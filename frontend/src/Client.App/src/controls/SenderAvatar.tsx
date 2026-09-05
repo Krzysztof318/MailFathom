@@ -10,12 +10,16 @@ import { initialsOf } from './initials';
 //
 // The signed-in person has a circle of their own in `PersonAvatar.tsx`, because they may have put a picture in it and
 // a sender never has one here: what the two share is the derivation of the letters, which is `initials.ts`.
+//
+// The row's circle is drawn at two sizes for the reason the row itself is two heights: the design project enlarges
+// both at the phone, where the list is the whole screen, and draws them at one size everywhere above it. The card's is
+// one size, because a message's head is the same head at every width.
 
 /** Where the avatar stands: on a row of the list, or at the head of a message drawn as a card. */
 export type SenderAvatarPlace = 'row' | 'card';
 
 const places: Readonly<Record<SenderAvatarPlace, string>> = {
-    row: 'size-5.5 text-2xs',
+    row: 'size-8.5 text-xs workspace:size-5.5 workspace:text-2xs',
     card: 'size-7.5 text-xs',
 };
 

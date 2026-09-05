@@ -43,11 +43,34 @@ function drawing(written: Partial<MailMessageHeaders> = {}, onShowFullHtml: () =
     );
 }
 
+// The width the head composes at is the one thing about it jsdom cannot answer, so a test about either shape states
+// which it is about. Every test that states neither inherits the narrow reading: `vitest.setup.ts` puts a `matchMedia`
+// over jsdom's missing one that answers `false` to every query, so the head composes as it does at the phone.
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+
+function atWorkspaceWidth(wideEnough: boolean): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: wideEnough,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
 // A zone pinned for one test is put back for the reason a fake clock is released: it is the worker's, not the file's.
 const machineZone = process.env['TZ'];
 
 afterEach(() => {
     process.env['TZ'] = machineZone;
+
+    if (declaredMatchMedia === undefined) {
+        Reflect.deleteProperty(window, 'matchMedia');
+    } else {
+        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
 });
 
 describe('MessageHeaders', () => {
@@ -172,5 +195,36 @@ describe('MessageHeaders and the sender own markup', () => {
         );
 
         expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
+    });
+});
+
+describe('MessageHeaders at the width its column has', () => {
+    // The head is the one place in the reading column a composition changes what is drawn rather than how it is laid
+    // out, so it is asked at both widths: the words go and the control stays, named by what it does either way.
+    it('draws the three acts as words beside their symbols wherever the column is not the whole screen', () => {
+        atWorkspaceWidth(true);
+        drawing();
+
+        expect(screen.getByText('Reply')).toBeDefined();
+        expect(screen.getByText('Forward')).toBeDefined();
+        expect(screen.getByText('Flag')).toBeDefined();
+    });
+
+    it('draws the three acts as symbols alone at the width the column is the whole screen', () => {
+        atWorkspaceWidth(false);
+        drawing();
+
+        expect(screen.queryByText('Reply')).toBeNull();
+        expect(screen.queryByText('Forward')).toBeNull();
+        expect(screen.queryByText('Flag')).toBeNull();
+    });
+
+    it('names each act the same way at either width, so nothing is reachable at one and nameless at the other', () => {
+        atWorkspaceWidth(false);
+        drawing();
+
+        expect(screen.getByRole('button', { name: 'Reply — not built yet' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Forward — not built yet' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Flag — not built yet' })).toBeDefined();
     });
 });

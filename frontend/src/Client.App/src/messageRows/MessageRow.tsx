@@ -33,6 +33,12 @@ import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 // when, what about, and a line for a sentence about the message rather than from it — why a search result is in the
 // list today, and what MailFathom made of the message when stage 3 lands. A row given none keeps the space, so the row
 // that gains one is this row rather than a taller one.
+//
+// It is the one measurement in the client a composition changes, and the change is the design project's own: the same
+// height at the desktop, the tablet and the fold, and a taller row with a larger circle at the phone, where the list
+// is the whole screen and the row is what a thumb lands on. Both come out of the same tree at the same breakpoint, so
+// the row that grows is this row and not a second one — and the window above it reads what was drawn rather than the
+// token, which is what lets the height change at all.
 
 // What the row says while a change this client asked for has not been seen to have reached the mail server. A mailbox
 // mutation is durable the moment it is written down and converges minutes later, so a row that said nothing would leave
@@ -202,7 +208,7 @@ export function MessageRow({
             //
             // Vertical panning stays the scroller's and everything sideways is the row's, which is what stops a browser
             // from taking the gesture over as a scroll before it has been read.
-            className="relative h-message-row touch-pan-y overflow-hidden border-b border-b-sunken"
+            className="relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row"
         >
             {carrying === undefined ? null : (
                 // What the row is being carried off is showing: the act, named and drawn, against the edge the finger

@@ -219,13 +219,19 @@
        than a rail beside a list. It is the sign-in artboard's own number rather than a fourth shell composition. */
     --breakpoint-split: 58.75rem;
 
-    /* One row of the message list. Declared here rather than in the list because it is a density decision like any
-       other — and because the list is arithmetic over it: the window that keeps a mailbox of two hundred thousand
-       messages costing what a screenful costs measures this value off a rendered row rather than holding a second
-       copy of it. It is three lines and the space around them: who wrote, what about, and a line for a sentence about
-       the message rather than from it — why a search result matched, and what MailFathom made of the message once
-       stage 3 lands. */
-    --spacing-message-row: 4.75rem;
+    /* One row of the message list, in the two heights the design project draws it. Declared here rather than in the
+       list because it is a density decision like any other — and because the list is arithmetic over it: the window
+       that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value off a
+       rendered row rather than holding a second copy of it. It is three lines and the space around them: who wrote,
+       what about, and a line for a sentence about the message rather than from it — why a search result matched, and
+       what MailFathom made of the message once stage 3 lands.
+
+       The narrow one is not the wide one loosened by taste: the project draws one height at the desktop, the tablet
+       and the fold alike, and a taller row at the phone, where the list is the whole screen and a row is something a
+       thumb lands on rather than something a cursor points at. So the row is the one place a composition changes a
+       height, and it changes it at the width the phone shape begins at. */
+    --spacing-message-row: 5.6875rem;
+    --spacing-message-row-narrow: 6.875rem;
 
     /* How wide the rail is, how wide the column beside it that holds the mailbox tree is when it is open and when it
        is folded to a strip, and how wide the drawer the narrow shape holds the mailboxes in is. All four are the
@@ -492,6 +498,36 @@
     :focus-visible {
         outline: 2px solid var(--color-accent);
         outline-offset: 2px;
+    }
+
+    /* What a control measures under a finger, decided once here for the same reason the ring above is: a floor met by
+       seven control shapes and forty hand-written buttons is a floor most of them eventually stop meeting, and the one
+       that stops is invisible in the diff that stopped it.
+
+       It is asked of the pointer rather than of the width, and that is the whole distinction this client draws between
+       the two questions. A composition follows the width it was given — the design project frames four of them and
+       every screen composes against those breakpoints. A target follows what is driving it: a touch screen on a
+       desktop is a finger at 1440 pixels and a narrow window on a laptop is a mouse at 390, so neither question
+       answers the other. The design project cannot state this half at all, its prototype having only a width to infer
+       touch from, which is why the number is the platform's rather than an artboard's.
+
+       `min-*` rather than a size, so a control the design already draws large keeps its own measurement and only the
+       ones below the floor are lifted to it. The three input kinds left out are drawn by the browser at a size this
+       would distort rather than enlarge, and the visually hidden ones are not on the screen to be hit. */
+    @media (pointer: coarse) {
+        button:not(.sr-only),
+        summary,
+        select,
+        textarea,
+        [role='button'],
+        [role='tab'],
+        [role='option'],
+        [role='treeitem'],
+        label:has(input),
+        input:not(.sr-only):not([type='checkbox']):not([type='radio']):not([type='range']) {
+            min-width: --spacing(11);
+            min-height: --spacing(11);
+        }
     }
 
     /* An accessibility obligation rather than a nicety: motion is removed under the preference rather than shortened,
