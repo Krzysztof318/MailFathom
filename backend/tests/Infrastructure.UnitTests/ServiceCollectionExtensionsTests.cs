@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
@@ -278,6 +280,35 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // The answering agent belongs to the AI boundary and arrives only where a chat endpoint was declared, which is
         // what the capability above resolves optionally rather than requires.
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IMailQuestionAnswerer));
+    }
+
+    /// <summary>
+    /// A Discover run resolves on every deployment for the same reason the capability does: it is what reports that
+    /// this instance derives no plans. Its planner belongs to the AI boundary and arrives only where a chat endpoint
+    /// was declared, so the registration resolves it optionally rather than requiring it.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAChatEndpoint_StillResolvesADiscoveryRunThatDerivesNoPlan()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(PlannedMailRetrieval)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(DiscoveryRun)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDiscoveryRunPlanner));
     }
 
     /// <summary>

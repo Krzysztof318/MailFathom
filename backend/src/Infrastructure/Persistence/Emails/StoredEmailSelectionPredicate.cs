@@ -156,7 +156,42 @@ internal static class StoredEmailSelectionPredicate
 
         emails = AccountScopedMailFolders.Admitting(emails, scope.ReadableFolders);
 
-        return AccountScopedMailFolders.Excluding(emails, scope.WithheldJunkFolders);
+        emails = AccountScopedMailFolders.Excluding(emails, scope.WithheldJunkFolders);
+
+        return NarrowedToWhatWasAskedAbout(emails, scope);
+    }
+
+    /// <summary>Narrows the emails to the conversation or the selection a question was asked about, where it named one.</summary>
+    /// <remarks>
+    /// <para>
+    /// It sits inside the scope's own narrowing rather than beside it, and after every folder decision, because it is
+    /// the innermost thing a caller may ask for: a question about four selected messages is answered from those four of
+    /// the mail this caller may read, never from four the folder decisions withheld.
+    /// </para>
+    /// <para>
+    /// This is what makes a scope bound a Discover run in the database rather than in the process. Narrowing the result
+    /// of a ranked window instead would read the mailbox and then discard it — which reads wider than the caller asked
+    /// for, and answers a question about a handful of messages with nothing whenever the window filled with others.
+    /// </para>
+    /// </remarks>
+    private static IQueryable<StoredEmailEntity> NarrowedToWhatWasAskedAbout(
+        IQueryable<StoredEmailEntity> emails,
+        MailboxScope scope)
+    {
+        if (scope.SelectedThread is { } thread)
+        {
+            var threadId = thread.Value;
+            emails = emails.Where(email => email.EmailThreadId == threadId);
+        }
+
+        if (scope.SelectedEmails.Count is 0)
+        {
+            return emails;
+        }
+
+        var selectedIds = scope.SelectedEmails.Select(static email => email.Value).ToArray();
+
+        return emails.Where(email => selectedIds.Contains(email.Id));
     }
 
     private static IQueryable<StoredEmailEntity> MatchingFlags(

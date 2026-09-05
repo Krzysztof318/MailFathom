@@ -1,6 +1,6 @@
 # The presentation plan
 
-<!-- describes: backend/src/Application/Discovery/** -->
+<!-- describes: backend/src/Application/Discovery/Presentation/**, backend/src/Application/Discovery/Citations/** -->
 
 An answer about a mailbox is rarely a paragraph. A comparison wants a table, a course of events wants dates in order,
 a question about people wants people. The presentation plan is the contract that lets a run say which of those an
@@ -8,7 +8,8 @@ answer is, in a form a client draws with ordinary typed UI and never evaluates.
 
 This page describes the contract as it stands: what a plan holds, what its parts mean, how a client that is behind the
 service reads one, how a citation in it is followed to the mail behind it, and what is deliberately not in it.
-Producing a plan and rendering one are not described here, because neither exists yet.
+How a run decides which blocks a plan holds is [the Discover run](discovery-run.md); rendering one is not described
+here, because no client draws a plan yet.
 
 ## Two properties the contract is built around
 
@@ -177,7 +178,7 @@ the deployment at all.
 
 ## What is deliberately not here
 
-- **Producing a plan.** What a run retrieves and which blocks it composes is separate work.
+- **Producing a plan.** What a run retrieves and which blocks it composes is [the Discover run](discovery-run.md).
 - **Rendering one.** The client's canvas and its block renderers are separate work again.
 - **What a run spent.** Cost, cancellation, and the events a run streams are properties of the run rather than of the
   plan it produced. What a run reports about each, and what a person is told when a spend ceiling refuses one, is

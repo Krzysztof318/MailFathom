@@ -355,6 +355,27 @@ public sealed class MailboxEmailSelectionTests
             hasAttachments: null));
     }
 
+    /// <summary>What a question was asked about is a filter, so two scopes that differ only there are two walks.</summary>
+    [Fact]
+    public void CanonicalText_ScopesDifferingOnlyInWhatWasAskedAbout_AreNotOneWalk()
+    {
+        // Arrange
+        var scope = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
+            [Account.Id],
+            []);
+        var thread = EmailThreadId.Create(new Guid("55555555-5555-5555-5555-555555555555"));
+        var email = StoredEmailId.Create(new Guid("66666666-6666-6666-6666-666666666666"));
+
+        // Act
+        var whole = SelectionWith(scope).CanonicalText;
+        var conversation = SelectionWith(scope.NarrowedToThread(thread)).CanonicalText;
+        var selection = SelectionWith(scope.NarrowedToEmails([email])).CanonicalText;
+
+        // Assert
+        Assert.Equal(3, new[] { whole, conversation, selection }.Distinct(StringComparer.Ordinal).Count());
+    }
+
     /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
     private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
     {
