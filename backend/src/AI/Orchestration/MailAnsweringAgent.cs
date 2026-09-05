@@ -30,11 +30,18 @@ namespace MailFathom.AI.Orchestration;
 /// question rather than at the next restart, and one caller's retrieved mail cannot outlive the call that retrieved it.
 /// </para>
 /// <para>
-/// A prompt this run sends is composed from three things and no others: the instruction, which is a constant of this
-/// build; the question, which is guarded here; and the extracts a lookup returns, which are guarded where the retrieval
-/// writes them. Guarding the composed conversation instead would rescan every earlier turn on every turn, and would
-/// leave the guarantee resting on which content kinds a framework release happens to publish rather than on where mail
-/// enters the run.
+/// A prompt this run sends is composed from three things and no others: the instruction, which is this build's own text
+/// wrapped by <see cref="IAgentInstructionEnvelope" />; the question, which is guarded here; and the extracts a lookup
+/// returns, which are guarded where the retrieval writes them. Guarding the composed conversation instead would rescan
+/// every earlier turn on every turn, and would leave the guarantee resting on which content kinds a framework release
+/// happens to publish rather than on where mail enters the run.
+/// </para>
+/// <para>
+/// The instruction is not scanned, and what makes that safe is the envelope's own contract rather than the text being
+/// fixed at compile time: neither half of it may carry mail content, an address, or anything else personal, so nothing
+/// an implementation supplies is untrusted input in the sense the guard exists for. An implementation that filled it
+/// from a mailbox would be the defect, and scanning here would not repair it — it would put mail into the position the
+/// instruction occupies and then check it for secrets.
 /// </para>
 /// </remarks>
 internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
@@ -49,6 +56,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly IAgentInstructionEnvelope instructionEnvelope;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailAnsweringAgent> logger;
 
@@ -63,6 +71,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     /// <param name="healthRecorder">Records what each call established about the provider.</param>
     /// <param name="spendLedger">Counts what every call of this run added to the current period.</param>
     /// <param name="egressGuard">Scans the question and every retrieved extract before either reaches the provider.</param>
+    /// <param name="instructionEnvelope">Supplies the text every composed agent's instruction is wrapped in, asked once per run.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <param name="logger">Records the outcome without recording any question, answer, or passage.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -77,6 +86,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         IAiProviderHealthRecorder healthRecorder,
         IMailAnsweringSpendLedger spendLedger,
         SensitiveContentEgressGuard egressGuard,
+        IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory,
         ILogger<MailAnsweringAgent> logger)
     {
@@ -90,6 +100,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(instructionEnvelope);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -103,6 +114,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         this.healthRecorder = healthRecorder;
         this.spendLedger = spendLedger;
         this.egressGuard = egressGuard;
+        this.instructionEnvelope = instructionEnvelope;
         this.loggerFactory = loggerFactory;
         this.logger = logger;
     }
@@ -123,8 +135,8 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         observation.RecordComposition(endpoint.Alias, MailAnsweringInstructions.Version);
 
         // The question is one turn, so the bound on what one call may carry is the bound on the question. What the
-        // retrieval adds beside it is bounded where the passages are built, and the run's instruction is a constant of
-        // this build rather than anything a caller composes.
+        // retrieval adds beside it is bounded where the passages are built, and the run's instruction is this build's
+        // own text inside the envelope registration supplied rather than anything a caller composes.
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, question.Text.Value)],
             this.plan.MaximumMessagesPerRequest,
@@ -184,7 +196,12 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             question.Text.Value,
             cancellationToken);
 
-        var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
+        var agent = MailAnsweringAgentComposition.Compose(
+            chatClient,
+            this.plan,
+            retrieval,
+            this.instructionEnvelope,
+            this.loggerFactory);
         var response = await agent.RunAsync(questionText, session: null, options: null, cancellationToken);
         var report = retrieval.Report;
 

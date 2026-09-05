@@ -59,6 +59,7 @@ internal sealed class ComposedMailQuestionAnswerer(
                 chatClient,
                 plan,
                 retrieval,
+                new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance);
 
             var response = await agent.RunAsync(

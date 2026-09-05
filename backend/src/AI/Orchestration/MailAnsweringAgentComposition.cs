@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
-using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Retrieval;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -11,8 +10,15 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Orchestration;
 
-/// <summary>Composes the agent that answers a question about the mailbox.</summary>
+/// <summary>Declares the agent that answers a question about the mailbox, and composes it like every other operation.</summary>
 /// <remarks>
+/// <para>
+/// What is here is what answering decides for itself: its name, its instruction, and its one tool.
+/// <see cref="AgentComposition" /> is what turns those into an agent, and everything true of every operation — where
+/// the instruction is carried, the <see cref="IAgentInstructionEnvelope" /> wrapped around it, the parameters each turn
+/// runs with — is stated there rather than again here. The word <em>envelope</em> below keeps the meaning this file
+/// already gave it, which is the element the retrieval formats an extract into.
+/// </para>
 /// <para>
 /// The composition is separate from what opens the provider connection, so what the agent is can be exercised over a
 /// substituted chat client and no network: the tool loop, the scope the retrieval is bound to, and the parameters the
@@ -44,6 +50,7 @@ internal static class MailAnsweringAgentComposition
     /// <param name="chatClient">The provider-neutral client every turn of the run is sent through.</param>
     /// <param name="plan">The validated declaration: the generation parameters one call runs with.</param>
     /// <param name="retrieval">The mail this run may reach, already bound to the caller's scope.</param>
+    /// <param name="instructionEnvelope">Supplies the text placed before and after this operation's instruction.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <returns>The composed agent.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -51,30 +58,19 @@ internal static class MailAnsweringAgentComposition
         IChatClient chatClient,
         ChatGenerationPlan plan,
         ScopedMailKnowledgeRetrieval retrieval,
+        IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {
-        ArgumentNullException.ThrowIfNull(chatClient);
-        ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(retrieval);
-        ArgumentNullException.ThrowIfNull(loggerFactory);
-
-        var chatOptions = ChatGenerationParameterMapping.ToChatOptions(plan);
-
-        // Carried as the run's instruction rather than written into a message, which is what keeps it in a position no
-        // retrieved extract can be placed in.
-        chatOptions.Instructions = MailAnsweringInstructions.Text;
 
         // The one tool, and the only route by which mail reaches the model. It is offered as a tool rather than through
         // the framework's text-search context provider because that provider publishes a query and nothing else, and
         // the narrowing a lookup needs is the greater part of what makes an answer reach the mail a search would.
-        chatOptions.Tools = [retrieval.CreateSearchTool()];
+        var operation = new AgentOperation(
+            AgentName,
+            MailAnsweringInstructions.Text,
+            [retrieval.CreateSearchTool()]);
 
-        var options = new ChatClientAgentOptions
-        {
-            Name = AgentName,
-            ChatOptions = chatOptions,
-        };
-
-        return new ChatClientAgent(chatClient, options, loggerFactory);
+        return AgentComposition.Compose(chatClient, plan, operation, instructionEnvelope, loggerFactory);
     }
 }

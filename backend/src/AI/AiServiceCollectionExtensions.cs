@@ -164,12 +164,20 @@ public static class AiServiceCollectionExtensions
     /// It adds no transport of its own — a run's requests go to the same endpoint under the same bounds as any other chat
     /// request, so it sends over the client that registration named.
     /// </para>
+    /// <para>
+    /// The instruction envelope every composed agent is wrapped in is registered here rather than by the composition
+    /// root, because it is what this boundary composes with rather than something a deployment declares. It is added
+    /// only if nothing registered one already, so an implementation supplying a person's language or a deployment's own
+    /// wording replaces the empty default by registering before this runs, with whatever lifetime its answer varies
+    /// over.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddMailAnsweringAgent(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IMailQuestionAnswerer, MailAnsweringAgent>();
 
         return services;

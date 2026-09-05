@@ -4,6 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
@@ -274,6 +275,27 @@ public sealed class AiServiceCollectionExtensionsTests
         Assert.NotSame(
             scope.ServiceProvider.GetRequiredService<IMailQuestionAnswerer>(),
             otherScope.ServiceProvider.GetRequiredService<IMailQuestionAnswerer>());
+    }
+
+    /// <summary>
+    /// The empty envelope is a default rather than a fixture: a deployment supplying a person's language registers its
+    /// own before this runs and keeps it, which is the whole of what makes the seam worth having.
+    /// </summary>
+    [Fact]
+    public void AddMailAnsweringAgent_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var declared = Substitute.For<IAgentInstructionEnvelope>();
+        services.AddSingleton(declared);
+
+        // Act
+        services.AddMailAnsweringAgent();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(declared, provider.GetRequiredService<IAgentInstructionEnvelope>());
     }
 
     [Fact]
