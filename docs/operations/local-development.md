@@ -1155,6 +1155,48 @@ several NDK versions, several JDKs, and rustup, so the job only says which of th
 runner image rather than tracking `ubuntu-latest`: that image is the toolchain pin. What it does add is the Rust
 targets, and only the two the APK covers. A local machine is the case all four rows are written for.
 
+### Pointing the Android head at a deployment
+
+The head reaches a deployment exactly the way the other two do — the address a deployment configured, then the address
+somebody named on the sign-in screen, then the origin that served the page — and the third of those never applies here,
+because a packaged head is served by nothing. So the two that decide where an Android run connects are the sign-in
+screen and `client.conf`, and what an emulator adds to both is that the machine running the deployment is not
+`127.0.0.1` from inside it.
+
+**The emulator reaches this machine at `10.0.2.2`.** That address is the emulator's alias for the host's loopback
+interface, so a client surface bound to `127.0.0.1:8082` here is `http://10.0.2.2:8082` there and needs no wider bind.
+A physical device has no such alias and two answers instead: `adb reverse tcp:8082 tcp:8082` publishes the same
+loopback socket on the device's own, which keeps the deployment on loopback, or the deployment binds an address the
+device can route to and the client names that. The first is what a USB-attached device wants; the second is a decision
+about what the deployment listens on rather than about the client.
+
+**Plain HTTP takes two permissions, and they are granted in different places.** Android refuses clear-text traffic
+outright unless the manifest permits it, which `gen/android/app/build.gradle.kts` does for the debug build type alone —
+so the APK `pnpm android:build` produces can reach an `http://` deployment and a release build never could. That is the
+platform's permission; the client's own is separate and is the checkbox under *Advanced* on the sign-in screen, which
+has to be ticked before an `http://` address is accepted at all. Both exist for the same reason the service warns about
+its own clear-text port at every startup.
+
+**`client.conf` is the other way in, and it is what a deployment handing out a packaged client uses.** The shell reads
+`key = value` lines from a file beside the application's own configuration — on Android that is
+`/data/data/io.github.krzysztof318.mailfathom/client.conf` — and an address stated there is drawn on the sign-in screen
+as one that cannot be changed:
+
+```
+service-address = http://10.0.2.2:8082
+permit-clear-text = true
+```
+
+Write it with `adb shell run-as io.github.krzysztof318.mailfathom`, which is what the debug build's own uid allows.
+Two things about it are worth knowing before a run: `adb install -r` keeps it, so a file left by an earlier run against
+a deployment that no longer exists is read on the next start and the screen refuses to let anybody correct it, and
+`adb shell pm clear io.github.krzysztof318.mailfathom` is what removes it along with everything else the head kept.
+
+**The WebView is debuggable in the debug build**, which is how a run is observed without a screenshot of somebody's
+mail. The activity publishes an abstract socket named `webview_devtools_remote_<pid>`, and
+`adb forward tcp:9222 localabstract:webview_devtools_remote_<pid>` puts the Chrome DevTools Protocol in front of it —
+Playwright's own Android support attaches through the same socket and drives the page as it would any other.
+
 ## Code coverage
 
 Both stacks are measured and one of them is enforced. The service's figure is the repository's only coverage threshold,
