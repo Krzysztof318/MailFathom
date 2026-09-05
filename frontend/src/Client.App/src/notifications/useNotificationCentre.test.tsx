@@ -138,6 +138,8 @@ const shell: SystemNotifier = {
     get offered() {
         return head.offered;
     },
+    standing: 'permitted',
+    permit: () => Promise.resolve('permitted'),
     raise: (said) => {
         if (head.answers !== 'raised') {
             return Promise.resolve(head.answers);

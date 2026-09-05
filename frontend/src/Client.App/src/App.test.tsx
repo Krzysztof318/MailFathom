@@ -390,9 +390,11 @@ const deliversNothing: AttachmentExchange = {
 
 const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
-/** The head a test runs in: one that offered no system notification, which is the web head and what jsdom is. */
+/** The head a test runs in: one that offered no system notification, which is what jsdom is with no binding on it. */
 const raisesNothing: SystemNotifier = {
     offered: false,
+    standing: 'unasked',
+    permit: () => Promise.resolve('unasked'),
     raise: () => Promise.resolve('unavailable'),
     whenActedOn: () => () => undefined,
 };

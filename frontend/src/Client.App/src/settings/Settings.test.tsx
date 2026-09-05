@@ -11,7 +11,11 @@ import { chooseSystemNotifications } from '../preferences/systemNotifications';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { deviceKeys } from '../device/deviceStore';
-import { SystemNotifierContext, type SystemNotifier } from '../shellOperations/systemNotifier';
+import {
+    SystemNotifierContext,
+    type NotificationStanding,
+    type SystemNotifier,
+} from '../shellOperations/systemNotifier';
 import { Settings } from './Settings';
 
 const settings: ClientPreferencesInForce = {
@@ -75,17 +79,65 @@ function renderSettings({
     );
 }
 
-/** The web head, where nothing offered the operation and the row therefore has nothing to decide. */
+/** A head that offered nothing, which is a page served outside a secure context and a shell with no plugin linked. */
 const raisesNothing: SystemNotifier = {
     offered: false,
+    standing: 'unasked',
+    permit: () => Promise.resolve('unasked'),
     raise: () => Promise.resolve('unavailable'),
     whenActedOn: () => () => undefined,
 };
 
-/** A head that offered it, which is the desktop one. */
+/** A head that offered it and grants on demand, which is the desktop one. */
 const raisesThem: SystemNotifier = {
     offered: true,
+    standing: 'permitted',
+    permit: () => Promise.resolve('permitted'),
     raise: () => Promise.resolve('raised'),
+    whenActedOn: () => () => undefined,
+};
+
+/**
+ * A head that offered it and has to ask somebody first, which is what a browser is.
+ *
+ * Its standing is read rather than fixed, exactly as the real one reads `Notification.permission` on every ask: what a
+ * browser will do is decided in the browser, so the answer moves when the question is put to it and `toldToBlockThem`
+ * moves it the way an address bar does, with nothing announcing either.
+ *
+ * @param answered What the person says to the browser's own dialog when the switch puts it in front of them.
+ */
+function asksFirst(
+    answered: NotificationStanding,
+): SystemNotifier & { asked: () => number; toldToBlockThem: () => void } {
+    let asked = 0;
+    let stands: NotificationStanding = 'unasked';
+
+    return {
+        offered: true,
+        get standing() {
+            return stands;
+        },
+        permit: () => {
+            asked += 1;
+            stands = answered;
+
+            return Promise.resolve(answered);
+        },
+        raise: () => Promise.resolve(answered === 'permitted' ? 'raised' : 'unavailable'),
+        whenActedOn: () => () => undefined,
+        asked: () => asked,
+        toldToBlockThem: () => {
+            stands = 'refused';
+        },
+    };
+}
+
+/** A browser that has already been told to block them, which no gesture on this row can put a question to again. */
+const alreadyRefused: SystemNotifier = {
+    offered: true,
+    standing: 'refused',
+    permit: () => Promise.resolve('refused'),
+    raise: () => Promise.resolve('refused'),
     whenActedOn: () => () => undefined,
 };
 
@@ -429,6 +481,106 @@ describe('Settings', () => {
             chooseSystemNotifications(false);
         });
 
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('draws the switch off on a head nobody has been asked in, however the device was left', () => {
+        renderSettings({ head: asksFirst('permitted') });
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('asks from the gesture, and a grant leaves the switch on and the answer on the device', async () => {
+        const browser = asksFirst('permitted');
+        renderSettings({ head: browser });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(browser.asked()).toBe(1);
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('true');
+    });
+
+    it('says so in the row where the answer to that question was no, and leaves the switch off', async () => {
+        renderSettings({ head: asksFirst('refused') });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('false');
+    });
+
+    it('writes nothing on the device where the question reached nobody, which nobody decided', async () => {
+        renderSettings({ head: asksFirst('unasked') });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBeNull();
+    });
+
+    it('follows the head where a permission is taken back underneath an open dialog', async () => {
+        const browser = asksFirst('permitted');
+        renderSettings({ head: browser });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+
+        // Nobody tells this screen either of these two things: the browser is told to block them from its own address
+        // bar, and the next arrival it refuses is what turns the choice off from `useNotificationCentre.ts`. A standing
+        // copied at mount would leave the ordinary explanation and a switch to move over a machine that raises nothing.
+        browser.toldToBlockThem();
+        act(() => {
+            chooseSystemNotifications(false);
+        });
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('recovers on the gesture once the browser has been told to allow them after all', async () => {
+        const browser = asksFirst('permitted');
+        browser.toldToBlockThem();
+        renderSettings({ head: browser });
+        openApplication();
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+
+        // What the row promises in words is that this switch works again once the browser has been told, and the
+        // gesture is what reads that: nothing announces a permission granted from the browser's own site settings, so a
+        // row that disabled itself here would be the one state on this screen nothing on this screen could leave.
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+        expect(screen.queryByText(/told to block notifications/u)).toBeNull();
+    });
+
+    it('reports a browser already told to block them without putting the question to it again', () => {
+        renderSettings({ head: alreadyRefused });
+        openApplication();
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
         expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
     });
 

@@ -184,6 +184,8 @@ export const pl: Catalogue = {
     'settings.raiseSystemNotifications': 'Powiadamiaj mnie na tym urządzeniu',
     'settings.raiseSystemNotificationsExplanation':
         'Gdy okno nie jest przed Tobą, to urządzenie mówi, ile rzeczy przyszło i jakiego rodzaju — nigdy od kogo ani w jakiej sprawie.',
+    'settings.systemNotificationsRefused':
+        'Ta przeglądarka ma zablokowane powiadomienia z tej strony. Zezwól na nie w jej własnych ustawieniach witryny, a przełącznik znów zadziała.',
     'settings.privacy': 'Prywatność',
     'settings.telemetryWithheld': 'Nie wysyłaj danych telemetrycznych',
     'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',
