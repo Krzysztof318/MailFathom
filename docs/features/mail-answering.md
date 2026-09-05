@@ -15,9 +15,9 @@ below; [`MailAnswering`](../operations/configuration-ai.md#mailanswering) holds 
 
 `ask_mail` is a Microsoft Agent Framework agent built over a provider-neutral chat client, and every other thing this
 product does with a model is built the same way, by the same composition. An operation supplies three things and no
-others: the name a run reports itself as, its own instruction, and its tool set.
-Everything else — where the instruction is carried, the generation parameters each turn runs with, the envelope
-described below — is decided once, for all of them.
+others: the name a run reports itself as, its own instruction, and its tool set. Everything else — where the instruction
+is carried, the generation parameters each turn runs with, the instruction envelope described below — is decided once,
+for all of them.
 
 One composition rather than a chat call written beside each feature, because what makes an operation safe is a property
 of that shape rather than of its prose. An instruction cannot be reached from a tool result because of where each is
@@ -26,7 +26,7 @@ through the client the run wrapped, which is where its spend is counted; and wha
 cancellation, and the model is what [ADR 0022](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)
 says. A feature composing its own call would re-decide all four in silence, once per feature.
 
-### An envelope around every instruction, empty in this build
+### The instruction envelope, empty in this build
 
 What a composed agent sends as its instruction is three parts: a preamble, the operation's own instruction, and a
 postamble. Both outer parts come from one implementation resolved through dependency injection and asked once per
@@ -41,8 +41,8 @@ There is no template language, no substitution syntax, no prompt store, and no c
 implementation returns is text, and the composition puts one part before the operation's instruction and the other
 after it, with no separator of its own.
 
-**Neither half may carry mail content, an address, or anything else personal.** The envelope is composed into the
-instruction, which is the one position [§ Mail is read as evidence, never as an instruction](#mail-is-read-as-evidence-never-as-an-instruction)
+**Neither half may carry mail content, an address, or anything else personal.** The instruction envelope is composed
+into the instruction, which is the one position [§ Mail is read as evidence, never as an instruction](#mail-is-read-as-evidence-never-as-an-instruction)
 keeps mail out of, so an implementation filling it from a mailbox would undo that separation. What belongs there is what
 the deployment or the person chose to say about how they are addressed. Whatever it adds rides inside the same
 instruction every turn carries, so it is sent through the same client the run's spend is counted on and is inside what a

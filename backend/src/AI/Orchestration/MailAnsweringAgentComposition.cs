@@ -15,8 +15,9 @@ namespace MailFathom.AI.Orchestration;
 /// <para>
 /// What is here is what answering decides for itself: its name, its instruction, and its one tool.
 /// <see cref="AgentComposition" /> is what turns those into an agent, and everything true of every operation — where
-/// the instruction is carried, the envelope around it, the parameters each turn runs with — is stated there rather than
-/// again here.
+/// the instruction is carried, the <see cref="IAgentInstructionEnvelope" /> wrapped around it, the parameters each turn
+/// runs with — is stated there rather than again here. The word <em>envelope</em> below keeps the meaning this file
+/// already gave it, which is the element the retrieval formats an extract into.
 /// </para>
 /// <para>
 /// The composition is separate from what opens the provider connection, so what the agent is can be exercised over a
@@ -49,7 +50,7 @@ internal static class MailAnsweringAgentComposition
     /// <param name="chatClient">The provider-neutral client every turn of the run is sent through.</param>
     /// <param name="plan">The validated declaration: the generation parameters one call runs with.</param>
     /// <param name="retrieval">The mail this run may reach, already bound to the caller's scope.</param>
-    /// <param name="envelope">Supplies the text placed before and after this operation's instruction.</param>
+    /// <param name="instructionEnvelope">Supplies the text placed before and after this operation's instruction.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <returns>The composed agent.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -57,7 +58,7 @@ internal static class MailAnsweringAgentComposition
         IChatClient chatClient,
         ChatGenerationPlan plan,
         ScopedMailKnowledgeRetrieval retrieval,
-        IAgentInstructionEnvelope envelope,
+        IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(retrieval);
@@ -70,6 +71,6 @@ internal static class MailAnsweringAgentComposition
             MailAnsweringInstructions.Text,
             [retrieval.CreateSearchTool()]);
 
-        return AgentComposition.Compose(chatClient, plan, operation, envelope, loggerFactory);
+        return AgentComposition.Compose(chatClient, plan, operation, instructionEnvelope, loggerFactory);
     }
 }

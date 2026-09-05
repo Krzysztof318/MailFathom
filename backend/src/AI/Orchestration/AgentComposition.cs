@@ -43,7 +43,7 @@ internal static class AgentComposition
     /// <param name="chatClient">The provider-neutral client every turn of the run is sent through, already carrying whatever the caller wrapped it in.</param>
     /// <param name="plan">The validated declaration: the generation parameters one call runs with.</param>
     /// <param name="operation">The operation being composed: its name, its own instruction, and its tool set.</param>
-    /// <param name="envelope">Supplies the text placed before and after the operation's instruction.</param>
+    /// <param name="instructionEnvelope">Supplies the text placed before and after the operation's instruction.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <returns>The composed agent.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -51,18 +51,21 @@ internal static class AgentComposition
         IChatClient chatClient,
         ChatGenerationPlan plan,
         AgentOperation operation,
-        IAgentInstructionEnvelope envelope,
+        IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(chatClient);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(operation);
-        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(instructionEnvelope);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         var chatOptions = ChatGenerationParameterMapping.ToChatOptions(plan);
 
-        chatOptions.Instructions = string.Concat(envelope.Preamble, operation.Instruction, envelope.Postamble);
+        chatOptions.Instructions = string.Concat(
+            instructionEnvelope.Preamble,
+            operation.Instruction,
+            instructionEnvelope.Postamble);
         chatOptions.Tools = [.. operation.Tools];
 
         var options = new ChatClientAgentOptions
