@@ -32,10 +32,17 @@ import { useEffect, useRef } from 'react';
 // that point. Back consumes one of those marks, the page is told, and the number the mark carries says how many steps
 // to unwind; the address never changes, so the space the reader is in is the space the address names throughout.
 //
-// The marks are pushed and given up by one effect rather than by whoever opened a surface, which is what keeps them
-// honest: a surface closed by its own control leaves one step fewer than the history holds, and the same effect gives
+// The marks are pushed and given up in one place rather than by whoever opened a surface, which is what keeps them
+// honest: a surface closed by its own control leaves one step fewer than the history holds, and the same place gives
 // the spare entry back. Nothing else in the client writes history state, and `routing/useSpace.ts` carries a mark
 // across the one address it rewrites rather than replacing it with nothing.
+//
+// **Giving an entry back is itself a traversal**, so it arrives as the very event a press of the gesture arrives as,
+// and the two cannot be told apart from what the history says — both leave an entry marked with fewer steps than the
+// screen holds. So the traversals asked for here are counted, and one of them is answered by finishing the
+// reconciliation rather than by unwinding anything. Without that, a surface replacing another — a menu folding away as
+// the screen its own row opened arrives — dips the count for the single render between the two, and the entry that dip
+// gives back comes back as a press that closes the screen which had just opened.
 
 const stepsTaken = 'mailfathom.back';
 
@@ -58,6 +65,38 @@ function markedSteps(): number {
 }
 
 /**
+ * Brings the session history into step with the screen, answering whether it asked for a traversal to do it.
+ *
+ * A surface that opened needs an entry to consume, and one closed by its own control leaves an entry nobody will —
+ * both are the same difference read in opposite directions, which is why one function answers both.
+ *
+ * @param standingSteps How many things stand between the reader and the screen underneath.
+ * @param arrivedOnAReload Whether this is the first reading, which is the one time the entry showing describes a
+ *   screen that no longer exists: its mark was written by the client that was thrown away, while the one that came
+ *   back has nothing standing over it. Giving those entries up would walk the reader backwards out of the client on a
+ *   reload, so the entry is re-marked for the screen actually being drawn and the ones behind it are left alone.
+ */
+function reconcileHistory(standingSteps: number, arrivedOnAReload: boolean): boolean {
+    const marked = markedSteps();
+
+    if (standingSteps > marked) {
+        for (let step = marked + 1; step <= standingSteps; step += 1) {
+            window.history.pushState({ [stepsTaken]: step }, '');
+        }
+    } else if (standingSteps < marked) {
+        if (arrivedOnAReload) {
+            window.history.replaceState({ ...asState(window.history.state), [stepsTaken]: standingSteps }, '');
+        } else {
+            window.history.go(standingSteps - marked);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Keeps the session history holding one entry per step the back gesture has to unwind, and unwinds them as it is used.
  *
  * @param steps How many things stand between the reader and the screen underneath — every open layer, plus the pane
@@ -70,33 +109,16 @@ export function useBackNavigation(steps: number, unwind: (used: number) => void)
     const standing = useRef(steps);
     const unwinding = useRef(unwind);
     const reconciled = useRef(false);
+    const travelling = useRef(0);
 
     useEffect(() => {
         standing.current = steps;
         unwinding.current = unwind;
     });
 
-    // The history is brought into step with the screen rather than written by whoever changed it: a surface that opened
-    // needs an entry to consume, and one closed by its own control leaves an entry nobody will. Both are the same
-    // difference read in opposite directions, which is why one effect answers both.
-    //
-    // The first reading of it is the exception, and it is a reload: the entry showing keeps whatever mark it carried
-    // before the page was thrown away, while the client that came back has nothing standing over its screen. Giving
-    // those entries up would be a reload that walks the reader backwards out of the client, so the entry is re-marked
-    // for the screen actually being drawn and the entries behind it are left where they are.
     useEffect(() => {
-        const marked = markedSteps();
-
-        if (steps > marked) {
-            for (let step = marked + 1; step <= steps; step += 1) {
-                window.history.pushState({ [stepsTaken]: step }, '');
-            }
-        } else if (steps < marked) {
-            if (reconciled.current) {
-                window.history.go(steps - marked);
-            } else {
-                window.history.replaceState({ ...asState(window.history.state), [stepsTaken]: steps }, '');
-            }
+        if (reconcileHistory(steps, !reconciled.current)) {
+            travelling.current += 1;
         }
 
         reconciled.current = true;
@@ -104,6 +126,19 @@ export function useBackNavigation(steps: number, unwind: (used: number) => void)
 
     useEffect(() => {
         function backWasUsed(): void {
+            // A traversal this hook asked for, answered by finishing what it interrupted rather than by unwinding
+            // anything: nobody went back through the screen. The last of them reconciles, because until they have all
+            // landed the entry showing is not yet the one the last of them will leave.
+            if (travelling.current > 0) {
+                travelling.current -= 1;
+
+                if (travelling.current === 0 && reconcileHistory(standing.current, false)) {
+                    travelling.current += 1;
+                }
+
+                return;
+            }
+
             // What the entry now showing says stands over the screen, against what actually does. A press that landed
             // on an address of ours rather than on a mark says nothing stands over it, which is the same arithmetic:
             // an unmarked entry is zero steps.

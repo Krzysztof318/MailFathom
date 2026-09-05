@@ -157,6 +157,74 @@ describe('useBackNavigation', () => {
         expect(travelled).toEqual([-1]);
     });
 
+    // One surface replacing another dips the count for a single render: the menu folds away as the screen its own row
+    // opened arrives, and the platform's own toggle event puts the two in separate renders. The entry that dip gives
+    // back is a traversal of ours, and it reaches this hook as the same event a press of the gesture does — read as a
+    // press it would close the screen that had just opened, which is the flake this test exists for.
+    it('does not read the entry it gave back as a press of the gesture', () => {
+        const unwound = vi.fn();
+
+        const { rerender } = renderHook(
+            ({ steps }) => {
+                useBackNavigation(steps, unwound);
+            },
+            { initialProps: { steps: 1 } },
+        );
+
+        rerender({ steps: 0 });
+        rerender({ steps: 1 });
+
+        expect(travelled).toEqual([-1]);
+
+        theEntryShowing(null);
+        theGestureIsUsed();
+
+        expect(unwound).not.toHaveBeenCalled();
+    });
+
+    // And the history is left holding an entry for the surface still standing, so the next press has one to consume: a
+    // traversal answered by swallowing alone would leave the screen a step ahead of the history for good.
+    it('marks the entry again for the surface the dip left standing', () => {
+        const { rerender } = renderHook(
+            ({ steps }) => {
+                useBackNavigation(steps, () => undefined);
+            },
+            { initialProps: { steps: 1 } },
+        );
+
+        rerender({ steps: 0 });
+        rerender({ steps: 1 });
+
+        theEntryShowing(null);
+        theGestureIsUsed();
+
+        expect(pushed).toEqual([{ 'mailfathom.back': 1 }, { 'mailfathom.back': 1 }]);
+    });
+
+    // The count is spent on the traversal it was kept for and on nothing after it, so the press that follows one is
+    // still a press.
+    it('unwinds the press that follows a traversal of its own', () => {
+        const unwound = vi.fn();
+
+        const { rerender } = renderHook(
+            ({ steps }) => {
+                useBackNavigation(steps, unwound);
+            },
+            { initialProps: { steps: 1 } },
+        );
+
+        rerender({ steps: 0 });
+        rerender({ steps: 1 });
+
+        theEntryShowing(null);
+        theGestureIsUsed();
+
+        theEntryShowing(null);
+        theGestureIsUsed();
+
+        expect(unwound).toHaveBeenCalledExactlyOnceWith(1);
+    });
+
     // A reload is the one time the entry showing describes a screen that no longer exists: the marks were written by
     // the client that was thrown away, and the one that came back has nothing standing over it. Giving those entries
     // up would walk the reader backwards out of the client on a reload, so the entry is re-marked instead.
