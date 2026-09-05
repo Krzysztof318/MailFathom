@@ -106,6 +106,16 @@ The same ordering governs every surface, and today that is not one place. `Recip
 
 It is written once. The partition — producing the two rankings, fusing the written one, and appending what the depicted one adds — is one step both use cases call, rather than a rule each remembers. That is issue 1562's own requirement that `/api/client` reuse the ranking rather than carry a second implementation of it, and issue 1559's that it reuse issue 1557's; this record is naming which step that is rather than adding an obligation. A guarantee that has to be remembered in two places is one that holds in one of them after the next change to the other.
 
+### The published sequence stays one order a keyset cursor can walk
+
+A concatenation is not automatically a sequence, and this one would not have been. `/api/client` pages its ranked list by a score keyset: `RankedSearchCursor` records the last result's score and timeline position, and the continuation skips past that boundary with `SkipWhile` under `RankedEmailCandidate.BestFirst`. That is correct only while the published sequence is monotone under `BestFirst`, and `RankedEmailCandidate`'s own remarks say what happens when it is not — "a boundary compared under one order while the sequence was built under another would repeat a result at one page edge and skip one at the next".
+
+A raw concatenation is exactly that. A fused score is a sum of reciprocal ranks and descends; a vector score is a distance, which the same remarks note "scores lower for a nearer one" and therefore ascends. Joining the two end to end produces a sequence that is not monotone in either direction, and which of the two failures a caller meets — the depicted tail becoming unreachable, or the first page repeating — depends on magnitudes neither ordering controls.
+
+So the shared partition step emits one sequence in one unit. The depicted section is scored by its own reciprocal rank, mapped strictly below the least fused score, so the whole published list descends under `BestFirst` and a cursor into it advances exactly as it does today. No cursor format changes and no surface learns a second paging rule.
+
+That mapping is not the constant option B2 was refused for, and the difference is worth stating because the two look alike. B2's number would have decided *whether* a picture ranks below written text, on a scale where no honest value exists. This one decides nothing: the floor already placed the whole section below, unconditionally and without reference to any score. What is left is expressing an order that is already settled in the one unit a keyset cursor can read — a representation, not a judgement, and one that no change of embedding model can invalidate because no distance survives into it.
+
 ### A message's place is decided by its nearest written passage
 
 Stated separately because it is the part an implementation gets wrong by accident. The written ranking is ordered by the nearest *written* passage, not by the nearest passage of any kind. Ordering by the nearest passage overall and labelling the result afterwards would let a description decide where a message sits while the result claims a body placed it — the floor would appear to hold in the labels and fail in the order.
@@ -172,6 +182,7 @@ Everything derived from an image inherits the classification of the mail that ca
 - Unit tests prove that a message carrying both a written passage and a nearer image-derived passage is ranked at the place its written passage earns, and that removing the image-derived passage does not move it.
 - Unit tests prove that a message placed only by an image-derived passage appears after every fused result, and that it is absent when the fused result fills the requested limit.
 - Unit tests prove that a message reached by both rankings appears once.
+- Unit tests prove that the published sequence is monotone under `RankedEmailCandidate.BestFirst` across the join between the fused result and the depicted section, and that a page ending on a depicted result continues onto the next depicted result — neither repeating what the previous page returned nor skipping past the rest of the section.
 - A test proves that an image description does not reach the `tsvector` a lexical search ranks, so a word occurring only in a description returns no lexical match.
 - A unit test proves that adding the extracted-or-described discriminator leaves a body passage's digest byte for byte what it was, and that a described passage and an extracted passage carrying identical text over the same attachment part produce different digests — the same two properties ADR 0029 asserts for its own encoding.
 - A test proves that no image is described on a deployment whose attachment extraction is off, whatever the description switch says.
