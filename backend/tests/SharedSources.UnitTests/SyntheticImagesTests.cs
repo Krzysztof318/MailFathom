@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Buffers.Binary;
+using System.Text;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -86,7 +87,7 @@ public sealed class SyntheticImagesTests
         // Assert
         Assert.Equal("RIFF"u8.ToArray(), file[..4]);
         Assert.Equal("WEBP"u8.ToArray(), file[8..12]);
-        Assert.Equal(chunk, System.Text.Encoding.ASCII.GetString(file, 12, 4));
+        Assert.Equal(chunk, Encoding.ASCII.GetString(file, 12, 4));
         Assert.Equal((uint)(file.Length - 8), BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(4)));
     }
 
@@ -130,6 +131,41 @@ public sealed class SyntheticImagesTests
         Assert.Equal(639, ReadUInt24LittleEndian(file.AsSpan(24)));
         Assert.Equal(479, ReadUInt24LittleEndian(file.AsSpan(27)));
     }
+
+    /// <summary>A grid a format cannot state is refused rather than truncated, which is what stops a bomb assertion passing against a small picture.</summary>
+    /// <remarks>
+    /// Each of these once produced a file declaring a different grid: a GIF of 34464 square, a lossy WebP of 1632
+    /// square — under the forty-megapixel default — and a lossless WebP the same. A test naming a decompression bomb
+    /// would have passed against every one of them.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(UnstatableGrids))]
+    public void EachBuilder_AGridItsFormatCannotState_IsRefused(string format)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => Build(format, dimension: 100_000));
+    }
+
+    /// <summary>The full thirty-two bits of a PNG dimension stay reachable, because a width past a signed integer is what the pixel ceiling is proved against.</summary>
+    [Fact]
+    public void Png_AGridNoOtherFormatCouldState_IsStillBuilt()
+    {
+        // Act
+        var file = SyntheticImages.Png(width: 100_000, height: 100_000);
+
+        // Assert
+        Assert.Equal(100_000u, BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(16)));
+    }
+
+    public static TheoryData<string> UnstatableGrids => ["jpeg", "gif", "lossy", "lossless"];
+
+    private static byte[] Build(string format, int dimension) => format switch
+    {
+        "jpeg" => SyntheticImages.Jpeg(dimension, dimension),
+        "gif" => SyntheticImages.Gif(dimension, dimension),
+        "lossy" => SyntheticImages.LossyWebp(dimension, dimension),
+        _ => SyntheticImages.LosslessWebp(dimension, dimension),
+    };
 
     private static byte[] WebpOf(string chunk) => chunk switch
     {

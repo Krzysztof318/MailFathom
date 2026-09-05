@@ -42,30 +42,30 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
     private const string ScalableVectorGraphicsMediaType = "image/svg+xml";
 
     private readonly IChatModelClient chatModelClient;
-    private readonly IChatGenerationPlanSource planSource;
+    private readonly ChatGenerationPlan plan;
     private readonly long maximumPixelCount;
     private readonly ILogger<ImageAttachmentDescriber> logger;
 
     /// <summary>Initializes a describer over the declared chat endpoint and this deployment's own decoding ceiling.</summary>
     /// <param name="chatModelClient">Sends the picture and returns what the model said about it.</param>
-    /// <param name="planSource">Publishes the declaration in force, which is where the octet ceiling one request may carry comes from.</param>
+    /// <param name="plan">The declaration this operation runs under, which is where the octet ceiling one request may carry comes from.</param>
     /// <param name="maximumPixelCount">The largest pixel grid an image may declare and still be sent.</param>
     /// <param name="logger">Records the outcome without recording the picture or the description.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumPixelCount" /> is not positive.</exception>
     public ImageAttachmentDescriber(
         IChatModelClient chatModelClient,
-        IChatGenerationPlanSource planSource,
+        ChatGenerationPlan plan,
         long maximumPixelCount,
         ILogger<ImageAttachmentDescriber> logger)
     {
         ArgumentNullException.ThrowIfNull(chatModelClient);
-        ArgumentNullException.ThrowIfNull(planSource);
+        ArgumentNullException.ThrowIfNull(plan);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPixelCount);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.chatModelClient = chatModelClient;
-        this.planSource = planSource;
+        this.plan = plan;
         this.maximumPixelCount = maximumPixelCount;
         this.logger = logger;
     }
@@ -85,8 +85,10 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
         }
 
         // One octet past the ceiling, so a file that reaches the ceiling exactly is admitted and the first one over it
-        // is known to be over without the rest of it ever being read.
-        var ceiling = this.planSource.Current.MaximumRequestImageOctets;
+        // is known to be over without the rest of it ever being read. Taken from the plan this operation was given
+        // rather than re-read from the source: the chat client holds the same instance, so a reload arriving between
+        // the two reads cannot leave a picture admitted here and refused at the send.
+        var ceiling = this.plan.MaximumRequestImageOctets;
         var buffer = ArrayPool<byte>.Shared.Rent(ceiling + 1);
 
         try

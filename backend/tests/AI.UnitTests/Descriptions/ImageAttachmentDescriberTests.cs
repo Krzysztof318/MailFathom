@@ -41,6 +41,10 @@ public sealed class ImageAttachmentDescriberTests
         // One octet past what a request may carry, refused before the format is even looked at.
         { "image/png", new byte[OctetCeiling + 1], ImageDescriptionRefusal.ImageTooLarge },
 
+        // Exactly the ceiling, which is admitted and then judged on what it holds. The reason names the format rather
+        // than the size, which is what a ceiling read as inclusive-of-the-limit would get wrong in silence.
+        { "image/png", new byte[OctetCeiling], ImageDescriptionRefusal.FormatNotSupported },
+
         // A PNG signature with nothing behind it.
         { "image/png", Png(width: 8, height: 8)[..12], ImageDescriptionRefusal.ImageUnreadable },
 
@@ -234,13 +238,14 @@ public sealed class ImageAttachmentDescriberTests
     public async Task DescribeAsync_AProviderCallThatObservedCancellation_PropagatesItRatherThanRefusing()
     {
         // Arrange
-        var provider = new ScriptedChatModelClient().Cancelling(RequestMarker);
+        using var cancellation = new CancellationTokenSource();
+        var provider = new ScriptedChatModelClient().Cancelling(RequestMarker, cancellation);
         var describer = Describer(provider);
         using var content = new MemoryStream(Png(width: 8, height: 8));
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => describer.DescribeAsync("image/png", content, TestContext.Current.CancellationToken));
+            () => describer.DescribeAsync("image/png", content, cancellation.Token));
 
         Assert.Equal(1, provider.CallCount);
     }
@@ -283,7 +288,7 @@ public sealed class ImageAttachmentDescriberTests
     private static ImageAttachmentDescriber Describer(ScriptedChatModelClient provider) =>
         new(
             provider,
-            ChatDeclarations.PlanSource(ChatDeclarations.Plan(maximumRequestImageOctets: OctetCeiling)),
+            ChatDeclarations.Plan(maximumRequestImageOctets: OctetCeiling),
             PixelCeiling,
             NullLogger<ImageAttachmentDescriber>.Instance);
 

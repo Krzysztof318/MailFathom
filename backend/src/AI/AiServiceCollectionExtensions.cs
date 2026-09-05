@@ -226,7 +226,7 @@ public static class AiServiceCollectionExtensions
 
         services.AddScoped<IEmailAttachmentImageDescriber>(provider => new ImageAttachmentDescriber(
             provider.GetRequiredService<IChatModelClient>(),
-            provider.GetRequiredService<IChatGenerationPlanSource>(),
+            provider.GetRequiredService<ChatGenerationPlan>(),
             ceiling,
             provider.GetRequiredService<ILogger<ImageAttachmentDescriber>>()));
 

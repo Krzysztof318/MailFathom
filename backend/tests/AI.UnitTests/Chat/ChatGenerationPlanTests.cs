@@ -191,6 +191,30 @@ public sealed class ChatGenerationPlanTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ChatDeclarations.Plan(maximumRequestCharacters: 0));
     }
 
+    /// <summary>Zero image octets is the declaration a text-only endpoint carries, so it is the one bound here that is admitted rather than refused.</summary>
+    /// <remarks>
+    /// Pinned because the whole activation story turns on it: tightened to the guard every other bound uses, every
+    /// deployment declaring <c>Chat:MaxRequestImageOctets: 0</c> would stop composing its plan, and nothing else in the
+    /// suite builds one.
+    /// </remarks>
+    [Fact]
+    public void Create_AnImageBudgetOfZero_DeclaresAnEndpointSentNoImage()
+    {
+        // Act
+        var plan = ChatDeclarations.Plan(maximumRequestImageOctets: 0);
+
+        // Assert
+        Assert.Equal(0, plan.MaximumRequestImageOctets);
+    }
+
+    /// <summary>A negative image budget is refused, because <c>ChatRequestBounds</c> would otherwise admit a picture on an endpoint declared to carry none.</summary>
+    [Fact]
+    public void Create_ANegativeImageBudget_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => ChatDeclarations.Plan(maximumRequestImageOctets: -1));
+    }
+
     [Fact]
     public void Create_ARequestTimeoutThatIsNotPositive_IsRefused()
     {

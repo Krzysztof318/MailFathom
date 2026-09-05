@@ -200,7 +200,7 @@ public sealed class AiServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(_ => ChatDeclarations.Plan());
         services.AddScoped(_ => Substitute.For<IChatModelClient>());
 
         // Act

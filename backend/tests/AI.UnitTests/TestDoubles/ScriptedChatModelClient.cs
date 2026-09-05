@@ -25,7 +25,7 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     private readonly List<IReadOnlyList<ChatMessage>> conversations = [];
     private readonly Dictionary<string, ChatGenerationFailure?> scriptByMarker = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Text, ChatGenerationStop Stop)> answerByMarker = new(StringComparer.Ordinal);
-    private readonly HashSet<string> cancelledMarkers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CancellationTokenSource> cancellationByMarker = new(StringComparer.Ordinal);
     private string? answerForEverythingElse;
 
     /// <summary>Gets every conversation this client was sent, in the order it received them.</summary>
@@ -72,15 +72,21 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
 
     /// <summary>Arranges that a conversation naming one marker observes the caller's cancellation instead of answering.</summary>
     /// <param name="marker">Text the conversation's last turn carries.</param>
+    /// <param name="cancellation">The source whose token the call was made with, cancelled inside the call before the exception leaves it.</param>
     /// <returns>This client, so arrangement reads as one statement.</returns>
     /// <remarks>
     /// Distinct from <see cref="Failing" /> because it is not a failure: a real client observes the token while the
     /// request is in flight and the caller's own decision comes back out of the call, which is the one outcome a caller
-    /// must not record against whatever it was asking about.
+    /// must not record against whatever it was asking about. The source is cancelled here rather than by the test so
+    /// that the state a caller can filter on matches production: the real client rethrows an
+    /// <see cref="OperationCanceledException" /> as a timeout unless the caller's own token is cancelled, so a fake
+    /// throwing one against a live token would prove a state nothing reaches.
     /// </remarks>
-    public ScriptedChatModelClient Cancelling(string marker)
+    public ScriptedChatModelClient Cancelling(string marker, CancellationTokenSource cancellation)
     {
-        this.cancelledMarkers.Add(marker);
+        ArgumentNullException.ThrowIfNull(cancellation);
+
+        this.cancellationByMarker[marker] = cancellation;
 
         return this;
     }
@@ -108,9 +114,14 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
 
         var lastTurn = conversation[^1].Text;
 
-        if (this.cancelledMarkers.Any(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal)))
+        var cancelledMarker = this.cancellationByMarker.Keys
+            .FirstOrDefault(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal));
+
+        if (cancelledMarker is not null)
         {
-            throw new OperationCanceledException();
+            this.cancellationByMarker[cancelledMarker].Cancel();
+
+            throw new OperationCanceledException(cancellationToken);
         }
 
         var marker = this.scriptByMarker.Keys.FirstOrDefault(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal));
