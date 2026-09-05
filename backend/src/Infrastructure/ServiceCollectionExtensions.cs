@@ -929,6 +929,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<MailAnsweringCapability>(),
             provider.GetRequiredService<PlannedMailRetrieval>(),
             provider.GetRequiredService<AccessAuthorization>(),
+            provider.GetRequiredService<SensitiveContentEgressGuard>(),
             provider.GetService<IDiscoveryRunPlanner>()));
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the

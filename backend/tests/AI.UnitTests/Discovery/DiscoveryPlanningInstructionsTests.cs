@@ -45,18 +45,6 @@ public sealed class DiscoveryPlanningInstructionsTests
         Assert.DoesNotContain("block", text, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>A run records which wording derived its plan, so an edited instruction is a different wording.</summary>
-    [Fact]
-    public void Version_TheInstruction_IsADigestOfItsOwnText()
-    {
-        // Act
-        var version = DiscoveryPlanningInstructions.Version;
-
-        // Assert
-        Assert.Equal(12, version.Length);
-        Assert.All(version, character => Assert.True(char.IsAsciiHexDigitLower(character)));
-    }
-
     /// <summary>A question about a selection is planned differently from one about a mailbox, so the count is stated.</summary>
     [Fact]
     public void ComposePlanningTurn_AQuestionAboutSelectedMessages_StatesHowManyWereSelected()

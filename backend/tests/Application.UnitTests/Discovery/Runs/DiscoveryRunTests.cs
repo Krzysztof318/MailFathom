@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -25,6 +26,9 @@ namespace MailFathom.Application.UnitTests.Discovery.Runs;
 /// <summary>Covers what one Discover run refuses, what it derives, and what it records having done.</summary>
 public sealed class DiscoveryRunTests
 {
+    /// <summary>The literal the scanner in the guarded-egress test reports, standing in for a credential in a question.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly EmbeddingProfileId ProfileId =
@@ -169,12 +173,60 @@ public sealed class DiscoveryRunTests
         return planner;
     }
 
+    /// <summary>
+    /// The question a derivation sends is this owner's own text, and the guard refuses to judge any text on a flow
+    /// acting for nobody wherever the deployment scans somebody. So the run states the owner before it derives: without
+    /// that, a deployment with a scanner switched on would refuse every Discover run before it reached the model.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ADeploymentThatScansSomebody_GuardsTheQuestionUnderTheCallersOwnPosture()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var guarding = new GuardingDiscoveryRunPlanner(egress.Guard);
+        var run = RunOver(guarding, new ScriptedEmailKnowledgeSearch(), egressGuard: egress.Guard);
+        var question = new MailQuestion(
+            MailQuestionText.Create($"what about the key {Marker} a colleague sent"),
+            Question.Scope);
+
+        // Act
+        await run.RunAsync(question, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(guarding.Guarded);
+        Assert.DoesNotContain(Marker, guarding.Guarded, StringComparison.Ordinal);
+    }
+
+    /// <summary>A derivation as the real one behaves at the egress point, without a provider behind it.</summary>
+    private sealed class GuardingDiscoveryRunPlanner(SensitiveContentEgressGuard egressGuard) : IDiscoveryRunPlanner
+    {
+        public string? Guarded { get; private set; }
+
+        public async Task<DiscoveryRunPlan> DerivePlanAsync(
+            MailQuestion question,
+            CancellationToken cancellationToken)
+        {
+            this.Guarded = await egressGuard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                question.Text.Value,
+                cancellationToken);
+
+            return DiscoveryRunPlan.Compose(
+                DiscoveryIntent.Unclassified,
+                RetrievalPlan.Create(
+                    EmailKnowledgeBounds.Default,
+                    [EmailKnowledgeQuery.ForText("quotation")],
+                    sufficientPassages: 5));
+        }
+    }
+
     private static DiscoveryRun RunOver(
         IDiscoveryRunPlanner? planner,
         IEmailKnowledgeSearch search,
         bool embeddingProfileActive = true,
         AiProviderHealthState chatState = AiProviderHealthState.Serving,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
         var healthReader = Substitute.For<IAiProviderHealthReader>();
@@ -204,6 +256,7 @@ public sealed class DiscoveryRunTests
                 planner is null ? null : new RecordingMailQuestionAnswerer()),
             new PlannedMailRetrieval(search),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             planner);
     }
 

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Discovery.Runs;
@@ -28,26 +29,31 @@ public sealed class DiscoveryRun
     private readonly MailAnsweringCapability capability;
     private readonly PlannedMailRetrieval retrieval;
     private readonly AccessAuthorization authorization;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IDiscoveryRunPlanner? planner;
 
     /// <summary>Creates the use case one Discover run is performed through.</summary>
     /// <param name="capability">Whether this deployment answers questions about mail, and whether it currently can.</param>
     /// <param name="retrieval">The retrieval a derived plan is run through.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
+    /// <param name="egressGuard">Withholds from a provider whatever this owner's posture withholds.</param>
     /// <param name="planner">The derivation, absent on a deployment that composes no chat agent.</param>
     public DiscoveryRun(
         MailAnsweringCapability capability,
         PlannedMailRetrieval retrieval,
         AccessAuthorization authorization,
+        SensitiveContentEgressGuard egressGuard,
         IDiscoveryRunPlanner? planner)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(retrieval);
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.capability = capability;
         this.retrieval = retrieval;
         this.authorization = authorization;
+        this.egressGuard = egressGuard;
         this.planner = planner;
     }
 
@@ -81,6 +87,12 @@ public sealed class DiscoveryRun
                 ? MailAnsweringUnavailableException.NotServed()
                 : MailAnsweringUnavailableException.TemporarilyUnable();
         }
+
+        // Stated before the derivation rather than inside it, because the question is this owner's text and the guard
+        // refuses to judge text on a flow acting for nobody wherever the deployment scans somebody. Read from the
+        // authorization rather than from the scope, which names nobody where the caller owns no served account — a run
+        // whose question would then leave under the deployment's floor instead of under this owner's posture.
+        using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireOwner());
 
         var plan = await derivation.DerivePlanAsync(question, cancellationToken);
 
