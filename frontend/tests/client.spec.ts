@@ -689,6 +689,14 @@ test('puts the navigation beside the workspace in a wide window and under it in 
 
     await page.setViewportSize(narrowWindow);
 
+    // Where the navigation is drawn changes with the width, but what it holds changes with a render: the bar's own
+    // five places are what `useWideWorkspace` answers a `matchMedia` change with, so for one task afterwards the
+    // navigation is still the rail's contents laid out across the foot of the window — 54 pixels taller than the bar,
+    // because the column the rail stacks the bell and the account in is standing in a row. A box read on either side
+    // of that render is a measurement of a different screen, and the pair below is read on one side of it by waiting
+    // for the control only the bar draws.
+    await expect(page.getByRole('button', { name: 'More' })).toBeVisible();
+
     const bottomBar = await boxOf(navigation);
     const narrowSpace = await boxOf(space);
     expect(bottomBar.y).toBeGreaterThanOrEqual(narrowSpace.y + narrowSpace.height);
