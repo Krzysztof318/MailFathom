@@ -5,7 +5,9 @@
 MailFathom reads the words inside a document somebody attached, so that a contract or an invoice is findable by what it
 says rather than only by the note it arrived with. `IAttachmentTextExtractor` is the one way that happens: it is handed
 one attachment already opened from stored content and answers with its plain text, or with the reason there is none —
-never with an exception a caller has to interpret, and never with an empty string standing in for "nothing found".
+never with an exception raised by whatever read the document, and never with an empty string standing in for "nothing
+found". The one thing a caller does have to handle is a failure reading the stored content itself, which is about the
+attempt rather than about the document and is described under the posture below.
 
 Nothing in this release calls it yet. The pipeline that cuts and embeds what an attachment yields is separate work, and
 the switch deciding whether an attachment is read at all arrives with it. What exists today is the port, the parsers
@@ -117,7 +119,10 @@ somebody keeps.
   sender's number, and a bomb is precisely a file that lies about it. What is counted is what actually inflates,
   against a total shared by every part and against each part's own compressed length.
 - **Nothing a parser raises reaches a caller.** Whatever a parser does with adversarial input becomes one of the
-  outcomes above. The two things never swallowed are a caller's own cancellation and a process out of memory.
+  outcomes above. The three things never swallowed are a caller's own cancellation, a process out of memory, and a
+  failure reading the attachment's stored content, which propagates as whatever the content store raised — a connection
+  that dropped is a fact about this attempt rather than about the document, and an outcome a caller may record once and
+  never revisit would turn it into a permanently unreadable attachment.
 - **The extracted text is untrusted output.** It is never logged, never rendered as markup, and nothing downstream may
   treat it as anything but opaque characters.
 - **It is background work.** Reading an attachment never happens inside a synchronization transaction and is never

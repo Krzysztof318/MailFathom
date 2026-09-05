@@ -406,8 +406,16 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
     /// <summary>Reads one cell, which holds its text in the string table, inline, or as a formula's result.</summary>
     /// <remarks>
+    /// <para>
     /// A cell whose type is numeric, boolean, an error, or a date yields nothing. Extraction reads what somebody wrote
     /// rather than what a workbook computes: no formula is evaluated, and a number is not text a search should match on.
+    /// </para>
+    /// <para>
+    /// One cell is gathered before any of it is handed on, because what a cell holds is decided by its type once the
+    /// whole subtree has been read — so the output ceiling is applied here as well, against each of the two buffers.
+    /// Without it a single cell would inflate to whatever the container budget allows before the accumulator ever saw
+    /// it, and a cell whose type yields nothing would inflate without ever being measured at all.
+    /// </para>
     /// </remarks>
     private string? ReadCellText(
         XmlReader cell,
@@ -432,11 +440,11 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
                 case XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.SignificantWhitespace:
                     if (insideValue)
                     {
-                        value.Append(cell.Value);
+                        this.AppendBounded(value, cell.Value);
                     }
                     else if (insideInlineRun)
                     {
-                        inlineText.Append(cell.Value);
+                        this.AppendBounded(inlineText, cell.Value);
                     }
 
                     break;
@@ -458,6 +466,18 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             "str" => value.ToString(),
             _ => null,
         };
+    }
+
+    /// <summary>Adds a run of a cell's characters, refusing the cell that grows past the output ceiling.</summary>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the addition would pass the ceiling.</exception>
+    private void AppendBounded(StringBuilder target, string value)
+    {
+        if (target.Length + value.Length > options.MaxExtractedTextCharacters)
+        {
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ExtractedTextTooLarge);
+        }
+
+        target.Append(value);
     }
 
     /// <summary>Resolves the string-table index a cell holds, or nothing when the index names no entry.</summary>

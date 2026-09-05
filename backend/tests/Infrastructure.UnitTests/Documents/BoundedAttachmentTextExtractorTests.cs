@@ -331,6 +331,34 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
     }
 
+    /// <summary>
+    /// A cell is gathered whole before its type decides what it yields, so the output ceiling is applied while it is
+    /// gathered rather than after: a cell whose type yields nothing would otherwise inflate to whatever the container
+    /// budget allows without ever being measured, and one that does yield would inflate before the accumulator saw it.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWorksheetCellInflatingPastTheOutputCeiling_RefusesItWhileItIsGathered()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxExtractedTextCharacters = 64 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "budget.xlsx",
+            DocumentFixtures.Package((
+                "xl/worksheets/sheet1.xml",
+                $"""
+                 <?xml version="1.0" encoding="UTF-8"?>
+                 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row><c t="n"><v>{new string('7', 4096)}</v></c></row></sheetData></worksheet>
+                 """)));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ExtractedTextTooLarge, result.Outcome);
+    }
+
     /// <summary>An OpenDocument package is a zip archive, so the entity refusal has to hold in its content part too.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnOpenDocumentPartDeclaringAnExternalEntity_ReportsMalformed()
@@ -437,7 +465,8 @@ public sealed class BoundedAttachmentTextExtractorTests
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/pdf",
             "contract.pdf",
-            DocumentFixtures.Pdf("Anything at all"));
+            DocumentFixtures.Pdf("Anything at all"),
+            beforeWriting: () => Assert.Fail("The attachment was copied despite the size its description declares."));
 
         // Act
         var result = await ExtractAsync(attachment, bounds);

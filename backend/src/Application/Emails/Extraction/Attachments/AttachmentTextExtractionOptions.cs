@@ -8,12 +8,12 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// <remarks>
 /// <para>
 /// Every value here is a ceiling rather than a target, and each one exists because a sender chose the bytes. A document
-/// Every value on it is set once and read-only afterwards, because the instance is registered as a singleton: a
-/// mutable one would let anything resolving it raise a ceiling at run time past the range a start validated, or widen
-/// the one value deciding which sender-composed formats reach a parser at all. A document
 /// parser is the largest attack surface this system has: an archive with a small compressed size and an enormous
 /// declared one, an element tree nested until a walk runs out of stack, and a page that decodes into more text than a
-/// mailbox holds in a year are all ordinary shapes of a mail-borne attack rather than corner cases.
+/// mailbox holds in a year are all ordinary shapes of a mail-borne attack rather than corner cases. Every value on it
+/// is set once and read-only afterwards, because the instance is registered as a singleton: a mutable one would let
+/// anything resolving it raise a ceiling at run time past the range a start validated, or widen the one value deciding
+/// which sender-composed formats reach a parser at all.
 /// </para>
 /// <para>
 /// Exceeding any of them abandons the attachment and says which ceiling stopped it. Nothing is truncated into a partial
