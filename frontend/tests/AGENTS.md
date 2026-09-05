@@ -192,6 +192,14 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   covers, and it is not this suite.
 - **Nothing here retries.** A check that passes on a second attempt has reported that the client is flaky rather than
   that it works.
+- **A geometry read after `setViewportSize` waits for the composition it is about.** The width is the browser's the
+  moment it is set, and everything a stylesheet lays out from it moves with it — but what a screen _holds_ at a width
+  is `useWideWorkspace` and its two neighbours answering a `matchMedia` change, which is a render a task later. A box
+  read before that render measures the previous composition laid out at the new width, and two boxes read either side
+  of it belong to two different screens, which is what an assertion comparing them reports as a defect in the client.
+  So the wait is an element only the new composition draws — the bottom bar's own overflow control, the mailbox column
+  that stands beside the list — rather than a duration, and the boxes are read after it. An element present in both
+  compositions says nothing about which one drew it and is not that wait.
 - **A failure keeps its trace and its screenshot in `frontend/.playwright/`, which Git ignores and nothing uploads.**
   That is a privacy decision rather than a storage one: the moment this suite drives anything but a routed answer, a
   capture shows somebody's mail and a trace carries the header it was read with, and an artifact anybody with the run's
