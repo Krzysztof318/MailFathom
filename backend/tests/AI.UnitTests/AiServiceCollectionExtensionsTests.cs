@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
+using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -12,6 +13,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -168,6 +170,70 @@ public sealed class AiServiceCollectionExtensionsTests
         // They are read from the plan source, because the factory builds a client on the root provider while the plan
         // itself belongs to an operation's scope.
         Assert.Equal(ChatDeclarations.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+    }
+
+    /// <summary>
+    /// The port is registered whichever decision a deployment took, because a caller needs a reason it can record
+    /// against the attachment rather than an absence it has to interpret. An instance that has not activated
+    /// description resolves the describer that reads nothing.
+    /// </summary>
+    [Fact]
+    public void AddImageAttachmentDescription_WithoutAGridCeiling_ResolvesTheDescriberThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddImageAttachmentDescription(maximumPixelCount: null);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveImageAttachmentDescriber>(
+            provider.GetRequiredService<IEmailAttachmentImageDescriber>());
+    }
+
+    /// <summary>Scoped where it is active, because it sends over the scoped chat client that a run's own scope resolves.</summary>
+    [Fact]
+    public void AddImageAttachmentDescription_WithAGridCeiling_ResolvesTheDescriberOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(_ => Substitute.For<IChatModelClient>());
+
+        // Act
+        services.AddImageAttachmentDescription(maximumPixelCount: 40_000_000);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var describer = scope.ServiceProvider.GetRequiredService<IEmailAttachmentImageDescriber>();
+
+        Assert.IsType<ImageAttachmentDescriber>(describer);
+        Assert.Same(describer, scope.ServiceProvider.GetRequiredService<IEmailAttachmentImageDescriber>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(describer, second.ServiceProvider.GetRequiredService<IEmailAttachmentImageDescriber>());
+    }
+
+    /// <summary>A ceiling that admits no image would refuse every one of them while reading as a bound somebody chose.</summary>
+    [Fact]
+    public void AddImageAttachmentDescription_WithAGridCeilingThatIsNotPositive_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new ServiceCollection().AddImageAttachmentDescription(maximumPixelCount: 0));
+    }
+
+    [Fact]
+    public void AddImageAttachmentDescription_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddImageAttachmentDescription(null!, maximumPixelCount: null));
     }
 
     /// <summary>

@@ -120,6 +120,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         reasoningEffort: null,
         maximumMessagesPerRequest: 32,
         maximumRequestCharacters: 200_000,
+        maximumRequestImageOctets: 4 * 1024 * 1024,
         requestTimeout: TimeSpan.FromSeconds(30));
 
     private readonly IHost host;

@@ -15,7 +15,8 @@ namespace MailFathom.AI.UnitTests.TestDoubles;
 /// </para>
 /// <para>
 /// It records every conversation it was sent, which is what lets a test read the instruction and the envelope that
-/// actually left the caller instead of asserting against a copy of them.
+/// actually left the caller instead of asserting against a copy of them. A turn's picture is the one part it does copy,
+/// for the reason <see cref="Recordable" /> gives.
 /// </para>
 /// </remarks>
 internal sealed class ScriptedChatModelClient : IChatModelClient
@@ -23,7 +24,8 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     private readonly Lock gate = new();
     private readonly List<IReadOnlyList<ChatMessage>> conversations = [];
     private readonly Dictionary<string, ChatGenerationFailure?> scriptByMarker = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> answerByMarker = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Text, ChatGenerationStop Stop)> answerByMarker = new(StringComparer.Ordinal);
+    private readonly HashSet<string> cancelledMarkers = new(StringComparer.Ordinal);
     private string? answerForEverythingElse;
 
     /// <summary>Gets every conversation this client was sent, in the order it received them.</summary>
@@ -44,10 +46,14 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     /// <summary>Arranges what the model answers for a conversation naming one marker.</summary>
     /// <param name="marker">Text the conversation's last turn carries, which for a judgement is the message identifier.</param>
     /// <param name="answerText">What the model answers.</param>
+    /// <param name="stop">Why the model stopped, which a caller distinguishing a truncated or withheld answer from a finished one reads.</param>
     /// <returns>This client, so arrangement reads as one statement.</returns>
-    public ScriptedChatModelClient Answering(string marker, string answerText)
+    public ScriptedChatModelClient Answering(
+        string marker,
+        string answerText,
+        ChatGenerationStop stop = ChatGenerationStop.Completed)
     {
-        this.answerByMarker[marker] = answerText;
+        this.answerByMarker[marker] = (answerText, stop);
         this.scriptByMarker[marker] = null;
 
         return this;
@@ -60,6 +66,21 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     public ScriptedChatModelClient Failing(string marker, ChatGenerationFailure failure)
     {
         this.scriptByMarker[marker] = failure;
+
+        return this;
+    }
+
+    /// <summary>Arranges that a conversation naming one marker observes the caller's cancellation instead of answering.</summary>
+    /// <param name="marker">Text the conversation's last turn carries.</param>
+    /// <returns>This client, so arrangement reads as one statement.</returns>
+    /// <remarks>
+    /// Distinct from <see cref="Failing" /> because it is not a failure: a real client observes the token while the
+    /// request is in flight and the caller's own decision comes back out of the call, which is the one outcome a caller
+    /// must not record against whatever it was asking about.
+    /// </remarks>
+    public ScriptedChatModelClient Cancelling(string marker)
+    {
+        this.cancelledMarkers.Add(marker);
 
         return this;
     }
@@ -82,10 +103,16 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
 
         lock (this.gate)
         {
-            this.conversations.Add(conversation);
+            this.conversations.Add(Recordable(conversation));
         }
 
         var lastTurn = conversation[^1].Text;
+
+        if (this.cancelledMarkers.Any(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal)))
+        {
+            throw new OperationCanceledException();
+        }
+
         var marker = this.scriptByMarker.Keys.FirstOrDefault(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal));
 
         if (marker is not null && this.scriptByMarker[marker] is { } failure)
@@ -93,11 +120,26 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
             throw new ChatGenerationFailedException("judging", failure);
         }
 
-        var answerText = marker is not null
+        var answer = marker is not null
             ? this.answerByMarker[marker]
-            : this.answerForEverythingElse
-                ?? throw new InvalidOperationException("The script names no answer for this conversation.");
+            : (Text: this.answerForEverythingElse
+                    ?? throw new InvalidOperationException("The script names no answer for this conversation."),
+                Stop: ChatGenerationStop.Completed);
 
-        return Task.FromResult(new ChatAnswer(answerText, ChatGenerationStop.Completed, Usage: null));
+        return Task.FromResult(new ChatAnswer(answer.Text, answer.Stop, Usage: null));
     }
+
+    /// <summary>Copies a turn's picture out of whatever the caller lent it, so a recorded conversation outlives the call.</summary>
+    /// <remarks>
+    /// A caller reading an attachment into a pooled buffer hands this port a window of it and returns the buffer as
+    /// soon as the call completes, which is the right thing for it to do and the wrong thing for a test to assert
+    /// against afterwards: the octets would be read out of a buffer somebody else may already have rented. The text is
+    /// a string and needs none of this.
+    /// </remarks>
+    private static IReadOnlyList<ChatMessage> Recordable(IReadOnlyList<ChatMessage> conversation) =>
+    [
+        .. conversation.Select(static turn => turn.Image is { } image
+            ? turn with { Image = image with { Content = image.Content.ToArray() } }
+            : turn),
+    ];
 }

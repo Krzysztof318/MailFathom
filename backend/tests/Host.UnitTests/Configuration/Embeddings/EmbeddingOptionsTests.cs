@@ -565,6 +565,18 @@ public sealed class EmbeddingOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.SpendPeriod)));
     }
 
+    /// <summary>An instance that has not read the section describes nothing, which is what makes the operator's decision the whole of the control over an egress nothing scans.</summary>
+    [Fact]
+    public void ImageDescription_ADeploymentThatDeclaredNothing_DescribesNoImage()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+
+        // Act, Assert
+        Assert.False(settings.ImageDescription.Enabled);
+        Assert.Equal(EmbeddingImageDescriptionOptions.DefaultMaxPixels, settings.ImageDescription.MaxPixels);
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(EmbeddingOptions settings) =>
         [.. settings.Validate(new ValidationContext(settings))];
 

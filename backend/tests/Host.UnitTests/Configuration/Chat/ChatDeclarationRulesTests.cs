@@ -39,6 +39,45 @@ public sealed class ChatDeclarationRulesTests
         Assert.Empty(errors);
     }
 
+    /// <summary>A chat endpoint declared to carry no image is refused beside the one feature whose whole request is a picture.</summary>
+    /// <remarks>
+    /// Zero is a supported declaration on its own — a text-only model carries it — so the rule spans the two sections
+    /// rather than sitting on either. Without it the describer answers every picture in the mailbox with
+    /// <c>ImageTooLarge</c>, which names the pictures rather than the declaration.
+    /// </remarks>
+    [Fact]
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAZeroImageBudget_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestImageOctets = 0;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
+    }
+
+    /// <summary>Zero on its own is the right declaration for a model that cannot read a picture, so nothing refuses it.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AZeroImageBudgetWithImageDescriptionOff_ReportsNothing()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestImageOctets = 0;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = false } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     /// <summary>The attribute bounds are the half no reload would otherwise report, because the options framework drops the candidate before anything can log it.</summary>
     [Fact]
     public void FindDeclarationErrors_ABoundOutsideItsRange_NamesTheKeyAnOperatorEdits()

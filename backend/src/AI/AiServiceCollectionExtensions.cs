@@ -4,6 +4,7 @@
 
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
+using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -13,6 +14,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Retrieval;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -179,6 +181,54 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IMailQuestionAnswerer, MailAnsweringAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the one way an image attachment becomes text, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="maximumPixelCount">The largest pixel grid an image may declare and still be sent, ignored where the deployment describes nothing.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumPixelCount" /> is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called unconditionally and always registering something, which is the difference from every other call here. The
+    /// port answers with a reason rather than with an absence, so a caller records why an attachment produced no
+    /// description without knowing what a deployment declared — and the reason a deployment that turned nothing on
+    /// gives is the one an operator would recognize as their own decision.
+    /// </para>
+    /// <para>
+    /// Which of the two is registered is decided once, at composition. An instance that has not activated image
+    /// description never resolves a chat client, never opens a transport, and never buffers an attachment: the
+    /// activation is a registration rather than a branch inside a call, so there is no path by which a picture leaves
+    /// an instance whose operator did not ask for it.
+    /// </para>
+    /// <para>
+    /// Scoped when it is active, because it sends over the scoped chat client and a background run makes one scope per
+    /// message. The inactive one is a singleton holding nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddImageAttachmentDescription(
+        this IServiceCollection services,
+        long? maximumPixelCount)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (maximumPixelCount is not { } ceiling)
+        {
+            services.AddSingleton<IEmailAttachmentImageDescriber>(InactiveImageAttachmentDescriber.Instance);
+
+            return services;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ceiling);
+
+        services.AddScoped<IEmailAttachmentImageDescriber>(provider => new ImageAttachmentDescriber(
+            provider.GetRequiredService<IChatModelClient>(),
+            provider.GetRequiredService<IChatGenerationPlanSource>(),
+            ceiling,
+            provider.GetRequiredService<ILogger<ImageAttachmentDescriber>>()));
 
         return services;
     }

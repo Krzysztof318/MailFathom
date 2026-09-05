@@ -138,6 +138,13 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
     public TimeSpan SpendPeriod { get; set; } = TimeSpan.FromDays(1);
 
+    /// <summary>Gets or sets whether and how an image attachment is described in words a provider writes.</summary>
+    /// <remarks>
+    /// Its own group rather than two properties here, because what it declares is an egress an operator turns on
+    /// deliberately, and a group is what makes that visible to a chart, a review, and a diff.
+    /// </remarks>
+    public EmbeddingImageDescriptionOptions ImageDescription { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;
 
@@ -151,6 +158,9 @@ internal sealed class EmbeddingOptions : IValidatableObject
         {
             yield return error;
         }
+
+        // The image-description block is judged in ComposedSettings instead, because composition reads its grid ceiling
+        // to decide which describer it registers and this validator runs strictly afterwards, under ValidateOnStart.
 
         if (!this.IsConfigured)
         {

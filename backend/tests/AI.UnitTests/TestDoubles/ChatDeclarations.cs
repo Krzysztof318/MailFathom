@@ -29,6 +29,7 @@ internal static class ChatDeclarations
         string? reasoningEffort = null,
         int maximumMessagesPerRequest = 8,
         int maximumRequestCharacters = 4000,
+        int maximumRequestImageOctets = 1024,
         TimeSpan? requestTimeout = null) =>
         ChatGenerationPlan.Create(
             endpoint ?? Endpoint(),
@@ -38,6 +39,7 @@ internal static class ChatDeclarations
             reasoningEffort,
             maximumMessagesPerRequest,
             maximumRequestCharacters,
+            maximumRequestImageOctets,
             requestTimeout ?? RequestTimeout);
 
     /// <summary>Publishes one fixed plan, standing in for the composition root's reading of the declaration in force.</summary>
