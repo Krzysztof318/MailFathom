@@ -9,7 +9,7 @@ informed:
 
 # Describe an image attachment in words the profile already embeds, open no second vector space, and let a depicted match join a result only under everything somebody wrote
 
-<!-- describes: backend/src/AI/Chunking/**, backend/src/AI/Embeddings/**, backend/src/Application/Emails/Search/**, backend/src/Application/Emails/SearchEmails/** -->
+<!-- describes: backend/src/AI/Chunking/**, backend/src/AI/Embeddings/**, backend/src/AI/Retrieval/**, backend/src/Application/Emails/Chunking/**, backend/src/Application/Emails/Search/**, backend/src/Application/Emails/SearchEmails/**, backend/src/Application/Emails/BrowseSearch/**, backend/src/Host/Configuration/Embeddings/** -->
 
 ## Context and Problem Statement
 
@@ -102,7 +102,9 @@ The guarantee that falls out is stronger than "never outranks" and simpler to te
 
 Both rankings come from two bounded scans of the same table under the same filters, which is what the per-profile index already serves; the set difference is done where fusion already lives.
 
-The same ordering governs every surface, because they read one use case: `search_emails`, `ask_mail`'s retrieval, and `/api/client`'s search route. Issue 1562's requirement that there be no second ranking implementation is what makes the floor a property of the system rather than of whichever surface remembered it.
+The same ordering governs every surface, and today that is not one place. `ReciprocalRankFusion.Fuse` has two callers: `MailboxSearchReader`, which `search_emails` and `ask_mail`'s retrieval both reach through `MailboxKnowledgeSearch`, and `MailSearchBrowser`, which `/api/client`'s search route reaches directly and which reads both rankings and fuses them itself. So a floor written where fusion happens would be written twice.
+
+It is written once. The partition — producing the two rankings, fusing the written one, and appending what the depicted one adds — is one step both use cases call, rather than a rule each remembers. That is issue 1562's own requirement that `/api/client` reuse the ranking rather than carry a second implementation of it, and issue 1559's that it reuse issue 1557's; this record is naming which step that is rather than adding an obligation. A guarantee that has to be remembered in two places is one that holds in one of them after the next change to the other.
 
 ### A message's place is decided by its nearest written passage
 
@@ -130,6 +132,16 @@ A description is not a span of anything the sender sent. ADR 0029's offset contr
 
 And a description is bounded on ADR 0029's extraction side of the budget, not its embedding side. What embedding is billed for is the characters a description contains, which the existing ceiling already counts correctly. What is new is a chat call per image, which no character count predicts — the same argument ADR 0029 made for parsing, and issue 1561 is where it lands.
 
+### A scanned page that arrives as an image is transcribed, and that is not the recognition ADR 0029 refused
+
+This has to be said outright rather than left to be inferred from the word "transcription" above, because ADR 0029 refused optical character recognition by name and a reader is owed the boundary.
+
+A scanned page that arrives *as an image attachment* is described like any other image, and what a description of it says is largely what it says in words. So this record does close part of the gap ADR 0029 named as its own worst consequence — the scanned letter, which is exactly the document a person most expects to be found. What stays refused is what ADR 0029 actually refused: an optical-character-recognition dependency, with its own licence review and its own price per page, and the parsing of a scanned page found *inside* a document attachment, which stays the case ADR 0029 records as yielding no text.
+
+Two of ADR 0029's three grounds simply do not reach this case. There is no new dependency: the chat provider is one this deployment already declares and already pays for, reached over the client and the pipeline every other chat call uses. There is no unpredictable price per page either — the cost is the one chat call per image the switch and the budget above already account for, whether the picture is a whiteboard or a page of text.
+
+The third ground does reach it, and this record answers it rather than passing over it. ADR 0029 refused recognition partly on "an accuracy floor that would put invented words into a vector space presented as the mailbox's meaning", and a chat model transcribing a page can misread it exactly as a recognition engine can. Three things already decided above are what contain it, and containment rather than accuracy is the honest claim. The transcription is stored as readable text, so a wrong word is visible to the person reading the result rather than buried in a vector nobody can inspect. It is attributed as a machine's account of a picture wherever a person or a model reads it, so nothing presents an invented word as something the sender wrote. And it sits under the floor: a passage the model invented can never lift a message above one somebody actually wrote, and can only add a message that would not have been in the result at all. That is a bound ADR 0029 did not have available when it refused — its extracted attachment text ranks beside body text with nothing holding it down — and it is the reason the same accuracy risk is acceptable here and was not there.
+
 ### What sending an image discloses, and what cannot scan it
 
 Describing an image sends the attachment's bytes to a provider, which is a disclosure of mail content as real as sending message text for embedding, and frequently a larger one — a photograph of a document discloses the document.
@@ -151,6 +163,7 @@ Everything derived from an image inherits the classification of the mail that ca
 - Neutral, because a deployment with no chat provider gets no image search. Description is a chat call, so an instance that declared only an embedding chain reaches documents and message text and stops there, which is a configuration to state in the documentation rather than a failure to report at runtime.
 - Bad, because a depicted result is only visible when the written results do not fill the requested window. That is what a strict floor means, and it is the price of the guarantee rather than an oversight: a caller-set filter that raises depicted results explicitly is the first thing to revisit if it proves too blunt in use, and it is deliberately not built now.
 - Bad, because an image leaving the deployment cannot be scanned the way text leaving it is, so the operator's activation is the whole of the control. Making that the documented, explicit position is the honest answer available; claiming a scan would be the dishonest one.
+- Bad, because a transcription of a scanned page can be wrong in a way an extraction cannot, and this record contains that rather than preventing it: the text is readable, it is attributed to a machine, and the floor keeps it from displacing anything written. A misread word still enters the vector space, and somebody reading a depicted result has to check it against the picture.
 - Bad, because a description is model output about attacker-controlled bytes, which is a prompt-injection surface that message text does not have in the same shape. It is bounded by treating the text as untrusted everywhere downstream, which is the same posture extracted document text already carries, and by attributing it as a machine's description wherever a model reads it.
 - Bad, because two rankings are read where one was read before, so a semantic search over a deployment that describes images pays a second bounded scan. Both are served by the index that already exists, and the alternative — one scan and a label — is the failure mode named above.
 
@@ -164,7 +177,7 @@ Everything derived from an image inherits the classification of the mail that ca
 - A test proves that no image is described on a deployment whose attachment extraction is off, whatever the description switch says.
 - Unit tests prove that a depicted result carries its description as the extract shown, while a message ranked semantically on written text and carrying none of the query's words still carries none.
 - Unit tests over the retrieval context formatter prove that a description is attributed as a machine's account of an attached picture rather than as an extract of what the message says.
-- Tests over each retrieval surface — `search_emails`, `ask_mail`, and `/api/client`'s search route — prove the ordering by exercising the one shared use case, rather than by re-implementing the rule per surface.
+- Tests prove the ordering against the shared partition step, and a test per retrieval surface — `search_emails`, `ask_mail`, and `/api/client`'s search route — proves that surface reaches it, which is what `MailSearchBrowser` fusing separately from `MailboxSearchReader` today makes worth asserting rather than assuming.
 - A test proves that an attachment on a withheld message produces no description and no chunk.
 - The documentation states, in the operator-facing pages that describe provider endpoints and the AI features, that describing images sends attachment bytes to a chat provider, that it is a separate activation, and that no content scan applies to the bytes.
 - Issue 1551's own acceptance carries the bounded-decoding and format-allowlist obligations; this record does not restate them, and a review of that work reads them there.
@@ -223,6 +236,6 @@ Everything derived from an image inherits the classification of the mail that ca
 - ADR 0006 settles what a profile is, what a vector is attributable to, and why activation is the act that spends. This record adds no axis to it.
 - [ADR 0029](0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md) settles that attachment-derived text is one kind of passage in one vector space under a switch of its own, and this record extends that model rather than sitting beside it: one further discriminator on the passage, one further switch beside its extraction switch, one further budget beside its extraction budget, and the ranking rule it does not carry.
 - ADR 0011 settles that reaching a provider outside the OpenAI wire protocol is refused in code, which is the ground A2 is refused on.
-- **Optical character recognition is not admitted here.** ADR 0029 refused it by name and left it a decision of its own, and this record does not take that decision through the side door: what it decides is the description of an *image attachment*, and a scanned page inside a document attachment stays the case ADR 0029 records as yielding no text. That the two mechanisms would plausibly be the same one is noted on issue 1551 and is a reason to keep them one when somebody does take that decision, not a reason to consider it taken.
+- **What this does and does not admit of ADR 0029's optical-character-recognition refusal** is decided above, under *A scanned page that arrives as an image is transcribed*: a scan arriving as an image attachment is transcribed and part of ADR 0029's stated gap closes; an OCR dependency and a scan inside a document attachment stay refused. That the two would plausibly reuse one mechanism is noted on issue 1551, and is a reason to keep them one when somebody takes the remaining half of that decision.
 - Revisit A2 when both hold at once: a multimodal embedding model reachable over the OpenAI-compatible embeddings route with no second wire protocol, and a feature that needs image-to-image similarity rather than image-to-query relevance.
 - Revisit the strictness of the floor if depicted results prove too rarely visible in use. The change is a caller-set filter that raises them explicitly, added beside the floor rather than in place of it.
