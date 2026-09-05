@@ -37,9 +37,13 @@ export function useSpace(offered: readonly Space[]): Space | null {
     // Replaced rather than pushed: a first load at the root, or a fragment nobody answers, would otherwise leave the
     // back gesture landing on an address that immediately corrects itself again. Nothing is written while the offered
     // spaces are unknown, so an address somebody arrived at survives the session being read.
+    //
+    // Whatever state the entry already carried is written back with it rather than replaced by nothing: an entry the
+    // shell marked is one press of the back gesture, and correcting the address on it would spend that press on an
+    // entry that no longer says what it is for. `shellOperations/backNavigation.ts` is what puts a mark there.
     useEffect(() => {
         if (space !== null && named !== space) {
-            window.history.replaceState(null, '', addressOf(space));
+            window.history.replaceState(window.history.state, '', addressOf(space));
         }
     }, [address, named, space]);
 

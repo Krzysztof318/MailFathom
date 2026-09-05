@@ -10,7 +10,7 @@ import { isOfferedLocale, localeNames, locales } from '../localization/locale';
 import { useLocalization } from '../localization/useLocalization';
 import { isThemeChoice, themeChoices } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
-import { useWideEnoughForTabs } from './useWideWorkspace';
+import { useDesktopComposition } from './useWideWorkspace';
 
 // The settings a person reaches without leaving the screen they are on. Two of them follow the person and are held on
 // the deployment — the theme and the tab mode — and one follows the machine, which is the language: what a client is
@@ -85,7 +85,7 @@ export function ThemeSegments({ onChoose }: { readonly onChoose: (choice: (typeo
  */
 export function TabModeSwitch({ on, onChange }: { readonly on: boolean; readonly onChange: (on: boolean) => void }) {
     const { translate } = useLocalization();
-    const wideEnough = useWideEnoughForTabs();
+    const wideEnough = useDesktopComposition();
 
     return (
         <label className={`${settingRow} ${wideEnough ? 'cursor-pointer hover:bg-hover' : 'opacity-50'}`}>

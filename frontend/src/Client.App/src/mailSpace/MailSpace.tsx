@@ -8,7 +8,8 @@ import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
 import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
-import { useWideWorkspace } from '../shell/useWideWorkspace';
+import { useScreenLayer } from '../shell/screenLayers';
+import { useDesktopComposition, useTwoPanes, useWideWorkspace } from '../shell/useWideWorkspace';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { AiFilters } from './AiFilters';
@@ -19,18 +20,28 @@ import { SelectionBar } from './SelectionBar';
 
 // The Mail space as the design project composes it, out of the three regions a mail client is: the mailboxes, the list
 // of what is in the one that is scoped, and what is open from it. What this component owns is the composition alone —
-// each region is handed in already built — and the composition is two shapes out of one tree, decided by the width the
-// space has been given rather than by which head it runs on.
+// each region is handed in already built — and the composition comes out of one tree, decided by the width the space
+// has been given rather than by which head it runs on.
 //
-// Wide, it is the toolbar over three columns: a mailbox column that folds to a strip, the list at the width the design
-// gives it, and the reading pane taking the rest. Narrow, it is one column at a time: the list first, with the mailboxes
-// behind a control and the message in front of the list once one is open, and a way back from each. Nothing is hidden
-// by the width alone; what the narrow shape cannot show at once is reached rather than dropped.
+// **Three widths decide it, and they are three separate questions rather than one asked three ways.** The design
+// project's prototype asks exactly these, and `shell/useWideWorkspace.ts` is where each is asked once:
 //
-// Where focus goes when the narrow shape changes what it shows is this component's too: a message coming in front of
-// the list is a view change, and so is going back, and a reader on a keyboard is put at the start of what replaced what
-// they were on rather than left on an element that is no longer there. A resize that changes the shape is not, so the
-// width changing moves nothing.
+// - *Two panes or one.* Below that width the space draws the list **or** what is open and never both, so a row that is
+//   not on the screen is not in the document either; above it the two stand side by side with a boundary to move.
+// - *The mailbox column or a drawer.* Only the desktop composition has room for a third column, so at the tablet and
+//   the fold the mailboxes stand in a drawer over the space, reached from a control in the list's own header.
+// - *The toolbar at all*, which is the phone question: bottom navigation already spends the foot of a phone-width
+//   window, and the toolbar's acts are on the selection bar and the message's own head there.
+//
+// So the four compositions the project frames fall out of those three: the phone has one pane, a drawer and no toolbar;
+// the fold and the tablet have two panes, a drawer and a toolbar; the desktop has two panes, the mailbox column and the
+// tab strip. Nothing is hidden by the width alone; what a narrower composition cannot show at once is reached rather
+// than dropped.
+//
+// Where focus goes when the single-pane shape changes what it shows is this component's too: a message coming in front
+// of the list is a view change, and so is going back, and a reader on a keyboard is put at the start of what replaced
+// what they were on rather than left on an element that is no longer there. A resize that changes the shape is not, so
+// the width changing moves nothing.
 //
 // How the wide shape divides its width between the list and the pane is the reader's, and this is where that lives: it
 // is the composition's own number rather than either column's, and only the shape that draws both columns has a
@@ -87,7 +98,10 @@ export function MailSpace({
     const { workspace, revise } = useWorkspace();
     const composing = useComposing();
     const wide = useWideWorkspace();
+    const twoPanes = useTwoPanes();
+    const desktop = useDesktopComposition();
     const [listWidth, setListWidth] = useState(() => readListWidth(person));
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const drawer = useRef<HTMLDialogElement>(null);
     const listColumn = useRef<HTMLElement>(null);
     const readingColumn = useRef<HTMLElement>(null);
@@ -95,7 +109,7 @@ export function MailSpace({
     // What is being written stands where what is being read stands, so the narrow shape brings the reading column
     // in front of the list for a message somebody is writing exactly as it does for one they opened.
     const readingInFront =
-        !wide && (workspace.selection !== null || workspace.conversation !== null || composing.opening !== null);
+        !twoPanes && (workspace.selection !== null || workspace.conversation !== null || composing.opening !== null);
 
     // Read from the workspace rather than held here, because the column is not the only thing that draws differently
     // once it is folded: the tree inside it draws a symbol where it drew a name, and the tree is a region handed in
@@ -113,7 +127,7 @@ export function MailSpace({
         const listed = listColumn.current;
         const reading = readingColumn.current;
 
-        if (!wide || listed === null || reading === null || typeof ResizeObserver !== 'function') {
+        if (!twoPanes || listed === null || reading === null || typeof ResizeObserver !== 'function') {
             return;
         }
 
@@ -131,20 +145,20 @@ export function MailSpace({
         return () => {
             watched.disconnect();
         };
-    }, [wide]);
+    }, [twoPanes]);
 
     // Focus is placed on the shape changing what it shows, and not on the width changing the shape: both are recorded
     // and only the first moves anything. A ref rather than state, because what it holds is what was last drawn.
-    const shown = useRef({ wide, readingInFront });
+    const shown = useRef({ twoPanes, readingInFront });
 
     useEffect(() => {
         const before = shown.current;
-        shown.current = { wide, readingInFront };
+        shown.current = { twoPanes, readingInFront };
 
-        if (before.wide === wide && before.readingInFront !== readingInFront) {
+        if (before.twoPanes === twoPanes && before.readingInFront !== readingInFront) {
             (readingInFront ? readingColumn : listColumn).current?.focus();
         }
-    }, [wide, readingInFront]);
+    }, [twoPanes, readingInFront]);
 
     // The drawer is a way to point at a mailbox, so pointing at one closes it: a reader who chose a folder wants the
     // folder's mail, which is behind the drawer they chose it in. The dialog is the platform's own, so closing it puts
@@ -158,6 +172,25 @@ export function MailSpace({
             drawer.current?.close();
         }
     }, [scope]);
+
+    // The drawer belongs to the two compositions with no room for a mailbox column, so a window widened past that room
+    // takes it off the screen without any way out of it firing `close`. What it was is given up as the composition
+    // changes rather than in an effect answering that it did: the width is what caused it, so a render answers it and
+    // nothing is left standing for a frame. Narrowing again therefore finds a drawer that is shut, which is what it is.
+    const [composedForDesktop, setComposedForDesktop] = useState(desktop);
+
+    if (composedForDesktop !== desktop) {
+        setComposedForDesktop(desktop);
+        setDrawerOpen(false);
+    }
+
+    // The drawer stands over the space rather than beside it, so the back gesture closes it before it takes a message
+    // off the screen, and taking the navigation to another destination leaves none of it behind. Whether it is open is
+    // held here because the platform publishes no such value: `close` is the one event every way out of it fires — the
+    // control inside it, Escape, and the back gesture alike — so this cannot disagree with what is on the screen.
+    useScreenLayer(drawerOpen, () => {
+        drawer.current?.close();
+    });
 
     function goBackToList(): void {
         revise({ selection: null, conversation: null });
@@ -174,7 +207,7 @@ export function MailSpace({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            {wide ? tabs : null}
+            {desktop ? tabs : null}
 
             {/* The bar replaces the toolbar while messages are picked out, which is the design project's composition:
                 one strip saying what the next press is about. It stands at every width because the narrow shape has no
@@ -182,7 +215,7 @@ export function MailSpace({
             {workspace.selected.length > 0 ? <SelectionBar /> : wide ? <MailToolbar /> : null}
 
             <div className="flex min-h-0 flex-1">
-                {wide ? (
+                {desktop ? (
                     <aside
                         aria-label={translate('mailboxes.open')}
                         className={`flex shrink-0 flex-col border-e border-line bg-sunken ${folded ? 'w-mailboxes-folded' : 'w-mailboxes'}`}
@@ -205,8 +238,13 @@ export function MailSpace({
                 ) : (
                     <dialog
                         ref={drawer}
+                        onClose={() => {
+                            setDrawerOpen(false);
+                        }}
                         aria-label={translate('mailboxes.open')}
-                        className="fixed inset-y-0 left-0 m-0 h-full max-h-none w-drawer max-w-full border-0 border-e border-line bg-sunken p-0 text-text shadow-overlay backdrop:bg-scrim"
+                        // It stands in the platform's top layer, which the frame's own safe-area padding is not around,
+                        // so a drawer running the height of the screen carries the insets it crosses itself.
+                        className="fixed inset-y-0 left-0 m-0 h-full max-h-none w-drawer max-w-full border-0 border-e border-line bg-sunken p-0 pt-safe-top pb-safe-bottom pl-safe-left text-text shadow-overlay backdrop:bg-scrim"
                     >
                         <div className="flex h-full flex-col">
                             <Mailboxes
@@ -227,12 +265,12 @@ export function MailSpace({
                     </dialog>
                 )}
 
-                {wide || !readingInFront ? (
+                {twoPanes || !readingInFront ? (
                     <section
                         ref={listColumn}
                         tabIndex={-1}
                         aria-label={translate('mail.listColumn')}
-                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${wide ? '' : 'flex-1'}`}
+                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${twoPanes ? '' : 'flex-1'}`}
                         /* The one width in the client a person sets rather than the design, which is why it is drawn
                            from a value instead of a utility. The narrow shape has no boundary to move, so it takes the
                            whole column and this says nothing about it.
@@ -240,15 +278,16 @@ export function MailSpace({
                            anything has measured this one, and a column that refuses to give way in that frame would
                            push the message off the side. Flexbox holds it inside the window until the measurement
                            below brings it back to a width that fits. */
-                        style={wide ? { width: `${String(listWidth)}px` } : undefined}
+                        style={twoPanes ? { width: `${String(listWidth)}px` } : undefined}
                     >
-                        {wide ? null : (
+                        {desktop ? null : (
                             <div className="flex items-center px-2 pt-2">
                                 <ColumnControl
                                     label={translate('mailboxes.open')}
                                     icon="menu"
                                     onActivate={() => {
                                         drawer.current?.showModal();
+                                        setDrawerOpen(true);
                                     }}
                                 />
                             </div>
@@ -256,13 +295,13 @@ export function MailSpace({
 
                         {list}
 
-                        {wide ? null : intent}
+                        {twoPanes ? null : intent}
                     </section>
                 ) : null}
 
                 {/* The boundary is only there where both columns are: one column at a time has nothing between them,
                     and the line the grip draws is the border the list would otherwise carry. */}
-                {wide ? (
+                {twoPanes ? (
                     <ListWidthGrip
                         width={listWidth}
                         onWidth={(moved) => {
@@ -277,14 +316,14 @@ export function MailSpace({
                     />
                 ) : null}
 
-                {wide || readingInFront ? (
+                {twoPanes || readingInFront ? (
                     <section
                         ref={readingColumn}
                         tabIndex={-1}
                         aria-label={translate('mail.readingColumn')}
                         className="flex min-h-0 min-w-0 flex-1 flex-col bg-panel"
                     >
-                        {wide ? null : (
+                        {twoPanes ? null : (
                             <div className="flex items-center px-2 pt-2">
                                 <button
                                     type="button"
@@ -310,7 +349,7 @@ export function MailSpace({
 
             {/* Composing stands on the list in the narrow shape, where the toolbar carrying it is not drawn: the one
                 thing a phone-width reader reaches for from the list, at the corner a thumb reaches. */}
-            {wide || readingInFront ? null : composing.offered ? (
+            {twoPanes || readingInFront ? null : composing.offered ? (
                 <Control
                     label={translate('mail.compose')}
                     icon="edit_square"

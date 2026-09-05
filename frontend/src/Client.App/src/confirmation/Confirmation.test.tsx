@@ -3,9 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from '../shell/screenLayers';
 import { storeLocale } from '../localization/locale';
 import { Confirmation, type Reversal, type WayOut } from './Confirmation';
 
@@ -57,6 +58,7 @@ function drawConfirmation(
     acted: ReturnType<typeof vi.fn>;
     leftAside: ReturnType<typeof vi.fn>;
     keptAsTheyWere: ReturnType<typeof vi.fn>;
+    shell: { readonly current: ScreenLayers };
 } {
     const acted = vi.fn();
     const leftAside = vi.fn();
@@ -66,21 +68,45 @@ function drawConfirmation(
     // to run and look exactly like one that resolved to nothing at all.
     const keptAsTheyWere = vi.fn();
 
+    // The shell around it, because the question records itself as standing over whatever asked it for as long as it
+    // is open. Its three functions are the same ones for the life of the stack, so the value handed to the provider
+    // stays current however the count moves.
+    const { result } = renderHook(() => useScreenLayerStack());
+
     render(
         <LocalizationProvider>
-            <Asking
-                reversal={reversal}
-                cautions={cautions}
-                ways={[
-                    { said: 'Keep them where they are', manner: 'back', run: keptAsTheyWere },
-                    { said: 'Leave a copy', manner: 'aside', run: leftAside },
-                    { said: 'Move them', manner: 'act', run: acted },
-                ]}
-            />
+            <ScreenLayersContext value={result.current}>
+                <Asking
+                    reversal={reversal}
+                    cautions={cautions}
+                    ways={[
+                        { said: 'Keep them where they are', manner: 'back', run: keptAsTheyWere },
+                        { said: 'Leave a copy', manner: 'aside', run: leftAside },
+                        { said: 'Move them', manner: 'act', run: acted },
+                    ]}
+                />
+            </ScreenLayersContext>
         </LocalizationProvider>,
     );
 
-    return { acted, leftAside, keptAsTheyWere };
+    return { acted, leftAside, keptAsTheyWere, shell: result };
+}
+
+/**
+ * The question as the platform would report it once it is open, which jsdom reports of nothing.
+ *
+ * The component reads whether it is open off the element's own toggle rather than holding a second copy, and jsdom
+ * fires none and declares no `ToggleEvent` — so the one property read off it is put on an ordinary event.
+ */
+function theQuestionIsOpened(): void {
+    const asked = screen.getByRole('dialog', { hidden: true });
+    const opening = new Event('toggle');
+
+    Object.defineProperty(opening, 'newState', { value: 'open' });
+
+    act(() => {
+        asked.dispatchEvent(opening);
+    });
 }
 
 function ask(): void {
@@ -242,5 +268,25 @@ describe('Confirmation', () => {
 
         expect(named === null ? null : document.getElementById(named)?.textContent).toBe(question);
         expect(described === null ? null : document.getElementById(described)?.textContent).toContain(consequence);
+    });
+
+    // The question stands over whatever asked it, so the back gesture answers this before it reaches anything behind
+    // it: back on a confirmation is the same as Escape on one, which is leaving without choosing a way out.
+    it('closes without choosing a way out when the back gesture reaches it', () => {
+        const { acted, leftAside, keptAsTheyWere, shell } = drawConfirmation();
+
+        ask();
+        theQuestionIsOpened();
+
+        expect(shell.current.depth).toBe(1);
+
+        act(() => {
+            shell.current.closeTop();
+        });
+
+        expect(screen.getByRole('dialog', { hidden: true }).hasAttribute('open')).toBe(false);
+        expect(acted).not.toHaveBeenCalled();
+        expect(leftAside).not.toHaveBeenCalled();
+        expect(keptAsTheyWere).not.toHaveBeenCalled();
     });
 });
