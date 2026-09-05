@@ -1806,6 +1806,14 @@ TLS-terminating reverse proxy and wrong anywhere else, so startup says so:
 - an endpoint serving [the page](#serving-the-client-from-the-deployment) over clear text an operator explicitly
   permitted reports that separately, at every startup, naming the permission rather than assuming it is still true.
 
+**One thing the page itself does less of over clear text**, and no setting turns it back on: a browser withholds the
+Notifications API outside a secure context, so a client reached over plain `http` at anything but `localhost` raises no
+system notification while its window is behind another, draws no switch for one on its settings screen, and asks nobody
+for permission. It is the browser's own rule rather than this deployment's, it is decided by the address a person
+opened rather than by any configuration here, and the client reports the operation as one this run does not carry —
+which is the same thing it says on a desktop shell that linked no notification plugin. A deployment that wants the
+client to notify therefore serves the page over `https`, which is what the redirect above already is for.
+
 All three are warnings rather than refusals, because a loopback bind, a private network, and a proxy that terminates
 TLS are each a deployment where one of them is the right answer, and only an operator knows which they have. Serving
 the page is the one part that is refused rather than warned about, for the reason the next section gives — and that

@@ -305,13 +305,47 @@ function Application({
 // rather than passed down — and read through a subscription rather than copied, because the person moving the switch is
 // not the only writer: an arrival the operating system refuses turns it off from `useNotificationCentre.ts`, and a copy
 // taken at mount would still read *on* underneath somebody with this dialog open.
+//
+// **Moving the switch on is the gesture the permission is asked from**, which is why this row asks rather than the
+// arrival that would use it: a browser refuses the prompt outright unless somebody's own action led to it, and a
+// dialog an arrival raised would land over whatever they were reading. Nothing here knows that a browser is what is
+// underneath — it asks the operation where it stands and asks it to ask, and a head that grants unconditionally
+// answers both without a dialog appearing at all.
+//
+// The switch says what this machine will actually do, which is the choice *and* the permission: a head nobody has been
+// asked in yet draws off however the device store reads, because a control saying *on* over a machine that will raise
+// nothing is the one state worse than an absent row. Only a refusal is explained in words, because it is the only one
+// of the three the switch cannot undo — the browser has to be told from its own address bar.
 function SystemNotifications() {
     const { translate } = useLocalization();
     const notifier = useSystemNotifier();
     const raising = useSystemNotificationsChosen();
 
+    // Seeded from what the head already stood at and moved by what it answers, because the operation resolves once at
+    // the composition root and cannot redraw a screen when somebody answers its dialog.
+    const [standing, setStanding] = useState(notifier.standing);
+
     if (!notifier.offered) {
         return null;
+    }
+
+    function choose(on: boolean): void {
+        if (!on) {
+            chooseSystemNotifications(false);
+
+            return;
+        }
+
+        void notifier.permit().then((answered) => {
+            setStanding(answered);
+
+            // Only an answer somebody gave is written. `unasked` is a question that reached nobody — a prompt the
+            // browser dismissed without deciding, or a shell command that threw — and writing *off* for it would leave
+            // a switch to undo on a machine that was never asked anything.
+            if (answered !== 'unasked') {
+                chooseSystemNotifications(answered === 'permitted');
+            }
+        });
     }
 
     return (
@@ -324,11 +358,15 @@ function SystemNotifications() {
                 <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                     {translate('settings.raiseSystemNotifications')}
                     <span className="text-xs text-muted">
-                        {translate('settings.raiseSystemNotificationsExplanation')}
+                        {translate(
+                            standing === 'refused'
+                                ? 'settings.systemNotificationsRefused'
+                                : 'settings.raiseSystemNotificationsExplanation',
+                        )}
                     </span>
                 </span>
 
-                <Switch on={raising} onChange={chooseSystemNotifications} />
+                <Switch on={raising && standing === 'permitted'} disabled={standing === 'refused'} onChange={choose} />
             </label>
         </>
     );

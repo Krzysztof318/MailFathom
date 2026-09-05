@@ -125,7 +125,19 @@ build time, so linking it would change what `gen/android/app/gradle.lockfile` fi
 that verifies that file. The phone's own notification is
 [#1616](https://github.com/Krzysztof318/MailFathom/issues/1616), which grants the capability, declares the runtime
 permission, and rewrites the lock file together; until then the Android head meets an operation that reports itself
-unoffered, exactly as the web head does.
+unoffered.
+
+**The web head raises one too, and through this same operation rather than beside it.** A browser has the
+Notifications API of its own, so `shellOperations/systemNotifier.ts` resolves a second implementation where no shell
+announced itself, and everything above it — the settings switch, the count and kind an arrival is reduced to, the rule
+that says nothing while the window has focus — is what it already was. Three things are the browser's own and are the
+whole of what differs. Permission is asked from the settings switch rather than from an arrival, because a browser
+wants a gesture behind the prompt and cannot re-ask a person who has said no. The API is withheld entirely outside a
+secure context, so a page served over plain `http` at anything but `localhost` carries no such operation and draws no
+switch — [the client endpoint's page](../docs/operations/client-endpoint.md) is where an operator reads that. And
+somebody acting on one arrives by a different route: the shell says it out loud over its own event, while the browser
+reports it on the notification itself, so the web head satisfies `whenActedOn` out of `Notification.onclick` and adds
+bringing the window to the front, which the shell's own event arrives too late to need.
 
 | What                                                                | Where it is decided                                                                                                                                                                                    |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

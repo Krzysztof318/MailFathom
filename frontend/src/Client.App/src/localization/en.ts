@@ -182,6 +182,8 @@ export const en = {
     'settings.raiseSystemNotifications': 'Notify me on this machine',
     'settings.raiseSystemNotificationsExplanation':
         'When the window is not in front of you, this machine says how much arrived and of what kind — never who wrote or what about.',
+    'settings.systemNotificationsRefused':
+        'This browser has been told to block notifications from here. Allow them in its own site settings, and this switch will work again.',
     'settings.privacy': 'Privacy',
     'settings.telemetryWithheld': 'Do not send telemetry',
     'settings.telemetryExplanation': 'Error diagnostics and usage statistics stay on this device.',

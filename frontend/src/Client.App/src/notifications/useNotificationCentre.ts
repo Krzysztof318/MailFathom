@@ -252,10 +252,12 @@ export function useNotificationCentre(
         [session, transport, onFollow],
     );
 
-    // What the operating system is told, which is the whole of the desktop head's half of an arrival. Three things
-    // decide whether anything is said at all, and each of them is a different question: whether a shell offered the
+    // What the operating system is told, which is the whole of an arrival's half outside the window. Three things
+    // decide whether anything is said at all, and each of them is a different question: whether this head offered the
     // operation, whether this machine was left raising them, and whether somebody is already looking at the window —
-    // a notification raised over a window somebody is reading is the client interrupting itself.
+    // a notification raised over a window somebody is reading is the client interrupting itself. None of the three is
+    // a question about which head this is: a desktop shell and a browser both answer the first, and everything below
+    // reads the same way in either.
     //
     // `document.hasFocus()` rather than `visibilityState`, and the difference is the case this exists for: a desktop
     // window standing behind another is visible and unfocused, which is exactly when nobody is looking at it.

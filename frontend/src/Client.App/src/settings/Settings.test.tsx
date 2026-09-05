@@ -11,7 +11,11 @@ import { chooseSystemNotifications } from '../preferences/systemNotifications';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { deviceKeys } from '../device/deviceStore';
-import { SystemNotifierContext, type SystemNotifier } from '../shellOperations/systemNotifier';
+import {
+    SystemNotifierContext,
+    type NotificationStanding,
+    type SystemNotifier,
+} from '../shellOperations/systemNotifier';
 import { Settings } from './Settings';
 
 const settings: ClientPreferencesInForce = {
@@ -75,17 +79,52 @@ function renderSettings({
     );
 }
 
-/** The web head, where nothing offered the operation and the row therefore has nothing to decide. */
+/** A head that offered nothing, which is a page served outside a secure context and a shell with no plugin linked. */
 const raisesNothing: SystemNotifier = {
     offered: false,
+    standing: 'unasked',
+    permit: () => Promise.resolve('unasked'),
     raise: () => Promise.resolve('unavailable'),
     whenActedOn: () => () => undefined,
 };
 
-/** A head that offered it, which is the desktop one. */
+/** A head that offered it and grants on demand, which is the desktop one. */
 const raisesThem: SystemNotifier = {
     offered: true,
+    standing: 'permitted',
+    permit: () => Promise.resolve('permitted'),
     raise: () => Promise.resolve('raised'),
+    whenActedOn: () => () => undefined,
+};
+
+/**
+ * A head that offered it and has to ask somebody first, which is what a browser is.
+ *
+ * @param answered What the person says to the browser's own dialog when the switch puts it in front of them.
+ */
+function asksFirst(answered: NotificationStanding): SystemNotifier & { asked: () => number } {
+    let asked = 0;
+
+    return {
+        offered: true,
+        standing: 'unasked',
+        permit: () => {
+            asked += 1;
+
+            return Promise.resolve(answered);
+        },
+        raise: () => Promise.resolve(answered === 'permitted' ? 'raised' : 'unavailable'),
+        whenActedOn: () => () => undefined,
+        asked: () => asked,
+    };
+}
+
+/** A browser that has already been told to block them, which no gesture on this row can put a question to again. */
+const alreadyRefused: SystemNotifier = {
+    offered: true,
+    standing: 'refused',
+    permit: () => Promise.resolve('refused'),
+    raise: () => Promise.resolve('refused'),
     whenActedOn: () => () => undefined,
 };
 
@@ -430,6 +469,62 @@ describe('Settings', () => {
         });
 
         expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('draws the switch off on a head nobody has been asked in, however the device was left', () => {
+        renderSettings({ head: asksFirst('permitted') });
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('asks from the gesture, and a grant leaves the switch on and the answer on the device', async () => {
+        const browser = asksFirst('permitted');
+        renderSettings({ head: browser });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(browser.asked()).toBe(1);
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('true');
+    });
+
+    it('says so in the row where the answer to that question was no, and stops offering the switch', async () => {
+        renderSettings({ head: asksFirst('refused') });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('false');
+    });
+
+    it('writes nothing on the device where the question reached nobody, which nobody decided', async () => {
+        renderSettings({ head: asksFirst('unasked') });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBeNull();
+    });
+
+    it('reports a browser already told to block them without putting the question to it again', () => {
+        renderSettings({ head: alreadyRefused });
+        openApplication();
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
     });
 
     it('closes from its own control, which is the way out that does not need a keyboard', () => {

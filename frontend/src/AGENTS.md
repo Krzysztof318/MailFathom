@@ -195,6 +195,21 @@ that would decide nothing — which is how a surface adapts to an absent operati
 did not need: a shell announcing itself says nothing about a plugin only some targets link, so the question is whether
 the binding that plugin installs is there. And an operation a head does not carry is an answer of its own rather than a
 refusal — a refusal was given by somebody and is kept, an absent operation was decided by nobody and is kept nowhere.
+
+**The same module is also the worked example of a shell operation a head other than a shell can satisfy**, which is
+what stops "shell operation" from meaning "the desktop one does it and the rest do without". A browser has the
+Notifications API, so `systemNotifier.ts` resolves a second implementation of the _same_ operation where no shell
+announced itself — and the settings row, the privacy bound, the device switch, and the focus rule are unchanged, because
+none of them ever asked which head was underneath. Three rules come out of it and hold for the next such module.
+**The order the implementations are asked in is part of the resolution**, since the desktop plugin installs its own
+replacement for the platform binding: the shell is asked first, or a browser question would answer for a head the
+plugin was already answering for. **What a head can do before anybody is asked is part of the operation's own type**,
+which is why this one answers a standing beside a way to ask — a browser needs a gesture behind its prompt and cannot
+re-ask somebody who refused, so a switch that assumed a default would draw a promise the head could not keep, and only
+the operation knows which case it is in. And **one member is satisfied by whatever each head actually has**, rather
+than gaining a second member per head: `whenActedOn` is a shell event on the desktop and `Notification.onclick` in a
+browser, and the caller subscribes once without learning which. That the two arrive by different mechanisms is the
+implementations' business; that they arrive at all is the operation's.
 `Client.App/src/signIn/credentialStore.ts` is the other one today and predates the directory, so it still sits beside
 the sign-in screen; moving it is a change of its own rather than a side effect of adding the second. What is refused
 above is a component, a hook, or a screen asking the question itself, and that refusal is unchanged by either
