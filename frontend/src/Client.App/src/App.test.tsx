@@ -391,7 +391,11 @@ const deliversNothing: AttachmentExchange = {
 const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
 /** The head a test runs in: one that offered no system notification, which is the web head and what jsdom is. */
-const raisesNothing: SystemNotifier = { offered: false, raise: () => Promise.resolve('unavailable') };
+const raisesNothing: SystemNotifier = {
+    offered: false,
+    raise: () => Promise.resolve('unavailable'),
+    whenActedOn: () => () => undefined,
+};
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {

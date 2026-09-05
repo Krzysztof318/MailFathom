@@ -228,6 +228,12 @@ export function useNotificationCentre(
         setShown(false);
     }, []);
 
+    // Coming back through the notification the operating system showed is the same act as reaching for the bell, so it
+    // lands in the same place: the window the shell brought forward, with the centre open on it. Subscribed
+    // unconditionally rather than behind `notifier.offered`, because a head that raises no notification offers a
+    // subscription that subscribes to nothing — which is one question fewer for this hook to ask about a head.
+    useEffect(() => notifier.whenActedOn(show), [notifier, show]);
+
     const follow = useCallback(
         (notification: ClientNotification): void => {
             setShown(false);

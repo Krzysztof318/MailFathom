@@ -6,19 +6,19 @@
 // the web head has no equivalent of: the operating system's own credential store. Every other behaviour the client has
 // belongs to the bundle it wraps, which is what keeps a screen one screen across every head.
 //
-// Four of the five commands below are what ADR 0023 decided this shell would offer, and they are the application's only
-// reach into Rust that this repository wrote. What answers them lives in `credentials.rs` beside this file, in two
-// implementations selected by target — the desktop keychain and, per ADR 0027, the Android Keystore — because that is
-// the one operation whose *answer* differs between the heads rather than only its mechanism. They are commands this
-// application defines rather than a plugin's, so the capability system does not gate them and no `capabilities/` file
-// names them; what does reach them is the Tauri API the WebView is given through `withGlobalTauri` in
-// `tauri.conf.json`, which is why this shell pins no JavaScript binding of its own.
+// Four of the six commands below are what ADR 0023 decided this shell would offer, and they are part of the
+// application's only reach into Rust that this repository wrote. What answers them lives in `credentials.rs` beside
+// this file, in two implementations selected by target — the desktop keychain and, per ADR 0027, the Android Keystore
+// — because that is the one operation whose *answer* differs between the heads rather than only its mechanism. They
+// are commands this application defines rather than a plugin's, so the capability system does not gate them and no
+// `capabilities/` file names them; what does reach them is the Tauri API the WebView is given through `withGlobalTauri`
+// in `tauri.conf.json`, which is why this shell pins no JavaScript binding of its own.
 //
-// Each is `async` for one reason: Tauri runs a synchronous command on the main thread, and every one of these ends in a
-// blocking call to something outside the process — a credential store, which on Linux is a D-Bus round trip that waits
-// while a locked keyring asks its owner to unlock it, or a file on a disk that may be a network mount. Run there, that
-// call freezes the window rather than the request; run on the async runtime, it occupies a worker and the application
-// keeps painting.
+// Each of those four and the fifth beside them is `async` for one reason: Tauri runs a synchronous command on the main
+// thread, and every one of them ends in a blocking call to something outside the process — a credential store, which
+// on Linux is a D-Bus round trip that waits while a locked keyring asks its owner to unlock it, or a file on a disk
+// that may be a network mount. Run there, that call freezes the window rather than the request; run on the async
+// runtime, it occupies a worker and the application keeps painting.
 //
 // None of the credential commands reports why it failed. Everything they could report is about a password, and a client
 // that is told nothing simply asks for it again — which is the same outcome a browser refusing storage produces on the
@@ -30,17 +30,24 @@
 // the application's, in `shellOperations/configuredConnection.ts` and `deployment/adoptedDeployment.ts`, because they
 // are the same decisions on either head and a rule written twice is a rule two heads eventually disagree about.
 //
-// Two plugins are registered beside them, and they answer the two operations the bundle asks of a shell: handing a link
-// a reader followed to the system browser, per ADR 0024, and raising a system notification while nobody is looking at
-// the window. Both are plugins' commands, so both are gated — `capabilities/open-a-link.json` narrows what the webview
-// may ask of the opener to the three schemes a message body may carry, and `capabilities/raise-a-notification.json`
-// narrows the notification plugin to the three commands the application calls on the desktop targets alone, each
-// rather than taking the plugin's own default set. No core capability is granted either.
+// The sixth is `raise_notification`, and it is the one command here that exists because a plugin could not do the whole
+// of what it is for. It is not `async` and needs nothing from the runtime: it hands the waiting to a thread of its own
+// and returns, which `notifications.rs` beside this file explains along with why the waiting is what this shell had to
+// take over.
 //
-// The second is also the one thing this crate does not link everywhere. `Cargo.toml` states it per target and `run`
-// below registers it under the same condition, for a reason about the Android project's locked dependency graph that
-// is written out where the pin is. Nothing above the shell learns that: the application asks whether the operation is
-// offered, and a head that linked no plugin answers no differently from a browser that has no shell at all.
+// Two plugins are registered beside them. The opener answers the first operation the bundle asks of a shell — handing a
+// link a reader followed to the system browser, per ADR 0024 — and the notification plugin answers half of the second,
+// which is whether raising one is permitted at all. Both are plugins' commands, so both are gated:
+// `capabilities/open-a-link.json` narrows what the webview may ask of the opener to the three schemes a message body
+// may carry, and `capabilities/raise-a-notification.json` narrows the notification plugin to the two permission
+// commands the application still calls, on the desktop targets alone, rather than taking the plugin's own default set.
+// No core capability is granted either.
+//
+// The notification plugin is also the one thing this crate does not link everywhere. `Cargo.toml` states it per target
+// and `run` below registers it under the same condition, for a reason about the Android project's locked dependency
+// graph that is written out where the pin is. Nothing above the shell learns that: the application asks whether the
+// operation is offered, and a head that linked no plugin answers no differently from a browser that has no shell at
+// all.
 //
 // This is a library rather than the binary it was, and `src/main.rs` beside it is now three lines calling `run` below.
 // The split is what an Android head needs and the only thing about this file that is Android's: an application there is
@@ -52,6 +59,7 @@
 // untouched by a shell that carries one attribute.
 
 mod credentials;
+mod notifications;
 
 use std::collections::HashMap;
 use tauri::Manager;
@@ -187,6 +195,16 @@ fn from_configuration_file(app: &tauri::AppHandle) -> HashMap<&'static str, Stri
     stated
 }
 
+/// Raises one system notification saying the sentence given, and answers a click on it by bringing the window forward.
+///
+/// It answers nothing, because raising one answers nothing a caller could act on: whether anything appeared is the
+/// operating system's business from that moment, and what the application needed to know — that permission stood — the
+/// plugin's own permission commands already told it.
+#[tauri::command]
+fn raise_notification(app: tauri::AppHandle, said: String) {
+    notifications::raise(app, said);
+}
+
 /// Starts the shell. Every head enters here: the desktop binary calls it from `main`, and Android's generated entry
 /// point calls it from the activity the platform started.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -210,7 +228,8 @@ pub fn run() {
             keep_credential,
             read_credential,
             forget_credential,
-            client_configuration
+            client_configuration,
+            raise_notification
         ])
         .run(tauri::generate_context!())
         .expect("The MailFathom shell failed to start.");

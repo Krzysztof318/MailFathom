@@ -63,3 +63,15 @@ tauri-plugin-opener = { version = "=2.5.5", features = [] }
 # for it at all.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-notification = { version = "=2.4.0", features = [] }
+
+# What actually raises the notification, and the reason the plugin above is now half an operation rather than a whole
+# one. The plugin's `notify` hands the notification to this crate on a spawned task and drops the handle, and the crate
+# emits nothing on a desktop target — so a click on one arrives nowhere and no version of the plugin can report it.
+# `src/notifications.rs` raises it here instead, keeps the handle, and waits on it, which is what lets a click bring
+# the window forward and open the notification centre.
+#
+# It is the one direct pin in this manifest that adds no crate to the closure: the plugin already resolved this exact
+# version, so naming it here states a dependency this repository now takes on its own account rather than inherits.
+# The target list is the plugin's for the same reason it is the plugin's — a mobile head links neither, and the phone's
+# notification is #1616, where the plugin's own mobile channel reports a click already.
+notify-rust = "=4.18.0"

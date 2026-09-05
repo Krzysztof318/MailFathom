@@ -23,6 +23,17 @@ interface Window {
         readonly core: {
             invoke: (command: string, argument?: Readonly<Record<string, unknown>>) => Promise<unknown>;
         };
+
+        /**
+         * How the shell says something happened outside the page, declared as narrowly as the invoke above it.
+         *
+         * One event is subscribed to today — a system notification somebody acted on, which
+         * `shellOperations/systemNotifier.ts` answers — and it carries nothing, so the handler takes nothing. The
+         * promise answers with what stops listening.
+         */
+        readonly event: {
+            listen: (event: string, handler: () => void) => Promise<() => void>;
+        };
     };
 }
 

@@ -76,10 +76,18 @@ function renderSettings({
 }
 
 /** The web head, where nothing offered the operation and the row therefore has nothing to decide. */
-const raisesNothing: SystemNotifier = { offered: false, raise: () => Promise.resolve('unavailable') };
+const raisesNothing: SystemNotifier = {
+    offered: false,
+    raise: () => Promise.resolve('unavailable'),
+    whenActedOn: () => () => undefined,
+};
 
 /** A head that offered it, which is the desktop one. */
-const raisesThem: SystemNotifier = { offered: true, raise: () => Promise.resolve('raised') };
+const raisesThem: SystemNotifier = {
+    offered: true,
+    raise: () => Promise.resolve('raised'),
+    whenActedOn: () => () => undefined,
+};
 
 /** The second tab opened, which is where everything about the client rather than about the person is. */
 function openApplication(): void {

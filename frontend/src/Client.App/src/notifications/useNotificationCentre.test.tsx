@@ -118,9 +118,21 @@ interface Head {
 
     /** What this head answers when it is asked to raise one, which is three answers rather than two. */
     answers: NotificationRaised;
+
+    /**
+     * Whether this head reports somebody acting on one at all, which is the second thing a head either carries or does
+     * not: the desktop one does, and the web one subscribes to nothing.
+     */
+    reportsActing: boolean;
+
+    /** Somebody acting on the notification the operating system showed, or `null` where nothing is subscribed. */
+    act: (() => void) | null;
+
+    /** How many subscriptions the hook has left listening, which is what proves it stops one it started. */
+    listening: number;
 }
 
-const head: Head = { said: [], offered: true, answers: 'raised' };
+const head: Head = { said: [], offered: true, answers: 'raised', reportsActing: true, act: null, listening: 0 };
 
 const shell: SystemNotifier = {
     get offered() {
@@ -134,6 +146,19 @@ const shell: SystemNotifier = {
         head.said.push(said);
 
         return Promise.resolve('raised');
+    },
+    whenActedOn: (act) => {
+        if (!head.reportsActing) {
+            return () => undefined;
+        }
+
+        head.act = act;
+        head.listening += 1;
+
+        return () => {
+            head.act = null;
+            head.listening -= 1;
+        };
     },
 };
 
@@ -171,7 +196,12 @@ function centreOf(
     transport: MailFathomTransport,
     signedIn: ClientSession | null = session,
     changes: SignalledChanges = nothingSignalled,
-): { result: { current: NotificationCentre }; signInAsSomebodyElse: () => void; rerender: () => void } {
+): {
+    result: { current: NotificationCentre };
+    signInAsSomebodyElse: () => void;
+    rerender: () => void;
+    unmount: () => void;
+} {
     signedInAs = signedIn;
 
     const view = renderHook(
@@ -195,6 +225,7 @@ function centreOf(
     return {
         result: view.result,
         rerender: view.rerender,
+        unmount: view.unmount,
         signInAsSomebodyElse: () => {
             signedInAs = somebodyElse;
             view.rerender();
@@ -255,6 +286,9 @@ beforeEach(() => {
     head.said.length = 0;
     head.offered = true;
     head.answers = 'raised';
+    head.reportsActing = true;
+    head.act = null;
+    head.listening = 0;
 
     // Nobody is looking at the window unless a test says they are, which is the state a system notification exists for.
     looking(false);
@@ -362,6 +396,47 @@ describe('useNotificationCentre', () => {
         await threeArrive();
 
         expect(head.said).toEqual([]);
+    });
+
+    it('opens the centre where somebody acted on the notification the operating system showed', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        const { result } = centreOf(transport);
+
+        await settled();
+
+        expect(result.current.shown).toBe(false);
+
+        act(() => {
+            head.act?.();
+        });
+
+        expect(result.current.shown).toBe(true);
+    });
+
+    it('subscribes to nothing where the head reports no acting, which is the web head unchanged', async () => {
+        head.reportsActing = false;
+
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        const { result } = centreOf(transport);
+
+        await settled();
+
+        expect(head.act).toBeNull();
+        expect(head.listening).toBe(0);
+        expect(result.current.shown).toBe(false);
+    });
+
+    it('stops listening for one when the centre goes away', async () => {
+        const { transport } = deployment({ unreadCount: 0, notifications: [] });
+        const { unmount } = centreOf(transport);
+
+        await settled();
+
+        expect(head.listening).toBe(1);
+
+        unmount();
+
+        expect(head.listening).toBe(0);
     });
 
     it('raises nothing on a machine that was left not raising them', async () => {
