@@ -13,11 +13,11 @@ namespace MailFathom.Infrastructure.Documents;
 /// <para>
 /// This is the boundary the issue's whole posture rests on: below it are document parsers reading octets a hostile
 /// sender composed, and above it are characters and a closed set of reasons. Nothing a parser raises crosses it, and
-/// nothing it reads is written to the file system — neither parser needs a path, so the question of a location a later
+/// nothing it reads is written to the file system — no parser here needs a path, so the question of a location a later
 /// step could execute never arises.
 /// </para>
 /// <para>
-/// The timeout is observed between units of work rather than imposed on one: neither parser accepts a cancellation
+/// The timeout is observed between units of work rather than imposed on one: no parser here accepts a cancellation
 /// token, and .NET cannot abort a thread, so a parser that never returns from one page or one part is bounded by the
 /// size, ratio, and depth ceilings instead. Those are not optional for that reason.
 /// </para>
@@ -28,6 +28,7 @@ internal sealed class BoundedAttachmentTextExtractor(
 {
     private readonly PdfAttachmentTextReader pdf = new(options);
     private readonly OpenXmlAttachmentTextReader openXml = new(options);
+    private readonly OpenDocumentAttachmentTextReader openDocument = new(options);
 
     /// <inheritdoc />
     public async Task<AttachmentTextExtractionResult> ExtractTextAsync(
@@ -91,9 +92,15 @@ internal sealed class BoundedAttachmentTextExtractor(
 
         var content = buffer.ToReadableStream();
 
-        return format is AttachmentDocumentFormat.Pdf
-            ? this.pdf.Read(content, cancellationToken)
-            : this.openXml.Read(content, format, cancellationToken);
+        return format switch
+        {
+            AttachmentDocumentFormat.Pdf => this.pdf.Read(content, cancellationToken),
+            AttachmentDocumentFormat.OpenDocumentText
+                or AttachmentDocumentFormat.OpenDocumentSpreadsheet
+                or AttachmentDocumentFormat.OpenDocumentPresentation =>
+                this.openDocument.Read(content, format, cancellationToken),
+            _ => this.openXml.Read(content, format, cancellationToken),
+        };
     }
 
     /// <summary>Reports the bound a read crossed as the outcome that bound is published as.</summary>

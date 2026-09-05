@@ -25,6 +25,9 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData("application/msword", AttachmentDocumentFormat.LegacyWord)]
     [InlineData("application/vnd.ms-excel", AttachmentDocumentFormat.LegacySpreadsheet)]
     [InlineData("application/vnd.ms-powerpoint", AttachmentDocumentFormat.LegacyPresentation)]
+    [InlineData("application/vnd.oasis.opendocument.text", AttachmentDocumentFormat.OpenDocumentText)]
+    [InlineData("application/vnd.oasis.opendocument.spreadsheet", AttachmentDocumentFormat.OpenDocumentSpreadsheet)]
+    [InlineData("application/vnd.oasis.opendocument.presentation", AttachmentDocumentFormat.OpenDocumentPresentation)]
     public void Recognize_ADeclaredDocumentMediaType_NamesTheFormatItDeclares(
         string mediaType,
         AttachmentDocumentFormat expected)
@@ -46,6 +49,9 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData("memo.doc", AttachmentDocumentFormat.LegacyWord)]
     [InlineData("budget.xls", AttachmentDocumentFormat.LegacySpreadsheet)]
     [InlineData("pitch.ppt", AttachmentDocumentFormat.LegacyPresentation)]
+    [InlineData("terms.odt", AttachmentDocumentFormat.OpenDocumentText)]
+    [InlineData("ledger.ods", AttachmentDocumentFormat.OpenDocumentSpreadsheet)]
+    [InlineData("deck.odp", AttachmentDocumentFormat.OpenDocumentPresentation)]
     public void Recognize_AGenericMediaTypeOverANamedFile_FallsBackToTheExtension(
         string fileName,
         AttachmentDocumentFormat expected)
@@ -104,6 +110,9 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData(AttachmentDocumentFormat.LegacyWord, false)]
     [InlineData(AttachmentDocumentFormat.LegacySpreadsheet, false)]
     [InlineData(AttachmentDocumentFormat.LegacyPresentation, false)]
+    [InlineData(AttachmentDocumentFormat.OpenDocumentText, true)]
+    [InlineData(AttachmentDocumentFormat.OpenDocumentSpreadsheet, true)]
+    [InlineData(AttachmentDocumentFormat.OpenDocumentPresentation, true)]
     public void IsExtracted_EveryRecognizedFormat_SeparatesWhatIsReadFromWhatIsOnlyNamed(
         AttachmentDocumentFormat format,
         bool expected)

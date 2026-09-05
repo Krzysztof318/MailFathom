@@ -24,6 +24,9 @@ decide which parser reads it.
 | Office Open XML word-processing document (`.docx`) | yes | the base class library's zip and XML readers |
 | Office Open XML workbook (`.xlsx`) | yes | the same, resolving the shared string table each cell indexes into |
 | Office Open XML presentation (`.pptx`) | yes | the same, one page per slide |
+| OpenDocument text document (`.odt`) | yes | the same, over the single content part the format packages |
+| OpenDocument spreadsheet (`.ods`) | yes | the same, one page per sheet |
+| OpenDocument presentation (`.odp`) | yes | the same, one page per drawing page |
 | Legacy binary Word document (`.doc`) | no | — |
 | Legacy binary Excel workbook (`.xls`) | no | — |
 | Legacy binary PowerPoint presentation (`.ppt`) | no | — |
@@ -33,10 +36,20 @@ no permissively licensed .NET parser reads all three — so an attachment carryi
 does not extract, which tells a mailbox owner their file was skipped instead of leaving them to conclude it was searched
 and empty. Recognizing them is what makes that sentence possible.
 
-An Office Open XML package is read as the zip archive of XML parts it is, rather than through a document model. That is
-not only the smaller dependency: a document model inflates a part before handing it over, which is exactly the moment a
-decompression bomb has already won. Only the parts carrying text are opened — a macro project, an embedded object, an
-OLE package, and every image in the package are never read, never decoded, and never handed to anything.
+Both office families are read as the zip archives of XML they are, rather than through a document model. That is not
+only the smaller dependency: a document model inflates a part before handing it over, which is exactly the moment a
+decompression bomb has already won. Only the parts carrying text are opened — a macro project, a Basic library, an
+embedded object, an OLE package, and every image in the package are never read, never decoded, and never handed to
+anything.
+
+Where the two families differ is the shape inside, and it is the only place they are read differently. Office Open XML
+puts each page in a part of its own, so its reader selects parts by name and by number. OpenDocument puts a whole
+document in one `content.xml`, so its reader walks that single part and segments it by the element the format begins a
+page with — a sheet in a spreadsheet, a drawing page in a presentation, and nothing in a text document, which counts as
+one page for the same reason a `.docx` does. Every character an OpenDocument file shows sits inside a paragraph or a
+heading, so one walk serves all three of its formats; the spaces, tabs, and line breaks it writes as elements rather
+than as characters are read as the whitespace they stand for, because a reader gathering only text nodes would join the
+words on either side of one into a word nobody wrote.
 
 ## What a read reports
 
@@ -59,9 +72,9 @@ page with no text layer is the exact target an optical-character-recognition pas
 are reported as a list rather than as a flag on the document — a scanned page bound into an otherwise textual report is
 the ordinary case. No optical character recognition happens here; that is a decision of its own and this is not it.
 
-A "page" is what the format has one of: a PDF page, a presentation slide, and a worksheet each count as one. A
-word-processing document counts as one page whatever it prints as, because Office Open XML records no pagination and
-reading one would mean laying the document out.
+A "page" is what the format has one of: a PDF page, a presentation slide, an OpenDocument drawing page, and a sheet of
+either spreadsheet format each count as one. A word-processing document counts as one page whatever it prints as,
+because neither office format records pagination and reading one would mean laying the document out.
 
 ## The posture every read is performed under
 
