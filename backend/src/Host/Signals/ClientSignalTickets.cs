@@ -58,7 +58,7 @@ internal sealed class ClientSignalTickets
     /// A bound this boundary states itself rather than one it inherits. What arrives is a query-string parameter off a
     /// WebSocket handshake, so its length is bounded today by Kestrel's request-line limit and by whatever a reverse
     /// proxy in front of it allows — neither of which is this type's to rely on, and both of which an operator
-    /// configures. A ticket this type minted is a little over eighty characters, so anything past this is not one.
+    /// configures. A ticket this type minted is sixty-six characters, so anything past this is not one.
     /// </remarks>
     private const int LongestPresentedTicket = 256;
 

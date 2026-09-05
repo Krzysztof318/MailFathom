@@ -529,11 +529,11 @@ public sealed class MailFolderResolverTests
         internal void BindAliasTo(MailFolderResolution resolution) =>
             this.bindingsByAlias[resolution.Alias.Value] = resolution;
 
-        /// <summary>Models a mail server that answers the creation of one alias's folder by refusing it.</summary>
         /// <summary>Releases the publisher this context composed, which holds a timer because a channel is registered behind it.</summary>
         /// <returns>A task that completes once the publisher has delivered whatever a window was still holding.</returns>
         public ValueTask DisposeAsync() => this.Signals.DisposeAsync();
 
+        /// <summary>Models a mail server that answers the creation of one alias's folder by refusing it.</summary>
         internal void RefuseCreationOf(MailFolderAlias alias) =>
             this.FolderCreator
                 .CreateFolderAsync(
