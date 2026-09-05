@@ -166,6 +166,7 @@ public sealed class PromptInjectionResistanceTests
                 OnePrimaryAccount,
                 new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
                 SensitiveContentEgressGuards.Inactive()),
+            new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
     private static IReadOnlyList<XElement> MessagesIn(string envelope) =>

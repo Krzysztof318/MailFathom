@@ -289,6 +289,7 @@ public sealed class MailAnsweringAgentTests
                 this.HealthRecorder,
                 this.SpendLedger,
                 egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+                new EmptyAgentInstructionEnvelope(),
                 NullLoggerFactory.Instance,
                 NullLogger<MailAnsweringAgent>.Instance);
         }

@@ -267,6 +267,7 @@ public sealed class MailAnsweringAgentCompositionTests
             chatClient,
             plan,
             retrieval,
+            new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
         // Act
@@ -354,6 +355,7 @@ public sealed class MailAnsweringAgentCompositionTests
             chatClient,
             plan,
             retrieval,
+            new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
         // Act
@@ -517,6 +519,7 @@ public sealed class MailAnsweringAgentCompositionTests
             chatClient,
             ChatDeclarations.Plan(),
             retrieval,
+            new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
 
         // Act
@@ -566,6 +569,7 @@ public sealed class MailAnsweringAgentCompositionTests
             chatClient,
             ChatDeclarations.Plan(),
             retrieval,
+            new EmptyAgentInstructionEnvelope(),
             NullLoggerFactory.Instance);
     }
 }

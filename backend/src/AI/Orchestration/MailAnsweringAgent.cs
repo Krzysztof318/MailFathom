@@ -49,6 +49,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly IAgentInstructionEnvelope instructionEnvelope;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailAnsweringAgent> logger;
 
@@ -63,6 +64,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     /// <param name="healthRecorder">Records what each call established about the provider.</param>
     /// <param name="spendLedger">Counts what every call of this run added to the current period.</param>
     /// <param name="egressGuard">Scans the question and every retrieved extract before either reaches the provider.</param>
+    /// <param name="instructionEnvelope">Supplies the text every composed agent's instruction is wrapped in, asked once per run.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <param name="logger">Records the outcome without recording any question, answer, or passage.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -77,6 +79,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         IAiProviderHealthRecorder healthRecorder,
         IMailAnsweringSpendLedger spendLedger,
         SensitiveContentEgressGuard egressGuard,
+        IAgentInstructionEnvelope instructionEnvelope,
         ILoggerFactory loggerFactory,
         ILogger<MailAnsweringAgent> logger)
     {
@@ -90,6 +93,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(instructionEnvelope);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -103,6 +107,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         this.healthRecorder = healthRecorder;
         this.spendLedger = spendLedger;
         this.egressGuard = egressGuard;
+        this.instructionEnvelope = instructionEnvelope;
         this.loggerFactory = loggerFactory;
         this.logger = logger;
     }
@@ -184,7 +189,12 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             question.Text.Value,
             cancellationToken);
 
-        var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
+        var agent = MailAnsweringAgentComposition.Compose(
+            chatClient,
+            this.plan,
+            retrieval,
+            this.instructionEnvelope,
+            this.loggerFactory);
         var response = await agent.RunAsync(questionText, session: null, options: null, cancellationToken);
         var report = retrieval.Report;
 

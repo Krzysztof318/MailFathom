@@ -11,6 +11,44 @@ surface — the arguments, the citations, and when the tool is advertised at all
 much of a mailbox may leave the process to answer it, is [§ What one question may spend](#what-one-question-may-spend)
 below; [`MailAnswering`](../operations/configuration-ai.md#mailanswering) holds the keys.
 
+## Every AI operation is one agent, composed one way
+
+`ask_mail` is a Microsoft Agent Framework agent built over a provider-neutral chat client, and every other thing this
+product does with a model is built the same way, by the same composition. An operation supplies three things and no
+others: the name a run reports itself as, its own instruction, and its tool set.
+Everything else — where the instruction is carried, the generation parameters each turn runs with, the envelope
+described below — is decided once, for all of them.
+
+One composition rather than a chat call written beside each feature, because what makes an operation safe is a property
+of that shape rather than of its prose. An instruction cannot be reached from a tool result because of where each is
+placed; the tool set **is** the capability, so an operation that only reads composes no mutating tool; every call goes
+through the client the run wrapped, which is where its spend is counted; and what a run reports about cost,
+cancellation, and the model is what [ADR 0022](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)
+says. A feature composing its own call would re-decide all four in silence, once per feature.
+
+### An envelope around every instruction, empty in this build
+
+What a composed agent sends as its instruction is three parts: a preamble, the operation's own instruction, and a
+postamble. Both outer parts come from one implementation resolved through dependency injection and asked once per
+composition, so an answer that varies per person or per request changes what a run sends without any operation changing.
+
+**This build ships the seam and an implementation that returns nothing**, so the composed instruction is the operation's
+own text byte for byte and no run pays for a wrapper nobody has written yet. What it buys is that adding the language a
+person reads, a deployment's own wording, or anything else true of every operation is one implementation of one
+interface rather than an edit to every instruction in the tree.
+
+There is no template language, no substitution syntax, no prompt store, and no configuration key. Whatever the
+implementation returns is text, and the composition puts one part before the operation's instruction and the other
+after it, with no separator of its own.
+
+**Neither half may carry mail content, an address, or anything else personal.** The envelope is composed into the
+instruction, which is the one position [§ Mail is read as evidence, never as an instruction](#mail-is-read-as-evidence-never-as-an-instruction)
+keeps mail out of, so an implementation filling it from a mailbox would undo that separation. What belongs there is what
+the deployment or the person chose to say about how they are addressed. Whatever it adds rides inside the same
+instruction every turn carries, so it is sent through the same client the run's spend is counted on and is inside what a
+run reports as spent rather than outside it — and it reaches no log and no telemetry event, for the reason
+[§ What never reaches a log](#what-never-reaches-a-log) gives for everything else on this path.
+
 ## The model asks for mail; nothing is pushed at it
 
 Retrieval runs **on demand**. The agent is composed with one tool, `search_mail`, and the model calls it when it decides
