@@ -138,6 +138,14 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
     public TimeSpan SpendPeriod { get; set; } = TimeSpan.FromDays(1);
 
+    /// <summary>Gets what reading a document attachment's text is bounded by.</summary>
+    /// <remarks>
+    /// A block of its own rather than seven more keys in this section, because what it bounds is a different cost: a
+    /// per-attachment parse over octets a stranger composed, in formats with their own parser vulnerabilities, which no
+    /// character count predicts. ADR 0029 put it under this section and beside these ceilings for exactly that reason.
+    /// </remarks>
+    public AttachmentTextOptions AttachmentText { get; } = new();
+
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;
 
@@ -148,6 +156,13 @@ internal sealed class EmbeddingOptions : IValidatableObject
         // for every synchronized message on an instance that has chosen no provider — they are what a later activation
         // embeds — so a per-message ceiling nobody validated would be one an instance is already applying.
         foreach (var error in this.FindSpendCeilingErrors())
+        {
+            yield return error;
+        }
+
+        // Validated on the same terms and for the same reason: an attachment is read under these bounds by whatever
+        // calls the port, whether or not this deployment ever declared somewhere to send the result.
+        foreach (var error in this.AttachmentText.Validate(validationContext))
         {
             yield return error;
         }
