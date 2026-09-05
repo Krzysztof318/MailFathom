@@ -42,6 +42,14 @@ public interface IAttachmentTextExtractor
     /// <see cref="AttachmentTextExtractionOutcome.TimedOut" /> instead, because that is a fact about the attachment
     /// rather than about the caller.
     /// </exception>
+    /// <remarks>
+    /// A failure reading the attachment's stored content propagates as whatever the content store raised, rather than
+    /// becoming an outcome. Every outcome here is a durable fact about the document — the caller may record one against
+    /// the attachment and never look again — and a database or object-storage fault is a transient fact about this
+    /// attempt, so reporting one as <see cref="AttachmentTextExtractionOutcome.Malformed" /> would write a broken
+    /// document into the record on the strength of a connection that dropped. Only what a parser does with the octets
+    /// once they have arrived becomes a reason.
+    /// </remarks>
     Task<AttachmentTextExtractionResult> ExtractTextAsync(
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken);

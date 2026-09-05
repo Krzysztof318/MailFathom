@@ -41,19 +41,21 @@ public sealed class AttachmentTextExtractionOptions
     /// <summary>The time one extraction may take where a deployment declares no ceiling of its own.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>Gets or sets the formats an attachment is offered to a parser for.</summary>
+    /// <summary>Gets the formats an attachment is offered to a parser for.</summary>
     /// <remarks>
     /// The undertaking rather than whatever arrives: an attachment whose recognized format is absent from this list is
     /// skipped without a parser ever seeing its bytes, which is what lets a deployment narrow the surface it accepts
-    /// without narrowing what MailFathom is able to read. It defaults to every format a parser here reads.
+    /// without narrowing what MailFathom is able to read. It defaults to every format a parser here reads. It is set
+    /// once and read-only afterwards because this instance is registered as a singleton: a mutable list here would let
+    /// anything resolving it widen at run time the one value deciding which sender-composed formats reach a parser.
     /// </remarks>
-    public IList<AttachmentDocumentFormat> Formats { get; } = [.. AttachmentDocumentFormats.Extracted];
+    public IReadOnlyList<AttachmentDocumentFormat> Formats { get; init; } = AttachmentDocumentFormats.Extracted;
 
     /// <summary>Gets or sets the greatest number of octets one attachment may hold before it is read at all.</summary>
     /// <remarks>
-    /// The bound on what is buffered. Both parsers need to seek, so the content is held in memory for the length of one
-    /// extraction, and this is what stops a single attachment from deciding how much memory the process needs. Sixteen
-    /// mebibytes is well above the size a mail server accepts an attachment at.
+    /// The bound on what is buffered. Every parser here needs to seek, so the content is held in memory for the length
+    /// of one extraction, and this is what stops a single attachment from deciding how much memory the process needs.
+    /// Sixteen mebibytes is well above the size a mail server accepts an attachment at.
     /// </remarks>
     public long MaxInputOctets { get; set; } = DefaultMaxInputOctets;
 
@@ -91,9 +93,10 @@ public sealed class AttachmentTextExtractionOptions
 
     /// <summary>Gets or sets the time one extraction may take before it is abandoned.</summary>
     /// <remarks>
-    /// Observed between units of work — a PDF page, an archive part, an element — because neither parser accepts a
-    /// cancellation token of its own. A parser that never returns from one unit is therefore bounded by the size and
-    /// ratio ceilings above rather than by this, which is why those are not optional.
+    /// Observed between units of work — a PDF page, an archive part, an element — because no parser here accepts a
+    /// cancellation token of its own. A parser that never returns from one unit is therefore bounded by whatever else
+    /// bounds its path rather than by this: for an archive that is the decompression, ratio, and depth ceilings above,
+    /// which is why those are not optional, and for a PDF it is <see cref="MaxInputOctets" /> alone.
     /// </remarks>
     public TimeSpan Timeout { get; set; } = DefaultTimeout;
 }

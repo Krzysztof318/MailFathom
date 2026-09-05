@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -28,6 +29,7 @@ internal static class DocumentFixtures
     private const string OpenDocumentTextNamespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
     private const string OpenDocumentTableNamespace = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
     private const string OpenDocumentDrawingNamespace = "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0";
+    private const string ManifestNamespace = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0";
 
     /// <summary>Builds a PDF whose pages carry the lines given for each of them.</summary>
     /// <param name="pages">One entry per page, each the line that page carries, or empty for a page with no text at all.</param>
@@ -193,6 +195,57 @@ internal static class DocumentFixtures
         <w:document xmlns:w="{WordprocessingNamespace}"><w:body><w:p><w:r><w:t>&stolen;</w:t></w:r></w:p></w:body></w:document>
         """);
 
+    /// <summary>Builds octets an office package was expected in that are an OLE compound file instead.</summary>
+    /// <returns>The document's octets.</returns>
+    /// <remarks>
+    /// What a password-protected Office package actually is: the package encrypted whole and wrapped in a compound
+    /// file. Only the eight-octet signature matters to the code under test, so the rest is filler rather than a
+    /// compound file anything could open — building a real one would prove nothing further and commit a binary fixture.
+    /// </remarks>
+    public static byte[] EncryptedOfficePackage() =>
+        [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, .. Enumerable.Repeat((byte)0, 512)];
+
+    /// <summary>Builds an OpenDocument package whose manifest declares its parts encrypted.</summary>
+    /// <returns>The package's octets.</returns>
+    /// <remarks>
+    /// A locked OpenDocument file stays an ordinary archive and encrypts the parts inside it, so the content part is
+    /// ciphertext and the manifest is the only place the package says so. The content part here is arbitrary octets for
+    /// exactly that reason: a reader that missed the manifest would reach it and report a broken document.
+    /// </remarks>
+    public static byte[] EncryptedOpenDocument() => Package(
+        ("META-INF/manifest.xml", $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <manifest:manifest xmlns:manifest="{ManifestNamespace}">
+              <manifest:file-entry manifest:full-path="content.xml">
+                <manifest:encryption-data manifest:checksum-type="SHA1/1K" manifest:checksum="Zm9v" />
+              </manifest:file-entry>
+            </manifest:manifest>
+            """),
+        ("content.xml", "not xml, because this part is ciphertext"));
+
+    /// <summary>Builds a word-processing package whose part overstates what it compressed to.</summary>
+    /// <param name="characters">How many characters the part's single run holds.</param>
+    /// <returns>The package's octets.</returns>
+    /// <remarks>
+    /// The compressed length is a field in the archive's own directory rather than a fact about the data, so a sender
+    /// can write whatever widens the per-part ratio denominator. What they cannot write is a length past the end of the
+    /// file: <c>ZipArchive</c> refuses that outright with <c>A local file header is corrupt</c>, measured on .NET 10 on
+    /// 2026-09-05. So the overstatement here is the largest one a reader will actually accept — just inside the
+    /// archive — which is the case the ratio bound has to hold against.
+    /// </remarks>
+    public static byte[] WordDocumentOverstatingItsCompressedLength(int characters)
+    {
+        var package = InflatingWordDocument(characters);
+        var declared = (uint)Math.Max(0, package.Length - 200);
+
+        foreach (var header in CompressedSizeFieldOffsets(package))
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(package.AsSpan(header, sizeof(uint)), declared);
+        }
+
+        return package;
+    }
+
     /// <summary>Builds a PDF encrypted under the standard security handler, with a password nothing here holds.</summary>
     /// <returns>The document's octets.</returns>
     /// <remarks>
@@ -232,6 +285,28 @@ internal static class DocumentFixtures
         document.Append(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R /Encrypt 4 0 R /ID [<{new string('3', 32)}> <{new string('4', 32)}>] >>\nstartxref\n{startOfCrossReferences}\n%%EOF\n");
 
         return Encoding.ASCII.GetBytes(document.ToString());
+    }
+
+    /// <summary>Finds where each central-directory record states the compressed length of its part.</summary>
+    /// <remarks>
+    /// The central directory is what a reader takes <c>CompressedLength</c> from, so it is the field a sender would
+    /// overstate and the only one this rewrites. Its records open with <c>PK\x01\x02</c> and carry that length twenty
+    /// octets in.
+    /// </remarks>
+    private static List<int> CompressedSizeFieldOffsets(byte[] package)
+    {
+        byte[] centralDirectoryRecord = [0x50, 0x4B, 0x01, 0x02];
+        var offsets = new List<int>();
+
+        for (var offset = 0; offset + 24 <= package.Length; offset++)
+        {
+            if (package.AsSpan(offset, centralDirectoryRecord.Length).SequenceEqual(centralDirectoryRecord))
+            {
+                offsets.Add(offset + 20);
+            }
+        }
+
+        return offsets;
     }
 
     /// <summary>Wraps a body in the one content part an OpenDocument package holds everything in.</summary>

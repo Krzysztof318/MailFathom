@@ -21,6 +21,14 @@ namespace MailFathom.Infrastructure.Documents;
 /// content is an image carries no characters, and is recorded as such rather than passed over — that is the exact page
 /// a later optical-character-recognition pass would be given.
 /// </para>
+/// <para>
+/// What bounds this path is narrower than what bounds the two package formats, and stating it is the point of this
+/// paragraph. The inflation total, the per-part ratio, and the element depth all live in the archive readers and none
+/// of them reaches here: the library inflates a page's content streams itself, with no ceiling this code can set, and
+/// builds that page's whole text before the output ceiling below can refuse it. So a PDF is bounded by the input
+/// ceiling on the octets that arrive and by a timeout observed between pages, and a page whose content stream inflates
+/// enormously is bounded by neither. Issue #1684 is where that gap is tracked.
+/// </para>
 /// </remarks>
 internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions options)
 {
@@ -28,7 +36,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
     /// <param name="content">The attachment's octets, positioned at the start.</param>
     /// <param name="cancellationToken">Cancels the read between pages.</param>
     /// <returns>What the document yielded.</returns>
-    /// <exception cref="AttachmentTextExtractionBoundException">Thrown when the output ceiling is crossed.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the output ceiling is crossed.</exception>
     public ExtractedAttachmentText Read(Stream content, CancellationToken cancellationToken)
     {
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);

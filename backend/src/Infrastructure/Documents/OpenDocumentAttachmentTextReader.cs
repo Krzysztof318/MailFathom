@@ -32,14 +32,19 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
     private const string TableNamespace = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
     private const string DrawingNamespace = "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0";
 
+    private const string ManifestNamespace = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0";
+
     private const string ContentPart = "content.xml";
+    private const string ManifestPart = "META-INF/manifest.xml";
+
+    private readonly BoundedArchivePartReader parts = new(options);
 
     /// <summary>Reads one OpenDocument attachment.</summary>
     /// <param name="content">The attachment's octets, positioned at the start.</param>
     /// <param name="format">Which of the three OpenDocument formats it is.</param>
     /// <param name="cancellationToken">Cancels the read between elements.</param>
     /// <returns>What the document yielded.</returns>
-    /// <exception cref="AttachmentTextExtractionBoundException">Thrown when a configured ceiling is crossed.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when a ceiling is crossed, or the package is encrypted.</exception>
     /// <exception cref="InvalidDataException">Thrown when the octets are not a readable archive, or carry no content.</exception>
     /// <exception cref="XmlException">Thrown when the content part is not readable XML.</exception>
     public ExtractedAttachmentText Read(
@@ -51,20 +56,59 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
 
         if (archive.Entries.Count > options.MaxContainerParts)
         {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
         }
 
         var entry = archive.GetEntry(ContentPart)
             ?? throw new InvalidDataException("The package declares no content part.");
 
-        var budget = new DecompressionBudget(options.MaxDecompressedOctets);
+        var budget = new DecompressionBudget(options.MaxDecompressedOctets, content.Length);
+
+        if (this.DeclaresEncryptedParts(archive, budget, cancellationToken))
+        {
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.Encrypted);
+        }
+
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
 
-        using var reader = XmlReader.Create(
-            new BoundedInflationStream(entry.Open(), entry.CompressedLength, budget, options.MaxDecompressionRatio),
-            OpenXmlAttachmentTextReader.PartReaderSettings());
+        using var reader = this.parts.OpenPart(entry, budget);
 
         return this.ReadContent(reader, PageElementOf(format), text, cancellationToken);
+    }
+
+    /// <summary>States whether the package's manifest says its parts are encrypted.</summary>
+    /// <remarks>
+    /// A password-protected OpenDocument file stays an ordinary zip and encrypts the parts inside it, so unlike a
+    /// protected Office Open XML package it opens cleanly and only fails when the content part turns out to be
+    /// ciphertext rather than XML. Reported from there it would read as <c>Malformed</c>, which tells an owner their
+    /// document is broken when what it is is locked. The manifest is where the format records that, and it is read
+    /// under the same inflation budget every other part is.
+    /// </remarks>
+    private bool DeclaresEncryptedParts(
+        ZipArchive archive,
+        DecompressionBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var manifest = archive.GetEntry(ManifestPart);
+
+        if (manifest is null)
+        {
+            return false;
+        }
+
+        using var reader = this.parts.OpenPart(manifest, budget);
+
+        while (this.parts.ReadNode(reader, cancellationToken))
+        {
+            if (reader.NodeType == XmlNodeType.Element
+                && reader.NamespaceURI == ManifestNamespace
+                && reader.LocalName == "encryption-data")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Names the element that begins a page, or nothing for a format that paginates nowhere.</summary>
@@ -100,7 +144,7 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
         var paragraphDepth = -1;
         var documentCarriedText = false;
 
-        while (this.ReadNode(reader, cancellationToken))
+        while (this.parts.ReadNode(reader, cancellationToken))
         {
             switch (reader.NodeType)
             {
@@ -200,21 +244,4 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
         }
     }
 
-    /// <summary>Advances a reader one node, refusing an element tree nested past the configured depth.</summary>
-    private bool ReadNode(XmlReader reader, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (!reader.Read())
-        {
-            return false;
-        }
-
-        if (reader.Depth > options.MaxElementDepth)
-        {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
-        }
-
-        return true;
-    }
 }

@@ -9,9 +9,9 @@ namespace MailFathom.Infrastructure.Documents;
 /// <summary>Collects an attachment's octets in memory and refuses the one that grows past the input ceiling.</summary>
 /// <remarks>
 /// <para>
-/// Both parsers seek, so the content has to be held rather than streamed, and this is the one place that decides how
-/// much of it may be. The size the MIME walk measured is checked first and this is checked while the copy runs, because
-/// a measurement taken elsewhere is a second reading of the same bytes rather than a guarantee about these.
+/// Every parser here seeks, so the content has to be held rather than streamed, and this is the one place that decides
+/// how much of it may be. The size the MIME walk measured is checked first and this is checked while the copy runs,
+/// because a measurement taken elsewhere is a second reading of the same bytes rather than a guarantee about these.
 /// </para>
 /// <para>
 /// It is a write-only stream because <see cref="Application.EmailContent.Attachments.IOpenedEmailAttachment" /> writes
@@ -109,7 +109,7 @@ internal sealed class BoundedAttachmentBuffer(long maxOctets) : Stream
     {
         if (this.buffer.Length + incoming > maxOctets)
         {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.InputTooLarge);
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.InputTooLarge);
         }
     }
 }

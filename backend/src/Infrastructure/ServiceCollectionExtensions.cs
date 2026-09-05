@@ -762,7 +762,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<EmailMimeExtractionOptions>()));
         // Behind that reader rather than beside it: it is handed an attachment somebody already opened and turns its
         // octets into characters. Scoped like the readers it follows, and holding nothing between calls — the bounds are
-        // a value read once and the two parsers it composes carry no state of their own.
+        // a value read once and the three parsers it composes carry no state of their own.
         services.AddScoped<IAttachmentTextExtractor>(provider => new BoundedAttachmentTextExtractor(
             provider.GetRequiredService<AttachmentTextExtractionOptions>(),
             provider.GetRequiredService<TimeProvider>()));

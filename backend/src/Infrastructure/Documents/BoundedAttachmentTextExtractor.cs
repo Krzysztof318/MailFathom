@@ -18,14 +18,20 @@ namespace MailFathom.Infrastructure.Documents;
 /// </para>
 /// <para>
 /// The timeout is observed between units of work rather than imposed on one: no parser here accepts a cancellation
-/// token, and .NET cannot abort a thread, so a parser that never returns from one page or one part is bounded by the
-/// size, ratio, and depth ceilings instead. Those are not optional for that reason.
+/// token, and .NET cannot abort a thread, so a parser that never returns from one page or one part is bounded by what
+/// its own path bounds instead. For a package format that is the inflation total, the per-part ratio, and the element
+/// depth, none of which is optional for that reason. For a PDF it is the input ceiling alone, because the library
+/// inflates a page's content streams itself with no ceiling this code can set — <see cref="PdfAttachmentTextReader" />
+/// states that and issue #1684 is where it is tracked.
 /// </para>
 /// </remarks>
 internal sealed class BoundedAttachmentTextExtractor(
     AttachmentTextExtractionOptions options,
     TimeProvider timeProvider) : IAttachmentTextExtractor
 {
+    /// <summary>The eight octets an OLE compound file opens with.</summary>
+    private static readonly byte[] CompoundFileSignature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
     private readonly PdfAttachmentTextReader pdf = new(options);
     private readonly OpenXmlAttachmentTextReader openXml = new(options);
     private readonly OpenDocumentAttachmentTextReader openDocument = new(options);
@@ -57,14 +63,35 @@ internal sealed class BoundedAttachmentTextExtractor(
         using var deadline = new CancellationTokenSource(options.Timeout, timeProvider);
         using var extraction = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
+        using var buffer = new BoundedAttachmentBuffer(options.MaxInputOctets);
+
         try
         {
-            return AttachmentTextExtractionResult.Extracted(
-                await this.ReadTextAsync(attachment, format, extraction.Token));
+            await attachment.WriteContentToAsync(buffer, extraction.Token);
         }
-        catch (AttachmentTextExtractionBoundException crossed)
+        catch (AttachmentTextExtractionStoppedException stopped)
         {
-            return CrossedBound(crossed);
+            return Stopped(stopped);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return AttachmentTextExtractionResult.TimedOut();
+        }
+
+        var content = buffer.ToReadableStream();
+
+        if (format is not AttachmentDocumentFormat.Pdf && IsCompoundFile(content))
+        {
+            return AttachmentTextExtractionResult.Encrypted();
+        }
+
+        try
+        {
+            return AttachmentTextExtractionResult.Extracted(this.ReadText(content, format, extraction.Token));
+        }
+        catch (AttachmentTextExtractionStoppedException stopped)
+        {
+            return Stopped(stopped);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -80,19 +107,11 @@ internal sealed class BoundedAttachmentTextExtractor(
         }
     }
 
-    /// <summary>Buffers the attachment under the input ceiling and hands it to the parser its format names.</summary>
-    private async Task<ExtractedAttachmentText> ReadTextAsync(
-        IOpenedEmailAttachment attachment,
+    /// <summary>Hands the buffered attachment to the parser its format names.</summary>
+    private ExtractedAttachmentText ReadText(
+        Stream content,
         AttachmentDocumentFormat format,
-        CancellationToken cancellationToken)
-    {
-        using var buffer = new BoundedAttachmentBuffer(options.MaxInputOctets);
-
-        await attachment.WriteContentToAsync(buffer, cancellationToken);
-
-        var content = buffer.ToReadableStream();
-
-        return format switch
+        CancellationToken cancellationToken) => format switch
         {
             AttachmentDocumentFormat.Pdf => this.pdf.Read(content, cancellationToken),
             AttachmentDocumentFormat.OpenDocumentText
@@ -101,14 +120,38 @@ internal sealed class BoundedAttachmentTextExtractor(
                 this.openDocument.Read(content, format, cancellationToken),
             _ => this.openXml.Read(content, format, cancellationToken),
         };
+
+    /// <summary>States whether octets a package format was expected in are an OLE compound file instead.</summary>
+    /// <remarks>
+    /// A password-protected <c>.docx</c>, <c>.xlsx</c>, <c>.pptx</c>, or OpenDocument file is not an archive at all:
+    /// the package is encrypted whole and wrapped in an OLE compound file, which opens with the eight octets this
+    /// reads. Without the check the archive reader refuses those octets and the answer is <c>Malformed</c>, which tells
+    /// an owner their document is broken when what it is is locked — different facts with different remedies. Nothing
+    /// else reaches here wearing that signature: a legacy binary format carries it too, and recognition has already
+    /// answered those as a format nothing reads.
+    /// </remarks>
+    private static bool IsCompoundFile(Stream content)
+    {
+        if (content.Length < CompoundFileSignature.Length)
+        {
+            return false;
+        }
+
+        Span<byte> opening = stackalloc byte[CompoundFileSignature.Length];
+
+        content.ReadExactly(opening);
+        content.Position = 0;
+
+        return opening.SequenceEqual(CompoundFileSignature);
     }
 
-    /// <summary>Reports the bound a read crossed as the outcome that bound is published as.</summary>
-    private static AttachmentTextExtractionResult CrossedBound(AttachmentTextExtractionBoundException crossed) =>
-        crossed.Outcome switch
+    /// <summary>Reports a read the adapter stopped as the outcome it carried up.</summary>
+    private static AttachmentTextExtractionResult Stopped(AttachmentTextExtractionStoppedException stopped) =>
+        stopped.Outcome switch
         {
             AttachmentTextExtractionOutcome.InputTooLarge => AttachmentTextExtractionResult.InputTooLarge(),
             AttachmentTextExtractionOutcome.ExtractedTextTooLarge => AttachmentTextExtractionResult.ExtractedTextTooLarge(),
+            AttachmentTextExtractionOutcome.Encrypted => AttachmentTextExtractionResult.Encrypted(),
             _ => AttachmentTextExtractionResult.ContainerBoundExceeded(),
         };
 

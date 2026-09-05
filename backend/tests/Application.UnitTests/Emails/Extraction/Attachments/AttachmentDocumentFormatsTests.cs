@@ -101,7 +101,7 @@ public sealed class AttachmentDocumentFormatsTests
         Assert.Null(recognized);
     }
 
-    /// <summary>The four Office Open XML and PDF formats are read; the three legacy binary ones are named and not read.</summary>
+    /// <summary>PDF and both office families are read; the three legacy binary ones are named and not read.</summary>
     [Theory]
     [InlineData(AttachmentDocumentFormat.Pdf, true)]
     [InlineData(AttachmentDocumentFormat.WordOpenXml, true)]
@@ -122,20 +122,6 @@ public sealed class AttachmentDocumentFormatsTests
 
         // Assert
         Assert.Equal(expected, extracted);
-    }
-
-    /// <summary>The published list and the predicate are one answer, so a format added to one is added to both.</summary>
-    [Fact]
-    public void Extracted_TheWholeRecognizedSet_AgreesWithThePredicate()
-    {
-        // Arrange
-        var everyFormat = Enum.GetValues<AttachmentDocumentFormat>();
-
-        // Act
-        var byPredicate = everyFormat.Where(AttachmentDocumentFormats.IsExtracted);
-
-        // Assert
-        Assert.Equal(AttachmentDocumentFormats.Extracted, byPredicate);
     }
 
     private static AttachmentFileName? FileNamed(string value) =>

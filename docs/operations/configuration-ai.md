@@ -344,7 +344,7 @@ What a document attachment may cost to read, and which formats are offered to a 
 section rather than beside the synchronization bounds because parsing an attachment is a different cost from embedding
 a passage: it is charged per attachment, over octets a stranger composed, in formats with their own parser
 vulnerabilities, and no character count predicts it. [ADR
-0029](https://krzysztof318.github.io/MailFathom/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.html)
+0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records that split.
 
 Every key below bounds **one** extraction, and each of them is a deliberate ceiling rather than a value nobody chose.
@@ -355,7 +355,7 @@ much.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Embeddings:AttachmentText:Formats:<index>` | enum | every format read | `Pdf`, `WordOpenXml`, `SpreadsheetOpenXml`, `PresentationOpenXml`, `OpenDocumentText`, `OpenDocumentSpreadsheet`, `OpenDocumentPresentation`; writing nothing reads all seven and naming any narrows to exactly those. Naming `LegacyWord`, `LegacySpreadsheet`, or `LegacyPresentation` is refused at startup, because MailFathom recognizes those three and reads none of them | restart |
-| `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Both parsers seek, so an attachment is held in memory for the length of one extraction | restart |
+| `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Every parser here seeks, so an attachment is held in memory for the length of one extraction | restart |
 | `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses | restart |
 | `Embeddings:AttachmentText:MaxDecompressedOctets` | long | `67108864` | 1 KiB – 2 GiB; the total an Office Open XML or OpenDocument archive may inflate to across every part read, counted while it inflates rather than after | restart |
 | `Embeddings:AttachmentText:MaxDecompressionRatio` | int | `200` | 2 – 10000; the greatest ratio of inflated to compressed octets one archive part may reach. It is what catches a small archive, before the total above would have been met | restart |

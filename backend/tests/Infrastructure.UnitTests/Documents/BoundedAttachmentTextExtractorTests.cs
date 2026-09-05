@@ -306,9 +306,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AFormatTheDeploymentExcluded_ReportsAFormatItDoesNotRead()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.Formats.Clear();
-        bounds.Formats.Add(AttachmentDocumentFormat.Pdf);
+        var bounds = new AttachmentTextExtractionOptions { Formats = [AttachmentDocumentFormat.Pdf] };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -500,7 +498,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     public void PartReaderSettings_EveryXmlPartThisAdapterReads_RefusesADocumentTypeDeclaration()
     {
         // Arrange
-        var settings = OpenXmlAttachmentTextReader.PartReaderSettings();
+        var settings = BoundedArchivePartReader.PartReaderSettings();
         using var declared = new StringReader(
             """<!DOCTYPE root [<!ENTITY stolen SYSTEM "file:///etc/hostname">]><root>&stolen;</root>""");
 
@@ -576,6 +574,123 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
     }
 
+    /// <summary>
+    /// An empty entry in the shared string table raises no end element, so a table that skipped it would hand every
+    /// later cell the next entry's words — the one failure of this kind that reads as extracted text rather than as an error.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWorkbookWhoseStringTableCarriesAnEmptyEntry_KeepsEveryLaterCellOnItsOwnWords()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "ledger.xlsx",
+            DocumentFixtures.Package(
+                ("xl/sharedStrings.xml", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si /><si><t>Roof repair</t></si></sst>
+                    """),
+                ("xl/worksheets/sheet1.xml", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row><c t="s"><v>1</v></c></row></sheetData></worksheet>
+                    """)));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Roof repair", result.Text?.Text);
+    }
+
+    /// <summary>
+    /// A password-protected Office package is an OLE compound file rather than an archive, and telling an owner their
+    /// document is broken when what it is is locked sends them looking for a defect that is not there.
+    /// </summary>
+    [Theory]
+    [InlineData("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "locked.docx")]
+    [InlineData("application/vnd.oasis.opendocument.text", "locked.odt")]
+    public async Task ExtractTextAsync_APackageThatIsAnOleCompoundFile_ReportsEncryptedRatherThanMalformed(
+        string mediaType,
+        string fileName)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            fileName,
+            DocumentFixtures.EncryptedOfficePackage());
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Encrypted, result.Outcome);
+    }
+
+    /// <summary>
+    /// A password-protected OpenDocument file stays an ordinary archive and encrypts the parts inside it, so only its
+    /// manifest says what it is — without reading that, a locked document reports as a broken one.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentPackageDeclaringEncryptedParts_ReportsEncrypted()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.text",
+            "locked.odt",
+            DocumentFixtures.EncryptedOpenDocument());
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Encrypted, result.Outcome);
+    }
+
+    /// <summary>
+    /// The compressed length a part declares is the sender's number like every other, and overstating it is how a ratio
+    /// denominator would be widened until no inflation could reach it — so the guard has to hold against a declaration
+    /// rather than against the data it claims to describe.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnArchiveOverstatingWhatItsPartCompressedTo_StillAppliesTheRatioBound()
+    {
+        // Arrange
+        // Both other container ceilings are set far out of reach, so the ratio is the only one that can answer.
+        var bounds = Bounds();
+        bounds.MaxDecompressedOctets = 64L * 1024 * 1024;
+        bounds.MaxExtractedTextCharacters = 10_000_000;
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "bomb.docx",
+            DocumentFixtures.WordDocumentOverstatingItsCompressedLength(400_000));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
+    /// <summary>
+    /// A storage fault is a fact about this attempt rather than about the document, and an outcome the caller may
+    /// record once and never revisit would turn a dropped connection into a permanently unreadable attachment.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStoredContentReadThatFails_LetsTheFailureReachTheCaller()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("A page nobody reaches"),
+            beforeWriting: () => throw new IOException("The content store dropped the connection."));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<IOException>(() => ExtractAsync(attachment));
+    }
+
     /// <summary>The timeout is a fact about the attachment, so it comes back as a reason rather than as a cancellation.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnExtractionPastItsTimeout_ReportsItAsTimedOutRatherThanCancelled()
@@ -589,6 +704,39 @@ public sealed class BoundedAttachmentTextExtractorTests
             "slow.pdf",
             DocumentFixtures.Pdf("A page nobody reaches"),
             beforeWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
+
+        // Act
+        var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
+            attachment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.TimedOut, result.Outcome);
+    }
+
+    /// <summary>
+    /// The copy into the buffer is not where a long extraction is spent, so the deadline has to be observed by the
+    /// parser as well: a document whose octets arrived quickly and whose walk then runs past the timeout is what every
+    /// per-page and per-element check exists for, and a test that crosses the deadline before the copy proves none of
+    /// them.
+    /// </summary>
+    [Theory]
+    [InlineData("application/pdf", "slow.pdf")]
+    [InlineData("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "slow.docx")]
+    [InlineData("application/vnd.oasis.opendocument.text", "slow.odt")]
+    public async Task ExtractTextAsync_ATimeoutCrossedOnceTheOctetsAreRead_ReportsItAsTimedOut(
+        string mediaType,
+        string fileName)
+    {
+        // Arrange
+        var bounds = Bounds();
+        var clock = new FakeTimeProvider();
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            fileName,
+            SingleParagraphOf(mediaType),
+            afterWriting: () => clock.Advance(bounds.Timeout + TimeSpan.FromSeconds(1)));
 
         // Act
         var result = await new BoundedAttachmentTextExtractor(bounds, clock).ExtractTextAsync(
@@ -614,17 +762,32 @@ public sealed class BoundedAttachmentTextExtractorTests
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new BoundedAttachmentTextExtractor(Bounds(), TimeProvider.System).ExtractTextAsync(
+            new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider()).ExtractTextAsync(
                 attachment,
                 caller.Token));
     }
 
+    /// <summary>Builds the same one-paragraph document in whichever format the media type names.</summary>
+    private static byte[] SingleParagraphOf(string mediaType) => mediaType switch
+    {
+        "application/pdf" => DocumentFixtures.Pdf("Roof repair invoice"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" =>
+            DocumentFixtures.WordDocument("Roof repair invoice"),
+        _ => DocumentFixtures.OpenDocumentText("Roof repair invoice"),
+    };
+
     private static AttachmentTextExtractionOptions Bounds() => new();
 
+    /// <summary>Reads one attachment under a clock that only moves where a test moves it.</summary>
+    /// <remarks>
+    /// The subject turns whatever clock it is given into a live deadline, so a real one would let a loaded runner
+    /// decide the outcome: a stall inside any test routed through here would answer <c>TimedOut</c> instead of what the
+    /// test asserts.
+    /// </remarks>
     private static Task<AttachmentTextExtractionResult> ExtractAsync(
         FakeOpenedEmailAttachment attachment,
         AttachmentTextExtractionOptions? bounds = null) =>
-        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), TimeProvider.System).ExtractTextAsync(
+        new BoundedAttachmentTextExtractor(bounds ?? Bounds(), new FakeTimeProvider()).ExtractTextAsync(
             attachment,
             TestContext.Current.CancellationToken);
 }

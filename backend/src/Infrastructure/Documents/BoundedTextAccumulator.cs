@@ -22,7 +22,7 @@ internal sealed class BoundedTextAccumulator(int maxCharacters)
 
     /// <summary>Adds a run of extracted characters.</summary>
     /// <param name="value">The characters, which may be empty.</param>
-    /// <exception cref="AttachmentTextExtractionBoundException">Thrown when the addition would pass the output ceiling.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the addition would pass the output ceiling.</exception>
     public void Add(string value)
     {
         if (string.IsNullOrEmpty(value))
@@ -32,14 +32,14 @@ internal sealed class BoundedTextAccumulator(int maxCharacters)
 
         if (this.text.Length + value.Length > maxCharacters)
         {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ExtractedTextTooLarge);
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ExtractedTextTooLarge);
         }
 
         this.text.Append(value);
     }
 
     /// <summary>Ends the current line, unless nothing has been gathered or a line break already ends what has.</summary>
-    /// <exception cref="AttachmentTextExtractionBoundException">Thrown when the break would pass the output ceiling.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the break would pass the output ceiling.</exception>
     public void EndLine()
     {
         if (this.text.Length == 0 || this.text[^1] == '\n')
