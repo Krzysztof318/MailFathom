@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 
 // Saying something while nobody is looking at the window is the second operation only a shell can perform, and it takes
 // the shape `linkOpener.ts` beside it established: the application declares what it needs, one function resolves which
@@ -27,6 +27,13 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 // than two. A refusal was given by somebody and is kept; an operation this head never carried was decided by nobody
 // and is kept nowhere. Conflating them is how a head with no notification plugin — the Android one until #1616 — would
 // write *off* on a machine whose owner was never asked anything.
+//
+// **Raising one and being permitted to are two different bridges, and the split is not arbitrary.** Permission is the
+// plugin's, because it is the half whose answer differs between heads and the half the phone will need. Raising is
+// this shell's own command, because the plugin's desktop path reports no click: it hands the notification to
+// `notify_rust` and drops the handle, so a person who clicks the thing the client showed them lands nowhere.
+// `src-tauri/src/notifications.rs` keeps that handle instead, which is what makes the third member below possible —
+// somebody acting on a notification is an event the shell says out loud, and a head that raises none says nothing.
 
 /**
  * What raising one ended as, which is three answers rather than two because two of them are not the same fact.
@@ -53,7 +60,20 @@ export interface SystemNotifier {
      * system draws the product's own name above it, so there is nothing left for a body to say that would not be mail.
      */
     readonly raise: (said: string) => Promise<NotificationRaised>;
+
+    /**
+     * Subscribes to somebody acting on a notification this raised, answering with what stops listening.
+     *
+     * It carries nothing, because a notification carries a count and a kind: which arrival was clicked is a question
+     * about mail, and where that is answered is the centre this opens. A head that raises no notification subscribes
+     * to nothing and answers with a stop that stops nothing, so a caller subscribes unconditionally rather than asking
+     * which head it is on first.
+     */
+    readonly whenActedOn: (act: () => void) => () => void;
 }
+
+/** What the shell calls the event, which is the one name this module and `src-tauri/src/notifications.rs` share. */
+const actedOn = 'system-notification-acted-on';
 
 export const SystemNotifierContext = createContext<SystemNotifier | null>(null);
 
@@ -73,15 +93,22 @@ export function systemNotifierForThisApplication(): SystemNotifier {
 }
 
 /** What a head that offered no such command answers, and what every caller reads before it asks for anything. */
-const raisesNothing: SystemNotifier = { offered: false, raise: () => Promise.resolve('unavailable') };
+const raisesNothing: SystemNotifier = {
+    offered: false,
+    raise: () => Promise.resolve('unavailable'),
+    whenActedOn: () => () => undefined,
+};
 
 // Two questions rather than one, and the second is what a shell operation for a *plugin* costs that `linkOpener.ts`
 // did not pay. A shell announces itself by putting its own bridge on the global object before the bundle runs, which is
 // what the first line asks — but the opener plugin is linked into every head and this one is not, so a bridge being
 // present says nothing about this operation. What says it is the binding: the plugin's own script replaces
-// `window.Notification` before the bundle runs, and every call this module makes goes through that replacement, so a
-// head that linked no notification plugin has nothing there to call. Asking after the binding rather than after the
-// operating system is what keeps this a question about the operation instead of one about which head is underneath.
+// `window.Notification` before the bundle runs, and the permission question this module puts goes through that
+// replacement, so a head that linked no notification plugin has nothing there to call. Asking after the binding rather
+// than after the operating system is what keeps this a question about the operation instead of one about which head is
+// underneath. It answers for the shell's own `raise_notification` beside it as well, and does so honestly rather than
+// by luck: `src-tauri/Cargo.toml` states the plugin per target and `src-tauri/src/notifications.rs` does nothing on
+// exactly the targets it is left off, so the two halves of this operation are linked and unlinked together.
 function shellOffersNotifying(): boolean {
     return Object.hasOwn(globalThis, '__TAURI_INTERNALS__') && typeof globalThis.Notification === 'function';
 }
@@ -110,13 +137,25 @@ function raisedThroughTheShell(): SystemNotifier {
                 return answer;
             }
 
-            // Raising itself answers nothing and cannot: the plugin's binding hands the notification to the shell and
-            // returns, so what is reported here is that permission stood rather than that a window appeared. The
+            // Raising itself answers nothing and cannot: the command hands the notification to the operating system
+            // and returns, so what is reported here is that permission stood rather than that a window appeared. The
             // answer that matters is the one above, and it is the same gate — the permission question is a command of
-            // the plugin's too, so a shell that granted this webview neither has already said so there.
-            sendNotification({ title: said });
+            // the plugin's, so a shell that granted this webview neither has already said so there.
+            void window.__TAURI__?.core.invoke('raise_notification', { said });
 
             return 'raised';
+        },
+        whenActedOn: (act) => {
+            // Subscribing is itself asynchronous and unsubscribing is what the shell answers with, so what is held is
+            // the promise rather than its value — a caller that stops listening before the subscription landed must
+            // still stop the one that is about to.
+            const listening = window.__TAURI__?.event.listen(actedOn, act);
+
+            return () => {
+                void listening?.then((stop) => {
+                    stop();
+                });
+            };
         },
     };
 }

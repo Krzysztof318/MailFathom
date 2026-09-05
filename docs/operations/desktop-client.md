@@ -83,8 +83,10 @@ head is, in full, is that record; how one is built is
   messages*, *1 calendar reminder* — and never a sender, a subject, a fragment of a body, an attachment name, or an
   address: a notification lands in the action centre and on the lock screen, which is storage MailFathom cannot retain,
   redact, or erase, so the substance stays inside the application. Nothing is raised while the window has focus, the
-  client having already said it on the screen. Whether this machine raises them at all is a switch in *Settings →
-  Application*, kept on this machine rather than carried between them — a notification is one operating system's, so
+  client having already said it on the screen. **Clicking one brings the window back in front of whatever was covering
+  it, minimised or not, and opens the notification centre on it** — which is the same panel the bell in the client
+  opens, so dismissing the notification instead loses nothing: what arrived is in the centre either way. Whether this
+  machine raises them at all is a switch in *Settings → Application*, kept on this machine rather than carried between them — a notification is one operating system's, so
   wanting them on a laptop and not on a shared machine is two answers rather than a change of mind. It is on until
   something says otherwise, and an operating system that refuses permission turns it off here rather than being asked
   again.

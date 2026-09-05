@@ -2201,6 +2201,7 @@ name = "mailfathom-desktop"
 version = "0.0.0"
 dependencies = [
  "keyring",
+ "notify-rust",
  "tauri",
  "tauri-build",
  "tauri-plugin-notification",
