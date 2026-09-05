@@ -7,11 +7,24 @@ namespace MailFathom.Application.Emails.Extraction.Images;
 /// <summary>Names why an image attachment produced no description, at the granularity a caller acts on.</summary>
 /// <remarks>
 /// <para>
-/// One value per decision a caller could take differently. Four of these say the attachment will never be described,
-/// however often it is offered — the deployment does not describe images, the octets are not a format the allow-list
-/// admits, they are a document rather than a picture, or they are a picture too large to send or to decode — so a
-/// caller records the reason against the attachment and never asks again. Two more say the provider may answer later,
-/// and one says it will not.
+/// One value per decision a caller could take differently, and the nine fall into three groups.
+/// </para>
+/// <para>
+/// Three are properties of the octets and will not change however often the attachment is offered:
+/// <see cref="FormatNotSupported" />, <see cref="FormatExcluded" />, and <see cref="ImageUnreadable" />. A caller
+/// records one of those against the attachment and never asks again.
+/// </para>
+/// <para>
+/// Three are properties of the configuration and are lifted the moment an operator changes it:
+/// <see cref="NotActivated" /> is the switch itself, <see cref="ImageTooLarge" /> is the chat endpoint's octet ceiling,
+/// and <see cref="PixelGridTooLarge" /> is this deployment's grid ceiling. A caller does not retry one of those on its
+/// own, and it does not treat one as settled either — turning description on, or raising either ceiling, is a backfill
+/// over everything already stored, and an attachment refused for one of these three is exactly what that backfill is
+/// for.
+/// </para>
+/// <para>
+/// The remaining three are the provider's: <see cref="ProviderTimedOut" /> and <see cref="ProviderUnavailable" /> say
+/// it may answer later, and <see cref="ProviderRefused" /> says it will not.
 /// </para>
 /// <para>
 /// A caller's own cancellation is absent, exactly as it is from <see cref="Chat.ChatGenerationFailure" />: it arrives

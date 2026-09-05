@@ -159,15 +159,8 @@ internal sealed class EmbeddingOptions : IValidatableObject
             yield return error;
         }
 
-        // Checked whether or not a chain was declared, for the reason the ceilings above are: an operator who turned
-        // description on and wrote a grid no image has is told at startup rather than at the first photograph.
-        if (this.ImageDescription.MaxPixels <= 0)
-        {
-            yield return new ValidationResult(
-                "Embeddings ImageDescription MaxPixels is positive, because a ceiling of zero or less would refuse "
-                + "every image while reading as a bound somebody chose.",
-                [nameof(this.ImageDescription)]);
-        }
+        // The image-description block is judged in ComposedSettings instead, because composition reads its grid ceiling
+        // to decide which describer it registers and this validator runs strictly afterwards, under ValidateOnStart.
 
         if (!this.IsConfigured)
         {

@@ -2,8 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.ComponentModel.DataAnnotations;
-
 namespace MailFathom.Host.Configuration.Embeddings;
 
 /// <summary>Declares whether this deployment sends image attachments to a chat provider to be described, and how large one may be.</summary>
@@ -39,16 +37,44 @@ internal sealed class EmbeddingImageDescriptionOptions
     /// </remarks>
     public const long DefaultMaxPixels = 40_000_000;
 
+    /// <summary>The largest pixel grid an operator may declare.</summary>
+    /// <remarks>
+    /// A billion pixels is twenty-five times the default and past every camera and scanner that exists, so a number
+    /// above it is a mistyped one rather than a deployment with unusual attachments. The ceiling is enforced because
+    /// the value it bounds is the one thing standing between a hostile header and a provider that decodes it.
+    /// </remarks>
+    public const long GreatestMaxPixels = 1_000_000_000;
+
     /// <summary>Gets or sets whether an image attachment is sent to the chat provider to be described.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Gets or sets the largest pixel grid an image may declare and still be described.</summary>
     /// <remarks>
+    /// <para>
     /// The decompression-bomb bound, and the reason it is stated in pixels rather than in octets: a compressed image of
     /// a few kilobytes may declare a grid of billions, and what a decoder then allocates follows the grid rather than
     /// the file. Nothing in this deployment decodes an image, so what this protects is the provider that does — and a
     /// grid this deployment would not have decoded is not one to make somebody else decode either.
+    /// </para>
+    /// <para>
+    /// Bounded by <see cref="FindDeclarationErrors" /> rather than by a range attribute, because
+    /// <c>ValidateDataAnnotations</c> validates the bound root's own properties and never descends into a nested block
+    /// — so an attribute here would read as a rule and enforce nothing.
+    /// </para>
     /// </remarks>
-    [Range(1, 1_000_000_000)]
     public long MaxPixels { get; set; } = DefaultMaxPixels;
+
+    /// <summary>Reports everything an operator must fix before this block can be used.</summary>
+    /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
+    /// <remarks>
+    /// Read while the host is being composed rather than under <c>ValidateOnStart</c>, because composition reads
+    /// <see cref="MaxPixels" /> to decide which describer it registers and a rule that ran afterwards would let the one
+    /// deployment shape it was written for die on an argument guard instead.
+    /// </remarks>
+    public IReadOnlyList<string> FindDeclarationErrors() =>
+        this.MaxPixels is > 0 and <= GreatestMaxPixels
+            ? []
+            : [
+                $"{EmbeddingOptions.SectionName}:{nameof(EmbeddingOptions.ImageDescription)}:{nameof(this.MaxPixels)} — a grid ceiling is between 1 and {GreatestMaxPixels} pixels. Zero or less would refuse every image while reading as a bound somebody chose, and more than that is past every camera and scanner there is, which leaves whatever a hostile attachment declares to be decoded by the provider.",
+            ];
 }

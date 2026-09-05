@@ -129,6 +129,13 @@ internal static class ComposedSettings
             // against: an operator who wrote one mistake in each reads the one their other mistake depends on first.
             .. Refusal<MailAnsweringOptions>(MailAnsweringOptions.SectionName, answering.FindConfigurationErrors()),
 
+            // The one rule of the embedding section read here rather than under ValidateOnStart with the rest of it:
+            // composition reads the grid ceiling to decide which image describer it registers, so a rule running after
+            // the container was built would let the mistake it was written for die on an argument guard instead.
+            .. Refusal<EmbeddingOptions>(
+                EmbeddingOptions.SectionName,
+                embeddings?.ImageDescription.FindDeclarationErrors() ?? []),
+
             // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names
             // one AI endpoint across the whole deployment because a credential, a resilience circuit, and a log line are
             // all keyed by it, and the filter's candidate count against what a lookup actually hands over.

@@ -2,12 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Binary;
 using System.Text;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -225,6 +225,26 @@ public sealed class ImageAttachmentDescriberTests
         Assert.Null(description.Refusal);
     }
 
+    /// <summary>Cancellation observed inside the provider call comes back out, rather than becoming a refusal stamped on the picture.</summary>
+    /// <remarks>
+    /// The path the one below cannot reach: a token cancelled before the call ends the read, while this one ends the
+    /// call itself, which is where a refusal would be the easy and wrong thing to record.
+    /// </remarks>
+    [Fact]
+    public async Task DescribeAsync_AProviderCallThatObservedCancellation_PropagatesItRatherThanRefusing()
+    {
+        // Arrange
+        var provider = new ScriptedChatModelClient().Cancelling(RequestMarker);
+        var describer = Describer(provider);
+        using var content = new MemoryStream(Png(width: 8, height: 8));
+
+        // Act, Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => describer.DescribeAsync("image/png", content, TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, provider.CallCount);
+    }
+
     /// <summary>The caller stopping the work is not something the attachment or the provider did, so it is never recorded against either.</summary>
     [Fact]
     public async Task DescribeAsync_ACallerThatCancelled_IsNotReportedAsARefusal()
@@ -269,30 +289,7 @@ public sealed class ImageAttachmentDescriberTests
 
     private static byte[] Utf8(string document) => Encoding.UTF8.GetBytes(document);
 
-    /// <summary>The smallest PNG carrying a readable header, which is all anything on this path ever reads.</summary>
-    private static byte[] Png(int width, int height)
-    {
-        var file = new byte[24];
+    private static byte[] Png(int width, int height) => SyntheticImages.Png(width, height);
 
-        ReadOnlySpan<byte> signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        signature.CopyTo(file);
-        BinaryPrimitives.WriteUInt32BigEndian(file.AsSpan(8), 13);
-        "IHDR"u8.CopyTo(file.AsSpan(12));
-        BinaryPrimitives.WriteUInt32BigEndian(file.AsSpan(16), (uint)width);
-        BinaryPrimitives.WriteUInt32BigEndian(file.AsSpan(20), (uint)height);
-
-        return file;
-    }
-
-    /// <summary>The smallest GIF carrying a readable logical screen descriptor.</summary>
-    private static byte[] Gif(int width, int height)
-    {
-        var file = new byte[13];
-
-        "GIF89a"u8.CopyTo(file);
-        BinaryPrimitives.WriteUInt16LittleEndian(file.AsSpan(6), (ushort)width);
-        BinaryPrimitives.WriteUInt16LittleEndian(file.AsSpan(8), (ushort)height);
-
-        return file;
-    }
+    private static byte[] Gif(int width, int height) => SyntheticImages.Gif(width, height);
 }

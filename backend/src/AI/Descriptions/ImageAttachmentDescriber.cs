@@ -126,7 +126,9 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            // Cleared on the way back, because what the buffer held is somebody's mail and the pool is shared with
+            // everything else in the process.
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
     }
 

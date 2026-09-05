@@ -5,11 +5,12 @@
 namespace MailFathom.Application.Emails.Extraction.Images;
 
 /// <summary>What describing one image attachment produced: the words, or the reason there are none.</summary>
-/// <param name="Text">What the picture shows, or <see langword="null" /> where nothing was described.</param>
-/// <param name="Refusal">Why nothing was described, or <see langword="null" /> where something was.</param>
 /// <remarks>
 /// <para>
-/// Exactly one of the two is present, which is what the factories below exist to guarantee. A refusal is a result
+/// Exactly one of the two is present, and the two factories below are the only way to make one — which is why the
+/// constructor is private rather than the positional one a record would otherwise publish alongside a <c>with</c>
+/// expression. Both would let a caller compose a value carrying neither, and a caller branching on the contract stated
+/// here would then store nothing while recording no reason. A refusal is a result
 /// rather than an exception because every one of them is an ordinary property of the mail a mailbox holds — a
 /// signature image in a format nothing reads, a photograph larger than one request sends, a provider having a bad
 /// afternoon — and none of them is a fault in this deployment worth unwinding a background run for.
@@ -20,8 +21,20 @@ namespace MailFathom.Application.Emails.Extraction.Images;
 /// never as something the sender wrote.
 /// </para>
 /// </remarks>
-public sealed record ImageAttachmentDescription(string? Text, ImageDescriptionRefusal? Refusal)
+public sealed record ImageAttachmentDescription
 {
+    private ImageAttachmentDescription(string? text, ImageDescriptionRefusal? refusal)
+    {
+        this.Text = text;
+        this.Refusal = refusal;
+    }
+
+    /// <summary>Gets what the picture shows, or <see langword="null" /> where nothing was described.</summary>
+    public string? Text { get; }
+
+    /// <summary>Gets why nothing was described, or <see langword="null" /> where something was.</summary>
+    public ImageDescriptionRefusal? Refusal { get; }
+
     /// <summary>Carries what the model said the picture shows.</summary>
     /// <param name="text">The description, which is never blank.</param>
     /// <returns>The described result.</returns>
@@ -30,7 +43,7 @@ public sealed record ImageAttachmentDescription(string? Text, ImageDescriptionRe
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
 
-        return new ImageAttachmentDescription(text, Refusal: null);
+        return new ImageAttachmentDescription(text, refusal: null);
     }
 
     /// <summary>Records why the attachment produced no description.</summary>
@@ -44,6 +57,6 @@ public sealed record ImageAttachmentDescription(string? Text, ImageDescriptionRe
             throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "The refusal names no declared reason.");
         }
 
-        return new ImageAttachmentDescription(Text: null, refusal);
+        return new ImageAttachmentDescription(text: null, refusal);
     }
 }

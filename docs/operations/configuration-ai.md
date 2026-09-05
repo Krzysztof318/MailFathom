@@ -368,13 +368,18 @@ and is not delivered.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Embeddings:ImageDescription:Enabled` | bool | `false` | with it off nothing is read and nothing is sent; with it on, and a chat endpoint declared, an image attachment's octets leave the deployment | restart |
-| `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent | restart |
+| `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent. A value outside the range stops the start, naming this key | restart |
 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
 is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
 another is judged on what it carries. Everything else is refused with a reason recorded against the attachment: a
 format outside the list, a file larger than `Chat:MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
 does not hold the format it claims, and a provider that timed out, was unavailable, or refused.
+
+**A chat endpoint carrying no image cannot be the one describing them.** `Chat:MaxRequestImageOctets: 0` is a
+supported declaration on its own — it is the right one for a model that cannot read a picture — but writing it beside
+this switch stops the start naming that key, because the alternative is every picture in the mailbox being refused as
+too large, which reads as a property of the pictures rather than of the endpoint.
 
 **SVG is excluded by name rather than left unsupported.** It is XML a renderer executes as a document, with script and
 external references available to whoever composed it, and nothing here is a renderer with a security team behind it. A
@@ -387,8 +392,9 @@ MailFathom never decodes an image — it reads the header and forwards the octet
 that does, and a grid this deployment would not have decoded is not one to make somebody else decode either. Forty
 megapixels is well past any camera a person attaches a photograph from.
 
-Describing runs in the background, after a message is stored, and never on a read path: a tool call and a client
-request never wait on a provider describing a picture.
+The port's own contract obliges whatever calls it to call it from a background step, after a message is stored, and
+never from a read path — so that a tool call and a client request never wait on a provider describing a picture. Nothing
+calls it yet, so that is an obligation on the caller rather than a scheduling this deployment performs.
 
 ### One endpoint — `Embeddings:Endpoints:<n>`
 

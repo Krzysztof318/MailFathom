@@ -4,7 +4,7 @@
 
 using System.Buffers.Binary;
 
-namespace MailFathom.Application.UnitTests.Emails.Extraction.Images;
+namespace MailFathom.TestSupport;
 
 /// <summary>Builds the smallest file of each format that carries a readable header, so a test states only the grid it varies.</summary>
 /// <remarks>

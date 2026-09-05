@@ -61,6 +61,16 @@ internal static class ChatDeclarationRules
             errors.Add(ProviderEndpointAliases.DescribeReusedAlias(reusedAlias));
         }
 
+        // Zero is a supported declaration on its own — it is what a text-only model carries — and it is only a mistake
+        // beside the one feature that has nothing else to send. Refused here rather than left to the describer, because
+        // what an operator would otherwise meet is ImageTooLarge stamped on every picture in the mailbox, which reads as
+        // a property of the pictures rather than as the endpoint declaration it is.
+        if (candidate.MaxRequestImageOctets == 0 && embeddings?.ImageDescription.Enabled is true)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxRequestImageOctets)} — a chat endpoint declared to carry no image cannot be the one describing image attachments. Either raise this above zero, or turn {EmbeddingOptions.SectionName}:{nameof(EmbeddingOptions.ImageDescription)}:{nameof(EmbeddingImageDescriptionOptions.Enabled)} off.");
+        }
+
         return errors;
     }
 

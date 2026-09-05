@@ -25,6 +25,7 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     private readonly List<IReadOnlyList<ChatMessage>> conversations = [];
     private readonly Dictionary<string, ChatGenerationFailure?> scriptByMarker = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Text, ChatGenerationStop Stop)> answerByMarker = new(StringComparer.Ordinal);
+    private readonly HashSet<string> cancelledMarkers = new(StringComparer.Ordinal);
     private string? answerForEverythingElse;
 
     /// <summary>Gets every conversation this client was sent, in the order it received them.</summary>
@@ -69,6 +70,21 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
         return this;
     }
 
+    /// <summary>Arranges that a conversation naming one marker observes the caller's cancellation instead of answering.</summary>
+    /// <param name="marker">Text the conversation's last turn carries.</param>
+    /// <returns>This client, so arrangement reads as one statement.</returns>
+    /// <remarks>
+    /// Distinct from <see cref="Failing" /> because it is not a failure: a real client observes the token while the
+    /// request is in flight and the caller's own decision comes back out of the call, which is the one outcome a caller
+    /// must not record against whatever it was asking about.
+    /// </remarks>
+    public ScriptedChatModelClient Cancelling(string marker)
+    {
+        this.cancelledMarkers.Add(marker);
+
+        return this;
+    }
+
     /// <summary>Arranges what the model answers for a conversation naming no arranged marker.</summary>
     /// <param name="answerText">What the model answers.</param>
     /// <returns>This client, so arrangement reads as one statement.</returns>
@@ -91,6 +107,12 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
         }
 
         var lastTurn = conversation[^1].Text;
+
+        if (this.cancelledMarkers.Any(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal)))
+        {
+            throw new OperationCanceledException();
+        }
+
         var marker = this.scriptByMarker.Keys.FirstOrDefault(candidate => lastTurn.Contains(candidate, StringComparison.Ordinal));
 
         if (marker is not null && this.scriptByMarker[marker] is { } failure)

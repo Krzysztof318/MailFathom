@@ -4,6 +4,7 @@
 
 using System.Text;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Extraction.Images;
@@ -183,6 +184,12 @@ public sealed class ImageAttachmentHeaderTests
 
         // A PNG declaring a grid with no pixels in it.
         SyntheticImages.Png(width: 8, height: 0),
+
+        // A PNG declaring a width past what a signed integer holds. PNG states a dimension in unsigned thirty-two bits
+        // and this reader keeps it in an int, so the value arrives negative — and were it published rather than
+        // refused, PixelCount would be a negative product that no ceiling comparison ever exceeds, which is exactly the
+        // decompression bomb the ceiling exists to stop.
+        SyntheticImages.Png(width: int.MinValue, height: 8),
 
         // A JPEG whose segment chain runs off the end before any frame header.
         SyntheticImages.Jpeg(width: 8, height: 8, precedingSegmentPayload: 64)[..20],

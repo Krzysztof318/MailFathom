@@ -130,12 +130,12 @@ public sealed partial class ChatGenerationPlan
     /// <param name="reasoningEffort">The reasoning effort every call states, or <see langword="null" /> to send none.</param>
     /// <param name="maximumMessagesPerRequest">The greatest number of turns one request carries.</param>
     /// <param name="maximumRequestCharacters">The greatest number of characters those turns may add up to.</param>
-    /// <param name="maximumRequestImageOctets">The greatest number of octets the images of those turns may add up to.</param>
+    /// <param name="maximumRequestImageOctets">The greatest number of octets the images of those turns may add up to, which zero states as an endpoint sent no image at all.</param>
     /// <param name="requestTimeout">The time one request may take.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the endpoint declares a blank alias or a blank routed model name.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound is not positive, a sampling parameter is outside the range every provider accepts, or the endpoint's API or the reasoning effort names no declared value.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound other than <paramref name="maximumRequestImageOctets" /> is not positive, when that one is negative, when a sampling parameter is outside the range every provider accepts, or when the endpoint's API or the reasoning effort names no declared value.</exception>
     public static ChatGenerationPlan Create(
         ChatEndpoint endpoint,
         int maximumOutputTokens,

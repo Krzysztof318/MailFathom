@@ -183,8 +183,8 @@ public sealed record ImageAttachmentHeader(ImageAttachmentFormat Format, int Wid
             }
 
             // Every start-of-frame marker states the grid the same way, whatever coding it introduces. The three
-            // excluded from the run share the numbering and carry no frame header: the Huffman table, the arithmetic
-            // conditioning table, and the restart interval.
+            // excluded from the run share the numbering and carry no frame header: the Huffman table at 0xC4, the
+            // reserved JPG extension marker at 0xC8, and the arithmetic conditioning table at 0xCC.
             if (marker is >= 0xC0 and <= 0xCF and not (0xC4 or 0xC8 or 0xCC))
             {
                 if (position + 9 > content.Length)
