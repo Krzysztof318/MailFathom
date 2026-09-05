@@ -688,6 +688,7 @@ public sealed class SpamActionRecorderTests
                 this.bindings,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 sessionFactory,
+                ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(EvaluatedAt)),
             transportSecurityPolicies);
     }

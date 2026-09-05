@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
@@ -35,6 +36,7 @@ public sealed class MailFolderResolver
     private readonly IMailFolderResolutionStore resolutionStore;
     private readonly IMailFolderMappingChangeAuditor mappingChangeAuditor;
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
+    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new folder resolver.</summary>
@@ -44,6 +46,7 @@ public sealed class MailFolderResolver
         IMailFolderResolutionStore resolutionStore,
         IMailFolderMappingChangeAuditor mappingChangeAuditor,
         IPersistenceSessionFactory persistenceSessionFactory,
+        ClientSignals signals,
         TimeProvider timeProvider)
     {
         this.remoteFolderCatalog = remoteFolderCatalog;
@@ -51,6 +54,7 @@ public sealed class MailFolderResolver
         this.resolutionStore = resolutionStore;
         this.mappingChangeAuditor = mappingChangeAuditor;
         this.persistenceSessionFactory = persistenceSessionFactory;
+        this.signals = signals;
         this.timeProvider = timeProvider;
     }
 
@@ -213,6 +217,11 @@ public sealed class MailFolderResolver
                     $"The binding of folder alias {newResolution.Alias.Value} was changed by another writer before this run recorded its own.");
             }
         }
+
+        // A binding written is the folder set having moved — an alias bound for the first time, or one now naming a
+        // different remote folder — which is exactly what a client redraws its tree for. It follows the commit for the
+        // reason the audit record does, and a run that found the binding unchanged never reaches here.
+        this.signals.Publish(ClientSignal.FoldersChanged(account));
 
         // The audit record follows the commit, because a record written first would describe a binding a failed
         // commit never created. The cost is the opposite risk: a sink that fails loses the explanation of a binding

@@ -19,6 +19,7 @@ using MailFathom.Infrastructure.Resilience;
 using MailFathom.IntegrationTests.Mailbox;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.IntegrationTests.Persistence;
+using MailFathom.TestSupport;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -250,6 +251,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             new MailKitImapWriteSessionFactory(pool, CreateTelemetry()),
             scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
             scope.GetRequiredService<IMailboxMutationAuditTrail>(),
+            ClientSignalPublishers.ReachingNobody,
             new MailboxMutationOptions());
 
         return await performer.PerformAsync(

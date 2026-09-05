@@ -3,11 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen, type RenderResult } from '@testing-library/react';
+import { act, fireEvent, render, screen, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import type { ClientSession, ClientSignal, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
+import {
+    SignalledChangesContext,
+    nothingSignalled,
+    type SignalListener,
+    type SignalledChanges,
+} from '../signals/signalledChanges';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { FolderTree } from './FolderTree';
@@ -133,13 +139,16 @@ function treeUnder(
     transport: MailFathomTransport,
     online: boolean,
     marking: ReadMarking = nothingMarkedRead,
+    changes: SignalledChanges = nothingSignalled,
 ): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <ReadMarkingContext value={marking}>
-                    <FolderTree session={session} transport={transport} online={online} />
-                </ReadMarkingContext>
+                <SignalledChangesContext value={changes}>
+                    <ReadMarkingContext value={marking}>
+                        <FolderTree session={session} transport={transport} online={online} />
+                    </ReadMarkingContext>
+                </SignalledChangesContext>
                 <FoldTheColumn />
                 <ScopeProbe />
             </WorkspaceProvider>
@@ -147,8 +156,35 @@ function treeUnder(
     );
 }
 
-function renderTree(transport: MailFathomTransport, online = true, marking?: ReadMarking): RenderResult {
-    return render(treeUnder(transport, online, marking));
+function renderTree(
+    transport: MailFathomTransport,
+    online = true,
+    marking?: ReadMarking,
+    changes?: SignalledChanges,
+): RenderResult {
+    return render(treeUnder(transport, online, marking, changes));
+}
+
+/** A deployment a test speaks for, so what a signal does to the tree is asserted rather than waited for. */
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+    const listeners = new Set<SignalListener>();
+
+    return {
+        changes: {
+            listen: (listener) => {
+                listeners.add(listener);
+
+                return () => {
+                    listeners.delete(listener);
+                };
+            },
+        },
+        say: (signal) => {
+            for (const listener of [...listeners]) {
+                listener(signal);
+            }
+        },
+    };
 }
 
 /** A client that has marked the named messages read, each in the folder the list counted it in. */
@@ -547,5 +583,88 @@ describe('FolderTree, in a folded column', () => {
 
         expect(carried().collapsed).toEqual(['account:work']);
         expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
+    });
+    it('reads the tree again when the deployment says a count moved, without taking the tree off the screen', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+        expect(reads).toBe(1);
+
+        act(() => {
+            deployment.say({ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 2 });
+        });
+
+        // The tree is still the tree while the read it asked for is in flight: a reader whose pointer is on a row
+        // keeps the row, which is the whole reason this is not the counter that says a read is in flight.
+        expect(screen.queryByText('Reading mailboxes and folders…')).toBeNull();
+        expect(row(/^Work/)).toBeDefined();
+
+        await drawn();
+        expect(reads).toBe(2);
+    });
+
+    it.each<{ signal: ClientSignal; named: string }>([
+        { signal: { kind: 'folders.changed', account: 'work' }, named: 'the mapping moving' },
+        { signal: { kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['m-1'] }, named: 'mail changing' },
+    ])('reads the tree again on $named', async ({ signal }) => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+
+        act(() => {
+            deployment.say(signal);
+        });
+
+        await drawn();
+        expect(reads).toBe(2);
+    });
+
+    it('reads nothing again for a signal about something the tree does not draw', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+
+        act(() => {
+            deployment.say({ kind: 'account.state', account: 'work' });
+        });
+
+        await drawn();
+        expect(reads).toBe(1);
     });
 });

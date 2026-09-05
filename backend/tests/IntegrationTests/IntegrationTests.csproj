@@ -28,6 +28,7 @@
     <!-- The same builder the unit suites link, because the certificates a real handshake needs are issued by it rather
          than committed: nothing here provisions material a second way. -->
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+    <Compile Include="..\shared\ClientSignalPublishers.cs" Link="ClientSignalPublishers.cs" />
     <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />

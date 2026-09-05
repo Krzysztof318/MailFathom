@@ -717,6 +717,7 @@ public sealed class MailRuleEvaluationPassTests
                 this.folders,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 Substitute.For<IPersistenceSessionFactory>(),
+                ClientSignalPublishers.ReachingNobody,
                 this.timeProvider),
             Substitute.For<IMailTransportSecurityPolicyReader>());
     }

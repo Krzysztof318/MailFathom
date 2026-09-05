@@ -5,9 +5,21 @@
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
+import type {
+    ClientRequest,
+    ClientSession,
+    ClientSignal,
+    MailAccount,
+    MailFathomTransport,
+} from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
+import {
+    SignalledChangesContext,
+    nothingSignalled,
+    type SignalListener,
+    type SignalledChanges,
+} from '../signals/signalledChanges';
 import { everything, type MailScope } from '../workspace/mailScope';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -119,19 +131,21 @@ const composing: Composing = { offered: true, opening: null, compose: vi.fn(), c
 
 function listUnder(
     transport: MailFathomTransport,
-    { scope = everything, accounts = [work], online = true }: Partial<Drawn> = {},
+    { scope = everything, accounts = [work], online = true, changes = nothingSignalled }: Partial<Drawn> = {},
 ): ReactElement {
     return (
         <LocalizationProvider>
             <ComposingContext value={composing}>
                 <WorkspaceProvider>
-                    <ListOpeningIntoTheWorkspace
-                        session={session}
-                        transport={transport}
-                        scope={scope}
-                        accounts={accounts}
-                        online={online}
-                    />
+                    <SignalledChangesContext value={changes}>
+                        <ListOpeningIntoTheWorkspace
+                            session={session}
+                            transport={transport}
+                            scope={scope}
+                            accounts={accounts}
+                            online={online}
+                        />
+                    </SignalledChangesContext>
                     <SelectionProbe />
                 </WorkspaceProvider>
             </ComposingContext>
@@ -143,6 +157,29 @@ interface Drawn {
     readonly scope: MailScope;
     readonly accounts: readonly MailAccount[];
     readonly online: boolean;
+    readonly changes: SignalledChanges;
+}
+
+/** A deployment a test speaks for, so what a signal does to the list is asserted rather than waited for. */
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+    const listeners = new Set<SignalListener>();
+
+    return {
+        changes: {
+            listen: (listener) => {
+                listeners.add(listener);
+
+                return () => {
+                    listeners.delete(listener);
+                };
+            },
+        },
+        say: (signal) => {
+            for (const listener of [...listeners]) {
+                listener(signal);
+            }
+        },
+    };
 }
 
 function renderList(transport: MailFathomTransport, drawn: Partial<Drawn> = {}): RenderResult {
@@ -669,5 +706,87 @@ describe('MessageList', () => {
         await rows();
 
         expect(screen.getByText('That is the whole of this folder.')).toBeDefined();
+    });
+    it('reads the leading page again when the deployment says mail arrived in what it is showing', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(wholeFolder);
+
+        renderList(asked.transport, { changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 2 });
+        });
+
+        await rows();
+        expect(asked.requests.length).toBe(before + 1);
+    });
+
+    it('keeps the rows a reader is looking at while the read it asked for is in flight', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        // The first read answers and the one the signal asks for never does, which is the frame the reader would see
+        // a list emptied in: what they were looking at stays on the screen until something replaces it.
+        renderList(
+            () => {
+                reads += 1;
+
+                return reads === 1
+                    ? Promise.resolve({ status: 200, body: wholeFolder, headers: {} })
+                    : new Promise(() => undefined);
+            },
+            { changes: deployment.changes },
+        );
+
+        const drawn = (await rows()).length;
+
+        act(() => {
+            deployment.say({ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 2 });
+        });
+
+        expect((await rows()).length).toBe(drawn);
+        expect(screen.queryByText('Reading your mail…')).toBeNull();
+    });
+
+    it('reads again for mail the deployment named as changed', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(wholeFolder);
+
+        renderList(asked.transport, { changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({
+                kind: 'mail.changed',
+                account: 'work',
+                folder: 'INBOX',
+                emails: ['message-0'],
+            });
+        });
+
+        await rows();
+        expect(asked.requests.length).toBe(before + 1);
+    });
+
+    it('reads nothing again for a change in another account than the one it is showing', async () => {
+        const deployment = deploymentSaying();
+        const asked = recording(wholeFolder);
+
+        renderList(asked.transport, { scope: { kind: 'account', accountId: 'work' }, changes: deployment.changes });
+        await rows();
+
+        const before = asked.requests.length;
+
+        act(() => {
+            deployment.say({ kind: 'mail.arrived', account: 'personal', folder: 'INBOX', count: 2 });
+        });
+
+        await rows();
+        expect(asked.requests.length).toBe(before);
     });
 });

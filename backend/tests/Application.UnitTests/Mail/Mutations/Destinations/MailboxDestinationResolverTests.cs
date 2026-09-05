@@ -259,6 +259,7 @@ public sealed class MailboxDestinationResolverTests
                     this.Bindings,
                     mappingChangeAuditor,
                     persistenceSessionFactory,
+                    ClientSignalPublishers.ReachingNobody,
                     new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
                 transportSecurityPolicies);
         }

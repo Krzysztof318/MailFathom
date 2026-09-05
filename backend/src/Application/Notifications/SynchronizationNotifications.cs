@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Notifications;
 
@@ -26,22 +27,32 @@ namespace MailFathom.Application.Notifications;
 /// no subject, address, body fragment, filename, or credential can reach the record, a log, or a telemetry event
 /// through this path.
 /// </para>
+/// <para>
+/// A row that was kept is also announced to whatever the owner has open, because this is the place that already
+/// observes it: the signal carries the row's own already-derived text and the count that follows from writing it, and a
+/// client draws the bell from that rather than from the next interval. A row the deduplication rule folded into a
+/// standing one is not announced, for the same reason it is not written.
+/// </para>
 /// </remarks>
 public sealed class SynchronizationNotifications
 {
     private readonly INotificationStore store;
+    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the producer from the record it raises into.</summary>
     /// <param name="store">Keeps what is raised.</param>
+    /// <param name="signals">Tells an open client that a row was written, so a bell is drawn without waiting for an interval.</param>
     /// <param name="timeProvider">Stamps a notification with when the run observed what it describes.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
-    public SynchronizationNotifications(INotificationStore store, TimeProvider timeProvider)
+    public SynchronizationNotifications(INotificationStore store, ClientSignals signals, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.store = store;
+        this.signals = signals;
         this.timeProvider = timeProvider;
     }
 
@@ -138,7 +149,7 @@ public sealed class SynchronizationNotifications
             condition: "credential-refused",
             cancellationToken);
 
-    private Task<bool> RecordAsync(
+    private async Task<bool> RecordAsync(
         MailAccountIdentity account,
         NotificationKind kind,
         string title,
@@ -156,17 +167,30 @@ public sealed class SynchronizationNotifications
         // rather than being shown truncated as an account nobody configured.
         var source = accountId.Length <= Notification.MaximumSourceLength ? accountId : null;
 
-        return this.store.RecordAsync(
-            Notification.Compose(
-                NotificationId.Create(Guid.CreateVersion7(occurredAt)),
-                account.Owner,
-                kind,
-                title,
-                body,
-                source,
-                target,
-                NotificationDeduplicationKey.For(condition, account.Id.Value),
-                occurredAt),
-            cancellationToken);
+        var notification = Notification.Compose(
+            NotificationId.Create(Guid.CreateVersion7(occurredAt)),
+            account.Owner,
+            kind,
+            title,
+            body,
+            source,
+            target,
+            NotificationDeduplicationKey.For(condition, account.Id.Value),
+            occurredAt);
+
+        var kept = await this.store.RecordAsync(notification, cancellationToken);
+
+        if (!kept || !this.signals.Reaches)
+        {
+            return kept;
+        }
+
+        // The count is read only where a row was actually written and something is listening, so a deployment serving
+        // no client and a run that changed nothing both pay nothing for this.
+        var unreadCount = await this.store.CountUnreadAsync(account.Owner, cancellationToken);
+
+        this.signals.Publish(ClientSignal.NotificationRaised(notification, unreadCount));
+
+        return true;
     }
 }

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -49,6 +50,7 @@ public sealed class MailboxReconciler
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly IRemotelyDeletedEmailDispositionReader dispositionReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
@@ -57,6 +59,7 @@ public sealed class MailboxReconciler
     /// <param name="mutationStore">Says which of the disappearances are changes MailFathom itself made.</param>
     /// <param name="dispositionReader">Answers what the account being reconciled does with an email its server no longer holds.</param>
     /// <param name="concurrencyRetryPolicy">Commits one window's outcome, retrying a conflict with a competing writer.</param>
+    /// <param name="signals">Tells an open client which stored mail this window moved, so what is on the screen catches up.</param>
     /// <param name="timeProvider">Stamps the observation, which is what advances the window across runs.</param>
     /// <param name="options">Bounds one window.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -65,6 +68,7 @@ public sealed class MailboxReconciler
         IMailboxMutationReconciliationStore mutationStore,
         IRemotelyDeletedEmailDispositionReader dispositionReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        ClientSignals signals,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
@@ -72,6 +76,7 @@ public sealed class MailboxReconciler
         ArgumentNullException.ThrowIfNull(mutationStore);
         ArgumentNullException.ThrowIfNull(dispositionReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(options);
 
@@ -79,6 +84,7 @@ public sealed class MailboxReconciler
         this.mutationStore = mutationStore;
         this.dispositionReader = dispositionReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.signals = signals;
         this.timeProvider = timeProvider;
         this.options = options;
     }
@@ -179,6 +185,8 @@ public sealed class MailboxReconciler
 
         var emailsRemain = window.Count == this.options.MaxReconciledEmailsPerRun;
 
+        this.AnnounceWhatMoved(account, folder.Alias, classification, outcome);
+
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
             outcome.Disappeared.Count,
@@ -196,6 +204,43 @@ public sealed class MailboxReconciler
                     attributed.MutationRecordId)),
                 .. flagChanges.Suppressed,
             ]);
+    }
+
+    /// <summary>Tells an open client which stored mail this window moved, once the window is committed.</summary>
+    /// <remarks>
+    /// After the commit rather than inside it, because a signal is an instruction to re-read and a client that acted on
+    /// one before the transaction landed would read the state the window was replacing. A window that moved nothing
+    /// says nothing, which is every window on a mailbox nobody is changing — and *described* is not *moved*: a server
+    /// without <c>CONDSTORE</c>, and an account still ramping up, describe every occurrence in every window, so reading
+    /// the outcome's whole still-present list would announce a mailbox nobody touched once per cycle.
+    /// <para>
+    /// What crosses is the account, the folder, and the stored identities — no flag, no count of which kind of change,
+    /// and nothing derived from a message. Which of them changed is what the client re-reads to find out.
+    /// </para>
+    /// </remarks>
+    private void AnnounceWhatMoved(
+        MailAccountIdentity account,
+        MailFolderAlias folder,
+        ReconciledWindowClassification classification,
+        ReconciledFolderOutcome outcome)
+    {
+        if (!this.signals.Reaches)
+        {
+            return;
+        }
+
+        var moved = classification.Moved
+            .Select(static observed => observed.Candidate.StoredEmailId)
+            .Concat(outcome.Disappeared)
+            .Concat(outcome.RemovedByOwnMutation.Select(static attributed => attributed.StoredEmailId))
+            .ToArray();
+
+        if (moved.Length == 0)
+        {
+            return;
+        }
+
+        this.signals.Publish(ClientSignal.MailChanged(account, folder, moved));
     }
 
     /// <summary>Separates the disappearances MailFathom caused from the ones the disposition answers for.</summary>
@@ -299,11 +344,9 @@ public sealed class MailboxReconciler
         ImapUidValidity uidValidity,
         CancellationToken cancellationToken)
     {
-        var changed = classification.StillPresent
-            .Where(static observed => observed.SeenStateMoved || observed.FlaggedStateMoved || observed.KeywordsMoved)
-            .ToArray();
+        var changed = classification.Moved;
 
-        if (changed.Length == 0)
+        if (changed.Count == 0)
         {
             return ReconciledFlagChanges.None;
         }
@@ -498,6 +541,20 @@ public sealed class MailboxReconciler
         IReadOnlyList<StoredEmailId> ConfirmedUnchanged,
         IReadOnlyList<StoredEmailAwaitingReconciliation> Disappeared)
     {
+        /// <summary>Gets the described occurrences whose flags or keywords stand somewhere other than where they were last seen.</summary>
+        /// <remarks>
+        /// An occurrence the server merely re-described is not one of them, which is what the three questions on
+        /// <see cref="ObservedWindowCandidate" /> already decide and why this reads them rather than restating them. It
+        /// matters twice over on a server without <c>CONDSTORE</c> and on an account still ramping up, where every
+        /// window describes every occurrence in it: the attribution below would otherwise weigh a whole window against
+        /// the mutation record, and a client would be told to re-read mail nothing touched on every cycle.
+        /// </remarks>
+        internal IReadOnlyList<ObservedWindowCandidate> Moved =>
+        [
+            .. this.StillPresent.Where(static observed =>
+                observed.SeenStateMoved || observed.FlaggedStateMoved || observed.KeywordsMoved),
+        ];
+
         /// <summary>Gets the flags to write, which is all the store applying the outcome needs of a described occurrence.</summary>
         internal IReadOnlyList<ObservedEmailFlags> ObservedFlags =>
         [

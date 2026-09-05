@@ -15,6 +15,7 @@ import {
     type NotificationTarget,
 } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
+import { useSignalledChanges } from '../signals/signalledChanges';
 import { notificationToastKinds } from './notificationKinds';
 import { useToasts } from '../toasts/useToasts';
 
@@ -22,9 +23,11 @@ import { useToasts } from '../toasts/useToasts';
 // than a store beside the frame because all of it belongs to one credential and goes with it: the count on the bell,
 // the page the panel draws, and the two ways of marking something read are one reading of one thing.
 //
-// **Nothing here streams.** The client surface serves no events for this, so the count is asked for on an interval and
-// again whenever the window comes back to the front — which is the moment a person is most likely to be looking at the
-// bell and the least likely to have had a poll land. The list is asked for when there is somewhere to draw it and when
+// **The count is asked for on an interval, and again whenever anything says it should be.** The interval is the floor:
+// a deployment that raised a notification says so over the signal channel and the count is read then, and the window
+// coming back to the front reads it as well — the moment a person is most likely to be looking at the bell and the
+// least likely to have had a poll land. A deployment serving no channel, or one this client cannot reach, therefore
+// behaves exactly as it did before there was one. The list is asked for when there is somewhere to draw it and when
 // the count says something has arrived, never on the interval: a badge that cost a screenful of rows to draw would be
 // the most expensive thing on a polling client's schedule.
 //
@@ -100,6 +103,7 @@ export function useNotificationCentre(
 ): NotificationCentre {
     const { translate } = useLocalization();
     const toasts = useToasts();
+    const signalledChanges = useSignalledChanges();
     const [unreadCount, setUnreadCount] = useState(0);
     const [shown, setShown] = useState(false);
     const [notifications, setNotifications] = useState<readonly ClientNotification[]>([]);
@@ -192,12 +196,23 @@ export function useNotificationCentre(
 
         document.addEventListener('visibilitychange', returned);
 
+        // Subscribed here rather than in an effect of its own, because what it does is exactly what the interval does
+        // and the two are cleaned up by the same credential going away. Only the count is read: what the signal
+        // carries is that something was raised, and how many stand unread is the deployment's answer rather than a
+        // number this client keeps in step on its own.
+        const listening = signalledChanges.listen((signal) => {
+            if (signal.kind === 'notification.raised') {
+                void count();
+            }
+        });
+
         return () => {
             attempted.abort();
             window.clearInterval(polling);
             document.removeEventListener('visibilitychange', returned);
+            listening();
         };
-    }, [session, transport, online]);
+    }, [session, transport, online, signalledChanges]);
 
     // Held steady, because the gestures that drive the panel on a phone subscribe to the document with these as their
     // dependencies: a pair rebuilt every render would resubscribe on every one of them.

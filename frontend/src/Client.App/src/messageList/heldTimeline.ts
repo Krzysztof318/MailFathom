@@ -170,6 +170,50 @@ function slotFor(page: MailTimelinePage, read: TimelineRead): TimelineSlot {
 }
 
 /**
+ * What the list knows once the deployment said mail arrived at the end this list is read from.
+ *
+ * The leading page's rows are dropped rather than read again here, because dropping is what makes the re-read
+ * conditional: `wantedFor` asks for a dropped page only while it is on the screen, so a reader who has scrolled away
+ * keeps every row they are looking at and the page comes back when they come back to it.
+ *
+ * @param held What the list knows now.
+ * @returns What the list knows.
+ */
+export function arrivalNoticed(held: HeldTimeline): HeldTimeline {
+    return held.slots.length === 0
+        ? held
+        : { slots: held.slots.map((slot, at) => (at === 0 ? { ...slot, emails: null } : slot)) };
+}
+
+/**
+ * What the list knows once the deployment named rows whose mail is no longer what was drawn.
+ *
+ * Only the pages actually holding one of the named rows are dropped, on the same rule: what a reader is looking at is
+ * read again while they are looking at it, and what they are not stays where it is until they reach it.
+ *
+ * @param held What the list knows now.
+ * @param storedEmailIds The rows the deployment named.
+ * @returns What the list knows.
+ */
+export function changeNoticed(held: HeldTimeline, storedEmailIds: readonly string[]): HeldTimeline {
+    const named = new Set(storedEmailIds);
+
+    if (named.size === 0) {
+        return held;
+    }
+
+    const holdsNamed = (slot: TimelineSlot): boolean => slot.emails?.some((email) => named.has(email.id)) === true;
+
+    // Answered before anything is rebuilt, so a change naming mail this list is not holding leaves the list the object
+    // it already was — which is what keeps a signal about another folder from re-rendering every row of this one.
+    if (!held.slots.some(holdsNamed)) {
+        return held;
+    }
+
+    return { slots: held.slots.map((slot) => (holdsNamed(slot) ? { ...slot, emails: null } : slot)) };
+}
+
+/**
  * What the list knows once a page has answered.
  *
  * A page that was asked for to refill a dropped one goes back where it stood; one that extends the list joins the end

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -14,6 +15,7 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -669,10 +671,36 @@ public sealed class MailboxMutationPerformerTests
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 
+    /// <summary>A change the mailbox settled stops being pending on the screen, so the row is named once it has.</summary>
+    [Fact]
+    public async Task PerformAsync_WhenTheMailboxSettledTheChange_SignalsTheStoredMessageAsChanged()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+        var context = new PerformerContext(signals: signals);
+        var request = RelocationRequest();
+        context.AnswerRelocationWith(ArchivedAt);
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(InboxFolder.Alias, signal.Folder);
+        Assert.Equal([request.StoredEmailId], signal.Emails);
+    }
+
     /// <summary>Assembles the performer over an in-memory record store and a substituted write session.</summary>
     private sealed class PerformerContext
     {
-        internal PerformerContext(int maximumAttempts = 5)
+        internal PerformerContext(int maximumAttempts = 5, ClientSignals? signals = null)
         {
             var persistenceSession = Substitute.For<IPersistenceSession>();
             persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
@@ -709,6 +737,7 @@ public sealed class MailboxMutationPerformerTests
                     new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
                     TimeProvider.System),
                 this.AuditTrail,
+                signals ?? ClientSignalPublishers.ReachingNobody,
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
         }
 

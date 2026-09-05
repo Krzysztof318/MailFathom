@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
@@ -33,7 +34,7 @@ public sealed class MailFolderResolverTests
     {
         // Arrange
         var advertisedArchive = RemoteFolderPath.Create("Archief/2026", '/');
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]),
             new RemoteFolder(advertisedArchive, []));
         var mapping = MailFolderMapping.ToRemotePath(
@@ -56,7 +57,7 @@ public sealed class MailFolderResolverTests
     {
         // Arrange
         var localizedInbox = RemoteFolderPath.Create("Skrzynka odbiorcza", '/');
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), []),
             new RemoteFolder(localizedInbox, [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
@@ -73,7 +74,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_ServerReportsNoSpecialUseAttributes_StillBindsTheInboxByItsMandatedName()
     {
         // Arrange
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), []),
             new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), []));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
@@ -90,7 +91,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_ServerReportsNoAttributeForANonInboxRole_ReportsNoAdvertisedFolderMatched()
     {
         // Arrange
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), []),
             new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), []));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive);
@@ -112,7 +113,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_SeveralAdvertisedFoldersCarryTheRole_ReportsAmbiguityInsteadOfChoosingByResponseOrder()
     {
         // Arrange
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
             new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive);
@@ -131,7 +132,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_ExplicitPathAmongFoldersSharingARole_ResolvesTheNamedFolder()
     {
         // Arrange
-        var context = new ResolverContext(
+        await using var context = new ResolverContext(
             new RemoteFolder(RemoteFolderPath.Create("Archief", '/'), [MailFolderSpecialUse.Archive]),
             new RemoteFolder(RemoteFolderPath.Create("Archive", '/'), [MailFolderSpecialUse.Archive]));
         var mapping = MailFolderMapping.ToRemotePath(
@@ -149,7 +150,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_AliasMatchesNothingAdvertised_LeavesTheOtherAliasesOfTheAccountResolvable()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var missingMapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archief"));
@@ -174,7 +175,7 @@ public sealed class MailFolderResolverTests
     {
         // Arrange
         var advertisedInbox = RemoteFolderPath.Create("INBOX", '/');
-        var context = new ResolverContext(new RemoteFolder(advertisedInbox, [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(advertisedInbox, [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
         context.BindAliasTo(MailFolderResolution.FirstBindingOf(mapping.Alias, advertisedInbox));
 
@@ -191,7 +192,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_FirstBindingOfAnAlias_RecordsItWithNoPreviousRemotePath()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
 
         // Act
@@ -209,7 +210,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_AliasRepointed_RecordsBothRemotePathsAndTheNewGeneration()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("Archive/2026", '/'), []));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("Archive/2026", '/'), []));
         var mapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archive/2026"));
@@ -236,7 +237,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_AliasRepointedToAFolderWithTheSameUidValidity_StartsAGenerationThatHasNoCheckpoint()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("Archive/2026", '/'), []));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("Archive/2026", '/'), []));
         var mapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archive/2026"));
@@ -260,7 +261,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_CompetingWriterRecordedTheBindingFirst_ReportsTheConcurrencyConflict()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         context.PersistenceSession
             .CommitAsync(Arg.Any<CancellationToken>())
             .Returns(PersistenceCommitResult.ConcurrencyConflict);
@@ -281,7 +282,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_NothingAdvertisedAtTheConfiguredPath_CreatesTheFolderOnlyForTheMappingThatAskedFor()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var silentMapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archief"),
             RemoteFolderPath.Create("Archief"));
@@ -306,7 +307,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_FolderWasCreated_BindsItAndAuditsTheChangeAsAnOrdinaryFirstBinding()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archive/2026"),
@@ -336,7 +337,7 @@ public sealed class MailFolderResolverTests
     {
         // Arrange
         var createdPath = RemoteFolderPath.Create("Archive/2026", '/');
-        var context = new ResolverContext(new RemoteFolder(createdPath, []));
+        await using var context = new ResolverContext(new RemoteFolder(createdPath, []));
         var mapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archive/2026"),
@@ -358,7 +359,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_RoleMappingMatchesNothingAdvertised_ReachesNoCreationAtAll()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive);
 
         // Act
@@ -374,7 +375,7 @@ public sealed class MailFolderResolverTests
     public async Task ResolveAsync_MailServerRefusedTheCreation_ReportsTheRefusalAndRecordsNoBinding()
     {
         // Arrange
-        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        await using var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
         var mapping = MailFolderMapping.ToRemotePath(
             MailFolderAlias.Create("archive"),
             RemoteFolderPath.Create("Archive/2026"),
@@ -391,8 +392,50 @@ public sealed class MailFolderResolverTests
         await context.PersistenceSessionFactory.DidNotReceive().BeginSessionAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A binding the resolver wrote is a folder tree that moved, so an open client is told to read it again.</summary>
+    [Fact]
+    public async Task ResolveAsync_RecordingANewBinding_SignalsThatTheAccountsFoldersMoved()
+    {
+        // Arrange
+        await using var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
+
+        // Act
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(context.SignalChannel.Published);
+        Assert.Equal(ClientSignalKind.FoldersChanged, signal.Kind);
+        Assert.Equal(PrimaryAccount.Id, signal.Account);
+        Assert.Null(signal.Folder);
+    }
+
+    /// <summary>A resolution that changed no binding is a tree that did not move, and says nothing.</summary>
+    [Fact]
+    public async Task ResolveAsync_ResolvingTheSameBindingAgain_SignalsOnlyTheFirstTime()
+    {
+        // Arrange
+        await using var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
+
+        // Act
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
+
+        // Assert
+        Assert.Single(context.SignalChannel.Published);
+    }
+
     /// <summary>Builds a resolver over a server that advertises exactly the folders a test names.</summary>
-    private sealed class ResolverContext
+    private sealed class ResolverContext : IAsyncDisposable
     {
         internal static readonly DateTimeOffset ResolvedAt = new(2026, 7, 28, 9, 0, 0, TimeSpan.Zero);
 
@@ -447,14 +490,25 @@ public sealed class MailFolderResolverTests
                     return Task.FromResult(RemoteFolderPath.Create(configuredPath.Value, AdvertisedDelimiter));
                 });
 
+            this.Signals = new ClientSignals([this.SignalChannel], this.Clock);
             this.Resolver = new MailFolderResolver(
                 remoteFolderCatalog,
                 this.FolderCreator,
                 this.ResolutionStore,
                 this.MappingChangeAuditor,
                 this.PersistenceSessionFactory,
-                new FakeTimeProvider(ResolvedAt));
+                this.Signals,
+                this.Clock);
         }
+
+        /// <summary>Gets the clock the resolver stamps a binding with, and the one the signal window is measured against.</summary>
+        internal FakeTimeProvider Clock { get; } = new(ResolvedAt);
+
+        /// <summary>Gets what this arrangement told a client, which most tests here have no claim about.</summary>
+        internal RecordingClientSignalChannel SignalChannel { get; } = new();
+
+        /// <summary>Gets the publisher the resolver raises through.</summary>
+        internal ClientSignals Signals { get; }
 
         internal MailFolderResolver Resolver { get; }
 
@@ -474,6 +528,10 @@ public sealed class MailFolderResolverTests
 
         internal void BindAliasTo(MailFolderResolution resolution) =>
             this.bindingsByAlias[resolution.Alias.Value] = resolution;
+
+        /// <summary>Releases the publisher this context composed, which holds a timer because a channel is registered behind it.</summary>
+        /// <returns>A task that completes once the publisher has delivered whatever a window was still holding.</returns>
+        public ValueTask DisposeAsync() => this.Signals.DisposeAsync();
 
         /// <summary>Models a mail server that answers the creation of one alias's folder by refusing it.</summary>
         internal void RefuseCreationOf(MailFolderAlias alias) =>

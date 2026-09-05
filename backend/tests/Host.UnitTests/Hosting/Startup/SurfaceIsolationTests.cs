@@ -4,6 +4,7 @@
 
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Startup;
+using MailFathom.Host.Signals;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting.Startup;
@@ -185,4 +186,23 @@ public sealed class SurfaceIsolationTests
     [Fact]
     public void IsClientPath_APathSharingThePrefixesLetters_IsNotTheClientSurface() =>
         Assert.False(SurfaceIsolation.IsClientPath("/api/clients"));
+
+    /// <summary>The signal hub is mapped outside the client route group, and is still one of this surface's paths.</summary>
+    [Fact]
+    public void IsClientPath_TheSignalHub_IsTheClientSurface() =>
+        Assert.True(SurfaceIsolation.IsClientPath(ClientSignalEndpoints.HubPath));
+
+    /// <summary>A listener serving no client answers the hub the way it answers every other route here.</summary>
+    [Fact]
+    public void ListenerServesPath_TheSignalHubOnAListenerWithoutTheClientSurface_IsRefused()
+    {
+        Assert.True(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Client,
+            ClientSignalEndpoints.HubPath,
+            DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Admin,
+            ClientSignalEndpoints.HubPath,
+            DocumentationIsPublished));
+    }
 }

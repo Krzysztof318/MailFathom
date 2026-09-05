@@ -38,6 +38,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Runs;
@@ -71,6 +72,7 @@ using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.Signals;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
@@ -1297,6 +1299,7 @@ internal static class HostComposition
         {
             builder.Services.AddClientTransportSecurity(clientEndpointSettings);
             AddClientTelemetryProxy(builder);
+            AddClientSignalChannel(builder);
         }
 
         // A separate callback from the listener binding below, and outside its condition, because the two decide different
@@ -1392,5 +1395,23 @@ internal static class HostComposition
 
         builder.Services.AddHttpClient(ClientTelemetryForwarder.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false });
+    }
+
+    /// <summary>Registers the live channel a client is told what changed over, where this deployment serves one.</summary>
+    /// <remarks>
+    /// Behind the client endpoint's own switch, so a deployment answering an agent alone registers no channel at all and
+    /// <see cref="ClientSignals" /> folds nothing — which is what keeps a service with no client from holding state
+    /// about signals nobody can receive.
+    /// <para>
+    /// The ticket store is a singleton because it holds what is outstanding across requests, and the hub reads it from a
+    /// connection rather than from a request. The publisher itself is registered with the rest of the application graph,
+    /// unconditionally, because every raise site reaches it whether or not anything is listening.
+    /// </para>
+    /// </remarks>
+    private static void AddClientSignalChannel(WebApplicationBuilder builder)
+    {
+        builder.Services.AddSignalR();
+        builder.Services.AddSingleton<ClientSignalTickets>();
+        builder.Services.AddSingleton<IClientSignalChannel, SignalRClientSignalChannel>();
     }
 }

@@ -10,6 +10,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
@@ -52,7 +53,7 @@ public sealed class AccountSynchronizationSupervisorTests
             lastFolderAttempted,
             expectedFolderCount: 2,
             _ => new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive"),
             sessionFactory);
 
@@ -76,7 +77,7 @@ public sealed class AccountSynchronizationSupervisorTests
             folderAlias => folderAlias == "INBOX"
                 ? new PersistenceConcurrencyConflictException("A competing writer won the race.")
                 : new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive"),
             sessionFactory);
 
@@ -106,7 +107,7 @@ public sealed class AccountSynchronizationSupervisorTests
                     MailFolderAlias.Create("INBOX"),
                     new TimeoutException("The server stopped answering."))
                 : new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive"),
             sessionFactory);
 
@@ -132,7 +133,7 @@ public sealed class AccountSynchronizationSupervisorTests
             lastFolderAttempted,
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "Archive", "INBOX"),
             sessionFactory,
             unadvertisedAliases: "ARCHIVE");
@@ -159,7 +160,7 @@ public sealed class AccountSynchronizationSupervisorTests
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
         var ruleEvaluationReached = new TaskCompletionSource();
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             sessionFactory,
             ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
@@ -181,7 +182,7 @@ public sealed class AccountSynchronizationSupervisorTests
         // Arrange
         var mirrorStore = new RecordingMailFolderMirrorStore();
         var ruleEvaluationReached = new TaskCompletionSource();
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
@@ -215,7 +216,7 @@ public sealed class AccountSynchronizationSupervisorTests
         options.Accounts[0].Folders[1].VisibleToTools = visibleToTools;
         var mirrorStore = new RecordingMailFolderMirrorStore();
         var ruleEvaluationReached = new TaskCompletionSource();
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             options,
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
@@ -249,7 +250,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true);
         options.Accounts[0].Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
-        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
+        await using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
 
         // Act
         await harness.SuperviseUntilAsync(listingRequested.Task);
@@ -275,7 +276,7 @@ public sealed class AccountSynchronizationSupervisorTests
             _ => new InvalidOperationException("connect failed"));
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
         options.Accounts[0].Folders.Insert(0, new MailFolderMappingOptions { Alias = "  ", RemotePath = "Archive" });
-        using var harness = CreateHarness(options, sessionFactory);
+        await using var harness = CreateHarness(options, sessionFactory);
 
         // Act
         await harness.SuperviseUntilAsync(lastFolderAttempted.Task);
@@ -298,7 +299,7 @@ public sealed class AccountSynchronizationSupervisorTests
             lastFolderAttempted,
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
 
@@ -343,7 +344,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
 
         using var spans = new SynchronizationSpanCollector("spans-its-folders");
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateOptions(
                 enabled: true,
                 SynchronizationTestHost.CreateAccount("spans-its-folders", "INBOX", "Archive")),
@@ -369,7 +370,7 @@ public sealed class AccountSynchronizationSupervisorTests
         // Arrange
         var concurrency = new MailboxConcurrencyProbe(expectedEntryCount: 3, entriesToHoldTogether: 1);
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive", "Sent");
-        using var harness = CreateHarness(options, concurrency.CreateSessionFactory());
+        await using var harness = CreateHarness(options, concurrency.CreateSessionFactory());
 
         // Act
         await harness.SuperviseUntilAsync(concurrency.AllEntered);
@@ -386,7 +387,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var concurrency = new MailboxConcurrencyProbe(expectedEntryCount: 3, entriesToHoldTogether: 3);
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive", "Sent");
         options.MaxConcurrentFoldersPerAccount = 3;
-        using var harness = CreateHarness(options, concurrency.CreateSessionFactory());
+        await using var harness = CreateHarness(options, concurrency.CreateSessionFactory());
 
         // Act
         await harness.SuperviseUntilAsync(concurrency.AllEntered);
@@ -407,7 +408,7 @@ public sealed class AccountSynchronizationSupervisorTests
             lastFolderAttempted,
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
 
@@ -439,7 +440,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 MailAccountId.Create("primary"),
                 MailFolderAlias.Create(folderAlias),
                 new TimeoutException("The server stopped answering.")));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
 
@@ -480,7 +481,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return HoldUntilWorkUnitCancelledAsync(releaseFolder, call.Arg<CancellationToken>());
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
         var supervision = harness.StartSupervision();
@@ -532,7 +533,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromException<IMailboxSession>(new InvalidOperationException("connect failed"));
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory,
             mutationRecordStore: recordStore);
@@ -562,7 +563,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 throw new InvalidOperationException("The outstanding mutations could not be read.");
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             Substitute.For<IMailboxSessionFactory>(),
             mutationRecordStore: recordStore);
@@ -597,7 +598,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromResult<IReadOnlyList<RemoteFolder>>([]);
             });
-        using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
+        await using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
 
         // Act
         await harness.SuperviseUntilAsync(runFinished.Task);
@@ -640,7 +641,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromException<IMailboxSession>(new InvalidOperationException("connect failed"));
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
 
@@ -681,7 +682,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return HoldUntilReleasedAsync(releaseFirstFolder);
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive", "Sent"),
             sessionFactory);
         var supervision = harness.StartSupervision();
@@ -725,7 +726,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
 
         using var spans = new SynchronizationSpanCollector("interrupted-mid-cycle");
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateOptions(
                 enabled: true,
                 SynchronizationTestHost.CreateAccount("interrupted-mid-cycle", "INBOX", "Archive", "Sent")),
@@ -759,7 +760,7 @@ public sealed class AccountSynchronizationSupervisorTests
             firstFolderAttempted,
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory);
         var supervision = harness.StartSupervision();
@@ -807,7 +808,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
         var clock = new FakeTimeProvider();
         var notificationSessions = new FakeMailboxNotificationSessionFactory(clock);
-        using var harness = CreateHarness(options, sessionFactory, notificationSessions);
+        await using var harness = CreateHarness(options, sessionFactory, notificationSessions);
         var supervision = harness.StartSupervision();
 
         // Act
@@ -861,7 +862,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 return new InvalidOperationException("connect failed");
             });
         var firstRunReached = new TaskCompletionSource();
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             sessionFactory,
             ruleEvaluationStore: CreateRuleStoreReporting(firstRunReached));
@@ -927,7 +928,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
             sessionFactory,
             ruleEvaluationStore: ruleStore);
@@ -988,7 +989,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 return Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]);
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
             Substitute.For<IMailboxSessionFactory>(),
             ruleEvaluationStore: ruleStore,
@@ -1017,7 +1018,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 throw new InvalidOperationException("the cut failed");
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
             Substitute.For<IMailboxSessionFactory>(),
             chunkingStore: chunkingStore);
@@ -1055,7 +1056,7 @@ public sealed class AccountSynchronizationSupervisorTests
 
                 throw new InvalidOperationException("The rule candidates could not be read.");
             });
-        using var harness = CreateHarness(
+        await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
             Substitute.For<IMailboxSessionFactory>(),
             ruleEvaluationStore: ruleStore);
@@ -1100,6 +1101,53 @@ public sealed class AccountSynchronizationSupervisorTests
             });
 
         return ruleStore;
+    }
+
+    /// <summary>A finished run leaves whatever a client draws behind its freshness line out of date, so it says so.</summary>
+    [Fact]
+    public async Task RunAsync_WhenARunFinishes_SignalsThatTheAccountsStateMoved()
+    {
+        // Arrange
+        // The second run reaching the mail server is what proves the first one finished, which is the moment the
+        // signal is raised at: stopping supervision on the first folder instead would leave the cycle interrupted,
+        // and an interrupted cycle deliberately says nothing.
+        var attemptCount = 0;
+        var secondRunStarted = new TaskCompletionSource();
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attemptCount) == 2)
+                {
+                    secondRunStarted.TrySetResult();
+                }
+
+                return Task.FromResult(emptyMailbox);
+            });
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+
+        // Act
+        await harness.SuperviseWhileAdvancingUntilAsync(secondRunStarted.Task);
+
+        harness.SignalClock.Advance(ClientSignals.FoldingWindow);
+        await harness.Signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(
+            harness.SignalChannel.Published,
+            published => published.Kind == ClientSignalKind.AccountState);
+        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(MailAccountId.Create("primary"), signal.Account);
+        Assert.Null(signal.Folder);
+        Assert.Empty(signal.Emails);
     }
 
     private static IMailboxSessionFactory CreateFailingSessionFactory(
@@ -1252,7 +1300,7 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>Holds the one supervisor a test drives, together with what it was composed from.</summary>
-    private sealed class SupervisorHarness : IDisposable
+    private sealed class SupervisorHarness : IAsyncDisposable
     {
         private readonly ServiceProvider services;
         private readonly SemaphoreSlim accountRunSlots = new(1);
@@ -1273,6 +1321,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
             this.RunLedger = new MailSynchronizationRunLedger(clock);
+            this.Signals = new ClientSignals([this.SignalChannel], this.SignalClock);
             this.supervisor = new AccountSynchronizationSupervisor(
                 account,
                 services.GetRequiredService<IServiceScopeFactory>(),
@@ -1285,10 +1334,21 @@ public sealed class AccountSynchronizationSupervisorTests
                     clock),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 this.RunLedger,
+                this.Signals,
                 this.Logger);
         }
 
         internal MailSynchronizationRunLedger RunLedger { get; }
+
+        /// <summary>Gets what this run told a client, which most tests here have no claim about.</summary>
+        internal RecordingClientSignalChannel SignalChannel { get; } = new();
+
+        /// <summary>Gets the clock the signal window is measured against, which is a second one deliberately.</summary>
+        /// <remarks>Not the supervisor's own: these tests advance that one by whole minutes to run a backoff out, and a folding window measured against it would tick hundreds of times per advance for a delivery no test is waiting on.</remarks>
+        internal FakeTimeProvider SignalClock { get; } = new();
+
+        /// <summary>Gets the publisher the supervisor raises through.</summary>
+        internal ClientSignals Signals { get; }
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 
@@ -1326,8 +1386,17 @@ public sealed class AccountSynchronizationSupervisorTests
             await supervision;
         }
 
-        public void Dispose()
+        /// <summary>Releases everything this harness composed, the publisher included.</summary>
+        /// <returns>A task that completes once the publisher has delivered whatever a window was still holding.</returns>
+        /// <remarks>
+        /// Asynchronous because <see cref="ClientSignals" /> offers asynchronous disposal alone, and blocking on it to
+        /// keep a synchronous shape is what this repository's asynchronous conventions refuse. It is disposed first,
+        /// so a window still being delivered finds the services it was composed over still standing.
+        /// </remarks>
+        public async ValueTask DisposeAsync()
         {
+            await this.Signals.DisposeAsync();
+
             this.scheduling.Dispose();
             this.workUnits.Dispose();
             this.accountRunSlots.Dispose();

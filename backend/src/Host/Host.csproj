@@ -51,6 +51,14 @@
     <!-- Every configuration section is bound into an internal options class, so the suite that records the published
          configuration key set has to name those classes to walk them. -->
     <InternalsVisibleTo Include="MailFathom.PublicSurfaces.UnitTests" />
+
+    <!--
+      NSubstitute proxies a type at run time from a generated assembly, which the grants above do not name, so a
+      generic interface closed over an internal type is refused with an accessibility error rather than substituted.
+      IHubContext<ClientSignalHub> is one: it is how the signal channel addresses a connection, and a test scripts a
+      hub through it instead of starting a server. The name is Castle DynamicProxy's fixed one.
+    -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
   <!-- The OpenAPI package ships a source generator that folds this project's XML documentation comments into the

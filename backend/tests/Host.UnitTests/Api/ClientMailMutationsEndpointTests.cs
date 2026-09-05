@@ -533,6 +533,7 @@ public sealed class ClientMailMutationsEndpointTests
             Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             Substitute.For<IPersistenceSessionFactory>(),
+            ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(RecordedAt)),
         Substitute.For<IMailTransportSecurityPolicyReader>());
 }

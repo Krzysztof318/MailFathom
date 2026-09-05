@@ -140,6 +140,32 @@ export function scopePointsAtJunk(scope: MailScope): boolean {
     return scope.kind === 'folder' || (scope.kind === 'role' && scope.role === 'Junk');
 }
 
+/**
+ * Whether a change the deployment reported in one account's folder is a change to what this scope shows.
+ *
+ * Answered by what the scope names and nothing else, because that is all a list has: a scope naming one folder is
+ * reached by that folder alone, one naming an account by every folder of it, and the two spanning scopes by anything.
+ * A role scope is the one that cannot be decided here — which alias plays which role is the folder tree's answer
+ * rather than a list's — so it is reached by every change, which costs a read a reader was going to make anyway and
+ * never leaves a list drawing mail that has moved.
+ *
+ * @param scope What the list is showing.
+ * @param account The account the change was reported in.
+ * @param folder The folder alias it was reported in, or `null` where the change was about the account itself.
+ * @returns Whether this list has to read again.
+ */
+export function scopeReaches(scope: MailScope, account: string, folder: string | null): boolean {
+    switch (scope.kind) {
+        case 'everything':
+        case 'role':
+            return true;
+        case 'account':
+            return scope.accountId === account;
+        case 'folder':
+            return scope.accountId === account && (folder === null || scope.alias === folder);
+    }
+}
+
 /** The scope naming one whole account, or everything where no account was named. */
 export function scopeOfAccount(accountId: string | null): MailScope {
     return accountId === null ? everything : { kind: 'account', accountId };

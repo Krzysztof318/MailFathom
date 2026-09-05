@@ -132,6 +132,15 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
         services.AddSingleton<IOwnerStoredContentLedger>(new InMemoryOwnerStoredContentLedger());
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());
+        // Registered with no channel behind it, so every service a run resolves composes while what it says about the
+        // run reaches nobody. A test that has a claim about what a client was told supplies its own publisher to the
+        // worker it drives, which is what the supervisor's harness does.
+        //
+        // As an instance rather than a type, because a container disposes only what it created itself and this one is
+        // disposed synchronously by the harnesses here — a publisher the container owned would fail every one of their
+        // tests on a type that offers asynchronous disposal alone. Owning nothing is what makes that safe: with no
+        // channel there is no timer and nothing held, so there is nothing for a disposal to release.
+        services.AddSingleton(ClientSignalPublishers.ReachingNobody);
         // Bounded generously, so no test here waits on a budget it never meant to exercise: what these tests are about
         // is the supervisor's scheduling and failure isolation, and the budget itself is asserted where it lives.
         services.AddSingleton(new RawMimeMemoryBudget(long.MaxValue));

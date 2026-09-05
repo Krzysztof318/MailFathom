@@ -404,6 +404,7 @@ public sealed class MailRelocationRecorderTests
                 this.bindings,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 sessionFactory,
+                ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(RecordedAt)),
             transportSecurityPolicies);
     }

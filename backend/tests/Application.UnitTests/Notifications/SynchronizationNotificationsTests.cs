@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Notifications;
+using MailFathom.Application.Signals;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Notifications;
@@ -239,6 +240,55 @@ public sealed class SynchronizationNotificationsTests
         Assert.True(notification.DeduplicationKey.Value.Length <= NotificationDeduplicationKey.MaximumLength);
     }
 
+    /// <summary>A row written while somebody has the client open is said out loud, with what the bell has to draw.</summary>
+    [Fact]
+    public async Task ReportArrivedMailAsync_WithAClientListening_SignalsTheRaisedNotificationAndTheUnreadCount()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var notifications = new SynchronizationNotifications(store, signals, clock);
+
+        // Act
+        await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.NotificationRaised, signal.Kind);
+        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(NotificationKind.Mail, signal.NotificationKind);
+        Assert.Equal(1, signal.Count);
+        Assert.Equal(Assert.Single(store.Recorded).Body, signal.SecondLine);
+    }
+
+    /// <summary>A notification the store recognized as one already raised says nothing to a client either.</summary>
+    [Fact]
+    public async Task ReportArrivedMailAsync_ARowTheStoreDeduplicated_SignalsNothingASecondTime()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var notifications = new SynchronizationNotifications(store, signals, clock);
+
+        // Act
+        await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
+        await notifications.ReportArrivedMailAsync(Account, 4, TestContext.Current.CancellationToken);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        Assert.Single(store.Recorded);
+        Assert.Single(channel.Published);
+    }
+
     private static SynchronizationNotifications CreateNotifications(INotificationStore store) =>
-        new(store, new FakeTimeProvider(RunInstant));
+        new(store, ClientSignalPublishers.ReachingNobody, new FakeTimeProvider(RunInstant));
 }

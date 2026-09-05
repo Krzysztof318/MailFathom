@@ -240,6 +240,7 @@ internal sealed class MailDraftHarness
                 this.folderResolutions,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 this.persistenceSessions,
+                ClientSignalPublishers.ReachingNobody,
                 this.clock),
             this.transportSecurityPolicies);
 

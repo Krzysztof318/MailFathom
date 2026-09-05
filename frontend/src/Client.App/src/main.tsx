@@ -17,6 +17,7 @@ import { LocalizationProvider } from './localization/Localization';
 import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
 import { credentialStore } from './signIn/credentialStore';
+import { browserSchedule, openSignalChannel } from './signals/signalChannel';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
@@ -106,8 +107,10 @@ async function open(root: HTMLElement): Promise<void> {
                                                 <App
                                                     credentials={credentials}
                                                     deployment={deployment}
+                                                    openSignals={openSignalChannel}
                                                     portraits={portraitExchange}
                                                     send={sendToDeployment}
+                                                    signalSchedule={browserSchedule}
                                                     signedInWith={signedInWith}
                                                 />
                                             </Containment>

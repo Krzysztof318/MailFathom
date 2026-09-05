@@ -2,9 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import type {
+    ClientRequest,
+    ClientResponse,
+    ClientSession,
+    ClientSignal,
+    MailFathomTransport,
+} from '@mailfathom/client-backend';
 import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { OpenAttachmentContext } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
@@ -17,6 +23,12 @@ import {
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { WorkspaceProvider } from '../workspace/Workspace';
+import {
+    SignalledChangesContext,
+    nothingSignalled,
+    type SignalListener,
+    type SignalledChanges,
+} from '../signals/signalledChanges';
 import { ReadingPane } from './ReadingPane';
 
 // The network boundary is the transport and it is the whole of what these tests fake, so the routes the pane asks for,
@@ -93,28 +105,53 @@ function drawing(
     online = true,
     deliver: AttachmentExchange = deliversNothing,
     marking: ReadMarking = nothingMarkedRead,
+    signalled: SignalledChanges = nothingSignalled,
 ): void {
     render(
-        <LocalizationProvider>
-            <WorkspaceProvider>
-                <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentExchangeContext value={deliver}>
-                        <OpenAttachmentContext value={() => undefined}>
-                            <ReadMarkingContext value={marking}>
-                                <ReadingPane
-                                    session={session}
-                                    transport={transport}
-                                    storedEmailId={storedEmailId}
-                                    online={online}
-                                    onShowFullHtml={() => undefined}
-                                />
-                            </ReadMarkingContext>
-                        </OpenAttachmentContext>
-                    </AttachmentExchangeContext>
-                </LinkOpenerContext>
-            </WorkspaceProvider>
-        </LocalizationProvider>,
+        <SignalledChangesContext value={signalled}>
+            <LocalizationProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliver}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <ReadMarkingContext value={marking}>
+                                    <ReadingPane
+                                        session={session}
+                                        transport={transport}
+                                        storedEmailId={storedEmailId}
+                                        online={online}
+                                        onShowFullHtml={() => undefined}
+                                    />
+                                </ReadMarkingContext>
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                </WorkspaceProvider>
+            </LocalizationProvider>
+        </SignalledChangesContext>,
     );
+}
+
+/** A deployment with a channel open, and the handle a test says something over it with. */
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+    const listeners = new Set<SignalListener>();
+
+    return {
+        changes: {
+            listen: (listener) => {
+                listeners.add(listener);
+
+                return () => {
+                    listeners.delete(listener);
+                };
+            },
+        },
+        say: (signal) => {
+            for (const listener of [...listeners]) {
+                listener(signal);
+            }
+        },
+    };
 }
 
 /** A client that would mark read, recording what the drawn body said was opened rather than submitting it. */
@@ -329,6 +366,82 @@ function paneFor(storedEmailId: string) {
 
 // A selection is a gesture over a real range, and what it is worth is what the intent field then says about it — so the
 // field is mounted beside the pane, in the one workspace both read, and the assertion is the sentence a person sees.
+describe('ReadingPane against a deployment that says what changed', () => {
+    it('reads the message again when the deployment says that message changed', async () => {
+        // Arrange
+        asked.length = 0;
+        const signalling = deploymentSaying();
+        drawing(deploymentDescribing(), messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+        const before = asked.filter((request) => !request.path.includes('/body')).length;
+
+        // Act
+        act(() => {
+            signalling.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: [messageId] });
+        });
+
+        // Assert
+        await waitFor(() => {
+            expect(asked.filter((request) => !request.path.includes('/body')).length).toBe(before + 1);
+        });
+    });
+
+    it('leaves a message about other mail alone rather than reading this one again', async () => {
+        // Arrange
+        asked.length = 0;
+        const signalling = deploymentSaying();
+        drawing(deploymentDescribing(), messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+        const before = asked.length;
+
+        // Act
+        act(() => {
+            signalling.say({
+                kind: 'mail.changed',
+                account: 'work',
+                folder: 'INBOX',
+                emails: ['11111111-1111-4111-8111-111111111111'],
+            });
+        });
+
+        // Assert
+        expect(asked.length).toBe(before);
+    });
+
+    it('keeps the message a reader is part-way through on the screen while it reads it again', async () => {
+        // Arrange
+        asked.length = 0;
+        let answersHeld = false;
+        const signalling = deploymentSaying();
+        const holdsTheSecondRead: MailFathomTransport = (request) => {
+            asked.push(request);
+
+            if (request.path.includes('/body')) {
+                return Promise.resolve<ClientResponse>({ status: 200, body: bodyAsWords, headers: {} });
+            }
+
+            if (answersHeld) {
+                return new Promise<ClientResponse>(() => undefined);
+            }
+
+            return Promise.resolve<ClientResponse>({ status: 200, body: description(), headers: {} });
+        };
+
+        drawing(holdsTheSecondRead, messageId, true, deliversNothing, nothingMarkedRead, signalling.changes);
+        await screen.findByText('Quarterly invoice');
+        answersHeld = true;
+
+        // Act
+        act(() => {
+            signalling.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: [messageId] });
+        });
+
+        // Assert
+        expect(screen.getByText('Quarterly invoice')).toBeDefined();
+        expect(screen.queryByText('Reading this message…')).toBeNull();
+    });
+});
+
 describe('ReadingPane selection', () => {
     function readingBeside(): void {
         render(

@@ -29,10 +29,13 @@ import { MessageRow } from '../messageRows/MessageRow';
 import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
 import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
-import { accountInScope, type MailScope } from '../workspace/mailScope';
+import { accountInScope, scopeReaches, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { useSignalledChanges } from '../signals/signalledChanges';
 import {
     answered,
+    arrivalNoticed,
+    changeNoticed,
     cursorAfter,
     heldRows,
     nothingHeld,
@@ -101,6 +104,7 @@ export function MessageList({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const listed = useListedMail();
+    const signalledChanges = useSignalledChanges();
     // Where this list opens: how the folder was last read and where in it the reader was. State rather than a value
     // computed each render, because it is read back once the first page has arrived and because changing the order or
     // a filter replaces it with the leading end of the list the change asks for.
@@ -283,6 +287,24 @@ export function MessageList({
             }
         }
     }, [viewport, rowHeight, rowCount, drawn.first, opening.rowInPage, focusedRow, focusedIsDrawn, restored]);
+
+    // What the deployment said changed, acted on by dropping the pages it names rather than by reading the folder
+    // again from its leading end: the read that follows is the one the window itself asks for, so the reader keeps
+    // their place, their selection, and the row under their pointer, and pages they have scrolled away from are read
+    // again when they reach them rather than now.
+    useEffect(
+        () =>
+            signalledChanges.listen((signal) => {
+                if (signal.kind === 'mail.arrived' && scopeReaches(scope, signal.account, signal.folder)) {
+                    setHeld(arrivalNoticed);
+                }
+
+                if (signal.kind === 'mail.changed' && scopeReaches(scope, signal.account, signal.folder)) {
+                    setHeld((current) => changeNoticed(current, signal.emails));
+                }
+            }),
+        [signalledChanges, scope],
+    );
 
     // A window resized changes how many rows the list draws, and a resize is not a commit. The scroller's own size is
     // read on the commit that follows, which is what this asks for.
