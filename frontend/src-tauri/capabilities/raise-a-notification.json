@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "raise-a-notification",
+  "description": "The second thing the bundle may ask of this shell: raise a system notification while its window does not have focus, carrying how many arrived and of what kind and never a sender, a subject, or a fragment of a body. Three commands rather than the plugin's own default set, which also grants scheduling, cancelling, listing what is pending or still on screen, and creating notification channels — the application asks for none of those and a notification it raised is the operating system's to keep from that moment on. The three are the whole of the operation: whether permission stands, asking for it once, and raising one. The platform list is deliberately narrower than the opener's beside it: Android is left off although the same library starts there, because a notification there needs the POST_NOTIFICATIONS runtime permission in the manifest and a channel to arrive on, which is #1616's work rather than something to grant by omission here; macOS is on the list for the reason it is on the opener's, that a contributor can build the desktop head there. A head this file does not name therefore refuses the command rather than answering it, and the application reads a refused command exactly as it reads an operating system that refused permission — the behaviour turns itself off on that device and asks again on none.",
+  "platforms": ["linux", "macOS", "windows"],
+  "windows": ["main"],
+  "permissions": [
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
+}

@@ -40,6 +40,42 @@ export const notificationKindLabels: Readonly<Record<NotificationKind, MessageKe
 };
 
 /**
+ * How an arrival of one kind is counted where the operating system is told about it, in the forms a language has.
+ *
+ * A phrase per kind rather than one sentence taking the kind as a hole, which is what
+ * `frontend/src/AGENTS.md` § *The two languages* requires of a sentence: in Polish both the count's own form and the
+ * adjective in front of the noun follow that noun's gender, so counted messages and counted tasks are two sentences
+ * rather than one with a word swapped. English hides that by inflecting nothing.
+ *
+ * These are the whole of what a system notification may say. Nothing here names a sender, a subject, or anything a
+ * message carried — `arrivalCounts.ts` is what makes that true of the value, and this is what makes it true of the
+ * words.
+ */
+export const systemNotificationCounts: Readonly<
+    Record<NotificationKind, Readonly<Record<Intl.LDMLPluralRule, MessageKey>>>
+> = {
+    Mail: counted('mail'),
+    Calendar: counted('calendar'),
+    Case: counted('case'),
+    Task: counted('task'),
+    System: counted('system'),
+};
+
+/** The four forms one kind is counted in, which every kind declares the same way. */
+function counted(
+    kind: 'mail' | 'calendar' | 'case' | 'task' | 'system',
+): Readonly<Record<Intl.LDMLPluralRule, MessageKey>> {
+    return {
+        zero: `notifications.arrived.${kind}.other`,
+        one: `notifications.arrived.${kind}.one`,
+        two: `notifications.arrived.${kind}.other`,
+        few: `notifications.arrived.${kind}.few`,
+        many: `notifications.arrived.${kind}.many`,
+        other: `notifications.arrived.${kind}.other`,
+    };
+}
+
+/**
  * The weight a toast is raised at when a notification of this kind arrives while the client is open.
  *
  * A case is the one that carries a consequence somebody has to know about without anything having failed, which is

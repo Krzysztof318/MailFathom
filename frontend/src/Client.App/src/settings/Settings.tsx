@@ -13,7 +13,9 @@ import { useLocalization } from '../localization/useLocalization';
 import { useScreenLayer } from '../shell/screenLayers';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
+import { chooseSystemNotifications, useSystemNotificationsChosen } from '../preferences/systemNotifications';
 import { LanguageSegments } from '../shell/Preferences';
+import { useSystemNotifier } from '../shellOperations/systemNotifier';
 import { chosenPortrait, type PortraitChoice } from './chosenPortrait';
 import { MessageView, MessageViewWarning } from './MessageView';
 
@@ -257,7 +259,10 @@ function SectionName({ children }: { readonly children: string }) {
 }
 
 // What the client is read in and how it draws a conversation, in the design project's own order: the language, then
-// the message view, then the privacy section carrying the telemetry decision.
+// the message view, then the privacy section carrying the telemetry decision. The notifications section between the
+// last two is the design project's on neither count — it draws no such row, because what it decides is whether an
+// operating system is spoken to and the project draws the client rather than the machine under it. It takes the shape
+// of the rows around it rather than one of its own, which is what keeps that from being a second house style.
 function Application({
     preferences,
     telemetryForwarding,
@@ -279,10 +284,52 @@ function Application({
             <ThreadExpansion preferences={preferences} />
             <MessageViewWarning preferences={preferences} />
 
+            <SystemNotifications />
+
             <Divider />
 
             <SectionName>{translate('settings.privacy')}</SectionName>
             <Telemetry preferences={preferences} forwarding={telemetryForwarding} />
+        </>
+    );
+}
+
+// Whether this machine raises a notification of its own while nobody is looking at the window.
+//
+// It is drawn only where a shell offered the operation, which is why the section is the component rather than a row
+// inside the one above: a switch the web head could move would decide nothing, and a setting that says nothing about
+// the machine it is read on is worse than an absent one. Nothing here asks which head it is running in — it asks
+// whether the operation exists, which `shellOperations/systemNotifier.ts` is what answers.
+//
+// The choice belongs to this machine rather than to the person, so it is held in the device store and read from there
+// rather than passed down — and read through a subscription rather than copied, because the person moving the switch is
+// not the only writer: an arrival the operating system refuses turns it off from `useNotificationCentre.ts`, and a copy
+// taken at mount would still read *on* underneath somebody with this dialog open.
+function SystemNotifications() {
+    const { translate } = useLocalization();
+    const notifier = useSystemNotifier();
+    const raising = useSystemNotificationsChosen();
+
+    if (!notifier.offered) {
+        return null;
+    }
+
+    return (
+        <>
+            <Divider />
+
+            <SectionName>{translate('settings.systemNotifications')}</SectionName>
+
+            <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+                <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+                    {translate('settings.raiseSystemNotifications')}
+                    <span className="text-xs text-muted">
+                        {translate('settings.raiseSystemNotificationsExplanation')}
+                    </span>
+                </span>
+
+                <Switch on={raising} onChange={chooseSystemNotifications} />
+            </label>
         </>
     );
 }

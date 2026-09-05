@@ -30,10 +30,17 @@
 // the application's, in `shellOperations/configuredConnection.ts` and `deployment/adoptedDeployment.ts`, because they
 // are the same decisions on either head and a rule written twice is a rule two heads eventually disagree about.
 //
-// One plugin is registered beside them, and it answers the other operation the bundle asks of a shell: handing a link a
-// reader followed to the system browser, per ADR 0024. That one is a plugin's command, so it is gated —
-// `capabilities/open-a-link.json` narrows what the webview may ask of it to the three schemes a message body may carry
-// rather than taking the plugin's own default set, and no core capability is granted either.
+// Two plugins are registered beside them, and they answer the two operations the bundle asks of a shell: handing a link
+// a reader followed to the system browser, per ADR 0024, and raising a system notification while nobody is looking at
+// the window. Both are plugins' commands, so both are gated — `capabilities/open-a-link.json` narrows what the webview
+// may ask of the opener to the three schemes a message body may carry, and `capabilities/raise-a-notification.json`
+// narrows the notification plugin to the three commands the application calls on the desktop targets alone, each
+// rather than taking the plugin's own default set. No core capability is granted either.
+//
+// The second is also the one thing this crate does not link everywhere. `Cargo.toml` states it per target and `run`
+// below registers it under the same condition, for a reason about the Android project's locked dependency graph that
+// is written out where the pin is. Nothing above the shell learns that: the application asks whether the operation is
+// offered, and a head that linked no plugin answers no differently from a browser that has no shell at all.
 //
 // This is a library rather than the binary it was, and `src/main.rs` beside it is now three lines calling `run` below.
 // The split is what an Android head needs and the only thing about this file that is Android's: an application there is
@@ -190,6 +197,12 @@ pub fn run() {
     // reaches one. Nothing registers on the desktop, where the same four commands answer out of the `keyring` crate.
     #[cfg(target_os = "android")]
     let shell = shell.plugin(credentials::registration());
+
+    // The notification plugin is not linked on a mobile target at all — `Cargo.toml` carries why, and the phone's own
+    // notification is #1616 — so there is nothing to register there. Where it is linked the registration is
+    // unconditional, and the application above asks whether the operation is offered rather than which head answered.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let shell = shell.plugin(tauri_plugin_notification::init());
 
     shell
         .invoke_handler(tauri::generate_handler![

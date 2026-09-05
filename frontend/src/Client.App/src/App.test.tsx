@@ -29,6 +29,7 @@ import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry }
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
+import { SystemNotifierContext, type SystemNotifier } from './shellOperations/systemNotifier';
 import { WorkspaceProvider } from './workspace/Workspace';
 
 // The network boundary is the transport, and the credential this run holds is the store — both arrive as props, so a
@@ -389,6 +390,9 @@ const deliversNothing: AttachmentExchange = {
 
 const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
+/** The head a test runs in: one that offered no system notification, which is the web head and what jsdom is. */
+const raisesNothing: SystemNotifier = { offered: false, raise: () => Promise.resolve('unavailable') };
+
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {
     return () => (request) => {
@@ -504,21 +508,23 @@ function renderApp(
                     <ToastsProvider>
                         <WorkspaceProvider>
                             <LinkOpenerContext value={() => Promise.resolve()}>
-                                <AttachmentExchangeContext value={deliversNothing}>
-                                    <AttachmentUploadContext value={uploadsNothing}>
-                                        <TelemetryContext value={telemetry}>
-                                            <App
-                                                credentials={credentials}
-                                                deployment={deployment}
-                                                openSignals={noSignalChannel}
-                                                portraits={drawsNobody}
-                                                send={send}
-                                                signalSchedule={neverReopens}
-                                                signedInWith={signedInWith}
-                                            />
-                                        </TelemetryContext>
-                                    </AttachmentUploadContext>
-                                </AttachmentExchangeContext>
+                                <SystemNotifierContext value={raisesNothing}>
+                                    <AttachmentExchangeContext value={deliversNothing}>
+                                        <AttachmentUploadContext value={uploadsNothing}>
+                                            <TelemetryContext value={telemetry}>
+                                                <App
+                                                    credentials={credentials}
+                                                    deployment={deployment}
+                                                    openSignals={noSignalChannel}
+                                                    portraits={drawsNobody}
+                                                    send={send}
+                                                    signalSchedule={neverReopens}
+                                                    signedInWith={signedInWith}
+                                                />
+                                            </TelemetryContext>
+                                        </AttachmentUploadContext>
+                                    </AttachmentExchangeContext>
+                                </SystemNotifierContext>
                             </LinkOpenerContext>
                         </WorkspaceProvider>
                     </ToastsProvider>
