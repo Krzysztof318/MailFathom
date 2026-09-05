@@ -2,13 +2,29 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.Discovery.Presentation.Citations;
+using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Repair;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
+using MailFathom.Application.Observability;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.TestSupport;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -177,6 +193,105 @@ public sealed class ClientCitationEndpointTests
         Assert.Equal(
             [other.Value, Message],
             response.Citations.Select(citation => citation.StoredEmailId));
+    }
+
+    /// <summary>A request naming no citation at all is refused rather than answered with an empty resolution.</summary>
+    [Fact]
+    public async Task ResolveAsync_ARequestNamingNoCitation_RefusesTheRequest()
+    {
+        // Act
+        var refused = await ResolveAsync(new ClientCitationResolutionRequest([]));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Refusal(refused).StatusCode);
+    }
+
+    /// <summary>
+    /// The count is what bounds the reads behind a resolution, so a batch past it is refused here rather than reaching
+    /// the use case, whose own guard is an argument failure a caller would meet as a <c>500</c>.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_ABatchPastTheBound_RefusesTheRequest()
+    {
+        // Arrange
+        var citations = Enumerable
+            .Range(0, CitationResolver.MaximumCitations + 1)
+            .Select(static _ => new ClientCitationRequest("email", Message, null, null))
+            .ToArray();
+
+        // Act
+        var refused = await ResolveAsync(new ClientCitationResolutionRequest(citations));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Refusal(refused).StatusCode);
+    }
+
+    /// <summary>
+    /// A citation this boundary cannot read is one a client composed rather than one a plan declared, so the whole
+    /// batch is refused: answering the rest would answer a question nobody asked.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_OneCitationNoPlanCouldHavePublished_RefusesTheWholeBatch()
+    {
+        // Arrange
+        var citations = new[]
+        {
+            new ClientCitationRequest("email", Message, null, null),
+            new ClientCitationRequest("fragment", Message, null, null),
+        };
+
+        // Act
+        var refused = await ResolveAsync(new ClientCitationResolutionRequest(citations));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Refusal(refused).StatusCode);
+    }
+
+    private static Task<Results<Ok<ClientCitationResolutionResponse>, ProblemHttpResult>> ResolveAsync(
+        ClientCitationResolutionRequest request) =>
+        ClientCitationEndpoint.ResolveAsync(request, Resolver(), TestContext.Current.CancellationToken);
+
+    private static ProblemHttpResult Refusal(
+        Results<Ok<ClientCitationResolutionResponse>, ProblemHttpResult> answered) =>
+        Assert.IsType<ProblemHttpResult>(answered.Result);
+
+    /// <summary>
+    /// Builds the use case the route resolves, over storage that is stood in for throughout: every refusal asserted
+    /// here is taken before a citation reaches it, which is the whole of what these three tests establish.
+    /// </summary>
+    private static CitationResolver Resolver()
+    {
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([]);
+
+        var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
+        readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
+            .Returns(Substitute.For<IMailboxReadScope>());
+
+        var scopeResolver = new MailboxScopeResolver(
+            catalog,
+            StubMailFolderParticipation.Nothing,
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing);
+
+        var content = new EmailContentReader(
+            Substitute.For<IStoredEmailSummaryReader>(),
+            Substitute.For<IEmailThreadReader>(),
+            Substitute.For<IEmailContentStore>(),
+            Substitute.For<IEmailContentRenderer>(),
+            Substitute.For<IEmailContentRepairRequestStore>(),
+            scopeResolver,
+            Substitute.For<IAttachmentDownloadLinkIssuer>(),
+            SensitiveContentEgressGuards.Inactive(),
+            new EmailContentReadOptions(),
+            readTelemetry,
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+        return new CitationResolver(
+            content,
+            Substitute.For<ICitedFragmentReader>(),
+            scopeResolver,
+            SensitiveContentEgressGuards.Inactive());
     }
 
     private static CitedMessage CitedMessageOf() => new(

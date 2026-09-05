@@ -7,6 +7,7 @@ using MailFathom.Application.Discovery.Presentation.Citations;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -93,6 +94,7 @@ public sealed class CitationResolver
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="citations" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the request names no citation, or more than <see cref="MaximumCitations" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what a passage or a message carries, which refuses the resolution rather than serving it unscanned.</exception>
     /// <remarks>
     /// The order is the contract, as it is for the content read this is built on: a resolution names the message it
     /// answers for and nothing else the caller sent, so position is how a caller pairs an answer with the citation it
@@ -134,13 +136,15 @@ public sealed class CitationResolver
     }
 
     /// <summary>Reads the passages the citations name within the messages that could be read, and guards them.</summary>
-    /// <returns>The passages found, keyed by their identifiers, holding no entry for one the store no longer has.</returns>
+    /// <returns>The passages found, keyed by the message each was read for as well as by its own identity, holding no entry for one the store no longer has.</returns>
     /// <remarks>
     /// A passage is read per message rather than by identifier alone, so a citation naming a passage of a message the
-    /// caller may not read has nothing to read it from. The guard is opened once around the whole publication rather
-    /// than per passage, because what a scan costs is paid per request.
+    /// caller may not read has nothing to read it from. It is keyed the same way, because one request may name two
+    /// messages and a key that is the passage alone would answer a citation with a passage read for the other one. The
+    /// guard is opened once around the whole publication rather than per passage, because what a scan costs is paid
+    /// per request.
     /// </remarks>
-    private async Task<IReadOnlyDictionary<EmailChunkId, CitedFragment>> ReadPassagesAsync(
+    private async Task<IReadOnlyDictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment>> ReadPassagesAsync(
         IReadOnlyList<PresentationCitationTarget> citations,
         IReadOnlyDictionary<StoredEmailId, EmailContentReadOutcome> messages,
         CancellationToken cancellationToken)
@@ -153,10 +157,10 @@ public sealed class CitationResolver
 
         if (cited.Length is 0)
         {
-            return new Dictionary<EmailChunkId, CitedFragment>();
+            return new Dictionary<(StoredEmailId, EmailChunkId), CitedFragment>();
         }
 
-        var found = new Dictionary<EmailChunkId, CitedFragment>();
+        var found = new Dictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment>();
 
         foreach (var message in cited)
         {
@@ -167,7 +171,7 @@ public sealed class CitationResolver
 
             foreach (var passage in passages)
             {
-                found[passage.Key] = passage.Value;
+                found[(message.Key, passage.Key)] = passage.Value;
             }
         }
 
@@ -175,8 +179,8 @@ public sealed class CitationResolver
     }
 
     /// <summary>Scans every passage about to cross to the caller, where this deployment scans anything.</summary>
-    private async Task<IReadOnlyDictionary<EmailChunkId, CitedFragment>> GuardedAsync(
-        Dictionary<EmailChunkId, CitedFragment> passages,
+    private async Task<IReadOnlyDictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment>> GuardedAsync(
+        Dictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment> passages,
         CancellationToken cancellationToken)
     {
         if (!this.egressGuard.IsActive)
@@ -192,21 +196,21 @@ public sealed class CitationResolver
         var cited = passages.Keys.ToArray();
         var guarded = await this.egressGuard.GuardAllAsync(
             SensitiveContentEgressPoint.ClientCitationResolution,
-            [.. cited.Select(fragment => passages[fragment].Text)],
+            [.. cited.Select(citation => passages[citation].Text)],
             cancellationToken);
 
         scan.Completed();
 
         return cited
-            .Select((fragment, position) => (Fragment: fragment, Passage: passages[fragment] with { Text = guarded[position] }))
-            .ToDictionary(static found => found.Fragment, static found => found.Passage);
+            .Select((citation, position) => (Citation: citation, Passage: passages[citation] with { Text = guarded[position] }))
+            .ToDictionary(static found => found.Citation, static found => found.Passage);
     }
 
     /// <summary>Answers for one citation from what the reads produced.</summary>
     private static ResolvedCitation Resolve(
         PresentationCitationTarget citation,
         IReadOnlyDictionary<StoredEmailId, EmailContentReadOutcome> messages,
-        IReadOnlyDictionary<EmailChunkId, CitedFragment> passages)
+        IReadOnlyDictionary<(StoredEmailId Email, EmailChunkId Fragment), CitedFragment> passages)
     {
         if (!messages.TryGetValue(citation.Email, out var outcome))
         {
@@ -226,7 +230,7 @@ public sealed class CitationResolver
         // three.
         return citation switch
         {
-            FragmentCitationTarget fragment => passages.TryGetValue(fragment.Fragment, out var passage)
+            FragmentCitationTarget fragment => passages.TryGetValue((fragment.Email, fragment.Fragment), out var passage)
                 ? ResolvedCitation.Resolved(source, passage)
                 : ResolvedCitation.Unresolvable(source),
             AttachmentCitationTarget attachment => AttachmentOf(message, attachment.AttachmentPosition) is { } file

@@ -109,6 +109,48 @@ public sealed class CitationResolverTests
         Assert.Null(citation.Fragment);
     }
 
+    /// <summary>
+    /// One request may name two messages the caller reads, and a passage belongs to exactly one of them: a citation
+    /// naming another message's passage reports the place unresolvable rather than publishing that message's text as
+    /// the evidence behind a fact attributed elsewhere.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_APassageOfAnotherCitedMessage_ReportsThePlaceUnresolvableOnTheMessageThatNamedIt()
+    {
+        // Arrange
+        var quoting = SyntheticEmailSummaries.Create();
+        var quoted = SyntheticEmailSummaries.Create();
+        var fragment = EmailChunkId.Create(Guid.CreateVersion7());
+        var fragments = Substitute.For<ICitedFragmentReader>();
+        fragments
+            .ReadFragmentsAsync(Arg.Any<StoredEmailId>(), Arg.Any<IReadOnlyCollection<EmailChunkId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<IReadOnlyDictionary<EmailChunkId, CitedFragment>>(
+                call.ArgAt<StoredEmailId>(0) == quoted.StoredEmailId
+                    ? new Dictionary<EmailChunkId, CitedFragment>
+                    {
+                        [fragment] = PassageOf(fragment, ordinal: 0, startOffset: 0, "the agreed rate is 4.5%"),
+                    }
+                    : new Dictionary<EmailChunkId, CitedFragment>()));
+
+        var resolver = ResolverOver([quoting, quoted], fragments: fragments);
+
+        // Act
+        var resolved = await resolver.ResolveAsync(
+            [
+                new FragmentCitationTarget(quoting.StoredEmailId, fragment),
+                new FragmentCitationTarget(quoted.StoredEmailId, fragment),
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                (quoting.StoredEmailId, CitationResolutionOutcome.Unresolvable, (string?)null),
+                (quoted.StoredEmailId, CitationResolutionOutcome.Resolved, "the agreed rate is 4.5%"),
+            ],
+            resolved.Select(citation => (citation.StoredEmailId, citation.Outcome, citation.Fragment?.Text)));
+    }
+
     [Fact]
     public async Task ResolveAsync_CitationOfAnAttachment_ResolvesToTheFileAtThatPosition()
     {

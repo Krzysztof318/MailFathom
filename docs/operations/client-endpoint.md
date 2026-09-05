@@ -1068,8 +1068,9 @@ which is a request the reader chose to make, and no octet of a cited file is her
 message route describes it.
 
 **One request follows at most ten citations**, which is also what bounds the messages read, and a passage is bounded
-before it is ever cited because chunking cuts it to a fixed length. A larger batch is answered `400`, as is a body over
-16 KiB, and a credential whose grant does not carry `mailfathom.mail.read` is answered `403`.
+before it is ever cited because chunking cuts it to a fixed length. A larger batch is answered `400`, a body over 16 KiB
+is answered `413` before the route is reached, and a credential whose grant does not carry `mailfathom.mail.read` is
+answered `403`.
 
 **It is a `POST` that changes nothing.** What it takes is a list of small documents rather than a value, and a request
 line of them would be the plan's own JSON encoded into a URL under a length Kestrel refuses before a handler is reached.
