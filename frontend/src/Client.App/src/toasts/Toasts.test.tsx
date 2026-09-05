@@ -4,7 +4,7 @@
 
 import { act, fireEvent, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { swipeDistance, swipeDrift } from '../controls/swipeDismissal';
+import { swipeDistance, swipeDrift } from '../controls/swipeAcross';
 import { LocalizationProvider } from '../localization/Localization';
 import { ToastsProvider } from './Toasts';
 import type { ReactNode } from 'react';
@@ -245,7 +245,7 @@ describe('ToastsProvider', () => {
         drawSurface();
 
         raise({ kind: 'neutral', title: 'Three threads archived' });
-        swipe(screen.getByText('Three threads archived'), swipeDistance, swipeDrift + 1);
+        swipe(screen.getByText('Three threads archived'), swipeDrift, swipeDrift + 1);
         pass(toastLeaving);
 
         expect(standing()).toHaveLength(1);
