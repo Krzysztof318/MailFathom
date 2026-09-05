@@ -20,10 +20,18 @@ internal sealed class BoundedArchivePartReader(AttachmentTextExtractionOptions o
     /// <summary>Builds the settings every XML part in this adapter is read under.</summary>
     /// <returns>Settings that resolve no entity and fetch nothing.</returns>
     /// <remarks>
-    /// The two properties are the whole of the external-entity answer and they are set explicitly rather than left to a
-    /// framework default, because a default is a decision somebody else may revise. <c>Prohibit</c> refuses a document
-    /// type declaration outright, which is where an entity would have to be declared, and a null resolver leaves
-    /// nothing able to fetch a resource even if one were.
+    /// <para>
+    /// The first two properties are the whole of the external-entity answer and they are set explicitly rather than
+    /// left to a framework default, because a default is a decision somebody else may revise. <c>Prohibit</c> refuses
+    /// a document type declaration outright, which is where an entity would have to be declared, and a null resolver
+    /// leaves nothing able to fetch a resource even if one were.
+    /// </para>
+    /// <para>
+    /// <see cref="XmlReaderSettings.CloseInput" /> is what makes the reader the owner of the whole stack beneath it —
+    /// the inflation guard and the archive's own deflate stream. Every call site holds the reader and nothing else, so
+    /// leaving it off would keep one zlib inflater per part alive until finalization, and a package near the part
+    /// ceiling opens a great many of them inside one extraction.
+    /// </para>
     /// </remarks>
     public static XmlReaderSettings PartReaderSettings() => new()
     {
@@ -31,13 +39,13 @@ internal sealed class BoundedArchivePartReader(AttachmentTextExtractionOptions o
         XmlResolver = null,
         IgnoreComments = true,
         IgnoreProcessingInstructions = true,
-        CloseInput = false,
+        CloseInput = true,
     };
 
     /// <summary>Opens one archive part under the container's shared inflation budget.</summary>
     /// <param name="entry">The part to open.</param>
     /// <param name="budget">What the whole container has left to inflate to.</param>
-    /// <returns>A reader over the part.</returns>
+    /// <returns>A reader over the part, owning every stream beneath it.</returns>
     public XmlReader OpenPart(ZipArchiveEntry entry, DecompressionBudget budget)
     {
         ArgumentNullException.ThrowIfNull(entry);

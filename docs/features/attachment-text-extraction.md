@@ -47,9 +47,13 @@ puts each page in a part of its own, so its reader selects parts by name and by 
 document in one `content.xml`, so its reader walks that single part and segments it by the element the format begins a
 page with — a sheet in a spreadsheet, a drawing page in a presentation, and nothing in a text document, which counts as
 one page for the same reason a `.docx` does. Every character an OpenDocument file shows sits inside a paragraph or a
-heading, so one walk serves all three of its formats; the spaces, tabs, and line breaks it writes as elements rather
-than as characters are read as the whitespace they stand for, because a reader gathering only text nodes would join the
-words on either side of one into a word nobody wrote.
+heading, so one walk serves all three of its formats.
+
+Both families write a tab and a line break as elements rather than as characters, and both readers read them as the
+whitespace they stand for, because a reader gathering only text nodes would join the words on either side of one into a
+word nobody wrote — which is what a `.docx` invoice line, a table of contents, and a form field are each separated by.
+Office Open XML writes the same names for something else inside a paragraph's properties, where `tab` declares a tab
+*stop* and stands in for no character at all, so a properties element is skipped whole rather than read.
 
 ## What a read reports
 
@@ -66,6 +70,13 @@ Every outcome is one of a closed set, and each is distinguishable from every oth
 | `Encrypted` | The document is password-protected and this system holds no password for it | Nothing automatic; no password is stored anywhere here |
 | `Malformed` | The bytes do not parse as the format they declare | Nothing; badly formed documents are expected of real mail |
 | `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at |
+
+**`Encrypted` currently also answers for one document that is not locked.** A password-protected Open XML package is
+not an archive at all — the package is encrypted whole and wrapped in an OLE compound file — and that wrapper is what
+the check recognizes. A legacy `.doc`, `.xls`, or `.ppt` is a compound file too, so one that arrived under a package
+format's name, which happens when the media type says nothing and the file name carries the package extension, is
+reported as `Encrypted` rather than as the format nothing here reads. Both answers already mean the text was not read,
+so what is wrong is the reason the owner is given; #1685 is where telling the two apart is tracked.
 
 `Extracted` with an empty text and every page named as carrying none is a scan, and it is deliberately not a failure. A
 page with no text layer is the exact target an optical-character-recognition pass would be given, which is why the pages

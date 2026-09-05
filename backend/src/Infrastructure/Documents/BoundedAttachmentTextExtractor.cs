@@ -123,12 +123,22 @@ internal sealed class BoundedAttachmentTextExtractor(
 
     /// <summary>States whether octets a package format was expected in are an OLE compound file instead.</summary>
     /// <remarks>
+    /// <para>
     /// A password-protected <c>.docx</c>, <c>.xlsx</c>, <c>.pptx</c>, or OpenDocument file is not an archive at all:
     /// the package is encrypted whole and wrapped in an OLE compound file, which opens with the eight octets this
     /// reads. Without the check the archive reader refuses those octets and the answer is <c>Malformed</c>, which tells
-    /// an owner their document is broken when what it is is locked — different facts with different remedies. Nothing
-    /// else reaches here wearing that signature: a legacy binary format carries it too, and recognition has already
-    /// answered those as a format nothing reads.
+    /// an owner their document is broken when what it is is locked — different facts with different remedies.
+    /// </para>
+    /// <para>
+    /// What the signature cannot tell apart is a legacy binary document that arrived under a package format's name,
+    /// which recognition admits because it falls back to the file name where the media type says nothing: a renamed
+    /// <c>.doc</c> is a compound file too and is reported here as <c>Encrypted</c>. Both answers already mean the text
+    /// was not read, so the cost is the reason an owner is given rather than the outcome, and separating them needs
+    /// the compound file's own directory walked for the stream an encrypted package stores its payload in. That is
+    /// <see href="https://github.com/Krzysztof318/MailFathom/issues/1685">issue #1685</see>. Answering
+    /// <c>Malformed</c> instead is the worse trade, because it would take the locked document — the case this check
+    /// exists for — back to the wrong answer it had.
+    /// </para>
     /// </remarks>
     private static bool IsCompoundFile(Stream content)
     {

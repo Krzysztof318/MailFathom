@@ -8,6 +8,9 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// <remarks>
 /// <para>
 /// Every value here is a ceiling rather than a target, and each one exists because a sender chose the bytes. A document
+/// Every value on it is set once and read-only afterwards, because the instance is registered as a singleton: a
+/// mutable one would let anything resolving it raise a ceiling at run time past the range a start validated, or widen
+/// the one value deciding which sender-composed formats reach a parser at all. A document
 /// parser is the largest attack surface this system has: an archive with a small compressed size and an enormous
 /// declared one, an element tree nested until a walk runs out of stack, and a page that decodes into more text than a
 /// mailbox holds in a year are all ordinary shapes of a mail-borne attack rather than corner cases.
@@ -45,58 +48,62 @@ public sealed class AttachmentTextExtractionOptions
     /// <remarks>
     /// The undertaking rather than whatever arrives: an attachment whose recognized format is absent from this list is
     /// skipped without a parser ever seeing its bytes, which is what lets a deployment narrow the surface it accepts
-    /// without narrowing what MailFathom is able to read. It defaults to every format a parser here reads. It is set
-    /// once and read-only afterwards because this instance is registered as a singleton: a mutable list here would let
-    /// anything resolving it widen at run time the one value deciding which sender-composed formats reach a parser.
+    /// without narrowing what MailFathom is able to read. It defaults to every format a parser here reads.
     /// </remarks>
     public IReadOnlyList<AttachmentDocumentFormat> Formats { get; init; } = AttachmentDocumentFormats.Extracted;
 
-    /// <summary>Gets or sets the greatest number of octets one attachment may hold before it is read at all.</summary>
+    /// <summary>Gets the greatest number of octets one attachment may hold before it is read at all.</summary>
     /// <remarks>
     /// The bound on what is buffered. Every parser here needs to seek, so the content is held in memory for the length
     /// of one extraction, and this is what stops a single attachment from deciding how much memory the process needs.
     /// Sixteen mebibytes is well above the size a mail server accepts an attachment at.
     /// </remarks>
-    public long MaxInputOctets { get; set; } = DefaultMaxInputOctets;
+    public long MaxInputOctets { get; init; } = DefaultMaxInputOctets;
 
-    /// <summary>Gets or sets the greatest number of characters one attachment may contribute.</summary>
+    /// <summary>Gets the greatest number of characters one attachment may contribute.</summary>
     /// <remarks>
     /// A ceiling on the output rather than on the input, because the two are not proportional: a compressed page of a
     /// document expands into text at a ratio the sender chooses. The default is the same order as the per-message
     /// ceiling extracted mail text is held to.
     /// </remarks>
-    public int MaxExtractedTextCharacters { get; set; } = DefaultMaxExtractedTextCharacters;
+    public int MaxExtractedTextCharacters { get; init; } = DefaultMaxExtractedTextCharacters;
 
-    /// <summary>Gets or sets the total octets a container format may decompress to.</summary>
+    /// <summary>Gets the total octets a container format may decompress to.</summary>
     /// <remarks>
     /// Counted incrementally across every part read, so an archive declaring an enormous uncompressed size is abandoned
     /// while it inflates rather than after it has finished. The declared size is never read: it is the sender's
     /// number, and a bomb is precisely a file that lies about it.
     /// </remarks>
-    public long MaxDecompressedOctets { get; set; } = DefaultMaxDecompressedOctets;
+    public long MaxDecompressedOctets { get; init; } = DefaultMaxDecompressedOctets;
 
-    /// <summary>Gets or sets the greatest ratio of decompressed to compressed octets one container part may reach.</summary>
+    /// <summary>Gets the greatest ratio of decompressed to compressed octets one container part may reach.</summary>
     /// <remarks>
     /// The second half of the same guard, and the half that catches a small archive: a part whose inflation runs far
     /// past what its compressed length can honestly explain is abandoned before <see cref="MaxDecompressedOctets" />
     /// would have been reached. Ordinary office markup compresses somewhere below twenty to one.
     /// </remarks>
-    public int MaxDecompressionRatio { get; set; } = DefaultMaxDecompressionRatio;
+    public int MaxDecompressionRatio { get; init; } = DefaultMaxDecompressionRatio;
 
-    /// <summary>Gets or sets the greatest number of parts a container format may declare.</summary>
-    /// <remarks>An archive of very many tiny parts costs per part rather than per octet, which neither size bound above measures.</remarks>
-    public int MaxContainerParts { get; set; } = DefaultMaxContainerParts;
+    /// <summary>Gets the greatest number of parts a container format may hold.</summary>
+    /// <remarks>
+    /// An archive of very many tiny parts costs per part rather than per octet, which neither size bound above
+    /// measures. It is checked against what the archive's own directory declares, and reading that directory is what
+    /// answers the count — so this bounds the parts a reader will go on to open rather than the cost of learning how
+    /// many there are. That cost is bounded instead by <see cref="MaxInputOctets" />, since a directory entry cannot
+    /// be smaller than its own record and the whole archive was already refused above this ceiling.
+    /// </remarks>
+    public int MaxContainerParts { get; init; } = DefaultMaxContainerParts;
 
-    /// <summary>Gets or sets the greatest depth an element tree inside a container part may nest to.</summary>
+    /// <summary>Gets the greatest depth an element tree inside a container part may nest to.</summary>
     /// <remarks>Deep nesting is what turns a small part into a walk that consumes stack rather than time.</remarks>
-    public int MaxElementDepth { get; set; } = DefaultMaxElementDepth;
+    public int MaxElementDepth { get; init; } = DefaultMaxElementDepth;
 
-    /// <summary>Gets or sets the time one extraction may take before it is abandoned.</summary>
+    /// <summary>Gets the time one extraction may take before it is abandoned.</summary>
     /// <remarks>
     /// Observed between units of work — a PDF page, an archive part, an element — because no parser here accepts a
     /// cancellation token of its own. A parser that never returns from one unit is therefore bounded by whatever else
     /// bounds its path rather than by this: for an archive that is the decompression, ratio, and depth ceilings above,
     /// which is why those are not optional, and for a PDF it is <see cref="MaxInputOctets" /> alone.
     /// </remarks>
-    public TimeSpan Timeout { get; set; } = DefaultTimeout;
+    public TimeSpan Timeout { get; init; } = DefaultTimeout;
 }

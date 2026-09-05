@@ -243,5 +243,4 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
                 break;
         }
     }
-
 }

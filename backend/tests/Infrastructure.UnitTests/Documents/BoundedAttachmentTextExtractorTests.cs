@@ -158,7 +158,7 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
         Assert.Equal("Clause one\nClause two", result.Text?.Text);
         Assert.Equal(1, result.Text?.PageCount);
-        Assert.Empty(result.Text?.PagesWithoutText ?? []);
+        Assert.Empty(result.Text?.PagesWithoutText ?? [0]);
     }
 
     /// <summary>An OpenDocument spreadsheet is read one page per sheet, each cell on a line of its own.</summary>
@@ -225,6 +225,110 @@ public sealed class BoundedAttachmentTextExtractorTests
         // Assert
         Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
         Assert.Equal("Roof repair\ninvoice paid", result.Text?.Text);
+    }
+
+    /// <summary>
+    /// A tab and a break are elements in Office Open XML exactly as they are in OpenDocument, so a reader gathering
+    /// only text nodes joins the words on either side of one — which is what an invoice line, a table of contents, and
+    /// a form field are each separated by.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWordParagraphSpacedByElements_KeepsTheWordsApart()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "invoice.docx",
+            DocumentFixtures.WordDocumentPart("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+                  <w:p><w:r><w:t>Roof repair</w:t><w:tab /><w:t>1200.00</w:t><w:br /><w:t>Paid</w:t></w:r></w:p>
+                </w:body></w:document>
+                """));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Roof repair 1200.00\nPaid", result.Text?.Text);
+    }
+
+    /// <summary>
+    /// The same names mean something else inside a paragraph's properties, where <c>tab</c> declares a tab stop rather
+    /// than standing in for a character — so reading one would put a space into every paragraph overriding the default
+    /// stops, which is most of them in a document somebody formatted.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWordParagraphDeclaringTabStops_ReadsNoneOfThemAsText()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "formatted.docx",
+            DocumentFixtures.WordDocumentPart("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+                  <w:p>
+                    <w:pPr><w:tabs><w:tab w:val="left" w:pos="1440" /><w:tab w:val="right" w:pos="9000" /></w:tabs></w:pPr>
+                    <w:r><w:t>Roof repair</w:t></w:r>
+                  </w:p>
+                </w:body></w:document>
+                """));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Roof repair", result.Text?.Text);
+    }
+
+    /// <summary>A break between two lines of a slide is what separates them, since DrawingML writes no paragraph there.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ASlideBrokenByAnElement_KeepsTheLinesApart()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "pitch.pptx",
+            DocumentFixtures.Package((
+                "ppt/slides/slide1.xml",
+                """
+                 <?xml version="1.0" encoding="UTF-8"?>
+                 <sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:p><a:r><a:t>Roof repair</a:t></a:r><a:br /><a:r><a:t>Paid</a:t></a:r></a:p></sld>
+                 """)));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Roof repair\nPaid", result.Text?.Text);
+    }
+
+    /// <summary>
+    /// A package declaring one of these formats and holding none of the parts it is read from did not parse, and
+    /// reporting it as a successful read of nothing tells an owner their document was searched and found empty.
+    /// </summary>
+    [Theory]
+    [InlineData("application/vnd.openxmlformats-officedocument.presentationml.presentation", "empty.pptx")]
+    [InlineData("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "empty.xlsx")]
+    public async Task ExtractTextAsync_AnOpenXmlPackageWithNoPagePart_ReportsMalformed(
+        string mediaType,
+        string fileName)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            fileName,
+            DocumentFixtures.Package(("docProps/app.xml", "<Properties />")));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
     }
 
     /// <summary>An OpenDocument package is a zip archive, so the entity refusal has to hold in its content part too.</summary>
@@ -325,8 +429,10 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AnAttachmentPastTheInputCeiling_RefusesItBeforeReadingIt()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxInputOctets = 64;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxInputOctets = 64,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/pdf",
@@ -345,8 +451,10 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AnAttachmentLongerThanItsDescriptionSays_RefusesItWhileItIsBeingCopied()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxInputOctets = 512;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxInputOctets = 512,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/pdf",
@@ -366,8 +474,10 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_ADocumentPastTheOutputCeiling_ReportsTheTextAsTooLarge()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxExtractedTextCharacters = 32;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxExtractedTextCharacters = 32,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -387,9 +497,11 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AContainerPartWithAnImplausibleInflationRatio_ReportsTheContainerBound()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxDecompressionRatio = 5;
-        bounds.MaxDecompressedOctets = long.MaxValue;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxDecompressionRatio = 5,
+            MaxDecompressedOctets = long.MaxValue,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -408,9 +520,11 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AContainerPastItsTotalDecompressedSize_ReportsTheContainerBound()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxDecompressionRatio = int.MaxValue;
-        bounds.MaxDecompressedOctets = 2_048;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxDecompressionRatio = int.MaxValue,
+            MaxDecompressedOctets = 2_048,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -429,8 +543,10 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AContainerDeclaringMorePartsThanAllowed_ReportsTheContainerBound()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxContainerParts = 2;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxContainerParts = 2,
+        };
 
         var parts = Enumerable.Range(0, 8)
             .Select(index => ($"word/part{index}.xml", "<a />"))
@@ -453,8 +569,10 @@ public sealed class BoundedAttachmentTextExtractorTests
     public async Task ExtractTextAsync_AContainerPartNestedPastTheDepthCeiling_ReportsTheContainerBound()
     {
         // Arrange
-        var bounds = Bounds();
-        bounds.MaxElementDepth = 8;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxElementDepth = 8,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -657,9 +775,11 @@ public sealed class BoundedAttachmentTextExtractorTests
     {
         // Arrange
         // Both other container ceilings are set far out of reach, so the ratio is the only one that can answer.
-        var bounds = Bounds();
-        bounds.MaxDecompressedOctets = 64L * 1024 * 1024;
-        bounds.MaxExtractedTextCharacters = 10_000_000;
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxDecompressedOctets = 64L * 1024 * 1024,
+            MaxExtractedTextCharacters = 10_000_000,
+        };
 
         await using var attachment = new FakeOpenedEmailAttachment(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

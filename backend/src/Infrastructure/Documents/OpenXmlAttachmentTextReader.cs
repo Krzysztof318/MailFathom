@@ -42,7 +42,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     /// <param name="cancellationToken">Cancels the read between parts and between elements.</param>
     /// <returns>What the document yielded.</returns>
     /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when a configured ceiling is crossed.</exception>
-    /// <exception cref="InvalidDataException">Thrown when the octets are not a readable archive.</exception>
+    /// <exception cref="InvalidDataException">Thrown when the octets are not a readable archive, or the package declares none of the parts its format is read from.</exception>
     /// <exception cref="XmlException">Thrown when a part is not readable XML.</exception>
     public ExtractedAttachmentText Read(
         Stream content,
@@ -108,6 +108,12 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         CancellationToken cancellationToken)
     {
         var slides = OrderedParts(archive, SlidePartPattern());
+
+        if (slides.Count == 0)
+        {
+            throw new InvalidDataException("The package declares no slide part.");
+        }
+
         var slidesWithoutText = new List<int>();
 
         foreach (var (slide, index) in slides.Select((slide, index) => (slide, index)))
@@ -151,6 +157,12 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     {
         var sharedStrings = this.ReadSharedStrings(archive, budget, cancellationToken);
         var sheets = OrderedParts(archive, WorksheetPartPattern());
+
+        if (sheets.Count == 0)
+        {
+            throw new InvalidDataException("The package declares no worksheet part.");
+        }
+
         var sheetsWithoutText = new List<int>();
 
         foreach (var (sheet, index) in sheets.Select((sheet, index) => (sheet, index)))
@@ -176,10 +188,22 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     /// <summary>Collects the runs of text in one part, ending a line where the format ends a paragraph.</summary>
     /// <returns><see langword="true" /> when the part carried anything but whitespace; otherwise <see langword="false" />.</returns>
     /// <remarks>
+    /// <para>
     /// Word-processing and presentation markup differ only in the namespace their text runs are written in, which is
     /// why one walk serves both: <c>t</c> holds the characters and <c>p</c> is what separates them into lines. The
     /// answer is what the part itself carried rather than how long the gathered text grew, because a line break written
     /// between two pages would otherwise read as the second page having said something.
+    /// </para>
+    /// <para>
+    /// A tab and a line break are elements rather than characters here exactly as they are in OpenDocument, so they are
+    /// read as the whitespace they stand for — otherwise the invoice line, the table of contents, and the form field
+    /// that a tab separates all come back as one joined word.
+    /// </para>
+    /// <para>
+    /// Everything inside a paragraph-properties element is skipped, because that is where the same names mean
+    /// something else: <c>tab</c> under <c>pPr</c> declares a tab <em>stop</em> and stands in for no character at all,
+    /// so reading it would put a space into every paragraph that overrides the default stops.
+    /// </para>
     /// </remarks>
     private bool ReadRunsInto(
         XmlReader reader,
@@ -188,14 +212,25 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         CancellationToken cancellationToken)
     {
         var insideRun = false;
+        var propertiesDepth = -1;
         var carriedText = false;
 
         while (this.parts.ReadNode(reader, cancellationToken))
         {
+            if (propertiesDepth >= 0)
+            {
+                if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == propertiesDepth)
+                {
+                    propertiesDepth = -1;
+                }
+
+                continue;
+            }
+
             switch (reader.NodeType)
             {
                 case XmlNodeType.Element when reader.NamespaceURI == textNamespace:
-                    insideRun = reader.LocalName == "t" && !reader.IsEmptyElement;
+                    ReadRunElement(reader, text, ref insideRun, ref propertiesDepth);
                     break;
 
                 case XmlNodeType.Text or XmlNodeType.CDATA or XmlNodeType.SignificantWhitespace or XmlNodeType.Whitespace:
@@ -225,6 +260,40 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         return carriedText;
+    }
+
+    /// <summary>Opens a run of characters, writes the whitespace an element stands in for, or enters properties.</summary>
+    private static void ReadRunElement(
+        XmlReader reader,
+        BoundedTextAccumulator text,
+        ref bool insideRun,
+        ref int propertiesDepth)
+    {
+        switch (reader.LocalName)
+        {
+            case "pPr" when !reader.IsEmptyElement:
+                propertiesDepth = reader.Depth;
+                insideRun = false;
+                break;
+
+            case "t":
+                insideRun = !reader.IsEmptyElement;
+                break;
+
+            case "tab":
+                text.Add(" ");
+                insideRun = false;
+                break;
+
+            case "br" or "cr":
+                text.EndLine();
+                insideRun = false;
+                break;
+
+            default:
+                insideRun = false;
+                break;
+        }
     }
 
     /// <summary>Reads the workbook's shared string table, which most cells hold their text in.</summary>
