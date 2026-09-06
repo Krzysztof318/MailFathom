@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -949,6 +950,17 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         if (this.Port is < 1 or > 65535)
         {
             yield return new ValidationResult("IMAP port must be between 1 and 65535.", [nameof(this.Port)]);
+        }
+
+        // A Discover result reports one coverage entry per account it read, and the identifier is the text that entry
+        // carries. The text rules a plan holds are narrower than what an identifier may be, so an identifier a plan
+        // cannot carry would bind, start, synchronize, and then refuse every question — a configuration fault answered
+        // at answer time rather than at start.
+        if (!string.IsNullOrWhiteSpace(this.AccountId) && !PresentationText.TryCreate(this.AccountId, out _))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the account identifier must be text a result may report back, so it carries no control character, is not written as markup, and is at most {PresentationText.MaxLength} characters.",
+                [nameof(this.AccountId)]);
         }
 
         // Required whether or not synchronization is enabled, unlike the connection settings below. The name is what

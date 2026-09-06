@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Text;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Discovery;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -157,6 +158,28 @@ public sealed class DiscoveryCompositionAgentTests
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
     }
 
+    /// <summary>A turn past what this deployment sends in one request is a question whose mail does not fit, not a run that fails.</summary>
+    [Fact]
+    public async Task ComposeAsync_ATurnPastTheDeploymentsRequestCeiling_ComposesAResultWithoutCallingTheProvider()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(
+            """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
+        var composer = provider.ComposerOver(plan: ChatDeclarations.Plan(maximumRequestCharacters: 100));
+
+        // Act
+        var plan = await composer.ComposeAsync(
+            Question(),
+            Plan(DiscoveryIntent.FindFact),
+            Evidence("we accept the revised figure"),
+            Coverage(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(PresentationSupport.Unsupported, plan.Blocks[0].Evidence.Support);
+        Assert.Empty(provider.RequestBodies);
+    }
+
     /// <summary>What a plan quotes is the owner's own mail going back to the owner, so it is not redacted on the way.</summary>
     [Fact]
     public async Task ComposeAsync_AnExtractCarryingASecret_StillQuotesItBackToTheOwner()
@@ -283,7 +306,8 @@ public sealed class DiscoveryCompositionAgentTests
 
         public DiscoveryCompositionAgent ComposerOver(
             SensitiveContentEgressGuard? egressGuard = null,
-            Exception? credentialFailure = null)
+            Exception? credentialFailure = null,
+            ChatGenerationPlan? plan = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -314,7 +338,7 @@ public sealed class DiscoveryCompositionAgentTests
                 });
 
             return new DiscoveryCompositionAgent(
-                ChatDeclarations.Plan(),
+                plan ?? ChatDeclarations.Plan(),
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,

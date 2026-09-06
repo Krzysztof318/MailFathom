@@ -132,7 +132,9 @@ internal static class DiscoveryCompositionReading
     /// <para>
     /// An answer past what a block may carry is cut rather than dropped, the same way an extract is quoted. Dropping it
     /// would leave a block citing mail while stating that no mail answered, which is a false sentence to the person
-    /// rather than the honest absence that sentence is for.
+    /// rather than the honest absence that sentence is for. The surrogate check is the one
+    /// <see cref="DiscoveryPlanReading" /> applies to the same cut: a cut between the halves of an astral character
+    /// leaves a lone surrogate that reaches a reader as a replacement character.
     /// </para>
     /// </remarks>
     private static AnswerBlock Answer(
@@ -141,7 +143,9 @@ internal static class DiscoveryCompositionReading
         PresentationSupport support)
     {
         var answer = document?.Answer is { Length: > PresentationText.MaxLength } overlong
-            ? overlong[..PresentationText.MaxLength]
+            ? overlong[..(char.IsLowSurrogate(overlong[PresentationText.MaxLength])
+                ? PresentationText.MaxLength - 1
+                : PresentationText.MaxLength)]
             : document?.Answer;
 
         var text = support is not PresentationSupport.Unsupported

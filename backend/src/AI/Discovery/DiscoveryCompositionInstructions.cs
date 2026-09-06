@@ -114,7 +114,7 @@ internal static class DiscoveryCompositionInstructions
 
         foreach (var source in sources)
         {
-            turn.Append(CultureInfo.InvariantCulture, $"[{source.Name}] {source.Label}")
+            turn.Append(CultureInfo.InvariantCulture, $"[{source.Name}] {WithoutForgedHeaders(source.Label)}")
                 .AppendLine()
                 .AppendLine(WithoutForgedHeaders(source.Extract))
                 .AppendLine();
@@ -134,9 +134,14 @@ internal static class DiscoveryCompositionInstructions
     /// a quoted reply, a mailing-list tag, a bracketed aside — and losing it would lose text a fact may rest on. A
     /// header this method writes is never indented, so an indented line cannot be one, and the reader keeps its words.
     /// </para>
+    /// <para>
+    /// The label passes through it as well as the extract. It is the message subject, which a plan's text rules permit a
+    /// newline in and which the metadata mapping writes as the envelope gave it, so a subject decoding to several lines
+    /// would otherwise put an unindented header into the turn from inside the header this method writes.
+    /// </para>
     /// </remarks>
-    private static string WithoutForgedHeaders(string extract) =>
-        string.Join('\n', extract.Split('\n').Select(line => line.StartsWith('[') ? " " + line : line));
+    private static string WithoutForgedHeaders(string text) =>
+        string.Join('\n', text.Split('\n').Select(line => line.StartsWith('[') ? " " + line : line));
 
     /// <summary>Says which of the answer's parts this question needs, from the intent the plan already read it as.</summary>
     /// <remarks>
