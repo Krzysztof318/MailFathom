@@ -103,8 +103,10 @@ checks every mirrored file against the byte count the project states, and
 `stamp`, which prints the etag set the mirror stands on so the state inventory
 beside it can say whether it still describes the current design.
 
-It reaches no design server itself, and it never writes into the mirror's own
-directory beyond the manifest. Nothing it touches is repository content:
+It reaches no design server itself. What it writes is the mirror and nothing
+else: `extract` and `decode` write a mirrored screen source, `record` writes the
+manifest, and `plan` and `stamp` write nothing at all. Nothing it touches is
+repository content:
 `artifacts/` is gitignored, `.worktreeinclude` copies `artifacts/design/` into a
 linked worktree so a session does not re-fetch what the main checkout holds, and
 no file describing what a screen looks like is committed.
