@@ -127,7 +127,7 @@ nine refusals where none did. The stored row names whichever word applies beside
 | `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
 | `FormatNotSupported` | The octets are not one of the raster formats a request may carry | Nothing; the attachment is not a picture this can send |
 | `FormatExcluded` | The octets are a markup document — an SVG among them — rather than a raster picture | Nothing; rendering one is executing a document somebody else composed |
-| `ImageTooLarge` | The attachment holds more octets than `Chat:MaxRequestImageOctets` | Raise the ceiling deliberately, having seen what one request then costs |
+| `ImageTooLarge` | The attachment holds more octets than one of the two ceilings it passes: `Embeddings:AttachmentText:MaxInputOctets`, which bounds what any attachment may cost to read, or `Chat:MaxRequestImageOctets`, which bounds what one request may carry | Raise whichever of the two refused it — the attachment ceiling is checked first, and neither constrains the other — deliberately, having seen what one request then costs |
 | `PixelGridTooLarge` | The image's header declares a grid larger than `Embeddings:ImageDescription:MaxPixels` | Raise the ceiling, or treat a file declaring an enormous grid as one worth looking at |
 | `ImageUnreadable` | The octets name a supported format and do not hold one | Nothing; truncated and malformed pictures are expected of real mail |
 | `ProviderTimedOut` | The request outlived the time one chat call is allowed | Raise the timeout, or accept that the message is read again on a later run |

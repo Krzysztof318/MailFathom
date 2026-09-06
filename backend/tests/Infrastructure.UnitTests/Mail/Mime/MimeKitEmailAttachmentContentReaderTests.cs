@@ -241,6 +241,59 @@ public sealed class MimeKitEmailAttachmentContentReaderTests
         Assert.False(opened.ContentIsUnreadable);
     }
 
+    /// <summary>
+    /// A message beyond the structural limits is refused on this door as well, before anything parses it, so the two
+    /// doors into one mailbox cannot disagree about which messages this deployment will parse at all.
+    /// </summary>
+    /// <remarks>
+    /// Every message of the attachment pass goes through the walk rather than through the single-position read, so a
+    /// structural pass lost here would parse stranger-composed MIME past the configured part and nesting limits on
+    /// every message of every account run, with nothing reporting that it had.
+    /// </remarks>
+    [Fact]
+    public async Task OpenWalkAsync_MessageBeyondTheStructuralLimits_ReportsTheCopyAsUnreadableWithoutParsingIt()
+    {
+        // Arrange
+        var content = MessageAttaching(
+            ("first.txt", "text/plain", "first"),
+            ("second.txt", "text/plain", "second"));
+        var narrowLimits = new EmailMimeExtractionOptions
+        {
+            MaxPartCount = 1,
+            MaxNestingDepth = 10,
+            MaxExtractedTextCharacters = 10_000,
+        };
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(narrowLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(walkResult.Walk);
+        Assert.True(walkResult.ContentIsUnreadable);
+    }
+
+    /// <summary>
+    /// Bytes that no longer parse are reported as a damaged local copy, which is the repair request the deriver
+    /// branches on rather than an exception leaving the pass.
+    /// </summary>
+    [Fact]
+    public async Task OpenWalkAsync_StoredBytesThatNoLongerParse_ReportsTheCopyAsUnreadable()
+    {
+        // Arrange — a header line that never terminates leaves nothing a parse can build a message from.
+        var content = MimeFixtures.StoredRawContent(Encoding.UTF8.GetBytes(new string('\0', 64)));
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(StructuralLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(walkResult.Walk);
+        Assert.True(walkResult.ContentIsUnreadable);
+    }
+
     private static EmailMimeExtractionOptions StructuralLimits => new()
     {
         MaxPartCount = 100,

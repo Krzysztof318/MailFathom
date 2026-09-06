@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
@@ -136,6 +137,46 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
         Assert.Null(await ReadDerivationStampAsync(services, storedEmailId, cancellationToken));
         Assert.Empty(await ReadStoredReadingsAsync(services, storedEmailId, cancellationToken));
     }
+
+    /// <summary>
+    /// A reading that is not the last one this message needs writes its rows and withholds the stamp, so the next
+    /// account run reaches the message again.
+    /// </summary>
+    /// <remarks>
+    /// The two halves have to be observed together in one committed transaction, which is why this is here rather than
+    /// in a unit test: what a substitute could show is that the property was read, not that the write kept the rows
+    /// while leaving the message outstanding. Inverting the condition would stamp a message whose picture the provider
+    /// never answered for, its attachments would never be offered to a parser again, and nothing else in either suite
+    /// would notice.
+    /// </remarks>
+    [Fact]
+    public async Task SaveAttachmentTextAsync_AReadingAProviderMayStillAnswer_WritesTheRowsWithoutStampingTheMessage()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9104);
+        var storedEmailId = await StoreAsync(services, occurrenceId, cancellationToken);
+
+        // Act — one document that was read, and one picture the provider did not answer for.
+        await SaveAsync(
+            services,
+            storedEmailId,
+            [Document(0, "contract"), UnansweredPicture(1)],
+            cancellationToken);
+
+        // Assert
+        Assert.Equal([0, 1], await ReadStoredReadingsAsync(services, storedEmailId, cancellationToken));
+        Assert.Null(await ReadDerivationStampAsync(services, storedEmailId, cancellationToken));
+    }
+
+    /// <summary>Builds the reading of a picture the chat provider did not answer for, which settles nothing.</summary>
+    private static DerivedAttachmentText UnansweredPicture(int position) => DerivedAttachmentText.FromDescription(
+        position,
+        "image/png",
+        "photograph.png",
+        ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ProviderUnavailable));
 
     /// <summary>Reads the walk position of every attachment reading stored for the message, one entry per reading.</summary>
     private static Task<IReadOnlyList<int>> ReadStoredReadingsAsync(

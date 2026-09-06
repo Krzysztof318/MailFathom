@@ -178,9 +178,12 @@ decides and what keeps a single search over a message and its attachment one ran
 - **Reconciliation is per attachment.** The reading that arrives later replaces the passages of the attachment it read
   and touches no other attachment's and none of the message's own, so an unchanged reading writes nothing exactly as an
   unchanged body does.
-- **Re-cutting after a boundary-rule change opens no document.** The extracted text and its boundaries are stored, so a
-  changed rule set re-cuts from the stored reading and re-embeds only the passages whose digests moved. Nothing goes
-  back to a parser and nothing goes back to a vision model.
+- **A later re-cut would open no document.** The extracted text, its boundaries, and the words a picture's description
+  produced are all stored, so cutting an attachment's passages again is a computation over rows the deployment already
+  holds rather than a second parse or a second vision call. Nothing performs that re-cut today: the walk offers a
+  message whose attachments nothing has read yet and no other pass reaches one, and the backfill that re-cuts a changed
+  rule set narrows to a message's body passages. [#1698](https://github.com/Krzysztof318/MailFathom/issues/1698) is
+  where the attachment half of it is tracked.
 
 An attachment reading is offered for embedding only where it produced words, and a message is stamped as read whether
 or not it did — which is what keeps a mailbox from being re-parsed on every run.
@@ -219,4 +222,6 @@ from markup and read from a plain-text part are worth different amounts, so they
 
 ## What is not here
 
-Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what `search_emails` returns. Serving an attachment passage or a citation into one through `search_emails`, `ask_mail`, or the client API, which is what those surfaces gain next.
+Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what a lexical `search_emails` answers with. The semantic half has already
+changed: a message whose only near passage was cut from an attachment now comes back, which
+[Email search](email-search.md) states. Serving an attachment passage or a citation into one through `search_emails`, `ask_mail`, or the client API, which is what those surfaces gain next.

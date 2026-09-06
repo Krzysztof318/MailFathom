@@ -459,10 +459,12 @@ whose document outran `Embeddings:AttachmentText:Timeout`, because a deadline re
 file. All three are read again on the next account run, so a provider outage or a loaded host during a first enablement
 costs the readings it interrupted a second time rather than losing them — which is what the deadline is worth budgeting
 processor time against, since a document that never parses inside it is re-fetched and re-parsed on every run. Every other refusal settles the message, including the ones a configuration
-change lifts — an image larger than `Chat:MaxRequestImageOctets`, a grid larger than
-`Embeddings:ImageDescription:MaxPixels`, and a picture met while image description was off. Raising either ceiling or
-turning that switch on therefore changes what arrives next rather than what is already stored, and no pass today goes
-back for the attachments it refused.
+change lifts — an image larger than `Embeddings:AttachmentText:MaxInputOctets` or larger than
+`Chat:MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
+description was off. The first of those three is this section's own key: it bounds what any attachment costs to read
+before a picture is offered to a provider at all, so a photograph past it is refused here rather than by the chat
+ceiling. Raising any of the three or turning that switch on therefore changes what arrives next rather than what is
+already stored, and no pass today goes back for the attachments it refused.
 
 **The three legacy binary formats are recognized and not read.** A `.doc`, `.xls`, or `.ppt` attachment is reported as a
 format MailFathom does not extract, which is a different and more useful fact than not recognizing it at all — the

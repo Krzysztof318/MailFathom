@@ -104,9 +104,11 @@ internal sealed class EmailAttachmentPassageReader(MailFathomDbContext dbContext
 
     /// <summary>Reads back the boundary document one attachment's row stores.</summary>
     /// <remarks>
-    /// A row written before this feature stored boundaries, and one whose redaction rewrote the text to a different
-    /// length, both carry none. Neither is an error: the passages are still passages, and a citation without a page is
-    /// what an honest reading of them supports.
+    /// A row written before this feature stored boundaries carries none, which is not an error: the passages are still
+    /// passages, and a citation without a page is what an honest reading of them supports. A redaction that rewrote the
+    /// text to a different length is not one of those rows — <c>DerivedAttachmentText.WithRedactedText</c> moves every
+    /// boundary through <c>RedactedText.MapOffset</c> before the document is serialized, so what a redacted attachment
+    /// loses is only the boundaries the scan's analyzed ceiling cut the text short of.
     /// </remarks>
     private static IReadOnlyList<AttachmentTextSegment> DeserializeSegments(string? document) => document is null
         ? []

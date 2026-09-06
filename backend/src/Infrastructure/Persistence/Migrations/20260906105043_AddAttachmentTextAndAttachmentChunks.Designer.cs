@@ -301,6 +301,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("StoredEmailId")
+                        .HasDatabaseName("ix_email_chunks_email");
+
                     b.HasIndex("StoredEmailId", "Ordinal")
                         .IsUnique()
                         .HasDatabaseName("ix_email_chunks_email_ordinal")

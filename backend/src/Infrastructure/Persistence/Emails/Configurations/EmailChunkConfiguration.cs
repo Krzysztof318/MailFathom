@@ -48,6 +48,11 @@ internal sealed class EmailChunkConfiguration : IEntityTypeConfiguration<EmailCh
             .HasFilter("\"AttachmentPosition\" IS NOT NULL")
             .HasDatabaseName(PersistenceConstraintNames.EmailChunkAttachmentOrdinalUniqueIndexName);
 
+        // Both indexes above are filtered, so neither covers a statement that names the message alone — which is what
+        // every cascade and every discard of one message's passages issues.
+        entity.HasIndex(chunk => chunk.StoredEmailId)
+            .HasDatabaseName(PersistenceConstraintNames.EmailChunkEmailIndexName);
+
         entity.HasOne(chunk => chunk.StoredEmail)
             .WithMany(email => email.Chunks)
             .HasForeignKey(chunk => chunk.StoredEmailId)

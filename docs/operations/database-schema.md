@@ -213,12 +213,13 @@ already serving:
   wait, for the duration.
 
 - **`AddAttachmentTextAndAttachmentChunks` rebuilds one index over the passage table and builds one over the largest
-  table in the schema.** It drops `ix_email_chunks_email_ordinal` first, then builds four indexes in this order:
+  table in the schema.** It drops `ix_email_chunks_email_ordinal` first, then builds five indexes in this order:
   `ix_stored_emails_awaiting_attachment_text`, which scans `stored_emails` in full under a lock that blocks writes to
-  it; the two filtered indexes that replace the dropped one, `ix_email_chunks_email_attachment_ordinal` and
+  it; the three that replace the dropped one, `ix_email_chunks_email`, `ix_email_chunks_email_attachment_ordinal` and
   `ix_email_chunks_email_ordinal`, each of which reads `email_chunks` once — proportional to the passages a deployment
   has cut, and under a lock that blocks writes to that table for the duration; and the GIN index over the new table
-  last. Unlike the other partial indexes above, the `stored_emails` one is not built empty, because
+  last. The passage table is therefore read three times rather than twice, the two indexes over the pair having gained
+  filters that leave neither covering a statement naming the message alone. Unlike the other partial indexes above, the `stored_emails` one is not built empty, because
   `AttachmentTextDerivedAt` is null on every row an upgrading deployment already holds, so it is written holding every
   message that carries an attachment. Budget a window against the message table rather than against the passage table
   alone. Nothing else in the migration is proportional to anything already stored: the two

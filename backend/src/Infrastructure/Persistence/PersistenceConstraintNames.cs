@@ -80,6 +80,16 @@ internal static class PersistenceConstraintNames
 
     internal const string EmailAttachmentTextVectorIndexName = "ix_email_attachment_texts_search_vector";
 
+    /// <summary>The index covering every passage of one message, whichever text it was cut from.</summary>
+    /// <remarks>
+    /// Unfiltered, because the two indexes beside it are not: PostgreSQL uses a partial index only where the statement's
+    /// own predicate implies the index predicate, and the deletion that follows a message — an expunge, an owner
+    /// erasure, a junk verdict — asks for one message's chunks without saying anything about the attachment position.
+    /// Before the attachment split the unique pair covered the foreign key and EF's convention created no index of its
+    /// own; this restores the cover the split removed.
+    /// </remarks>
+    internal const string EmailChunkEmailIndexName = "ix_email_chunks_email";
+
     /// <summary>The unique index over the ordinals of one message's body passages.</summary>
     /// <remarks>
     /// Filtered on the passages cut from the body, because a message with attachments has several texts and the
