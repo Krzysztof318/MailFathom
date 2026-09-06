@@ -4,10 +4,10 @@
 
 using System.Text;
 using MailFathom.Application.Access;
-using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -457,7 +457,7 @@ public sealed class MailDraftBookTests
 
         harness.ScreenWith(OutgoingMailScreenings.Through(
             egress.Screen,
-            AttachmentTextExtractionOutcome.Encrypted));
+            OutgoingAttachmentRefusal.NotRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(

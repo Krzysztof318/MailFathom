@@ -4,8 +4,10 @@
 
 using System.Text;
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Infrastructure.Mail.Mime;
 using Microsoft.Extensions.Time.Testing;
 using MimeKit;
@@ -33,6 +35,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         this.reader = new MimeKitOutgoingMailTextReader(
             this.extractor,
             new AttachmentTextExtractionOptions(),
+            EmailAttachmentTextBounds.Disabled,
             this.timeProvider);
 
     [Fact]
@@ -119,7 +122,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
 
         // Assert
         Assert.Equal("the signing key is AKIAEXAMPLEKEY", Assert.Single(text.AttachmentTexts));
-        Assert.Null(text.UnreadableAttachment);
+        Assert.Null(text.AttachmentRefusal);
         Assert.Contains("the signing key is AKIAEXAMPLEKEY", text.ScreenedValues, StringComparer.Ordinal);
     }
 
@@ -138,7 +141,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
 
         // Assert
         Assert.Empty(text.AttachmentTexts);
-        Assert.Null(text.UnreadableAttachment);
+        Assert.Null(text.AttachmentRefusal);
         Assert.Equal(2, text.ScreenedValues.Count);
     }
 
@@ -153,7 +156,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     [InlineData(nameof(AttachmentTextExtractionOutcome.TimedOut))]
     [InlineData(nameof(AttachmentTextExtractionOutcome.InputTooLarge))]
     [InlineData(nameof(AttachmentTextExtractionOutcome.ContainerBoundExceeded))]
-    public async Task ReadAsync_ADocumentNothingCouldRead_ReportsTheOutcomeAndNoText(string outcome)
+    public async Task ReadAsync_ADocumentNothingCouldRead_RefusesForTheFileAndReadsNoText(string outcome)
     {
         // Arrange
         this.extractor.Reports("locked.docx", UnreadableResult(outcome));
@@ -164,7 +167,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(Enum.Parse<AttachmentTextExtractionOutcome>(outcome), text.UnreadableAttachment);
+        Assert.Equal(OutgoingAttachmentRefusal.NotRead, text.AttachmentRefusal);
         Assert.Empty(text.AttachmentTexts);
     }
 
@@ -189,47 +192,24 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(AttachmentTextExtractionOutcome.Encrypted, text.UnreadableAttachment);
+        Assert.Equal(OutgoingAttachmentRefusal.NotRead, text.AttachmentRefusal);
         Assert.Empty(text.AttachmentTexts);
         Assert.Equal(["first.pdf", "locked.pdf"], this.extractor.ReadFileNames);
     }
 
     /// <summary>
-    /// The output ceiling binds the message rather than each file, or a sender would get it once per attachment. The
-    /// answer is the same one a single oversized document produces, because the fact is the same: more text than one
-    /// scan of this message undertakes to read.
+    /// The octets a whole message may be read from are the account run's own ceiling, applied here so one message costs
+    /// the same on either path. It is reported apart from a file nobody could read, because every document here was
+    /// read successfully and telling the author to convert one would name a file that was never the problem.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_DocumentsYieldingMoreTextThanTheCeilingTogether_RefusesForTheOutput()
+    public async Task ReadAsync_DocumentsHoldingMoreOctetsThanTheMessageCeiling_RefusesForTheMessage()
     {
         // Arrange
         var reader = new MimeKitOutgoingMailTextReader(
             this.extractor,
-            new AttachmentTextExtractionOptions { MaxExtractedTextCharacters = 12 },
-            this.timeProvider);
-
-        this.extractor.Reads("first.pdf", "0123456789");
-        this.extractor.Reads("second.pdf", "0123456789");
-
-        var raw = MessageAttaching(
-            Attachment("first.pdf", "application/pdf", "%PDF-1.7 one"),
-            Attachment("second.pdf", "application/pdf", "%PDF-1.7 two"));
-
-        // Act
-        var text = await reader.ReadAsync(raw, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(AttachmentTextExtractionOutcome.ExtractedTextTooLarge, text.UnreadableAttachment);
-    }
-
-    /// <summary>The input ceiling binds the message the same way, and for the same reason.</summary>
-    [Fact]
-    public async Task ReadAsync_DocumentsHoldingMoreOctetsThanTheCeilingTogether_RefusesForTheInput()
-    {
-        // Arrange
-        var reader = new MimeKitOutgoingMailTextReader(
-            this.extractor,
-            new AttachmentTextExtractionOptions { MaxInputOctets = 16 },
+            new AttachmentTextExtractionOptions(),
+            MessageBoundedTo(maxInputOctetsPerEmail: 16),
             this.timeProvider);
 
         this.extractor.Reads("first.pdf", "an ordinary invoice");
@@ -243,7 +223,61 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var text = await reader.ReadAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(AttachmentTextExtractionOutcome.InputTooLarge, text.UnreadableAttachment);
+        Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
+    }
+
+    /// <summary>
+    /// Two ordinary documents that each fit are read rather than refused, which is the case the message-wide ceiling
+    /// must not swallow: a message of two large reports is an ordinary message, and answering it as an unreadable file
+    /// would tell its author to convert something nothing was wrong with.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_TwoDocumentsThatFitTheMessageCeilingTogether_ReadsBothAndRefusesNothing()
+    {
+        // Arrange
+        this.extractor.Reads("first.pdf", "an ordinary invoice");
+        this.extractor.Reads("second.pdf", "another ordinary invoice");
+
+        var raw = MessageAttaching(
+            Attachment("first.pdf", "application/pdf", "0123456789"),
+            Attachment("second.pdf", "application/pdf", "0123456789"));
+
+        // Act
+        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(text.AttachmentRefusal);
+        Assert.Equal(["an ordinary invoice", "another ordinary invoice"], text.AttachmentTexts);
+    }
+
+    /// <summary>
+    /// How many of a message's attachments are opened at all is the same ceiling, and it is read before the walk starts
+    /// rather than during it: the count a message declares is the sender's, and opening the first of a thousand parts to
+    /// discover there are a thousand is work spent on a send that is not happening.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_MoreAttachmentsThanTheMessageCeiling_RefusesBeforeAnythingIsOpened()
+    {
+        // Arrange
+        var reader = new MimeKitOutgoingMailTextReader(
+            this.extractor,
+            new AttachmentTextExtractionOptions(),
+            MessageBoundedTo(maxAttachmentsPerEmail: 1),
+            this.timeProvider);
+
+        this.extractor.Reads("first.pdf", "an ordinary invoice");
+        this.extractor.Reads("second.pdf", "another ordinary invoice");
+
+        var raw = MessageAttaching(
+            Attachment("first.pdf", "application/pdf", "%PDF-1.7 one"),
+            Attachment("second.pdf", "application/pdf", "%PDF-1.7 two"));
+
+        // Act
+        var text = await reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
+        Assert.Empty(this.extractor.ReadFileNames);
     }
 
     /// <summary>
@@ -267,7 +301,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(AttachmentTextExtractionOutcome.TimedOut, text.UnreadableAttachment);
+        Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
         Assert.Equal(["first.pdf"], this.extractor.ReadFileNames);
     }
 
@@ -300,6 +334,16 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         await Assert.ThrowsAsync<ArgumentException>(
             () => this.reader.ReadAsync(ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
     }
+
+    /// <summary>The message-wide ceilings, narrowed to whichever one a test is about.</summary>
+    private static EmailAttachmentTextBounds MessageBoundedTo(
+        int maxAttachmentsPerEmail = int.MaxValue,
+        long maxInputOctetsPerEmail = long.MaxValue) =>
+        EmailAttachmentTextBounds.Disabled with
+        {
+            MaxAttachmentsPerEmail = maxAttachmentsPerEmail,
+            MaxInputOctetsPerEmail = maxInputOctetsPerEmail,
+        };
 
     private static AttachmentTextExtractionResult UnreadableResult(string outcome) => outcome switch
     {
@@ -398,7 +442,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         /// <summary>Scripts a file that reads as the text given.</summary>
         public void Reads(string fileName, string text) => this.Reports(
             fileName,
-            AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(text, PageCount: 1, [])));
+            AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(text, PageCount: 1, [], [])));
 
         /// <summary>Scripts a file that produces one outcome.</summary>
         public void Reports(string fileName, AttachmentTextExtractionResult result) =>

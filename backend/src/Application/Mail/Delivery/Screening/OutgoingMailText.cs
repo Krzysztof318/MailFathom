@@ -55,21 +55,20 @@ public sealed record OutgoingMailText(string Subject, string PlainTextBody, stri
     /// </remarks>
     public IReadOnlyList<string> AttachmentTexts { get; init; } = [];
 
-    /// <summary>Gets why one attachment could not be read, or <see langword="null" /> where every document the message carries was read.</summary>
+    /// <summary>Gets why the message's attachments left nothing to judge them by, or <see langword="null" /> where every document it carries was read.</summary>
     /// <remarks>
     /// <para>
-    /// It carries the outcome rather than a flag so that whatever reads this back can be tested against the reason it
-    /// stopped, and it is deliberately not carried any further than that: the refusal a caller is told names none of
-    /// these, because which shape of unreadable file a deployment stops at is a fact about the screen rather than about
-    /// the message.
+    /// It distinguishes the two because the author is told a different thing by each — see
+    /// <see cref="OutgoingAttachmentRefusal" /> — and it carries neither which extraction outcome nor which ceiling it
+    /// was, because that is a fact about how this deployment is configured rather than about the message.
     /// </para>
     /// <para>
-    /// <see cref="AttachmentTextExtractionOutcome.FormatNotRecognized" /> is never what this holds. An attachment
+    /// <see cref="AttachmentTextExtractionOutcome.FormatNotRecognized" /> produces neither of them. An attachment
     /// nothing recognized as a document is not a document this deployment failed to read; it is a file no reader here
     /// ever undertook to read, and stopping a send over one would refuse every message carrying a photograph.
     /// </para>
     /// </remarks>
-    public AttachmentTextExtractionOutcome? UnreadableAttachment { get; init; }
+    public OutgoingAttachmentRefusal? AttachmentRefusal { get; init; }
 
     /// <summary>Gets the values to screen, in the order they are scanned and with what the message does not carry left out.</summary>
     /// <remarks>

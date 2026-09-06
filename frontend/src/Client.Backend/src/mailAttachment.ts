@@ -85,15 +85,25 @@ export function readMailAttachment<TOutcome>(
  * the fourth says a body could not be parsed, while what can go wrong here is a refusal, an unreachable deployment, or
  * an answer that did not hold what the message said it would.
  */
-export type MailAttachmentRefusal = 'unauthenticated' | 'unauthorized' | 'unavailable' | 'largerThanDescribed';
+export type MailAttachmentRefusal =
+    'unauthenticated' | 'unauthorized' | 'unavailable' | 'screened' | 'largerThanDescribed';
 
-/** The refusal an HTTP status stands for, for a status this package did not expect to succeed. */
+/**
+ * The refusal an HTTP status stands for, for a status this package did not expect to succeed.
+ *
+ * `409` is its own answer rather than `unavailable` because it is the one refusal here that is permanent and about the
+ * file: a deployment that screens what it serves has read this document and will not serve it, so a reader offered a
+ * retry would be offered one that cannot succeed. Nothing about why is on the wire and nothing is read off the body —
+ * the deployment deliberately says only that it screened the file.
+ */
 export function attachmentRefusalForStatus(status: number): MailAttachmentRefusal {
     switch (status) {
         case 401:
             return 'unauthenticated';
         case 403:
             return 'unauthorized';
+        case 409:
+            return 'screened';
         default:
             return 'unavailable';
     }

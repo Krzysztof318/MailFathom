@@ -36,10 +36,13 @@ namespace MailFathom.Host.UnitTests.Api;
 
 /// <summary>Covers the one route this process answers without a credential.</summary>
 /// <remarks>
-/// Two things are asserted throughout. The first is that a refusal says nothing: every reason a download is refused
-/// produces the same status and the same body, because a caller holding a capability must not learn from the refusal
-/// what became of the mail it points at. The second is that a served file is described in the encoding each header
-/// defines, since both the media type and the file name are text a sender wrote.
+/// Two things are asserted throughout. The first is that a refusal says nothing about the mail: every reason there is
+/// nothing to serve produces the same status and the same body, because a caller holding a capability must not learn
+/// from the refusal what became of the mail it points at. A file this deployment screened is the stated exception and
+/// is asserted as one — `409` with a code of its own — because that caller was already told by the read that offered
+/// them the link that the attachment exists, so what is left to withhold is what is in it. The second is that a served
+/// file is described in the encoding each header defines, since both the media type and the file name are text a sender
+/// wrote.
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The endpoint under test takes ownership of the opened attachment and disposes it, which is the contract these tests exercise.")]
 public sealed class EmailAttachmentDownloadEndpointTests
@@ -57,6 +60,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         // Arrange
         var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
 
         // Act
         var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
@@ -65,7 +69,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             AttachmentOpening(
                 principals,
                 new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()),
-                screensTheFile: true),
+                egress.Screen),
             principals,
             DeploymentOwner(),
             context,
@@ -415,7 +419,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     private static EmailAttachmentDownloadReader AttachmentOpening(
         IAuthorizedPrincipalSource principals,
         IOpenedEmailAttachment? attachment,
-        bool screensTheFile = false)
+        SensitiveContentEgressScreen? screen = null)
     {
         var summary = SummaryOf();
 
@@ -444,8 +448,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
             contentStore,
             contentReader,
             Substitute.For<IEmailContentRepairRequestStore>(),
-            AttachmentTextReading(screensTheFile),
-            ScreenRefusing(screensTheFile),
+            AttachmentTextReading(screening: screen is not null),
+            screen ?? ScreensNothing(),
             new MailboxScopeResolver(
                 accountCatalog,
 
@@ -510,25 +514,29 @@ public sealed class EmailAttachmentDownloadEndpointTests
     }
 
     /// <summary>Reads the attachment as one carrying whatever a screened deployment in this suite stops at.</summary>
-    private static IAttachmentTextExtractor AttachmentTextReading(bool screensTheFile)
+    private static IAttachmentTextExtractor AttachmentTextReading(bool screening)
     {
         var extractor = Substitute.For<IAttachmentTextExtractor>();
         extractor
             .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(screensTheFile
+            .Returns(Task.FromResult(screening
                 ? AttachmentTextExtractionResult.Extracted(
-                    new ExtractedAttachmentText(ScreenedMarker, PageCount: 1, []))
+                    new ExtractedAttachmentText(ScreenedMarker, PageCount: 1, [], []))
                 : AttachmentTextExtractionResult.FormatNotRecognized()));
 
         return extractor;
     }
 
-    /// <summary>Builds the screen of a deployment that stops at the marker, or of one that screens nothing at all.</summary>
-    private static SensitiveContentEgressScreen ScreenRefusing(bool screensTheFile) => screensTheFile
-        ? ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System).Screen
-        : new SensitiveContentEgressScreen(
-            FixedSensitiveContentPostures.ScanningNothing(),
-            new RecordingSensitiveContentEgressTelemetry(),
-            TimeProvider.System);
+    /// <summary>Builds the screen of a deployment that screens nothing, which is what every test but one is arranged with.</summary>
+    /// <remarks>
+    /// A deployment that <em>does</em> screen is not built here, because building one owns a concurrency bound its
+    /// author has to release: <see cref="ScanningSensitiveContentEgress" /> is disposable and a helper handing back
+    /// only its screen would drop the instance holding it. The one test that needs it binds it with <c>using</c> and
+    /// passes the screen in.
+    /// </remarks>
+    private static SensitiveContentEgressScreen ScreensNothing() => new(
+        FixedSensitiveContentPostures.ScanningNothing(),
+        new RecordingSensitiveContentEgressTelemetry(),
+        TimeProvider.System);
 
 }

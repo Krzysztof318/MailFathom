@@ -5,7 +5,6 @@
 using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Governance;
@@ -488,7 +487,7 @@ public sealed class MailOutboxTests
             signal: signal,
             screening: OutgoingMailScreenings.Through(
                 egress.Screen,
-                AttachmentTextExtractionOutcome.Encrypted));
+                OutgoingAttachmentRefusal.NotRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
@@ -500,7 +499,7 @@ public sealed class MailOutboxTests
         // Assert
         Assert.Equal(MailFathomErrorCode.OutgoingMailAttachmentNotRead, refusal.ErrorCode);
         Assert.DoesNotContain(
-            nameof(AttachmentTextExtractionOutcome.Encrypted),
+            nameof(OutgoingAttachmentRefusal.NotRead),
             refusal.Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Empty(store.OpenRequests);

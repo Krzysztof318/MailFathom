@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -173,7 +172,7 @@ public sealed class OutgoingMailScreeningTests
             egress,
             new OutgoingMailText("a subject", "the file is attached", HtmlBody: null)
             {
-                UnreadableAttachment = AttachmentTextExtractionOutcome.Encrypted,
+                AttachmentRefusal = OutgoingAttachmentRefusal.NotRead,
             });
 
         // Act
@@ -203,7 +202,7 @@ public sealed class OutgoingMailScreeningTests
             egress,
             new OutgoingMailText("a subject", $"the key is {Marker}", HtmlBody: null)
             {
-                UnreadableAttachment = AttachmentTextExtractionOutcome.Encrypted,
+                AttachmentRefusal = OutgoingAttachmentRefusal.NotRead,
             });
 
         // Act

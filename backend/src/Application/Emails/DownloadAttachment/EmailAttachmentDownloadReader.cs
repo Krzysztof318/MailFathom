@@ -13,6 +13,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 
 namespace MailFathom.Application.Emails.DownloadAttachment;
 
@@ -34,10 +35,16 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// afresh rather than a rule anybody has to remember.
 /// </para>
 /// <para>
-/// Every refusal is the same refusal. A message this deployment no longer serves, one belonging to somebody else, a
-/// stored copy that has gone missing, a damaged one, and a position the message does not have all answer
-/// <see langword="null" />, because telling them apart would let a caller learn what became of mail they cannot read —
-/// and, on the signed path, learn it while holding nothing but a URL.
+/// Every refusal about what is there is the same refusal. A message this deployment no longer serves, one belonging to
+/// somebody else, a stored copy that has gone missing, a damaged one, and a position the message does not have all
+/// answer <see cref="AttachmentDownloadOutcome.NothingToServe" />, because telling them apart would let a caller learn
+/// what became of mail they cannot read — and, on the signed path, learn it while holding nothing but a URL.
+/// </para>
+/// <para>
+/// A screened file is the one refusal that says so, and <see cref="AttachmentDownloadOutcome.ScreenedOut" /> is how.
+/// It is not the answer above, because the caller has already been told by the read that offered them the file that the
+/// attachment exists and what it is called: what is left to withhold is what is in it, which that answer withholds
+/// entirely. <see cref="MailFathomErrorCode.AttachmentDownloadScreened" /> holds the reasoning both ways round.
 /// </para>
 /// <para>
 /// It reaches no mail server, for the reason the content read does not: the use case holds no mailbox port, so a

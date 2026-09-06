@@ -133,6 +133,10 @@ describe('Attachment', () => {
         ['unauthorized', 'This credential may not read mail on this deployment, so the file was not downloaded.'],
         ['unavailable', 'The deployment did not answer, so the file was not downloaded. Try again.'],
         [
+            'screened',
+            'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Asking again will not change that.',
+        ],
+        [
             'largerThanDescribed',
             'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
         ],

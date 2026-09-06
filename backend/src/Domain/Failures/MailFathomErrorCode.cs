@@ -872,11 +872,19 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailContentRefused { get; } = new(59001);
 
-    /// <summary>Gets subcategory 9, content policy: a message is longer than one scan analyzes, so nothing established what its remainder carries.</summary>
+    /// <summary>Gets subcategory 9, content policy: a message is more than one screen covers, so nothing established what its remainder carries.</summary>
     /// <remarks>
-    /// Separate from the code above because the remedy is separate and because nothing was found: the author shortens
-    /// the message, or the operator raises the analyzed ceiling. Telling them a category was detected would send them
-    /// looking through a message for material no scanner ever reported.
+    /// <para>
+    /// Separate from the code above because the remedy is separate and because nothing was found: the author sends less,
+    /// or the operator raises the ceiling that stopped it. Telling them a category was detected would send them looking
+    /// through a message for material no scanner ever reported.
+    /// </para>
+    /// <para>
+    /// Two ceilings reach it, and the author acts on both the same way. One value of the message may be longer than a
+    /// single scan analyzes; and the documents attached to it may together exhaust what a whole message is read within,
+    /// which stops the read with files still unopened. Neither is about any one file — every attachment may have been
+    /// read successfully — which is why the code beside this one is not the answer to either.
+    /// </para>
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailNotFullyScanned { get; } = new(59002);
 
@@ -884,10 +892,12 @@ public readonly record struct MailFathomErrorCode
     /// <remarks>
     /// <para>
     /// A third code beside the two above because the author's remedy is a third one again. The first asks them to take
-    /// something out of the message and the second to make it shorter; this one says a file they attached is one this
+    /// something out of the message and the second to send less of it; this one says a file they attached is one this
     /// deployment cannot read at all — it is encrypted, it is a format nothing here parses, it is malformed, or reading
-    /// it ran past a ceiling — so the only way the message goes is without that file, or with it in a form the screen
-    /// can read.
+    /// that one file ran past a ceiling of its own — so the only way the message goes is without that file, or with it
+    /// in a form the screen can read. A message whose attachments were read and merely came to more than a whole
+    /// message may spend is the code above rather than this one, because converting a document that was read
+    /// successfully would change nothing.
     /// </para>
     /// <para>
     /// It names none of that. Which of the reasons stopped the read, which file it was, what the file is called, and
@@ -902,10 +912,14 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 9, content policy: an attachment this deployment screens was not served, because of what it carries or because nothing could read it.</summary>
     /// <remarks>
     /// <para>
-    /// Separate from the three codes above because it stops a read rather than a write, and one code covers both of its
-    /// reasons because whoever asked can act on neither. An author told their own message was refused edits it; a caller
-    /// redeeming a download link holds nothing to edit, so telling them a category was found would publish a fact about
-    /// the file — that it carries a credential — to somebody the deployment has just decided may not have the file.
+    /// Separate from the three codes above because it stops a read rather than a write, and one code covers every one of
+    /// its reasons because whoever asked can act on none of them. The file carries something a scanner named; or nothing
+    /// here could read it; or its text was longer than one scan analyzes, so the remainder went unread; or a switched-on
+    /// scanner could not answer at all. An author told their own message was refused edits it; a caller redeeming a
+    /// download link holds nothing to edit, so telling them which of the four it was would publish a fact about the
+    /// file — that it carries a credential, or that this deployment's analyzer is down — to somebody the deployment has
+    /// just decided may not have the file. A scanner that could not answer is recorded where an operator reads it, on
+    /// the instrument beside the screen, rather than in this answer.
     /// </para>
     /// <para>
     /// It is answered distinctly rather than folded into the refusal every other stopped download shares, because the

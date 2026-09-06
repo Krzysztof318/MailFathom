@@ -675,6 +675,8 @@ export const pl: Catalogue = {
     'attachment.refusedUnauthorized':
         'Te dane logowania nie pozwalają czytać poczty w tym wdrożeniu, więc plik nie został pobrany.',
     'attachment.refusedUnavailable': 'Wdrożenie nie odpowiedziało, więc plik nie został pobrany. Spróbuj ponownie.',
+    'attachment.refusedScreened':
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie został pobrany. Ponowna próba tego nie zmieni.',
     'attachment.refusedLargerThanDescribed':
         'Wdrożenie przysłało więcej, niż ta wiadomość deklaruje dla tego pliku, więc nic nie zostało zapisane. Zgłoś to jako usterkę.',
     'attachment.reading': 'Trwa otwieranie pliku {name}…',
@@ -686,6 +688,8 @@ export const pl: Catalogue = {
         'Te poświadczenia nie mogą czytać poczty w tym wdrożeniu, więc nie udało się pokazać pliku.',
     'attachment.notShownUnavailable':
         'Wdrożenie nie odpowiedziało, więc nie udało się pokazać pliku. Spróbuj ponownie.',
+    'attachment.notShownScreened':
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie udało się go pokazać. Ponowna próba tego nie zmieni.',
     'attachment.notShownUnreadable':
         'To, co dotarło, nie zgadza się z tym, co ta wiadomość mówi o pliku, więc nic z niego nie rysujemy. Pobierz go i zgłoś to jako usterkę.',
     'attachment.empty': 'Ten plik nic nie zawiera.',

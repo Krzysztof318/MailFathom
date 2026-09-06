@@ -1112,6 +1112,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOutgoingMailTextReader>(provider => new MimeKitOutgoingMailTextReader(
             provider.GetRequiredService<IAttachmentTextExtractor>(),
             provider.GetRequiredService<AttachmentTextExtractionOptions>(),
+            provider.GetRequiredService<EmailAttachmentTextBounds>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<OutgoingMailScreening>();
         services.AddScoped<MailOutbox>();

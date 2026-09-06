@@ -46,6 +46,7 @@ const failureMessages: Readonly<Record<ShowingRefusal, MessageKey>> = {
     unauthenticated: 'attachment.notShownUnauthenticated',
     unauthorized: 'attachment.notShownUnauthorized',
     unavailable: 'attachment.notShownUnavailable',
+    screened: 'attachment.notShownScreened',
     largerThanDescribed: 'attachment.notShownUnreadable',
     unreadable: 'attachment.notShownUnreadable',
 };

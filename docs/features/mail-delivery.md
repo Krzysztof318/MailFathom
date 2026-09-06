@@ -583,13 +583,17 @@ used costs nothing further, since the charge is keyed on the send's own idempote
 that key is admitted without being charged again. Only a fresh key spends another message and its recipients. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
 records and the refusal writes none.
 
-A caller reads `59001` naming the category, `59002` where one screened value — the subject or either body — was
-longer than the deployment's analyzed ceiling and nothing read the remainder of it, or `59003` where an attached
-document could not be read at all and so nothing screened what would have left with it; the analyzed ceiling is applied
-to each value on its own rather than to the message as a whole, while the extraction bounds are applied per attachment
-and across the message together. None of the three carries the rule, the position, or one character of what was found,
-and `59003` names neither the file nor why it could not be read. A finding wins over an unread file: a message that
-carries both answers `59001`, which is the one of the two its author can act on.
+A caller reads `59001` naming the category, `59002` where the message is more than one screen covers, or `59003` where
+an attached document could not be read at all and so nothing screened what would have left with it. Two ceilings reach
+`59002` and the remedy is the same for both: one screened value — the subject, either body, or the text of one attached
+document — was longer than the deployment's analyzed ceiling and nothing read the remainder of it, or the message's
+attachments together exhausted what a whole message is read within, leaving files unopened. The analyzed ceiling is
+applied to each value on its own rather than to the message as a whole, while the extraction bounds are applied per
+attachment and across the message together. None of the three carries the rule, the position, or one character of what
+was found, and `59003` names neither the file nor why it could not be read — nor is it the answer when every file was
+read and there was merely too much of them, because converting a document that was read successfully would change
+nothing. A finding wins over both: a message that carries one answers `59001`, which is the one thing here its author
+can act on directly.
 Which scanners stop a send is the operator's, defaults to secrets alone, and is
 [`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent); [sensitive-content
 scanning § outgoing mail is screened rather than

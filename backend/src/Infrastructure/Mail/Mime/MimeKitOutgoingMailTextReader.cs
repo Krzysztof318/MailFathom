@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Screening;
@@ -27,11 +28,21 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// <para>
 /// <b>An attachment is the exception to that, and is read as hostile input.</b> Its octets are whatever a caller handed
 /// the composition, so nothing about them was produced here — which is why they are offered to
-/// <see cref="IAttachmentTextExtractor" /> rather than to a parser of this reader's own, and why the ceilings that port
-/// declares are applied a second time across the message: the greatest octets one attachment may hold bound every
-/// document in the message together, the greatest characters one may yield bound their texts together, and the time one
-/// may take bounds the loop. Without the second reading a message of many small documents would cost each ceiling once
-/// per attachment.
+/// <see cref="IAttachmentTextExtractor" /> rather than to a parser of this reader's own. What bounds one attachment is
+/// what that port declares; what bounds the message is <see cref="EmailAttachmentTextBounds" />, the same two numbers
+/// the account run's own attachment stage is held to — how many of a message's attachments are opened at all, and the
+/// octets they may be read from together. Reusing them rather than declaring a pair here is what keeps one message from
+/// costing a different amount depending on which path met it, and it is why two ordinary large documents are read
+/// rather than refused.
+/// </para>
+/// <para>
+/// <b>One ceiling is this reader's own, and it exists because of who waits.</b> The extraction timeout bounds one
+/// attachment, so a message carrying the greatest number of them would bound at that timeout multiplied by the count —
+/// which a background stage can afford and a caller holding a send open cannot. So the same timeout is read a second
+/// time across the whole walk: a screened send costs at most that budget plus the one attachment already under way.
+/// <see cref="EmailAttachmentTextBounds.IsEnabled" /> is deliberately not read at all, because what a screen judges is
+/// what would leave rather than what is worth indexing, and a deployment that derives no attachment text still screens
+/// the documents it sends.
 /// </para>
 /// <para>
 /// Nothing beyond that is materialized. <see cref="MimeMessage.TextBody" /> and <see cref="MimeMessage.HtmlBody" />
@@ -40,11 +51,13 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// </para>
 /// </remarks>
 /// <param name="attachmentText">Reads one attachment's text under the ceilings it declares, or says why it read none.</param>
-/// <param name="bounds">The ceilings that reading is held to, applied here across the message.</param>
+/// <param name="perAttachment">The ceilings one attachment is read within, whose timeout is read again across the walk.</param>
+/// <param name="perMessage">The ceilings a whole message's attachments are read within.</param>
 /// <param name="timeProvider">Measures what reading the message's attachments has spent so far.</param>
 internal sealed class MimeKitOutgoingMailTextReader(
     IAttachmentTextExtractor attachmentText,
-    AttachmentTextExtractionOptions bounds,
+    AttachmentTextExtractionOptions perAttachment,
+    EmailAttachmentTextBounds perMessage,
     TimeProvider timeProvider) : IOutgoingMailTextReader
 {
     /// <inheritdoc />
@@ -78,14 +91,14 @@ internal sealed class MimeKitOutgoingMailTextReader(
             message.HtmlBody)
         {
             AttachmentTexts = attachments.Texts,
-            UnreadableAttachment = attachments.Unreadable,
+            AttachmentRefusal = attachments.Refusal,
         };
     }
 
-    /// <summary>Reads every document the message attaches, and stops at the first one nothing could read.</summary>
+    /// <summary>Reads every document the message attaches, and stops at the first thing that leaves the screen unable to judge it.</summary>
     /// <remarks>
-    /// It stops rather than reading on, because one unreadable document already refuses the act: everything after it
-    /// would be work spent on a send that is not happening, and on octets a caller supplied.
+    /// It stops rather than reading on, because either refusal already refuses the act: everything after it would be
+    /// work spent on a send that is not happening, and on octets a caller supplied.
     /// </remarks>
     private async Task<ReadAttachments> ReadAttachmentsAsync(
         MimeMessage message,
@@ -94,12 +107,16 @@ internal sealed class MimeKitOutgoingMailTextReader(
         var parts = MimeAttachmentClassifier.FindAttachmentParts(message);
         if (parts.Count == 0)
         {
-            return new ReadAttachments([], Unreadable: null);
+            return new ReadAttachments([], Refusal: null);
+        }
+
+        if (parts.Count > perMessage.MaxAttachmentsPerEmail)
+        {
+            return new ReadAttachments([], OutgoingAttachmentRefusal.MessageCeilingReached);
         }
 
         var startedAt = timeProvider.GetTimestamp();
         var octets = 0L;
-        var characters = 0L;
         var texts = new List<string>(parts.Count);
 
         foreach (var part in parts)
@@ -107,9 +124,9 @@ internal sealed class MimeKitOutgoingMailTextReader(
             // Measured before the read rather than around it, because no reading here is interruptible: what this
             // bounds is how many more attachments are opened, so the message costs this ceiling plus the one attachment
             // that was already under way.
-            if (timeProvider.GetElapsedTime(startedAt) > bounds.Timeout)
+            if (timeProvider.GetElapsedTime(startedAt) > perAttachment.Timeout)
             {
-                return new ReadAttachments([], AttachmentTextExtractionOutcome.TimedOut);
+                return new ReadAttachments([], OutgoingAttachmentRefusal.MessageCeilingReached);
             }
 
             var description = await MimeAttachmentClassifier.DescribeAttachmentAsync(part, cancellationToken);
@@ -127,41 +144,37 @@ internal sealed class MimeKitOutgoingMailTextReader(
             }
 
             // Counted after the read rather than before it, because the read is already bounded on its own: the
-            // extractor refuses an attachment declaring more than this ceiling before it buffers a byte of it. So what
-            // this total bounds is how many more documents are opened, and the message costs the ceiling plus the one
-            // attachment already read within it — never the sum of what a caller attached.
+            // extractor refuses an attachment declaring more than its own ceiling before it buffers a byte of it. So
+            // what this total bounds is how many more documents are opened, and the message costs this ceiling plus the
+            // one attachment already read within it — never the sum of what a caller attached.
             octets += description.DecodedSizeOctets;
-            if (octets > bounds.MaxInputOctets)
+            if (octets > perMessage.MaxInputOctetsPerEmail)
             {
-                return new ReadAttachments([], AttachmentTextExtractionOutcome.InputTooLarge);
+                return new ReadAttachments([], OutgoingAttachmentRefusal.MessageCeilingReached);
             }
 
             if (extracted.Text is not { } read)
             {
-                return new ReadAttachments([], extracted.Outcome);
-            }
-
-            characters += read.Text.Length;
-            if (characters > bounds.MaxExtractedTextCharacters)
-            {
-                return new ReadAttachments([], AttachmentTextExtractionOutcome.ExtractedTextTooLarge);
+                return new ReadAttachments([], OutgoingAttachmentRefusal.NotRead);
             }
 
             texts.Add(read.Text);
         }
 
-        return new ReadAttachments(texts, Unreadable: null);
+        return new ReadAttachments(texts, Refusal: null);
     }
 
-    /// <summary>What reading a message's attachments produced: their texts, or the reason one of them yielded none.</summary>
+    /// <summary>What reading a message's attachments produced: their texts, or why there is nothing to judge them by.</summary>
     /// <remarks>
-    /// The texts are empty whenever a reason is present, because a message with one unreadable document is refused
+    /// The texts are empty whenever a refusal is present, because a message the screen cannot judge whole is refused
     /// whole — carrying the texts read before it would invite a caller to screen part of a message the screen has
-    /// already decided it cannot judge.
+    /// already decided it cannot judge. Which of the two refusals it is is decided here and nowhere else: this is the
+    /// only place that knows whether the extractor refused one file or the message ran out of what a whole message may
+    /// spend, and an author told the wrong one is told to convert a document that was read successfully.
     /// </remarks>
     private sealed record ReadAttachments(
         IReadOnlyList<string> Texts,
-        AttachmentTextExtractionOutcome? Unreadable);
+        OutgoingAttachmentRefusal? Refusal);
 
     /// <summary>One part of a message somebody else parsed, offered to the extractor for the length of one read.</summary>
     /// <remarks>

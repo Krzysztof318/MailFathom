@@ -86,6 +86,7 @@ describe('attachmentRefusalForStatus', () => {
         [401, 'unauthenticated'],
         [403, 'unauthorized'],
         [404, 'unavailable'],
+        [409, 'screened'],
         [500, 'unavailable'],
         [503, 'unavailable'],
     ])('reads a status of %i as %s', (status, refusal) => {

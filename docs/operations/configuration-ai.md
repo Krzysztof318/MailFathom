@@ -410,15 +410,15 @@ vulnerabilities, and no character count predicts it. [ADR
 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records that split.
 
-The first four keys decide whether attachments are read at all and what a whole message and a whole account run may
-spend on them. The rest bound **one** extraction, and each of them is a deliberate ceiling rather than a value nobody
-chose. Crossing one abandons that attachment and records which ceiling stopped it — nothing is truncated into a partial
+The first key decides whether an **account run** reads its mail's attachments; the next three bound what a whole
+message and a whole account run may spend on them. The rest bound **one** extraction, and each of them is a deliberate
+ceiling rather than a value nobody chose. Crossing one abandons that attachment and records which ceiling stopped it — nothing is truncated into a partial
 extract, because a document cut off at a limit and stored as its text reads exactly like a document that said only that
 much.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Embeddings:AttachmentText:Enabled` | bool | `false` | whether this deployment reads its mail's attachments at all. Off unless an operator turns it on, which is what ADR 0029 decides for an upgrade: turning it on narrows the undertaking to parse nothing a stranger composed rather than reversing it — what is read is the format list below and nothing else — and it means the most sensitive part of a mailbox starts travelling to whichever provider embeds it | restart |
+| `Embeddings:AttachmentText:Enabled` | bool | `false` | whether the account run reads its mail's attachments — this switch gates the reading described in this section and nothing else. Off unless an operator turns it on, which is what ADR 0029 decides for an upgrade: turning it on narrows the undertaking to parse nothing a stranger composed rather than reversing it — what is read is the format list below and nothing else — and it means the most sensitive part of a mailbox starts travelling to whichever provider embeds it | restart |
 | `Embeddings:AttachmentText:MaxAttachmentsPerEmail` | int | `20` | 1 – 1000; how many of one message's attachments are read at all, counted in walk order. It bounds the walk rather than what the walk decides: a part past it is never opened and no row is stored against it, because the number of parts a message declares is the sender's. What the ceiling left unread is the count stored against the message less the readings beside it | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerEmail` | long | `67108864` | 1 KiB – 8 GiB, and at least `MaxInputOctets`; the octets one message's attachments may be read from together. A ten-line covering note with a two-hundred-page report attached is an expensive message, and no length of its text predicts that | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerAccountRun` | long | `4294967296` | 1 KiB – 1 TiB, and at least `MaxInputOctetsPerEmail`; the octets one account run may read across every message it reaches. A run that spends it stops where it is and leaves the message it was on untouched, so the next run reaches that message first. The budget is per account rather than shared, so a mailbox full of large attachments delays nobody else's run | restart |
@@ -445,8 +445,22 @@ index exist with no reader yet — `search_emails` still matches a message on it
 only inside a PDF returns nothing there — and a message's own snippet quotes only what the message said either way. An
 image attachment's description is embedded and never lexically indexed at all, which [ADR
 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
-decides and the database enforces. Reading happens in the account run, behind the passage cut, and never on a read
-path: no MCP call and no client request ever waits on a parser or a provider.
+decides and the database enforces. Reading for retrieval happens in the account run, behind the passage cut, and never
+on a read path: no MCP call and no client request ever waits on a parser or a provider *for a passage*.
+
+**Two other readings use these ceilings and are not gated by `Enabled`.** Sensitive-content screening reads an
+attachment's own text before a message leaves the deployment and before a stored file is served, so a scanner judges
+what is in the file rather than only what somebody typed beside it —
+[sensitive-content scanning](../features/sensitive-content-scanning.md) is the page. Both happen on a path a caller
+waits on, which is the one place attachment parsing is not a background step, and both are bounded by the same ceilings
+this section states: `MaxInputOctets` and everything below it bound one attachment, and `MaxAttachmentsPerEmail` and
+`MaxInputOctetsPerEmail` bound the outgoing message. They are not gated by
+`Enabled`, because that switch decides what a deployment stores about its mail and this decides what leaves it; a
+deployment that screens for sensitive content has already undertaken to look, and a screen that skipped every
+attachment because retrieval was off would pass a file out unread while reporting the message as screened.
+`MaxInputOctetsPerAccountRun` reaches neither of them, there being no run to charge. `Timeout` is what bounds how long
+a sender or a downloading client waits, so a deployment raising it towards the hour the range permits is lengthening a
+request rather than only a background pass.
 
 **Turning it on reads mail that is already stored, once.** A message keeps a stamp saying its attachments were read, so
 each one is opened once and never again unless it changes; turning the switch off leaves what was already read in

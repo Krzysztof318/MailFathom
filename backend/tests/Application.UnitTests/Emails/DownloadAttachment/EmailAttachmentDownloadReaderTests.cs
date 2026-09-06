@@ -764,7 +764,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>Reports a document that was read and says exactly what it said.</summary>
     private static IAttachmentTextExtractor ExtractorReading(string text) => ExtractorReporting(
-        AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(text, PageCount: 1, [])));
+        AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(text, PageCount: 1, [], [])));
 
     /// <summary>Builds the result one of the several ways a document defeats a reader produces.</summary>
     private static AttachmentTextExtractionResult UnreadableResult(string outcome) => outcome switch

@@ -188,7 +188,10 @@ somebody keeps.
   read an attachment while their caller waits — a send or a draft being screened, and a download being screened — so a
   hostile document does delay the caller who supplied or requested it. The ceilings below are what bounds that delay,
   and they are applied per attachment and across the whole message together, so a hundred small files cost no more
-  than one large one.
+  than one large one. **With one exception, stated in the next paragraph and not softened here:** the timeout is
+  observed between units of work, so a single PDF page whose content stream inflates enormously is bounded by the input
+  ceiling alone and by no clock. On a synchronization stage that costs a worker; on a screened send or a screened
+  download it costs the caller, on a request nothing here will cut short.
 
 The timeout is honest about its own limit: it is observed between units of work — a page, an archive part, an element —
 because no parser here accepts a cancellation token and .NET cannot abort a thread. A parser that never returns from a

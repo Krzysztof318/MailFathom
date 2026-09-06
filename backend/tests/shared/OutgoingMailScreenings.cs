@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.SensitiveContent.Egress;
 
@@ -30,7 +29,7 @@ internal static class OutgoingMailScreenings
     /// <returns>A screening that answers without parsing the message or constructing a detector.</returns>
     internal static OutgoingMailScreening Inactive() =>
         new(
-            new PlainTextOutgoingMailTextReader(unreadableAttachment: null),
+            new PlainTextOutgoingMailTextReader(attachmentRefusal: null),
             new SensitiveContentEgressScreen(
                 FixedSensitiveContentPostures.ScanningNothing(),
                 new RecordingSensitiveContentEgressTelemetry(),
@@ -38,8 +37,8 @@ internal static class OutgoingMailScreenings
 
     /// <summary>Builds the screening a switched-on deployment's screen answers for.</summary>
     /// <param name="screen">The screen, which <see cref="ScanningSensitiveContentEgress" /> holds the redaction behind.</param>
-    /// <param name="unreadableAttachment">
-    /// The reason the message carries a file nothing could read, or <see langword="null" /> for a message whose
+    /// <param name="attachmentRefusal">
+    /// Why the message's attachments left nothing to judge them by, or <see langword="null" /> for a message whose
     /// attachments were all read. It is a parameter rather than a second helper because every consumer of the screening
     /// asserts the refusal it produces, and composing a whole reader per suite to say one word would be four copies of
     /// the same stub.
@@ -48,17 +47,17 @@ internal static class OutgoingMailScreenings
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="screen" /> is <see langword="null" />.</exception>
     internal static OutgoingMailScreening Through(
         SensitiveContentEgressScreen screen,
-        AttachmentTextExtractionOutcome? unreadableAttachment = null)
+        OutgoingAttachmentRefusal? attachmentRefusal = null)
     {
         ArgumentNullException.ThrowIfNull(screen);
 
         return new OutgoingMailScreening(
-            new PlainTextOutgoingMailTextReader(unreadableAttachment),
+            new PlainTextOutgoingMailTextReader(attachmentRefusal),
             screen);
     }
 
     /// <summary>Reads a test's bytes back as the one body representation the message carries.</summary>
-    private sealed class PlainTextOutgoingMailTextReader(AttachmentTextExtractionOutcome? unreadableAttachment)
+    private sealed class PlainTextOutgoingMailTextReader(OutgoingAttachmentRefusal? attachmentRefusal)
         : IOutgoingMailTextReader
     {
         public Task<OutgoingMailText> ReadAsync(
@@ -78,7 +77,7 @@ internal static class OutgoingMailScreenings
                     Encoding.UTF8.GetString(rawMime.Span),
                     HtmlBody: null)
                 {
-                    UnreadableAttachment = unreadableAttachment,
+                    AttachmentRefusal = attachmentRefusal,
                 });
         }
     }

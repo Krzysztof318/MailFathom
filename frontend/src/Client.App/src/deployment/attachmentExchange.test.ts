@@ -94,9 +94,12 @@ describe('drawnFrom', () => {
 });
 
 describe('deliveryFailureOf', () => {
-    it.each(['delivered', 'abandoned'] as const)('reports %s as an answer the client acted on', (outcome) => {
-        expect(deliveryFailureOf(outcome)).toBeNull();
-    });
+    it.each(['delivered', 'abandoned', 'screened'] as const)(
+        'reports %s as an answer the client acted on',
+        (outcome) => {
+            expect(deliveryFailureOf(outcome)).toBeNull();
+        },
+    );
 
     it('reports a file larger than the message described as a body this client refused', () => {
         expect(deliveryFailureOf('largerThanDescribed')).toBe('unreadable');
@@ -133,5 +136,11 @@ describe('showingFailureOf', () => {
         ['largerThanDescribed', 'unreadable'],
     ] as const)('reports a %s refusal as the failure a download reports it as', (refusal, reported) => {
         expect(showingFailureOf({ outcome: 'refused', refusal })).toBe(reported);
+    });
+
+    // A deployment that screened the file answered exactly as it meant to, so it is no more a failure of the request
+    // than a person stopping the download is. Counting it would report a working policy as a deployment at fault.
+    it('reports a screened file as an answer the client acted on rather than as a failure', () => {
+        expect(showingFailureOf({ outcome: 'refused', refusal: 'screened' })).toBeNull();
     });
 });

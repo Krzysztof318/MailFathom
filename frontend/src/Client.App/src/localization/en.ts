@@ -668,6 +668,8 @@ export const en = {
     'attachment.refusedUnauthorized':
         'This credential may not read mail on this deployment, so the file was not downloaded.',
     'attachment.refusedUnavailable': 'The deployment did not answer, so the file was not downloaded. Try again.',
+    'attachment.refusedScreened':
+        'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Asking again will not change that.',
     'attachment.refusedLargerThanDescribed':
         'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
     'attachment.reading': 'Reading {name}…',
@@ -678,6 +680,8 @@ export const en = {
     'attachment.notShownUnauthorized':
         'This credential may not read mail on this deployment, so the file could not be shown.',
     'attachment.notShownUnavailable': 'The deployment did not answer, so the file could not be shown. Try again.',
+    'attachment.notShownScreened':
+        'This deployment screens the files it serves and does not serve this one, so it cannot be shown. Asking again will not change that.',
     'attachment.notShownUnreadable':
         'What arrived is not what this message said the file holds, so nothing is drawn from it. Download it, and report this as a defect.',
     'attachment.empty': 'This file holds nothing.',

@@ -36,7 +36,10 @@ namespace MailFathom.Host.UnitTests.Api;
 /// The route is the client half of a download: a reader who authenticated follows it, so no capability is minted and no
 /// link expires. What is asserted here is that the octets arrive described in the encoding each header defines, that the
 /// file is served as something to save rather than something to render, and that every reason there is nothing to serve
-/// answers identically — a caller must not learn what became of mail they cannot read by asking about it.
+/// answers identically — a caller must not learn what became of mail they cannot read by asking about it. A file this
+/// deployment screened is the stated exception and is asserted as one, `409` with a code of its own: this reader is
+/// already authenticated for this message and this position, so the only thing left to withhold is what is in the
+/// file.
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The endpoint under test takes ownership of the opened attachment and disposes it, which is the contract these tests exercise.")]
 public sealed class ClientMailAttachmentEndpointTests
@@ -55,6 +58,7 @@ public sealed class ClientMailAttachmentEndpointTests
     {
         // Arrange
         var context = new DefaultHttpContext();
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
 
         // Act
         var result = await ClientMailAttachmentEndpoint.DownloadAsync(
@@ -62,7 +66,7 @@ public sealed class ClientMailAttachmentEndpointTests
             position: 0,
             AttachmentOpening(
                 new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()),
-                screensTheFile: true),
+                screen: egress.Screen),
             context,
             TestContext.Current.CancellationToken);
 
@@ -218,7 +222,7 @@ public sealed class ClientMailAttachmentEndpointTests
     private static EmailAttachmentDownloadReader AttachmentOpening(
         IOpenedEmailAttachment? attachment,
         IEmailContentStore? contentStore = null,
-        bool screensTheFile = false)
+        SensitiveContentEgressScreen? screen = null)
     {
         var summary = SummaryOf();
 
@@ -250,8 +254,8 @@ public sealed class ClientMailAttachmentEndpointTests
             resolvedContentStore,
             contentReader,
             Substitute.For<IEmailContentRepairRequestStore>(),
-            AttachmentTextReading(screensTheFile),
-            ScreenRefusing(screensTheFile),
+            AttachmentTextReading(screening: screen is not null),
+            screen ?? ScreensNothing(),
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation.Mapping(
@@ -312,25 +316,29 @@ public sealed class ClientMailAttachmentEndpointTests
     }
 
     /// <summary>Reads the attachment as one carrying whatever a screened deployment in this suite stops at.</summary>
-    private static IAttachmentTextExtractor AttachmentTextReading(bool screensTheFile)
+    private static IAttachmentTextExtractor AttachmentTextReading(bool screening)
     {
         var extractor = Substitute.For<IAttachmentTextExtractor>();
         extractor
             .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(screensTheFile
+            .Returns(Task.FromResult(screening
                 ? AttachmentTextExtractionResult.Extracted(
-                    new ExtractedAttachmentText(ScreenedMarker, PageCount: 1, []))
+                    new ExtractedAttachmentText(ScreenedMarker, PageCount: 1, [], []))
                 : AttachmentTextExtractionResult.FormatNotRecognized()));
 
         return extractor;
     }
 
-    /// <summary>Builds the screen of a deployment that stops at the marker, or of one that screens nothing at all.</summary>
-    private static SensitiveContentEgressScreen ScreenRefusing(bool screensTheFile) => screensTheFile
-        ? ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System).Screen
-        : new SensitiveContentEgressScreen(
-            FixedSensitiveContentPostures.ScanningNothing(),
-            new RecordingSensitiveContentEgressTelemetry(),
-            TimeProvider.System);
+    /// <summary>Builds the screen of a deployment that screens nothing, which is what every test but one is arranged with.</summary>
+    /// <remarks>
+    /// A deployment that <em>does</em> screen is not built here, because building one owns a concurrency bound its
+    /// author has to release: <see cref="ScanningSensitiveContentEgress" /> is disposable and a helper handing back
+    /// only its screen would drop the instance holding it. The one test that needs it binds it with <c>using</c> and
+    /// passes the screen in.
+    /// </remarks>
+    private static SensitiveContentEgressScreen ScreensNothing() => new(
+        FixedSensitiveContentPostures.ScanningNothing(),
+        new RecordingSensitiveContentEgressTelemetry(),
+        TimeProvider.System);
 
 }

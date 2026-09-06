@@ -178,14 +178,17 @@ contracts already hold rather than something redaction would enforce. MailFathom
 deterministic in-process embedding generator is exempt for a different reason: nothing leaves the process, so there is
 nothing for a guard to sit in front of.
 
-**The fifth is the one a redaction never reaches**, because rewriting what an author wrote is not a disposition
-MailFathom may take: a placeholder in a message somebody signed would be sent in their name. It refuses the act instead,
-and [outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) is where that
-difference is stated in full.
+**Two of them are the ones a redaction never reaches**, and each for its own reason. At `outgoing_mail` rewriting what
+an author wrote is not a disposition MailFathom may take: a placeholder in a message somebody signed would be sent in
+their name. At `attachment_download` what crosses is not text at all but a byte stream, and a region replaced inside one
+produces a file its author never composed whose reader has no way of knowing it was changed. Both refuse the act
+instead, which is why `stopped` is a series either of them can produce and no other point can;
+[outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) states the difference
+in full and carries the download rule beneath it.
 
-A refusal at any of the five fails the operation it guards, as [failing closed](#failing-closed) describes — the
+A refusal at any of the nine fails the operation it guards, as [failing closed](#failing-closed) describes — the
 question is not answered, the passages are not embedded, the listing is not served, the message is not returned, the
-send is not queued. What
+send is not queued, the file is not served. What
 each guarded call found, refused, and cost is published; [telemetry § what guarding an egress point
 publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
 
@@ -233,10 +236,13 @@ committed is opened.
 **A caller reads why.** The refusal carries `59001` naming the category that stopped it — never the rule, the position,
 the confidence, or one character of what was found — `59002` when the text was longer than
 `SensitiveContent:MaximumAnalyzedCharacters`, which stops the act because nothing read the remainder and a message
-whose tail nobody analyzed is exactly the message that must not leave, and `59003` when a file the message attaches
-could not be read. The third names neither which file it was, what it is called, where it sits, nor which of the several
-ways it defeated the reader, for the reason the first names no position: a refusal is a line in a log, and a file name
-is mail content exactly as a body is. A message carrying both a finding and an unreadable file is refused for the
+whose tail nobody analyzed is exactly the message that must not leave, and the same code again when the message's
+attachments come to more than a whole message is read within, which is the same fact about the same message — and
+`59003` when one file the message attaches could not be read at all. The third names neither which file it was, what it
+is called, where it sits, nor which of the several ways it defeated the reader, for the reason the first names no
+position: a refusal is a line in a log, and a file name is mail content exactly as a body is. It is also not the answer
+where every document was read and there was simply too much of them, because converting a file that was read
+successfully would change nothing. A message carrying both a finding and an unreadable file is refused for the
 finding, which is the half its author can act on. All three belong to the MCP boundary's own category, so an MCP client
 is told what happened rather than that the tool failed; the same
 [error reporting](mcp-tools.md#error-reporting) rule governs every other code.
@@ -258,8 +264,11 @@ same screen sits on the two paths that hand an attachment's octets to somebody o
 - **A stopped download says so, and says nothing else.** It answers `409` carrying `59004`, which is deliberately
   distinct from the single refusal every other stopped download shares: whoever asked was already told by the read
   beside it that the attachment exists and what it is called, so the answer discloses nothing that description did not.
-  What it never carries is a category — that would tell somebody the deployment has just refused a file that the file
-  holds a credential — or which of the two reasons it was.
+  Four things reach it — a scanner named something in the file's text; nothing here could read the file; its text was
+  longer than `SensitiveContent:MaximumAnalyzedCharacters`, so the remainder went unscanned; or a switched-on scanner
+  could not answer at all — and the answer says which of the four it was no more than it names a category. Telling them
+  apart would say that this file holds a credential, or that this deployment's analyzer is down, to somebody the
+  deployment has just decided may not have the file.
 - **An owner who screens nothing pays for none of it.** The posture is read before anything is opened, so a deployment
   that switched no scanner on serves a download at exactly the cost it did before.
 
@@ -515,6 +524,15 @@ no switch at all, because the operator would believe it was in force.
 
 Every one of those failures reports error code `81001` and names the scanner. None of them names the text or the
 finding: the content the scan was about is exactly what must not appear in a failure written to a log.
+
+**`attachment_download` is the one egress point where that code does not reach the caller**, and it is a disclosure rule
+rather than an exception to failing closed. The download refuses exactly as every other guarded operation does — nothing
+is served — but the answer is the same `409` and `59004` a screened file gets, because a caller holding a capability who
+could tell "this file carries something" from "the analyzer is down" would be reading this deployment's health off a
+link somebody handed them. What an operator reads instead is the instrument beside the screen, which records the
+scanner's refusal at that point exactly as it records one anywhere else;
+[telemetry § what guarding an egress point publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes)
+names it.
 
 One failure in this feature is an availability failure rather than a scan's: `81002`, raised when the personal-data
 analyzer cannot be reached, answers the availability probe with a refusal, or recognises nothing the configured

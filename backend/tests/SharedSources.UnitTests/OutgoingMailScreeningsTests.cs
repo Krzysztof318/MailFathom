@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.TestSupport;
@@ -71,7 +71,7 @@ public sealed class OutgoingMailScreeningsTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
         var screening = OutgoingMailScreenings.Through(
             egress.Screen,
-            AttachmentTextExtractionOutcome.Encrypted);
+            OutgoingAttachmentRefusal.NotRead);
 
         // Act
         var refusal = await screening.FindRefusalAsync(

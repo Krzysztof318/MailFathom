@@ -92,8 +92,11 @@ public sealed class OutgoingMailScreening(
         // Read after the findings rather than before them, for the reason the screen reads its own ceiling last: a
         // message carrying something a scanner named is refused for what was found rather than for a file nobody could
         // open, and only the first of those tells the author something they can act on.
-        return found ?? (composed.UnreadableAttachment is null
-            ? null
-            : SensitiveContentEgressRefusal.AttachmentNotRead());
+        return found ?? composed.AttachmentRefusal switch
+        {
+            OutgoingAttachmentRefusal.NotRead => SensitiveContentEgressRefusal.AttachmentNotRead(),
+            OutgoingAttachmentRefusal.MessageCeilingReached => SensitiveContentEgressRefusal.NotFullyScanned(),
+            _ => null,
+        };
     }
 }

@@ -277,6 +277,10 @@ describe('AttachmentView', () => {
         ['unauthorized', 'This credential may not read mail on this deployment, so the file could not be shown.'],
         ['unavailable', 'The deployment did not answer, so the file could not be shown. Try again.'],
         [
+            'screened',
+            'This deployment screens the files it serves and does not serve this one, so it cannot be shown. Asking again will not change that.',
+        ],
+        [
             'largerThanDescribed',
             'What arrived is not what this message said the file holds, so nothing is drawn from it. Download it, and report this as a defect.',
         ],
