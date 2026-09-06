@@ -1,6 +1,37 @@
 {
   "components": {
     "schemas": {
+      "AccountCoverage": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "earliestReceivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/PresentationFreshness"
+          },
+          "latestReceivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "freshness",
+          "earliestReceivedAt",
+          "latestReceivedAt"
+        ],
+        "type": "object"
+      },
       "AdminSessionResponse": {
         "properties": {
           "credential": {
@@ -24,6 +55,45 @@
           "version",
           "credential",
           "permissions"
+        ],
+        "type": "object"
+      },
+      "AttachmentAvailability": {
+        "enum": [
+          "Stored",
+          "NotStored",
+          "Removed"
+        ]
+      },
+      "AttachmentEntry": {
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/AttachmentAvailability"
+          },
+          "mediaType": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "name": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/PresentationCitationId"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "mediaType",
+          "sizeOctets",
+          "availability"
         ],
         "type": "object"
       },
@@ -218,6 +288,71 @@
           "subject",
           "sentAt",
           "receivedAt"
+        ],
+        "type": "object"
+      },
+      "ClientDiscoveryRunRequest": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "emails": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "question": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "thread": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "question",
+          "accounts",
+          "folders",
+          "thread",
+          "emails"
+        ],
+        "type": "object"
+      },
+      "ClientDiscoveryRunResponse": {
+        "properties": {
+          "runId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
         ],
         "type": "object"
       },
@@ -2394,6 +2529,21 @@
         ],
         "type": "object"
       },
+      "ConflictingClaim": {
+        "properties": {
+          "sources": {
+            "type": "array"
+          },
+          "statement": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "statement",
+          "sources"
+        ],
+        "type": "object"
+      },
       "ContactErasureResponse": {
         "properties": {
           "addressesErased": {
@@ -2824,6 +2974,286 @@
         ],
         "type": "object"
       },
+      "DiscoveryRetrievalProgress": {
+        "properties": {
+          "lookupsPlanned": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "lookupsRefused": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "lookupsRun": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "passagesFound": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "lookupsRun",
+          "lookupsRefused",
+          "lookupsPlanned",
+          "passagesFound"
+        ],
+        "type": "object"
+      },
+      "DiscoveryRunEvent": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryRunStarted"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryRetrievalProgressed"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryCitationDeclared"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryBlockComposed"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryRunCompleted"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoveryRunEventDiscoveryRunFailed"
+          }
+        ],
+        "discriminator": {
+          "mapping": {
+            "block": "#/components/schemas/DiscoveryRunEventDiscoveryBlockComposed",
+            "citation": "#/components/schemas/DiscoveryRunEventDiscoveryCitationDeclared",
+            "completed": "#/components/schemas/DiscoveryRunEventDiscoveryRunCompleted",
+            "failed": "#/components/schemas/DiscoveryRunEventDiscoveryRunFailed",
+            "retrieval": "#/components/schemas/DiscoveryRunEventDiscoveryRetrievalProgressed",
+            "started": "#/components/schemas/DiscoveryRunEventDiscoveryRunStarted"
+          },
+          "propertyName": "event"
+        },
+        "required": [
+          "event"
+        ],
+        "type": "object"
+      },
+      "DiscoveryRunEventDiscoveryBlockComposed": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/PresentationBlock"
+          },
+          "event": {
+            "enum": [
+              "block"
+            ],
+            "type": "string"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "block"
+        ]
+      },
+      "DiscoveryRunEventDiscoveryCitationDeclared": {
+        "properties": {
+          "citation": {
+            "$ref": "#/components/schemas/PresentationCitation"
+          },
+          "event": {
+            "enum": [
+              "citation"
+            ],
+            "type": "string"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "citation"
+        ]
+      },
+      "DiscoveryRunEventDiscoveryRetrievalProgressed": {
+        "properties": {
+          "event": {
+            "enum": [
+              "retrieval"
+            ],
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/DiscoveryRetrievalProgress"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "progress"
+        ]
+      },
+      "DiscoveryRunEventDiscoveryRunCompleted": {
+        "properties": {
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/AccountCoverage"
+            },
+            "type": "array"
+          },
+          "event": {
+            "enum": [
+              "completed"
+            ],
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/PresentationLimitation"
+            },
+            "type": "array"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "limitations",
+          "coverage"
+        ]
+      },
+      "DiscoveryRunEventDiscoveryRunFailed": {
+        "properties": {
+          "event": {
+            "enum": [
+              "failed"
+            ],
+            "type": "string"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/DiscoveryRunFailure"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "failure"
+        ]
+      },
+      "DiscoveryRunEventDiscoveryRunStarted": {
+        "properties": {
+          "event": {
+            "enum": [
+              "started"
+            ],
+            "type": "string"
+          },
+          "planSchemaVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "runId": {
+            "$ref": "#/components/schemas/DiscoveryRunId"
+          },
+          "sequence": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        }
+      },
+      "DiscoveryRunFailure": {
+        "enum": [
+          "Unavailable",
+          "TemporarilyUnavailable",
+          "RetrievalRefused",
+          "TimedOut",
+          "Failed",
+          "Stopped"
+        ]
+      },
+      "DiscoveryRunId": {
+        "properties": {
+          "value": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DraftDisposition": {
+        "enum": [
+          "Composed",
+          "Saved",
+          "Queued"
+        ]
+      },
       "EffectiveSettingResponse": {
         "properties": {
           "origin": {
@@ -2852,6 +3282,38 @@
           "origin",
           "redacted"
         ],
+        "type": "object"
+      },
+      "EmailAddress": {
+        "properties": {
+          "address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "normalizedAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EmailChunkId": {
+        "properties": {
+          "value": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "EmbeddingActivationAssessmentResponse": {
@@ -3154,6 +3616,63 @@
           "outstandingPassageCount",
           "outstandingCharacterCount",
           "approximateTokenCount"
+        ],
+        "type": "object"
+      },
+      "EvidenceEntry": {
+        "properties": {
+          "fragment": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/PresentationFreshness"
+          },
+          "relevance": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/PresentationCitationId"
+          }
+        },
+        "required": [
+          "source",
+          "fragment",
+          "relevance",
+          "freshness"
+        ],
+        "type": "object"
+      },
+      "FactTableCell": {
+        "properties": {
+          "sources": {
+            "type": "array"
+          },
+          "value": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "value",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "FactTableRow": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/FactTableCell"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cells"
         ],
         "type": "object"
       },
@@ -5715,6 +6234,647 @@
         ],
         "type": "object"
       },
+      "PersonEntry": {
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/EmailAddress"
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "lastContactAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "sources": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "displayName",
+          "address",
+          "relationship",
+          "lastContactAt",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "PresentationBlock": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PresentationBlockAnswerBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockEvidenceListBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockTimelineBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockFactTableBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockPeopleBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockThreadStateBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockAttachmentGalleryBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockDraftBlock"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationBlockSuggestedActionBlock"
+          }
+        ],
+        "discriminator": {
+          "mapping": {
+            "answer": "#/components/schemas/PresentationBlockAnswerBlock",
+            "attachmentGallery": "#/components/schemas/PresentationBlockAttachmentGalleryBlock",
+            "draft": "#/components/schemas/PresentationBlockDraftBlock",
+            "evidenceList": "#/components/schemas/PresentationBlockEvidenceListBlock",
+            "factTable": "#/components/schemas/PresentationBlockFactTableBlock",
+            "people": "#/components/schemas/PresentationBlockPeopleBlock",
+            "suggestedAction": "#/components/schemas/PresentationBlockSuggestedActionBlock",
+            "threadState": "#/components/schemas/PresentationBlockThreadStateBlock",
+            "timeline": "#/components/schemas/PresentationBlockTimelineBlock"
+          },
+          "propertyName": "type"
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "PresentationBlockAnswerBlock": {
+        "properties": {
+          "confidence": {
+            "$ref": "#/components/schemas/PresentationConfidence"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "text": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "type": {
+            "enum": [
+              "answer"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "confidence",
+          "evidence"
+        ]
+      },
+      "PresentationBlockAttachmentGalleryBlock": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentEntry"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "attachmentGallery"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "evidence"
+        ]
+      },
+      "PresentationBlockDraftBlock": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "disposition": {
+            "$ref": "#/components/schemas/DraftDisposition"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/EmailAddress"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "type": {
+            "enum": [
+              "draft"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "recipients",
+          "subject",
+          "body",
+          "disposition",
+          "evidence"
+        ]
+      },
+      "PresentationBlockEvidenceListBlock": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceEntry"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "evidenceList"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "evidence"
+        ]
+      },
+      "PresentationBlockFactTableBlock": {
+        "properties": {
+          "columns": {
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/FactTableRow"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "factTable"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "evidence"
+        ]
+      },
+      "PresentationBlockPeopleBlock": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PersonEntry"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "people"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "evidence"
+        ]
+      },
+      "PresentationBlockSuggestedActionBlock": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SuggestedActionKind"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/SuggestedActionImpact"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "requiresConfirmation": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "suggestedAction"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "reason",
+          "impact",
+          "requiresConfirmation",
+          "evidence"
+        ]
+      },
+      "PresentationBlockThreadStateBlock": {
+        "properties": {
+          "agreements": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadStatement"
+            },
+            "type": "array"
+          },
+          "commitments": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadCommitment"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "openQuestions": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadStatement"
+            },
+            "type": "array"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadParticipant"
+            },
+            "type": "array"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "threadState"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "participants",
+          "agreements",
+          "openQuestions",
+          "commitments",
+          "evidence"
+        ]
+      },
+      "PresentationBlockTimelineBlock": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntry"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/PresentationEvidence"
+          },
+          "referencedCitations": {
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "timeline"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "evidence"
+        ]
+      },
+      "PresentationCitation": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PresentationCitationId"
+          },
+          "label": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "medium": {
+            "$ref": "#/components/schemas/PresentationSourceMedium"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PresentationCitationTarget"
+          },
+          "unreadable": {
+            "$ref": "#/components/schemas/UnreadableSourceReason"
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "label",
+          "medium"
+        ],
+        "type": "object"
+      },
+      "PresentationCitationId": {},
+      "PresentationCitationTarget": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PresentationCitationTargetEmailCitationTarget"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationCitationTargetFragmentCitationTarget"
+          },
+          {
+            "$ref": "#/components/schemas/PresentationCitationTargetAttachmentCitationTarget"
+          }
+        ],
+        "discriminator": {
+          "mapping": {
+            "attachment": "#/components/schemas/PresentationCitationTargetAttachmentCitationTarget",
+            "email": "#/components/schemas/PresentationCitationTargetEmailCitationTarget",
+            "fragment": "#/components/schemas/PresentationCitationTargetFragmentCitationTarget"
+          },
+          "propertyName": "kind"
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "PresentationCitationTargetAttachmentCitationTarget": {
+        "properties": {
+          "attachmentPosition": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "email": {
+            "$ref": "#/components/schemas/StoredEmailId"
+          },
+          "kind": {
+            "enum": [
+              "attachment"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentPosition",
+          "email"
+        ]
+      },
+      "PresentationCitationTargetEmailCitationTarget": {
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/StoredEmailId"
+          },
+          "kind": {
+            "enum": [
+              "email"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "PresentationCitationTargetFragmentCitationTarget": {
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/StoredEmailId"
+          },
+          "fragment": {
+            "$ref": "#/components/schemas/EmailChunkId"
+          },
+          "kind": {
+            "enum": [
+              "fragment"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "fragment",
+          "email"
+        ]
+      },
+      "PresentationConfidence": {
+        "enum": [
+          "High",
+          "Moderate",
+          "Low"
+        ]
+      },
+      "PresentationEvidence": {
+        "properties": {
+          "citations": {
+            "type": "array"
+          },
+          "conflictingClaims": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictingClaim"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/PresentationFreshness"
+          },
+          "support": {
+            "$ref": "#/components/schemas/PresentationSupport"
+          }
+        },
+        "required": [
+          "support",
+          "citations",
+          "freshness"
+        ],
+        "type": "object"
+      },
+      "PresentationFreshness": {
+        "properties": {
+          "observedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "staleness": {
+            "$ref": "#/components/schemas/PresentationStaleness"
+          }
+        },
+        "required": [
+          "staleness",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "PresentationLimitation": {
+        "enum": [
+          "RetrievalTruncated",
+          "SourcesUnavailable",
+          "SemanticRankingUnavailable",
+          "LocalCopyBehind",
+          "BlocksOmitted",
+          "OutsideRetainedMail"
+        ]
+      },
+      "PresentationSourceMedium": {
+        "enum": [
+          "Written",
+          "Depicted"
+        ]
+      },
+      "PresentationStaleness": {
+        "enum": [
+          "Current",
+          "Stale",
+          "Unknown"
+        ]
+      },
+      "PresentationSupport": {
+        "enum": [
+          "Supported",
+          "Unsupported",
+          "Conflicting",
+          "Stale"
+        ]
+      },
+      "PresentationText": {},
       "ProblemDetails": {
         "properties": {
           "detail": {
@@ -6078,6 +7238,42 @@
         ],
         "type": "object"
       },
+      "SseItemOfDiscoveryRunEvent": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DiscoveryRunEvent"
+          },
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eventType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reconnectionInterval": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "StoredEmailId": {
+        "properties": {
+          "value": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "StoredSecretProvisionedResponse": {
         "properties": {
           "secretReference": {
@@ -6113,6 +7309,117 @@
       "Stream": {
         "format": "binary",
         "type": "string"
+      },
+      "SuggestedActionImpact": {
+        "enum": [
+          "ReadsOnly",
+          "ChangesMailbox",
+          "SendsMail"
+        ]
+      },
+      "SuggestedActionKind": {
+        "enum": [
+          "ReplyToThread",
+          "ForwardEmail",
+          "ComposeEmail",
+          "FlagEmail",
+          "OpenThread",
+          "SearchAgain",
+          "CreateMailRule"
+        ]
+      },
+      "ThreadCommitment": {
+        "properties": {
+          "dueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "owedBy": {
+            "$ref": "#/components/schemas/ThreadParticipant"
+          },
+          "sources": {
+            "type": "array"
+          },
+          "text": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "text",
+          "owedBy",
+          "dueAt",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "ThreadParticipant": {
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/EmailAddress"
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "displayName",
+          "address"
+        ],
+        "type": "object"
+      },
+      "ThreadStatement": {
+        "properties": {
+          "sources": {
+            "type": "array"
+          },
+          "text": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "text",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "TimelineEntry": {
+        "properties": {
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sources": {
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "occurredAt",
+          "summary",
+          "subject",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "UnreadableSourceReason": {
+        "enum": [
+          "Encrypted",
+          "Corrupt",
+          "FormatNotRead",
+          "TooLarge",
+          "NoTextFound",
+          "NotAttempted",
+          "ReadingFailed",
+          null
+        ]
       }
     },
     "securitySchemes": {
@@ -8783,6 +10090,84 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/discovery/runs": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientDiscoveryRunRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDiscoveryRunResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/discovery/runs/{runId}/events": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseItemOfDiscoveryRunEvent"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

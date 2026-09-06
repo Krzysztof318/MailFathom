@@ -7,13 +7,10 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
-using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
-using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -21,7 +18,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -33,10 +29,8 @@ public sealed class DiscoveryRunTests
     /// <summary>The literal the scanner in the guarded-egress test reports, standing in for a credential in a question.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";
 
-    private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
-
-    private static readonly EmbeddingProfileId ProfileId =
-        EmbeddingProfileId.Create(new Guid("0f9d6b0b-2f1e-4c2a-9a3d-7c8e5f4a1b20"));
+    /// <summary>How much evidence the derived plan calls enough, which no test here varies.</summary>
+    private const int SufficientPassages = 5;
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
@@ -49,10 +43,10 @@ public sealed class DiscoveryRunTests
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation"));
-        var run = RunOver(PlannerDeriving(DiscoveryIntent.CompareTerms, "quotation"), search);
+        var run = DiscoveryRuns.Composing(DiscoveryRuns.PlannerDeriving(DiscoveryIntent.CompareTerms, SufficientPassages, "quotation"), search);
 
         // Act
-        var result = await run.RunAsync(Question, TestContext.Current.CancellationToken);
+        var result = await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(DiscoveryIntent.CompareTerms, result.Plan.Intent);
@@ -66,13 +60,13 @@ public sealed class DiscoveryRunTests
     {
         // Arrange
         var presentation = PresentationPlanExample.Compose();
-        var run = RunOver(
-            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
             new ScriptedEmailKnowledgeSearch(),
-            composer: ComposerReturning(presentation));
+            composer: DiscoveryRuns.ComposerReturning(presentation));
 
         // Act
-        var result = await run.RunAsync(Question, TestContext.Current.CancellationToken);
+        var result = await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(presentation, result.Presentation);
@@ -83,9 +77,9 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_AnAccountTheScopeReached_ComposesTheAnswerOverItsCoverage()
     {
         // Arrange
-        var composer = ComposerReturning(PresentationPlanExample.Compose());
-        var run = RunOver(
-            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+        var composer = DiscoveryRuns.ComposerReturning(PresentationPlanExample.Compose());
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
             new ScriptedEmailKnowledgeSearch(),
             composer: composer,
             folders:
@@ -93,11 +87,11 @@ public sealed class DiscoveryRunTests
                 new MailboxFolderFreshness(
                     MailAccountId.Create("primary"),
                     MailFolderAlias.Create("INBOX"),
-                    Now.AddHours(-1)),
+                    DiscoveryRuns.Now.AddHours(-1)),
             ]);
 
         // Act
-        await run.RunAsync(Question, TestContext.Current.CancellationToken);
+        await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
 
         // Assert
         await composer.Received(1).ComposeAsync(
@@ -115,10 +109,10 @@ public sealed class DiscoveryRunTests
     {
         // Arrange
         var search = new ScriptedEmailKnowledgeSearch();
-        var run = RunOver(PlannerDeriving(DiscoveryIntent.FindFact, "quotation", "oferta"), search);
+        var run = DiscoveryRuns.Composing(DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation", "oferta"), search);
 
         // Act
-        await run.RunAsync(Question, TestContext.Current.CancellationToken);
+        await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(["quotation", "oferta"], search.Lookups.Select(lookup => lookup.QueryText));
@@ -129,11 +123,11 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_NoPlannerRegistered_RefusesAsNotServed()
     {
         // Arrange
-        var run = RunOver(planner: null, new ScriptedEmailKnowledgeSearch());
+        var run = DiscoveryRuns.Composing(planner: null, new ScriptedEmailKnowledgeSearch());
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailAnsweringUnavailableException>(() =>
-            run.RunAsync(Question, TestContext.Current.CancellationToken));
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailAnsweringAvailability.Inactive, refusal.Availability);
@@ -144,14 +138,14 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_NoEmbeddingProfileConfigured_RefusesAsNotServed()
     {
         // Arrange
-        var run = RunOver(
-            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
             new ScriptedEmailKnowledgeSearch(),
             embeddingProfileActive: false);
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailAnsweringUnavailableException>(() =>
-            run.RunAsync(Question, TestContext.Current.CancellationToken));
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailAnsweringAvailability.Inactive, refusal.Availability);
@@ -162,14 +156,14 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_AChatProviderRefusingRecently_RefusesAsTemporarilyUnable()
     {
         // Arrange
-        var run = RunOver(
-            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
             new ScriptedEmailKnowledgeSearch(),
             chatState: AiProviderHealthState.Unavailable);
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailAnsweringUnavailableException>(() =>
-            run.RunAsync(Question, TestContext.Current.CancellationToken));
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailAnsweringAvailability.Degraded, refusal.Availability);
@@ -180,14 +174,14 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_ACallerGrantedReadingAlone_IsRefused()
     {
         // Arrange
-        var run = RunOver(
-            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
             new ScriptedEmailKnowledgeSearch(),
             authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            run.RunAsync(Question, TestContext.Current.CancellationToken));
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
@@ -198,46 +192,18 @@ public sealed class DiscoveryRunTests
     public async Task RunAsync_ACallerGrantedNothing_ReachesNoDerivation()
     {
         // Arrange
-        var planner = PlannerDeriving(DiscoveryIntent.FindFact, "quotation");
-        var run = RunOver(
+        var planner = DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation");
+        var run = DiscoveryRuns.Composing(
             planner,
             new ScriptedEmailKnowledgeSearch(),
             authorization: AccessAuthorizations.ForCallerGranted());
 
         // Act
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            run.RunAsync(Question, TestContext.Current.CancellationToken));
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Empty(planner.ReceivedCalls());
-    }
-
-    private static IDiscoveryResultComposer ComposerReturning(PresentationPlan presentation)
-    {
-        var composer = Substitute.For<IDiscoveryResultComposer>();
-        composer.ComposeAsync(
-                Arg.Any<MailQuestion>(),
-                Arg.Any<DiscoveryRunPlan>(),
-                Arg.Any<DiscoveryEvidence>(),
-                Arg.Any<IReadOnlyList<AccountCoverage>>(),
-                Arg.Any<CancellationToken>())
-            .Returns(presentation);
-
-        return composer;
-    }
-
-    private static IDiscoveryRunPlanner PlannerDeriving(DiscoveryIntent intent, params string[] queries)
-    {
-        var planner = Substitute.For<IDiscoveryRunPlanner>();
-        planner.DerivePlanAsync(Arg.Any<MailQuestion>(), Arg.Any<CancellationToken>())
-            .Returns(DiscoveryRunPlan.Compose(
-                intent,
-                RetrievalPlan.Create(
-                    EmailKnowledgeBounds.Default,
-                    [.. queries.Select(EmailKnowledgeQuery.ForText)],
-                    sufficientPassages: 5)));
-
-        return planner;
     }
 
     /// <summary>
@@ -251,13 +217,13 @@ public sealed class DiscoveryRunTests
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
         var guarding = new GuardingDiscoveryRunPlanner(egress.Guard);
-        var run = RunOver(guarding, new ScriptedEmailKnowledgeSearch(), egressGuard: egress.Guard);
+        var run = DiscoveryRuns.Composing(guarding, new ScriptedEmailKnowledgeSearch(), egressGuard: egress.Guard);
         var question = new MailQuestion(
             MailQuestionText.Create($"what about the key {Marker} a colleague sent"),
             Question.Scope);
 
         // Act
-        await run.RunAsync(question, TestContext.Current.CancellationToken);
+        await run.RunAsync(question, progress: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(guarding.Guarded);
@@ -286,62 +252,4 @@ public sealed class DiscoveryRunTests
                     sufficientPassages: 5));
         }
     }
-
-    private static DiscoveryRun RunOver(
-        IDiscoveryRunPlanner? planner,
-        IEmailKnowledgeSearch search,
-        bool embeddingProfileActive = true,
-        AiProviderHealthState chatState = AiProviderHealthState.Serving,
-        AccessAuthorization? authorization = null,
-        SensitiveContentEgressGuard? egressGuard = null,
-        IDiscoveryResultComposer? composer = null,
-        IReadOnlyList<MailboxFolderFreshness>? folders = null)
-    {
-        // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
-        var healthReader = Substitute.For<IAiProviderHealthReader>();
-        healthReader.Read(AiProviderRole.Embedding)
-            .Returns(new AiProviderHealth(AiProviderRole.Embedding, AiProviderHealthState.Serving, Now));
-        healthReader.Read(AiProviderRole.Chat)
-            .Returns(new AiProviderHealth(AiProviderRole.Chat, chatState, Now));
-
-        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
-        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
-            .Returns(embeddingProfileActive ? new RegisteredEmbeddingProfile(ProfileId, Identity()) : null);
-
-        var timeProvider = new FakeTimeProvider(Now);
-
-        var freshnessReader = Substitute.For<ISynchronizationFreshnessReader>();
-        freshnessReader.ReadAsync(Arg.Any<MailboxScope>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(folders ?? []));
-
-        return new DiscoveryRun(
-            new MailAnsweringCapability(
-                new SemanticEmailSearch(
-                    profileReader,
-                    new InMemoryEmailVectorSearchIndex(),
-                    healthReader,
-                    timeProvider,
-                    new ScriptedTextEmbeddingGenerator(Identity(), maximumPassagesPerCall: 8)),
-                healthReader,
-                timeProvider,
-                // The answering agent stands in for the chat half of the configuration, which is the half the
-                // capability reads: this deployment registers the planner and the answerer behind one declaration.
-                planner is null ? null : new RecordingMailQuestionAnswerer()),
-            new PlannedMailRetrieval(search),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
-            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
-            planner,
-            // The two halves of one deployment's chat configuration: an instance that derives a plan composes a result
-            // from it, and an instance that declared no endpoint has neither.
-            planner is null ? null : composer ?? ComposerReturning(PresentationPlanExample.Compose()));
-    }
-
-    private static EmbeddingProfileIdentity Identity() => EmbeddingProfileIdentity.Create(
-        "a-provider",
-        "a-model",
-        modelVersion: null,
-        dimension: 8,
-        EmbeddingDistanceMetric.Cosine,
-        EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 }

@@ -1314,6 +1314,10 @@ internal static class HostComposition
             builder.Services.AddClientTransportSecurity(clientEndpointSettings);
             AddClientTelemetryProxy(builder);
             AddClientSignalChannel(builder);
+            // What puts a Discover run on a scope of its own and keeps it running past the request that asked for it.
+            // Behind the client endpoint's switch because the routes that start and read a run are, and a singleton
+            // because it holds nothing per request — the scope a run executes on is made per run rather than inherited.
+            builder.Services.AddSingleton<DiscoveryRunLauncher>();
         }
 
         // A separate callback from the listener binding below, and outside its condition, because the two decide different

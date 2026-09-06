@@ -65,6 +65,12 @@ namespace MailFathom.Host.Api;
 /// grant — the plan it follows was composed somewhere else, and may have been composed for somebody else.
 /// </para>
 /// <para>
+/// The Discover routes, which <see cref="ClientDiscoveryRunEndpoints" /> describes, are where a question is asked of
+/// years of mail and where the run answering it is read as it happens. They are two rather than one because a run
+/// outlives the request that started it: a client that lost its network reattaches to the run instead of paying for the
+/// same question twice, which is the whole reason the answer is a stream rather than a response.
+/// </para>
+/// <para>
 /// The signal ticket route, which <see cref="ClientSignalEndpoints" /> describes, is how a client obtains the
 /// short-lived value it opens the live channel against. It is the one route here whose answer is a credential, and it
 /// is the only part of that channel served in this group: the hub itself is mapped outside it, for the reasons that
@@ -130,6 +136,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailAttachment();
         api.MapClientMailMutations();
         api.MapClientCitations();
+        api.MapClientDiscoveryRuns();
         api.MapClientDrafts();
         api.MapClientOutbox();
         api.MapClientNotifications();

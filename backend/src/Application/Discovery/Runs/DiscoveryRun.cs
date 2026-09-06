@@ -74,6 +74,7 @@ public sealed class DiscoveryRun
 
     /// <summary>Reads the question into a plan, retrieves what that plan asks for, and composes what it found into a result.</summary>
     /// <param name="question">The question and the scope bounding what may be read to answer it.</param>
+    /// <param name="progress">Told how far the retrieval has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
     /// <param name="cancellationToken">Cancels the derivation and the retrieval.</param>
     /// <returns>What the run decided, what it found, and what it composed out of it.</returns>
     /// <exception cref="MailAnsweringUnavailableException">This deployment answers no questions about mail, or currently cannot.</exception>
@@ -84,7 +85,10 @@ public sealed class DiscoveryRun
     /// nothing and will go on answering nothing until an operator changes that; one whose provider is refusing right now
     /// answers nothing about this request and says so. Neither is a silent degradation into a run answered from less.
     /// </remarks>
-    public async Task<DiscoveryRunResult> RunAsync(MailQuestion question, CancellationToken cancellationToken)
+    public async Task<DiscoveryRunResult> RunAsync(
+        MailQuestion question,
+        Action<DiscoveryRetrievalProgress>? progress,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
 
@@ -112,7 +116,7 @@ public sealed class DiscoveryRun
         using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireOwner());
 
         var plan = await derivation.DerivePlanAsync(question, cancellationToken);
-        var evidence = await this.retrieval.RetrieveAsync(question, plan.Retrieval, cancellationToken);
+        var evidence = await this.retrieval.RetrieveAsync(question, plan.Retrieval, progress, cancellationToken);
         var coverage = await this.coverageReader.ReadAsync(question.Scope, evidence.Passages, cancellationToken);
 
         return new DiscoveryRunResult(

@@ -11,6 +11,7 @@ using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
+using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Release;
@@ -936,6 +937,12 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<DiscoveryCoverageReader>(),
             provider.GetService<IDiscoveryRunPlanner>(),
             provider.GetService<IDiscoveryResultComposer>()));
+        services.AddScoped<StreamedDiscoveryRun>();
+        // A singleton because a run is held between the request that asks the question and the requests that read the
+        // answer, which is exactly what neither a scope nor a request can hold. Nothing about it is a deployment's
+        // configuration, so it is registered for every one of them: an instance that answers no question opens no run,
+        // and one whose client never comes back forgets it.
+        services.AddSingleton<DiscoveryRunRegistry>();
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one

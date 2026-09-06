@@ -1,6 +1,6 @@
 # The Discover run
 
-<!-- describes: backend/src/AI/Discovery/**, backend/src/Application/Discovery/Planning/**, backend/src/Application/Discovery/Runs/** -->
+<!-- describes: backend/src/AI/Discovery/**, backend/src/Application/Discovery/Planning/**, backend/src/Application/Discovery/Runs/**, backend/src/Application/Discovery/Streaming/**, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Api/DiscoveryRunLauncher.cs -->
 
 A question about a mailbox arrives as words and a scope: *which supplier quoted least for the racking*, asked about one
 conversation, about four selected messages, or about every folder of every account. Before anything is read, that has to
@@ -8,7 +8,9 @@ become two decisions — what to retrieve, and what an answer to it will look li
 says is composed into the answer. This page describes how those decisions are made, what bounds each of them, what the
 composition may and may not say, and what a deployment does when it cannot do any of it.
 
-What a run produces is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in.
+What a run produces is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in. The
+plan does not cross the wire whole — a run publishes its parts as they become ready, which is
+[what a client watches](#a-run-is-watched-rather-than-waited-for).
 
 ---
 
@@ -181,11 +183,141 @@ Two refusals come before any of the above, and neither is a fallback.
   and *degraded* is one that does and cannot right now, which is worth retrying. A build with no planner configured
   reports the first of those, because a deployment that cannot derive a plan does not run Discover.
 
+## A run is watched rather than waited for
+
+A run takes as long as a model and a mailbox take, and what it produces becomes readable in pieces — so it is delivered
+as it happens rather than as one answer at the end. Two routes do that, both under the
+[client endpoint](../operations/client-endpoint.md) and both published under the same grant that governs asking a
+question anywhere else:
+
+| Route | What it does |
+|---|---|
+| `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address its events are read at, as soon as the question and its scope are known to be answerable. |
+| `GET /api/client/discovery/runs/{runId}/events` | Reads that run, from its beginning or from wherever a dropped connection left off. |
+
+Two routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
+loses its reading connection and nothing else: the run goes on executing, and the client comes back to the second route
+and is given what it missed. A single route that streamed the answer over the connection that asked would lose the whole
+run instead, which is exactly the case this surface exists for.
+
+### What a client is told, and in what order
+
+Every event names its run and carries a sequence that starts at `1` and never skips, so a client renders in arrival
+order and never has to sort. Six kinds are published, and the run ends on exactly one of the last two:
+
+| Event | What it carries |
+|---|---|
+| `started` | The revision of the [presentation contract](presentation-plan.md), which is what a client keys its renderers by |
+| `retrieval` | How far retrieval has got: lookups run, lookups refused, lookups planned, passages found — counts, and no mail |
+| `citation` | One source the run declares, ready to be named by a block |
+| `block` | One composed block, ready to be drawn |
+| `completed` | The run finished, with what made the answer narrower than the question and what it read of each account |
+| `failed` | The run stopped, as one of `Unavailable`, `TemporarilyUnavailable`, `RetrievalRefused`, `TimedOut`, `Stopped`, or `Failed` |
+
+Those six cross the wire as written here. This surface applies no naming policy to an enum, so the value is the member's
+own name — unlike the same kind of value on the MCP surface, where the tool contract's serializer lower-cases the first
+letter, and a client matching the wrong spelling falls through every branch it has.
+
+`TimedOut` and `Stopped` are the pair worth telling apart, because the same cancellation produces both: the first says
+the run spent the longest a run may take, the second says the deployment shut down while it was executing. One is about
+the question having been more than a run could answer and the other says nothing about the question at all, so a client
+offering to retry has a reason to offer it differently. `Failed` is the value that carries nothing: the reason is in the
+deployment's own logs, which is where it is written when a run ends on something it has no name for.
+
+Two orderings hold within that. **A source is always declared before the block naming it**, so a block can be drawn the
+moment it arrives instead of being held until the run closes. And **an ending is the last thing a run publishes** —
+nothing is appended after it, so a client that has seen one has seen the whole run.
+
+Nothing crosses the wire as a whole presentation plan. What a client assembles is the plan; what the run publishes is
+its parts. That is what makes *a failure keeps what came before* fall out rather than being arranged: the blocks that
+arrived stay exactly where they were, and the failure is one more event behind them.
+
+A run belongs to the owner who asked for it. Reading somebody else's is answered as **no such run** rather than as a
+refusal, so an identifier says nothing about whether it exists.
+
+### Resuming a dropped connection
+
+Resumption is the protocol's own: each event goes out under its sequence as the event id, and a client reattaching
+sends the last one it holds back in `Last-Event-ID`. A browser's `EventSource` does that by itself, so a client that
+never wrote the reconnection gets the resumption too.
+
+A header that is absent, blank, or names a place this run never reached reads as the beginning. That is the safe
+direction: no client can hold such a value honestly — a sequence is only ever learned by being sent it — so what it
+means is a client whose state belongs to some other run, and replaying costs it a few events it already has rather than
+an answer it never receives.
+
+### Why Server-Sent Events, and why not SignalR
+
+A run is one-directional, its events are small JSON documents, and the resumption above is already in the protocol. So
+what a plain chunked HTTP stream would need built by hand — framing, event names, an identifier per event, a
+reconnection that says where it left off — is what this gets from the browser's own `EventSource` and from
+`TypedResults.ServerSentEvents` on the server.
+
+SignalR would carry it too, and is deliberately not introduced. What it adds over this is multi-directional messaging
+and a connection lifecycle of its own, and a run has no use for either: nothing is sent back up the stream, and the run
+is addressed by an identifier rather than by a connection. Nothing about the events depends on the choice, which is the
+point — the contract is the sequence, so a deployment that ever needed a different transport would serve the same events
+over it.
+
+### What bounds a run
+
+Four bounds, each with a stated behaviour when it is reached. All four are constants of this build rather than settings,
+because none of them is a deployment decision an operator has any basis to take differently — and a Discover run's own
+metered budget is separate work.
+
+| Bound | What it is | What happens when it is reached |
+|---|---|---|
+| The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `TimedOut` |
+| Events one run may publish | Two hundred and twenty-eight — one opening, six lookups, two hundred sources, twenty blocks, one ending | Nothing further is published, and the run still ends: it completes stating `BlocksOmitted` |
+| Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
+| How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
+
+Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
+is one whose execution never reported at all: a task that never ran, or a fault between the run being opened and being
+started. Without that ceiling such a run would spend one of the eight slots until the process was restarted, and eight
+of them would leave a deployment answering `429` to every question.
+
+The buffer is bounded and **never evicts**, which is what makes resumption exact rather than best-effort: there is no
+state in which a client asks for what it missed and is told the run has moved on. The last slot is reserved for the
+ending, so a run that filled its buffer still says so instead of leaving a reader waiting.
+
+The two windows are not the same window, and which one a run is held on is decided by whether it has ended. **A run
+that has ended is held for the retention window**, measured from the last time anything read or wrote it, so a client
+that is reading is never cut off mid-stream and one that never came back is dropped rather than kept for the life of
+the process. **A run that is still executing is held on the wider ceiling above instead**, so a slow run is never
+forgotten out from under a client reconnecting to it while its provider call is still outstanding. A healthy run never
+meets that ceiling: it is stopped at the five-minute mark and ends there, which starts its own retention window well
+before the wider one could elapse.
+
+### What the stream publishes is the composition, not a second one
+
+The plan a run publishes is the one [the composition produced](#composing-the-answer-and-what-it-may-not-say), part by
+part. Nothing about it is decided by the stream: the citations are the plan's citations, the blocks are the plan's
+blocks, and the limitations and the coverage on the ending are the plan's own. What the stream decides is the order they
+go out in, which is what lets a client draw a block the moment it arrives instead of holding everything until the run
+closes.
+
+That also fixes what a client holds at the end. A client that read the whole stream holds every part of the plan — its
+blocks, its sources, what made the answer narrower than the question, and what the run read of each account — so the
+stream is a delivery of the plan rather than a summary of one.
+
+### None of it reaches a log
+
+Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these two
+routes and nowhere else. The events that describe how a run is *going* carry counts and closed values alone, which is
+what makes a run observable without any of the mail: a failure names one of six words, and retrieval progress names
+four numbers.
+
+The one thing that does reach a log is the failure a run has no word for. `failed` promises an operator can read what
+happened, so the run itself publishes only the endings it can name and lets the rest travel out to the composition root,
+which is where a logger exists — the application layer has none, deliberately. What is written there is the fault and
+nothing about the question or the mail it read.
+
 ## What is deliberately not here
 
 - **The blocks a composition does not fill.** People, thread state, attachment galleries, drafts, and suggested actions
   are part of the contract and are composed by nothing here: the intent decides between an answer, a timeline, and a
   fact table, and the rest wait for the surfaces that produce them.
 - **What a run spent.** Neither call is metered against a run ledger, because a turn with no tools cannot iterate; a
-  Discover run's own budget is separate work, and both calls join it when it exists.
+  Discover run's own budget is separate work, and both calls and the bounds above join it when it exists.
 - **Rendering.** No client draws a presentation plan yet.
