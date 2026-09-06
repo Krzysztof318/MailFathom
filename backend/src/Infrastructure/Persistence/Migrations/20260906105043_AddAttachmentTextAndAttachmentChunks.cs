@@ -61,6 +61,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "ix_stored_emails_awaiting_attachment_text",
+                table: "stored_emails",
+                columns: new[] { "OwnerId", "MailboxAccountId", "Id" },
+                filter: "\"AttachmentTextDerivedAt\" IS NULL AND \"AttachmentCount\" > 0");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_email_chunks_email_attachment_ordinal",
                 table: "email_chunks",
                 columns: new[] { "StoredEmailId", "AttachmentPosition", "Ordinal" },
@@ -86,6 +92,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "email_attachment_texts");
+
+            migrationBuilder.DropIndex(
+                name: "ix_stored_emails_awaiting_attachment_text",
+                table: "stored_emails");
 
             migrationBuilder.DropIndex(
                 name: "ix_email_chunks_email_attachment_ordinal",

@@ -312,8 +312,8 @@ attachment](message-chunks.md#passages-cut-from-an-attachment) records what a re
 is a substitution, so the ordinary case leaves every page boundary where it was, and a redaction that changed the length
 of the text drops the boundaries rather than publishing coordinates that would send a reader to the wrong page.
 
-**Only the body goes through it.** A subject, a display name, an address, a folder alias, and a thread identity are
-routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
+**Only derived mail text goes through it** — a body and an attachment's words. A subject, a display name, an address, a
+folder alias, and a thread identity are routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
 leave rather than where they are stored — otherwise a listing would name messages nobody could recognise and a reply
 would have nowhere to go. A subject an operator wants hidden from a model or an MCP client is hidden by the egress
 guard, which already covers it.

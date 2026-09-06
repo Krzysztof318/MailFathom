@@ -26,16 +26,30 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// </remarks>
 public interface IEmailAttachmentPassageReader
 {
-    /// <summary>Reads the passages cut from one message's attachments.</summary>
+    /// <summary>Reads one window of the passages cut from a message's attachments.</summary>
     /// <param name="emailId">The message whose attachment passages are read.</param>
+    /// <param name="resumeAfter">The passage to continue past, or <see langword="null" /> to start at the first one.</param>
+    /// <param name="windowSize">How many passages this read may return, which it never exceeds.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The passages ordered by attachment and then by their place inside it, or an empty list where the message has none.</returns>
+    /// <returns>The passages ordered by attachment and then by their place inside it, or an empty list where none remain.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="windowSize" /> is not positive.</exception>
     /// <remarks>
-    /// An empty answer covers every way a message can have no attachment passage — none was ever read, every one of
-    /// them was refused, the message carries no attachment at all — because none of those is a state a caller acts on
-    /// differently. What the reason was is on the attachment's own row, which is where an owner asking why is answered.
+    /// <para>
+    /// Windowed rather than whole, because what one message's attachments hold is the sender's to decide: twenty
+    /// attachments of two hundred thousand characters each is what the per-attachment ceilings already permit, and a
+    /// caller wanting the passage a search matched should not load four million characters to serve it. The window and
+    /// the cursor are on the port rather than left to its first caller so that the bound holds for every later one.
+    /// </para>
+    /// <para>
+    /// An empty answer covers every way a message can have no further attachment passage — none was ever read, every
+    /// one of them was refused, the message carries no attachment at all, or the window has reached the end — because
+    /// none of those is a state a caller acts on differently. What the reason was is on the attachment's own row, which
+    /// is where an owner asking why is answered.
+    /// </para>
     /// </remarks>
     Task<IReadOnlyList<AttachmentPassage>> ReadAttachmentPassagesAsync(
         StoredEmailId emailId,
+        AttachmentPassagePosition? resumeAfter,
+        int windowSize,
         CancellationToken cancellationToken);
 }

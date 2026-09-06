@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260906082446_AddAttachmentTextAndAttachmentChunks")]
+    [Migration("20260906105043_AddAttachmentTextAndAttachmentChunks")]
     partial class AddAttachmentTextAndAttachmentChunks
     {
         /// <inheritdoc />
@@ -2648,6 +2648,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stored_emails_owner_account_timeline");
 
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("OwnerId", "MailboxAccountId", "ReceivedAt", "Id"), new[] { NullSortOrder.Unspecified, NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified });
+
+                    b.HasIndex(new[] { "OwnerId", "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_attachment_text")
+                        .HasDatabaseName("ix_stored_emails_awaiting_attachment_text")
+                        .HasFilter("\"AttachmentTextDerivedAt\" IS NULL AND \"AttachmentCount\" > 0");
 
                     b.HasIndex(new[] { "MailFolderId", "UidValidity", "Uid" }, "ix_stored_emails_awaiting_content")
                         .HasDatabaseName("ix_stored_emails_awaiting_content")

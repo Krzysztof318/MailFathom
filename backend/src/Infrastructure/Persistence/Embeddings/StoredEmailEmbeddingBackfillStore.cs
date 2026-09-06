@@ -72,7 +72,8 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
             .Take(batchSize)
             .Select(email => new OutstandingEmailRow(
                 email.Id,
-                !email.Chunks.Any(),
+                // A body passage rather than any passage, for the reason the predicate below narrows the same way.
+                !email.Chunks.Any(chunk => chunk.AttachmentPosition == null),
                 new StoredDerivedWorkCandidateRow(
                     email.MailFolder.MailboxAccountId,
                     email.MailFolder.Alias,
@@ -195,7 +196,10 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                 .Where(StoredEmailTombstone.IsNotTombstoned)
                 .Where(email => email.Chunks.Any(chunk =>
                         !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
-                    || (!email.Chunks.Any()
+                    // A body passage rather than any passage: email_chunks also holds what an attachment yielded, and
+                    // a message whose attachments were read before its body was cut would otherwise read as cut here
+                    // and never be cut by the sweep that exists to catch exactly that.
+                    || (!email.Chunks.Any(chunk => chunk.AttachmentPosition == null)
                         // Both clauses of MailAwaitingRuleEvaluation, written inline for the reason the relocation
                         // reading below is: this is one disjunct of a larger predicate rather than a whole query.
                         && (email.RulesEvaluatedAt != null || email.FiledFromOutgoingEmailId != null)

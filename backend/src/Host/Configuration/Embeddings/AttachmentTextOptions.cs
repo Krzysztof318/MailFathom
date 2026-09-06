@@ -8,7 +8,7 @@ using MailFathom.Application.Emails.Extraction.Attachments;
 
 namespace MailFathom.Host.Configuration.Embeddings;
 
-/// <summary>Declares which document attachments this deployment reads, and what reading one may consume.</summary>
+/// <summary>Declares whether this deployment reads its mail's attachments at all, which of them, and what that may consume.</summary>
 /// <remarks>
 /// <para>
 /// It sits under <c>Embeddings</c> rather than beside the synchronization bounds because
@@ -17,8 +17,11 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// costs to embed, and the record keeps the two beside each other rather than inside one another.
 /// </para>
 /// <para>
-/// Every key here bounds one extraction. What a message and an account run may spend across their attachments is a
-/// second budget the same record names, and it arrives with the pipeline that spends it.
+/// The keys fall into three groups. <see cref="Enabled" /> is the switch, and with it off nothing on this block is
+/// reached at all. <see cref="MaxAttachmentsPerEmail" />, <see cref="MaxInputOctetsPerEmail" />, and
+/// <see cref="MaxInputOctetsPerAccountRun" /> are the second budget the same record names — what one message and one
+/// account run may spend across their attachments — and they bound the pass that walks a mailbox rather than one
+/// reading. Everything else here bounds one extraction, and is what the parser is handed.
 /// </para>
 /// </remarks>
 internal sealed class AttachmentTextOptions : IValidatableObject

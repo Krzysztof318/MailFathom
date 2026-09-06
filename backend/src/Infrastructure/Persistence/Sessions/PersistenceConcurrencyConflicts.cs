@@ -166,6 +166,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.SpamClassificationRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.EmailSpamClassificationPrimaryKeyConstraintName
                 or PersistenceConstraintNames.EmailChunkOrdinalUniqueIndexName
+                or PersistenceConstraintNames.EmailChunkAttachmentOrdinalUniqueIndexName
+                or PersistenceConstraintNames.EmailAttachmentTextPrimaryKeyName
                 or PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName

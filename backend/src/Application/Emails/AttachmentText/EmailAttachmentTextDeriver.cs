@@ -3,11 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.AttachmentText;
 
@@ -45,6 +47,7 @@ public sealed class EmailAttachmentTextDeriver
     private readonly IAttachmentTextExtractor extractor;
     private readonly IEmailAttachmentImageDescriber describer;
     private readonly SensitiveContentDerivationGuard guard;
+    private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly AttachmentTextExtractionOptions extractionOptions;
     private readonly EmailAttachmentTextBounds bounds;
 
@@ -54,6 +57,7 @@ public sealed class EmailAttachmentTextDeriver
     /// <param name="extractor">Reads a document attachment's text, or says why it read none.</param>
     /// <param name="describer">Describes an image attachment, or says why it stayed a picture.</param>
     /// <param name="guard">Redacts what is about to be stored, and stamps what it was redacted under.</param>
+    /// <param name="repairRequestStore">Records durably that a message's stored copy is missing or will not parse.</param>
     /// <param name="extractionOptions">The per-attachment ceilings, whose input bound also bounds what is buffered for a description.</param>
     /// <param name="bounds">The per-message and per-run ceilings.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -63,6 +67,7 @@ public sealed class EmailAttachmentTextDeriver
         IAttachmentTextExtractor extractor,
         IEmailAttachmentImageDescriber describer,
         SensitiveContentDerivationGuard guard,
+        IEmailContentRepairRequestStore repairRequestStore,
         AttachmentTextExtractionOptions extractionOptions,
         EmailAttachmentTextBounds bounds)
     {
@@ -71,6 +76,7 @@ public sealed class EmailAttachmentTextDeriver
         ArgumentNullException.ThrowIfNull(extractor);
         ArgumentNullException.ThrowIfNull(describer);
         ArgumentNullException.ThrowIfNull(guard);
+        ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(extractionOptions);
         ArgumentNullException.ThrowIfNull(bounds);
 
@@ -79,6 +85,7 @@ public sealed class EmailAttachmentTextDeriver
         this.extractor = extractor;
         this.describer = describer;
         this.guard = guard;
+        this.repairRequestStore = repairRequestStore;
         this.extractionOptions = extractionOptions;
         this.bounds = bounds;
     }
@@ -105,10 +112,15 @@ public sealed class EmailAttachmentTextDeriver
     /// already says how many the ceiling left unread.
     /// </para>
     /// <para>
-    /// A message whose raw MIME is not stored, and one whose stored MIME the walk cannot open, are both decided rather
-    /// than deferred. Neither is a fact that a repetition changes: content this deployment never stored is not going to
-    /// appear, and a local copy that no longer parses is repaired through the repair path rather than by a pass that
-    /// keeps re-reading it. Deferring either would put a message the walk meets every run into the selection for ever.
+    /// A message whose raw MIME is not stored, and one whose stored MIME the walk cannot open, are the two the repair
+    /// path exists for, so this pass does what every other reader of stored content does with them: it records an
+    /// <see cref="EmailContentRepairRequest" /> and leaves the message unsettled, which keeps it out of the stamp and
+    /// in the walk. Re-reading it costs one content-store read that answers with nothing until synchronization has
+    /// fetched the message again, and the request is idempotent per message, so neither repeats into anything.
+    /// </para>
+    /// <para>
+    /// A walk position the message turns out not to have is a different fact and is settled: the count on the row
+    /// disagrees with the structure, which no repair changes and no repetition resolves.
     /// </para>
     /// </remarks>
     public async Task<EmailAttachmentTextDerivation?> DeriveAsync(
@@ -133,7 +145,7 @@ public sealed class EmailAttachmentTextDeriver
 
         if (content is null)
         {
-            return new EmailAttachmentTextDerivation([], redactedUnder);
+            return await this.RequestRepairAsync(email.Id, EmailContentDefect.Missing, redactedUnder, cancellationToken);
         }
 
         var derived = new List<DerivedAttachmentText>();
@@ -149,9 +161,21 @@ public sealed class EmailAttachmentTextDeriver
         {
             var opened = await this.attachmentReader.OpenAsync(content, position, cancellationToken);
 
-            // Bytes that no longer parse are a damaged local copy rather than a fact about this attachment, and a
-            // position the message turns out not to have is the walk disagreeing with the count the row recorded.
-            // Neither is something to write down against the file, and both end the message rather than the run.
+            // Bytes that no longer parse are a damaged local copy rather than a fact about this attachment, so the
+            // repair path is told and the message keeps its place in the walk; whatever earlier positions yielded is
+            // still returned, and a re-read after the repair replaces it.
+            if (opened.ContentIsUnreadable)
+            {
+                return await this.RequestRepairAsync(
+                    email.Id,
+                    EmailContentDefect.Unreadable,
+                    redactedUnder,
+                    cancellationToken,
+                    derived);
+            }
+
+            // A position the message turns out not to have is the walk disagreeing with the count the row recorded.
+            // Nothing repairs that and nothing about the file is worth writing down, so it ends the message.
             if (opened.Attachment is not { } attachment)
             {
                 break;
@@ -184,6 +208,25 @@ public sealed class EmailAttachmentTextDeriver
         }
 
         return new EmailAttachmentTextDerivation(derived, redactedUnder);
+    }
+
+    /// <summary>Leaves a durable note that the stored copy needs fetching again, and hands back what was read so far.</summary>
+    /// <remarks>
+    /// The request is recorded outside any transaction, exactly as the download route records one: the note is worth
+    /// keeping whether or not the commit that follows it succeeds.
+    /// </remarks>
+    private async Task<EmailAttachmentTextDerivation> RequestRepairAsync(
+        StoredEmailId emailId,
+        EmailContentDefect defect,
+        SensitiveContentDerivationStamp? redactedUnder,
+        CancellationToken cancellationToken,
+        IReadOnlyList<DerivedAttachmentText>? read = null)
+    {
+        await this.repairRequestStore.RecordAsync(
+            new EmailContentRepairRequest(emailId, defect),
+            cancellationToken);
+
+        return new EmailAttachmentTextDerivation(read ?? [], redactedUnder, AwaitsRepair: true);
     }
 
     /// <summary>Reads one opened attachment as a document, falling through to a description where it is not one.</summary>

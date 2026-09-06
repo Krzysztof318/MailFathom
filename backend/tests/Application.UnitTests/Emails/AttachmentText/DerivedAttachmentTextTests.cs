@@ -237,6 +237,61 @@ public sealed class DerivedAttachmentTextTests
             DerivedAttachmentText.PastMessageBudget(0, "application/pdf", null).WithRedactedText(null!));
     }
 
+    /// <summary>A media type is the sender's header and nothing upstream bounds it, so this record does.</summary>
+    /// <remarks>
+    /// Left unbounded it reaches a column narrower than it and fails the insert, which is not a conflict the commit
+    /// policy retries — so the message would never be stamped and every later run would meet it first and fail again.
+    /// </remarks>
+    [Fact]
+    public void PastMessageBudget_AMediaTypeLongerThanItIsStoredAt_HoldsItToTheCeiling()
+    {
+        // Arrange
+        var declared = new string('a', DerivedAttachmentText.MaximumDeclaredMediaTypeLength + 40) + "/plain";
+
+        // Act
+        var derived = DerivedAttachmentText.PastMessageBudget(0, declared, "appendix.pdf");
+
+        // Assert
+        Assert.Equal(DerivedAttachmentText.MaximumDeclaredMediaTypeLength, derived.DeclaredMediaType.Length);
+        Assert.StartsWith("aaaa", derived.DeclaredMediaType, StringComparison.Ordinal);
+    }
+
+    /// <summary>An ordinary media type is recorded exactly as the part declared it.</summary>
+    [Fact]
+    public void FromExtraction_AMediaTypeWithinTheCeiling_RecordsItUnchanged()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Encrypted());
+
+        // Assert
+        Assert.Equal("application/pdf", derived.DeclaredMediaType);
+    }
+
+    /// <summary>Cutting a media type must not leave half a character behind, which no encoder could then write.</summary>
+    /// <remarks>
+    /// A lone surrogate reaching the same insert fails it exactly as an over-long value would, which would reproduce
+    /// the defect this ceiling exists to remove.
+    /// </remarks>
+    [Fact]
+    public void PastMessageBudget_AMediaTypeCutThroughASurrogatePair_DropsThePairRatherThanHalfOfIt()
+    {
+        // Arrange
+        var declared = new string('a', DerivedAttachmentText.MaximumDeclaredMediaTypeLength - 1)
+            + "\U0001F600"
+            + "extra";
+
+        // Act
+        var derived = DerivedAttachmentText.PastMessageBudget(0, declared, fileName: null);
+
+        // Assert
+        Assert.Equal(DerivedAttachmentText.MaximumDeclaredMediaTypeLength - 1, derived.DeclaredMediaType.Length);
+        Assert.DoesNotContain(derived.DeclaredMediaType, character => char.IsSurrogate(character));
+    }
+
     private static AttachmentTextSegment Page(int number, int startOffset) =>
         new(AttachmentTextSegmentKind.Page, number, Label: null, startOffset);
 }

@@ -634,6 +634,50 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.InputTooLarge, result.Outcome);
     }
 
+    /// <summary>The page count a document declares is the sender's, and one boundary is stored per page.</summary>
+    /// <remarks>
+    /// A file well inside the input ceiling can name page objects that carry nothing, so the number of them is bounded
+    /// by the same ceiling the archive readers hold their own pages to: without it a small attachment would inflate
+    /// into an arbitrarily long boundary document stored against its row.
+    /// </remarks>
+    [Fact]
+    public async Task ExtractTextAsync_APdfDeclaringMorePagesThanAContainerMayHold_RefusesIt()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxContainerParts = 2 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("One", "Two", "Three"));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
+    /// <summary>The ceiling is a refusal past it rather than a narrowing of what an ordinary document yields.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfWithinTheContainerCeiling_ReadsItWholeAndRecordsEveryPage()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxContainerParts = 3 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("One", "Two", "Three"));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal(3, result.Text!.Segments.Count);
+    }
+
     /// <summary>A measured size is a second reading of the same bytes rather than a guarantee, so the copy is bounded too.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnAttachmentLongerThanItsDescriptionSays_RefusesItWhileItIsBeingCopied()

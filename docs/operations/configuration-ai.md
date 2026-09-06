@@ -359,11 +359,13 @@ model that cannot read the page writes what it can see instead, and a dedicated 
 reads stays worth having.
 
 **What has landed is the mechanism and its bounds**: the port that turns one image attachment into text or into a
-recorded reason, the allow-list, the size and grid ceilings, and this switch. Nothing offers an attachment to it yet, so
-turning it on changes no behaviour today and sends nothing; what a description becomes once it is produced — a passage,
-an embedding, a place in a ranked result —
-is [ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
-and is not delivered.
+recorded reason, the allow-list, the size and grid ceilings, and this switch — and the account run's attachment stage
+now offers pictures to it. **Turning this on sends mail's images to the chat provider**, on every account run, for every
+message the attachment stage reaches, from the moment `Embeddings:AttachmentText:Enabled` is on as well; with that
+second switch off nothing here is reached and this one changes nothing. What a description becomes once it is produced
+— a passage, an embedding, a place in a ranked result — is
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md);
+the passage and the embedding are delivered and the ranking is not, and no tool or client route answers with one yet.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -395,8 +397,9 @@ that does, and a grid this deployment would not have decoded is not one to make 
 megapixels is well past any camera a person attaches a photograph from.
 
 The port's own contract obliges whatever calls it to call it from a background step, after a message is stored, and
-never from a read path — so that a tool call and a client request never wait on a provider describing a picture. Nothing
-calls it yet, so that is an obligation on the caller rather than a scheduling this deployment performs.
+never from a read path — so that a tool call and a client request never wait on a provider describing a picture. The
+account run's attachment stage is what calls it, and it is exactly that: a background pass behind the passage cut, so
+no tool call and no client request ever reaches a provider through it.
 
 ### Reading a document attachment — `Embeddings:AttachmentText`
 

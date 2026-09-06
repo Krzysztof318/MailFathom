@@ -38,6 +38,17 @@ public sealed record DerivedAttachmentText
     /// </remarks>
     private const string MessageBudgetOutcome = "MessageBudgetExhausted";
 
+    /// <summary>The greatest number of characters a declared media type is recorded with.</summary>
+    /// <remarks>
+    /// The sender writes the <c>Content-Type</c> header and the MIME parser reads a type out of it with no ceiling of
+    /// its own, so this is the one sender-controlled string on this record that nothing upstream bounds — a file name
+    /// reaches here already normalized to a ceiling of its own. Without it a message declaring a three-hundred-character
+    /// type makes the insert fail on the column's width, which is not a conflict the commit policy retries, so the
+    /// message is never stamped and every later run reaches it first and fails at the same statement. RFC 6838 puts a
+    /// real type and subtype far below this, so a claim longer than it is malformed rather than merely long.
+    /// </remarks>
+    public const int MaximumDeclaredMediaTypeLength = 255;
+
     private DerivedAttachmentText(
         int position,
         AttachmentTextKind kind,
@@ -50,7 +61,7 @@ public sealed record DerivedAttachmentText
     {
         this.Position = position;
         this.Kind = kind;
-        this.DeclaredMediaType = declaredMediaType;
+        this.DeclaredMediaType = Bounded(declaredMediaType);
         this.FileName = fileName;
         this.Outcome = outcome;
         this.Text = text;
@@ -222,5 +233,22 @@ public sealed record DerivedAttachmentText
             described
                 ? [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 1, Label: null, StartOffset: 0)]
                 : []);
+    }
+
+    /// <summary>Holds a declared media type to the length it is stored at, without leaving half a character behind.</summary>
+    /// <remarks>
+    /// The trailing high surrogate is dropped because a cut through a surrogate pair leaves a lone code unit that no
+    /// UTF-8 encoder can write, which would fail the same insert this ceiling exists to keep from failing.
+    /// </remarks>
+    private static string Bounded(string declaredMediaType)
+    {
+        if (declaredMediaType.Length <= MaximumDeclaredMediaTypeLength)
+        {
+            return declaredMediaType;
+        }
+
+        var kept = declaredMediaType.AsSpan(0, MaximumDeclaredMediaTypeLength);
+
+        return char.IsHighSurrogate(kept[^1]) ? new string(kept[..^1]) : new string(kept);
     }
 }

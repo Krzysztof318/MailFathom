@@ -51,8 +51,13 @@ refuses. The exclusion is in the database rather than in a writer: the generated
 document's text and nothing at all for a description, so a word occurring only in a description returns no lexical
 match whatever a later writer does with the row. A depicted match reaches retrieval through the vector index alone.
 
-`search_emails` does not answer with an attachment match yet — the rows and the index exist and the surface that reads
-them is separate work.
+The two halves have landed to different depths, and the difference is what an operator is told. **The lexical rows and
+their GIN index exist and nothing reads them yet**: `search_emails` matches a message on its own words alone, so a word
+that occurs only inside a PDF returns nothing there, and the surface that reads the attachment index is separate work.
+**The vector index already answers with an attachment match**: an attachment passage is embedded through the active
+profile exactly as a body passage is, and a semantic search ranks a message on whichever of its passages is nearest — so
+on a deployment with attachment reading on and a profile active, `search_emails` already returns a message whose only
+near passage was cut from an attachment, including one cut from a description of a picture.
 
 **Where a sensitive-content scanner is switched on, the indexed body text is the redacted text.** Redaction happens as
 the message is extracted, so what `search_vector` is generated from is what a reader of a result would see, and a word

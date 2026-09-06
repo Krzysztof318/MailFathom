@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction;
@@ -266,6 +267,7 @@ public sealed class MailAttachmentTextPassTests
             Deriver(extraction),
             bounds ?? Bounds(),
             backlog,
+            new RecordingDerivedWorkGateTelemetry(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -307,6 +309,7 @@ public sealed class MailAttachmentTextPassTests
             extractor,
             Substitute.For<IEmailAttachmentImageDescriber>(),
             ScanningSensitiveContentDerivation.Inactive(),
+            Substitute.For<IEmailContentRepairRequestStore>(),
             new AttachmentTextExtractionOptions(),
             EmailAttachmentTextBounds.Disabled with { IsEnabled = true });
     }

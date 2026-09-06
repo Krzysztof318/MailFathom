@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// Two projections joined in this process rather than one query joining the tables, because the boundaries are a
 /// document per attachment while the passages are a row each: a join would return the whole boundary list once per
 /// passage, which for a long report is the list repeated a few thousand times over the wire. Read separately, each
-/// attachment's boundaries cross once.
+/// attachment's boundaries cross once — and only for the attachments the requested window actually reached.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class EmailAttachmentPassageReader(MailFathomDbContext dbContext) : IEmailAttachmentPassageReader
@@ -24,11 +24,45 @@ internal sealed class EmailAttachmentPassageReader(MailFathomDbContext dbContext
     /// <inheritdoc />
     public async Task<IReadOnlyList<AttachmentPassage>> ReadAttachmentPassagesAsync(
         StoredEmailId emailId,
+        AttachmentPassagePosition? resumeAfter,
+        int windowSize,
         CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(windowSize);
+
+        var afterAttachment = resumeAfter?.AttachmentPosition;
+        var afterOrdinal = resumeAfter?.Ordinal;
+
+        // The window is taken over the passages, and the attachment rows are then read for the positions this window
+        // actually reached. Reading them first would load every attachment's boundary document of a message the window
+        // covers one page of, which is the amplification the bound exists to stop.
+        var passages = await dbContext.EmailChunks
+            .AsNoTracking()
+            .Where(chunk => chunk.StoredEmailId == emailId.Value
+                && chunk.AttachmentPosition != null
+                && (afterAttachment == null
+                    || chunk.AttachmentPosition > afterAttachment
+                    || (chunk.AttachmentPosition == afterAttachment && chunk.Ordinal > afterOrdinal)))
+            .OrderBy(chunk => chunk.AttachmentPosition)
+            .ThenBy(chunk => chunk.Ordinal)
+            .Take(windowSize)
+            .Select(chunk => new PassageRow(
+                chunk.AttachmentPosition!.Value,
+                chunk.Ordinal,
+                chunk.StartOffset,
+                chunk.Text))
+            .ToArrayAsync(cancellationToken);
+
+        if (passages.Length == 0)
+        {
+            return [];
+        }
+
+        var positions = passages.Select(passage => passage.AttachmentPosition).Distinct().ToArray();
+
         var attachments = await dbContext.EmailAttachmentTexts
             .AsNoTracking()
-            .Where(text => text.StoredEmailId == emailId.Value && text.Text != null)
+            .Where(text => text.StoredEmailId == emailId.Value && positions.Contains(text.AttachmentPosition))
             .Select(text => new AttachmentRow(
                 text.AttachmentPosition,
                 text.FileName,
@@ -36,23 +70,6 @@ internal sealed class EmailAttachmentPassageReader(MailFathomDbContext dbContext
                 text.Kind,
                 text.Segments))
             .ToDictionaryAsync(row => row.Position, cancellationToken);
-
-        if (attachments.Count == 0)
-        {
-            return [];
-        }
-
-        var passages = await dbContext.EmailChunks
-            .AsNoTracking()
-            .Where(chunk => chunk.StoredEmailId == emailId.Value && chunk.AttachmentPosition != null)
-            .OrderBy(chunk => chunk.AttachmentPosition)
-            .ThenBy(chunk => chunk.Ordinal)
-            .Select(chunk => new PassageRow(
-                chunk.AttachmentPosition!.Value,
-                chunk.Ordinal,
-                chunk.StartOffset,
-                chunk.Text))
-            .ToArrayAsync(cancellationToken);
 
         var boundaries = attachments.ToDictionary(
             entry => entry.Key,

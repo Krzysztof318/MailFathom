@@ -51,7 +51,12 @@ internal sealed class EmbeddingWorkloadReader(MailFathomDbContext dbContext) : I
         var searchableEmailCount = await this.SearchableEmails().CountAsync(cancellationToken);
 
         var outstandingEmailCount = await this.SearchableEmails()
-            .Where(email => !email.Chunks.Any()
+            // Uncut is a body with text and no body passage of its own, rather than a message with no passage at all:
+            // email_chunks also holds what an attachment yielded, so a message carrying only those and no body text
+            // would otherwise be reported as outstanding on every run for ever, there being no body left to cut.
+            .Where(email => (email.SearchDocument != null
+                    && email.SearchDocument.BodyText != null
+                    && !email.Chunks.Any(chunk => chunk.AttachmentPosition == null))
                 || email.Chunks.Any(chunk => profileId == null
                     || !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId)))
             .CountAsync(cancellationToken);
@@ -73,7 +78,9 @@ internal sealed class EmbeddingWorkloadReader(MailFathomDbContext dbContext) : I
     /// The same two conditions the embedding sweep selects on, composed from the same tombstone expression so the
     /// progress an operator reads is measured against exactly the mail the sweep will work through. A message an
     /// expunge has been observed for is outside it, because vectors nothing may retrieve are a provider bill with no
-    /// reader; so is one whose extraction produced no text, because nothing about it could ever become a passage.
+    /// reader; so is one whose extraction produced no text and whose attachments yielded none either, because nothing
+    /// about it could ever become a passage. A passage cut from an attachment counts here exactly as a body's does,
+    /// since the vector index reaches a message through either.
     /// </remarks>
     private IQueryable<StoredEmailEntity> SearchableEmails() => dbContext.StoredEmails
         .AsNoTracking()

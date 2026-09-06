@@ -2646,6 +2646,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("OwnerId", "MailboxAccountId", "ReceivedAt", "Id"), new[] { NullSortOrder.Unspecified, NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified });
 
+                    b.HasIndex(new[] { "OwnerId", "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_attachment_text")
+                        .HasDatabaseName("ix_stored_emails_awaiting_attachment_text")
+                        .HasFilter("\"AttachmentTextDerivedAt\" IS NULL AND \"AttachmentCount\" > 0");
+
                     b.HasIndex(new[] { "MailFolderId", "UidValidity", "Uid" }, "ix_stored_emails_awaiting_content")
                         .HasDatabaseName("ix_stored_emails_awaiting_content")
                         .HasFilter("\"ContentAvailability\" = 'AwaitingStorageHeadroom'");

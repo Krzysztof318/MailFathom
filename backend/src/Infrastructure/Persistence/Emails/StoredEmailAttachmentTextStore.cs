@@ -132,7 +132,15 @@ internal sealed class StoredEmailAttachmentTextStore(
 
         // Written last and in the same statement as everything above. A message stamped without its readings would
         // never be offered to a parser again, and readings without the stamp would be taken a second time next run.
-        storedEmail.AttachmentTextDerivedAt = derivedAt;
+        //
+        // Withheld where the reading is not the last one this message needs — a provider that may answer later, or a
+        // stored copy a repair request was recorded for. The rows above are still written, so what the run did manage
+        // to read is not lost and the re-read replaces them wholesale.
+        // EmailAttachmentTextDerivation.IsSettled holds which refusals count and why the configuration ones do not.
+        if (derived.IsSettled)
+        {
+            storedEmail.AttachmentTextDerivedAt = derivedAt;
+        }
     }
 
     /// <summary>Narrows stored mail to the messages whose attachments nothing has read yet.</summary>

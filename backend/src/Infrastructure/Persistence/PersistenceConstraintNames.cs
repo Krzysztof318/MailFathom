@@ -59,6 +59,13 @@ internal static class PersistenceConstraintNames
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
 
+    /// <summary>The queue of mail whose attachments nothing has read, which is read once per account run and is usually empty.</summary>
+    /// <remarks>
+    /// Filtered for the same reason the rule queue above is: in steady state every row of an account carries the stamp,
+    /// so an unfiltered index would be walked in full, once per run, for ever, to return nothing.
+    /// </remarks>
+    internal const string StoredEmailAwaitingAttachmentTextIndexName = "ix_stored_emails_awaiting_attachment_text";
+
     internal const string StoredEmailSenderIndexName = "ix_stored_emails_sender";
 
     internal const string StoredEmailToAddressesIndexName = "ix_stored_emails_to_addresses";
@@ -82,7 +89,18 @@ internal static class PersistenceConstraintNames
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
 
     /// <summary>The unique index over the ordinals of the passages cut from one attachment.</summary>
+    /// <remarks>
+    /// Named because a losing writer is recognized by the constraint its insert violated: two runs reading one
+    /// message's attachments at once resolve to the readings one of them committed rather than to a failure.
+    /// </remarks>
     internal const string EmailChunkAttachmentOrdinalUniqueIndexName = "ix_email_chunks_email_attachment_ordinal";
+
+    /// <summary>The primary key over one message's attachment readings, one row per walk position.</summary>
+    /// <remarks>
+    /// Named for the reason the attachment ordinal index above is: the readings are replaced whole and re-inserted, so
+    /// a competing run losing that race violates this key and is retried rather than ending the account's run.
+    /// </remarks>
+    internal const string EmailAttachmentTextPrimaryKeyName = "PK_email_attachment_texts";
 
     /// <summary>The unique index over an embedding profile's identity, which is what makes activation idempotent.</summary>
     /// <remarks>

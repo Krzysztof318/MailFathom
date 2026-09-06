@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction;
@@ -29,6 +30,7 @@ public sealed class EmailAttachmentTextDeriverTests
     private readonly IEmailAttachmentContentReader attachmentReader = Substitute.For<IEmailAttachmentContentReader>();
     private readonly IAttachmentTextExtractor extractor = Substitute.For<IAttachmentTextExtractor>();
     private readonly IEmailAttachmentImageDescriber describer = Substitute.For<IEmailAttachmentImageDescriber>();
+    private readonly IEmailContentRepairRequestStore repairRequestStore = Substitute.For<IEmailContentRepairRequestStore>();
 
     /// <summary>A document is read by the extractor, and its words and pagination reach the record whole.</summary>
     [Fact]
@@ -199,11 +201,11 @@ public sealed class EmailAttachmentTextDeriverTests
     }
 
     /// <summary>
-    /// Content this deployment never stored is not going to appear, so the message is decided rather than deferred:
-    /// deferring it would put a message every run meets back into the selection for ever.
+    /// Content this deployment does not hold is what the repair path exists for, so the message is told about rather
+    /// than stamped: settling it would take it out of the walk before the copy it needs has been fetched again.
     /// </summary>
     [Fact]
-    public async Task DeriveAsync_AMessageWhoseRawMimeIsNotStored_IsDecidedWithNoAttachmentsRatherThanDeferred()
+    public async Task DeriveAsync_AMessageWhoseRawMimeIsNotStored_RequestsARepairAndLeavesTheMessageUnsettled()
     {
         // Arrange
         this.contentStore
@@ -216,12 +218,15 @@ public sealed class EmailAttachmentTextDeriverTests
         // Assert
         Assert.NotNull(derived);
         Assert.Empty(derived.Attachments);
-        Assert.False(derived.YieldedText);
+        Assert.False(derived.IsSettled);
+        await this.repairRequestStore.Received(1).RecordAsync(
+            Arg.Is<EmailContentRepairRequest>(request => request!.Defect == EmailContentDefect.Missing),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Stored octets the walk can no longer open are a damaged local copy, which ends the message not the run.</summary>
     [Fact]
-    public async Task DeriveAsync_StoredContentTheWalkCannotOpen_EndsTheMessageWithWhatItAlreadyRead()
+    public async Task DeriveAsync_StoredContentTheWalkCannotOpen_RequestsARepairAndKeepsWhatItAlreadyRead()
     {
         // Arrange
         this.StoreHolds();
@@ -240,6 +245,30 @@ public sealed class EmailAttachmentTextDeriverTests
         // Assert
         Assert.NotNull(derived);
         Assert.Single(derived.Attachments);
+        Assert.False(derived.IsSettled);
+        await this.repairRequestStore.Received(1).RecordAsync(
+            Arg.Is<EmailContentRepairRequest>(request => request!.Defect == EmailContentDefect.Unreadable),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A walk position the message turns out not to have is the count disagreeing with the structure, which no repair
+    /// mends and no later run resolves — so it settles the message instead of holding it back for ever.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_AWalkPositionTheMessageDoesNotHave_SettlesItWithoutRequestingARepair()
+    {
+        // Arrange
+        this.StoreHolds();
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(derived!.IsSettled);
+        Assert.Empty(derived.Attachments);
+        await this.repairRequestStore.DidNotReceive()
+            .RecordAsync(Arg.Any<EmailContentRepairRequest>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -319,6 +348,49 @@ public sealed class EmailAttachmentTextDeriverTests
             .DescribeAsync(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A provider having a bad afternoon has decided nothing, so the message is left for a later run to read.</summary>
+    /// <remarks>
+    /// Stamping it here would settle a picture nobody has looked at yet, and nothing would come back for it: the walk
+    /// selects on the stamp, so the description that provider owes would never be asked for again.
+    /// </remarks>
+    [Theory]
+    [InlineData(ImageDescriptionRefusal.ProviderTimedOut)]
+    [InlineData(ImageDescriptionRefusal.ProviderUnavailable)]
+    public async Task DeriveAsync_ADescriptionTheProviderMayAnswerLater_LeavesTheMessageUnsettled(
+        ImageDescriptionRefusal refusal)
+    {
+        // Arrange
+        this.RefusesToDescribe(refusal);
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(derived!.IsSettled);
+    }
+
+    /// <summary>
+    /// Everything else a description can refuse for is settled here, because nothing about this message changes it: a
+    /// switch or a ceiling an operator moves is a backfill over what is already stored, and the octets themselves are
+    /// what they are.
+    /// </summary>
+    [Theory]
+    [InlineData(ImageDescriptionRefusal.NotActivated)]
+    [InlineData(ImageDescriptionRefusal.PixelGridTooLarge)]
+    [InlineData(ImageDescriptionRefusal.ProviderRefused)]
+    [InlineData(ImageDescriptionRefusal.FormatNotSupported)]
+    public async Task DeriveAsync_ADescriptionRefusedForAnythingElse_SettlesTheMessage(ImageDescriptionRefusal refusal)
+    {
+        // Arrange
+        this.RefusesToDescribe(refusal);
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(derived!.IsSettled);
+    }
+
     /// <summary>Nothing can be derived from arguments that are not there.</summary>
     [Fact]
     public async Task DeriveAsync_MissingArgument_IsRefused()
@@ -341,6 +413,7 @@ public sealed class EmailAttachmentTextDeriverTests
             this.extractor,
             this.describer,
             ScanningSensitiveContentDerivation.Inactive(),
+            this.repairRequestStore,
             new AttachmentTextExtractionOptions(),
             Bounds()));
         Assert.Throws<ArgumentNullException>(() => new EmailAttachmentTextDeriver(
@@ -349,6 +422,7 @@ public sealed class EmailAttachmentTextDeriverTests
             this.extractor,
             this.describer,
             ScanningSensitiveContentDerivation.Inactive(),
+            this.repairRequestStore,
             new AttachmentTextExtractionOptions(),
             null!));
     }
@@ -375,6 +449,7 @@ public sealed class EmailAttachmentTextDeriverTests
         this.extractor,
         this.describer,
         guard ?? ScanningSensitiveContentDerivation.Inactive(),
+        this.repairRequestStore,
         extractionOptions ?? new AttachmentTextExtractionOptions(),
         bounds ?? Bounds());
 
@@ -389,6 +464,18 @@ public sealed class EmailAttachmentTextDeriverTests
         this.attachmentReader
             .OpenAsync(Arg.Any<StoredEmailContent>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.NoSuchAttachment());
+    }
+
+    private void RefusesToDescribe(ImageDescriptionRefusal refusal)
+    {
+        this.StoreHolds();
+        this.Opens(0, "image/png", "roof.png", octets: 4096);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.FormatNotRecognized());
+        this.describer
+            .DescribeAsync("image/png", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ImageAttachmentDescription.Refused(refusal));
     }
 
     private void Opens(int position, string mediaType, string fileName, long octets)

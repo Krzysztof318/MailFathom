@@ -7,6 +7,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
@@ -144,6 +145,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());
         services.AddSingleton(Substitute.For<IEmailContentStore>());
+        services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
         services.AddSingleton<IOwnerStoredContentLedger>(new InMemoryOwnerStoredContentLedger());
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());

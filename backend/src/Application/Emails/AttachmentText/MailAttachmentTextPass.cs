@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Emails.AttachmentText;
@@ -46,6 +47,7 @@ public sealed class MailAttachmentTextPass
     private readonly EmailAttachmentTextDeriver deriver;
     private readonly EmailAttachmentTextBounds bounds;
     private readonly IEmailEmbeddingBacklog embeddingBacklog;
+    private readonly IDerivedWorkGateTelemetry gateTelemetry;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
 
     /// <summary>Initializes the pass from the state it walks, the derivation it runs, and the backlog it hands messages to.</summary>
@@ -53,6 +55,7 @@ public sealed class MailAttachmentTextPass
     /// <param name="deriver">Reads one message's attachments, outside any transaction.</param>
     /// <param name="bounds">The ceilings one message and one run are read under.</param>
     /// <param name="embeddingBacklog">Takes each message whose attachments yielded passages on to the embedding worker.</param>
+    /// <param name="gateTelemetry">Reports which of the classification gate's answers let each message through.</param>
     /// <param name="commitPolicy">Commits one message's readings, retrying a conflict with a competing writer.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAttachmentTextPass(
@@ -60,18 +63,21 @@ public sealed class MailAttachmentTextPass
         EmailAttachmentTextDeriver deriver,
         EmailAttachmentTextBounds bounds,
         IEmailEmbeddingBacklog embeddingBacklog,
+        IDerivedWorkGateTelemetry gateTelemetry,
         OptimisticConcurrencyRetryPolicy commitPolicy)
     {
         ArgumentNullException.ThrowIfNull(attachmentTextStore);
         ArgumentNullException.ThrowIfNull(deriver);
         ArgumentNullException.ThrowIfNull(bounds);
         ArgumentNullException.ThrowIfNull(embeddingBacklog);
+        ArgumentNullException.ThrowIfNull(gateTelemetry);
         ArgumentNullException.ThrowIfNull(commitPolicy);
 
         this.attachmentTextStore = attachmentTextStore;
         this.deriver = deriver;
         this.bounds = bounds;
         this.embeddingBacklog = embeddingBacklog;
+        this.gateTelemetry = gateTelemetry;
         this.commitPolicy = commitPolicy;
     }
 
@@ -139,6 +145,10 @@ public sealed class MailAttachmentTextPass
                         derived,
                         attemptCancellationToken),
                     cancellationToken);
+
+                // Recorded here for the reason the cut records it where it does: this is where the gate's decision
+                // becomes an act, a message it was holding having been released by having its attachments read.
+                this.gateTelemetry.RecordAdmission(email.Admission);
 
                 readCount++;
 

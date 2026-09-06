@@ -770,11 +770,12 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Cuts the passages of the mail the stages in front of this one have finished with, and offers each message for embedding.</summary>
     /// <remarks>
     /// <para>
-    /// Last of the run's local passes, which is the ordering the arrival pipeline is built on rather than an arbitrary
-    /// place to put it. A message may be withheld by the classification pass above and may be moved by the rule pass
-    /// above that, and passages cut before either had its turn are passages of a placement and a verdict that had not
-    /// been settled — so the cut waits for both, and the message is offered to the embedding worker only once its
-    /// passages are durable.
+    /// Behind the classification pass and the rule pass, which is the ordering the arrival pipeline is built on rather
+    /// than an arbitrary place to put it. A message may be withheld by the classification pass above and may be moved
+    /// by the rule pass above that, and passages cut before either had its turn are passages of a placement and a
+    /// verdict that had not been settled — so the cut waits for both, and the message is offered to the embedding
+    /// worker only once its passages are durable. What follows the cut is the reading of what the attachments say,
+    /// which is the run's last local pass and waits on this one for the reason its own remarks give.
     /// </para>
     /// <para>
     /// A failure never fails the run, for the reason the two passes above it do not: nothing here reaches a mail server,

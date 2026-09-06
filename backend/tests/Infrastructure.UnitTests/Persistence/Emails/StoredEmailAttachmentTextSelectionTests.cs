@@ -6,6 +6,7 @@ using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -193,6 +194,67 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         [],
         [WorkInbox],
         Now - TimeSpan.FromMinutes(15));
+
+    /// <summary>A relocation still converging moves the message to a folder whose mapping may embed nothing.</summary>
+    /// <remarks>
+    /// The clause matters most here of the three passes that carry it: reading an attachment opens a stranger's file and
+    /// may send a picture to a vision provider, so doing it under the mapping the message is leaving would spend that on
+    /// a folder an operator never asked to have embedded.
+    /// </remarks>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded)]
+    [InlineData(MailboxMutationStage.PlacementIssued)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted)]
+    public void Selecting_MailARuleIsStillRelocating_LeavesItOut(MailboxMutationStage stage)
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
+
+        // Act
+        var selected = Selecting(email, [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected);
+    }
+
+    /// <summary>A relocation that has stopped converging moves nothing again, so waiting for it would wait for ever.</summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Completed)]
+    [InlineData(MailboxMutationStage.Abandoned)]
+    [InlineData(MailboxMutationStage.Cancelled)]
+    public void Selecting_MailWhoseRelocationHasEnded_SelectsIt(MailboxMutationStage stage)
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
+
+        // Act
+        var selected = Selecting(email, [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected);
+    }
+
+    /// <summary>One mutation of the message, as the relocation clause reads it.</summary>
+    private static MailboxMutationEntity Mutation(
+        StoredEmailEntity email,
+        MailboxMutation mutation,
+        MailboxMutationStage stage) => new()
+        {
+            StoredEmailId = email.Id,
+            StoredEmail = email,
+            OwnerId = email.OwnerId,
+            MailboxAccountId = email.MailboxAccountId,
+            MailFolder = email.MailFolder,
+            Mutation = mutation.Name,
+            RequesterIdentity = "rule:file-the-newsletters",
+            RequesterOrigin = MailboxMutationOrigin.Rule,
+            Stage = stage,
+            RecordedAt = Now,
+            StageChangedAt = Now,
+        };
 
     private static IReadOnlyList<StoredEmailEntity> Selecting(
         StoredEmailEntity email,

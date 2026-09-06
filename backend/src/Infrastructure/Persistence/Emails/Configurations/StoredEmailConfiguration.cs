@@ -239,6 +239,18 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
                 $"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL AND "
                 + $"\"{nameof(StoredEmailEntity.FiledFromOutgoingEmailId)}\" IS NULL");
 
+        // The attachment queue, filtered for exactly the reason the rule queue above is: the stamp is written once and
+        // never cleared, so in steady state every row of an account carries it and an unfiltered index would be walked
+        // in full, once per account run, for ever, to return nothing. The messages carrying no attachment at all are
+        // the larger part of a mailbox and are outside the filter too, since the walk requires a positive count.
+        entity.HasIndex(
+                email => new { email.OwnerId, email.MailboxAccountId, email.Id },
+                PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
+            .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
+            .HasFilter(
+                $"\"{nameof(StoredEmailEntity.AttachmentTextDerivedAt)}\" IS NULL AND "
+                + $"\"{nameof(StoredEmailEntity.AttachmentCount)}\" > 0");
+
         // Every read of a conversation runs on this: assembling an arrival asks its thread for the message it answers
         // and for the messages already stored that answer it, and publishing a thread reads its whole membership. The
         // identity is carried beside the thread because it is the last term of the one order a thread has, so the rows

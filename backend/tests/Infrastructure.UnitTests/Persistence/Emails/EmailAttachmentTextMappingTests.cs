@@ -23,6 +23,12 @@ public sealed class EmailAttachmentTextMappingTests
     /// a vector for a document's own words and nothing at all for a description, so a word a model chose can never be
     /// matched as though somebody had written it — whatever a later writer does with the row.
     /// </summary>
+    /// <remarks>
+    /// The whole expression rather than a substring of it, because the absence of an <c>ELSE</c> arm is the exclusion:
+    /// an expression amended to fall through to a second <c>to_tsvector</c> would satisfy every containment check that
+    /// could be written about it and would put a model's guessed words into the index as though a person had typed
+    /// them. Nothing else pins the shape, so this assertion is what a change to it has to walk past.
+    /// </remarks>
     [Fact]
     public void SearchVector_TheGeneratedColumn_IsProducedForADocumentAndForNothingElse()
     {
@@ -30,8 +36,9 @@ public sealed class EmailAttachmentTextMappingTests
         var expression = Property(nameof(EmailAttachmentTextEntity.SearchVector)).GetComputedColumnSql();
 
         // Assert
-        Assert.Contains("CASE WHEN \"Kind\" = 'Document'", expression, StringComparison.Ordinal);
-        Assert.Contains("to_tsvector", expression, StringComparison.Ordinal);
+        Assert.Equal(
+            """CASE WHEN "Kind" = 'Document' THEN to_tsvector('simple'::regconfig, coalesce("FileName", '') || ' ' || coalesce("Text", '')) END""",
+            expression);
         Assert.True(Property(nameof(EmailAttachmentTextEntity.SearchVector)).GetIsStored());
     }
 
