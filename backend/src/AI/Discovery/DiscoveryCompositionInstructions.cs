@@ -116,12 +116,27 @@ internal static class DiscoveryCompositionInstructions
         {
             turn.Append(CultureInfo.InvariantCulture, $"[{source.Name}] {source.Label}")
                 .AppendLine()
-                .AppendLine(source.Extract)
+                .AppendLine(WithoutForgedHeaders(source.Extract))
                 .AppendLine();
         }
 
         return turn.ToString();
     }
+
+    /// <summary>Keeps a line of somebody's mail from reading as one of the headers this run minted.</summary>
+    /// <remarks>
+    /// Minting the citations stops a model inventing a name; it does not stop a message forging one. A body carrying a
+    /// line that opens <c>[s3]</c> is, in the turn, indistinguishable from the header the run wrote for <c>s3</c>, so
+    /// whatever follows it is attributed to a real message that never said it — a citation that resolves, is accepted
+    /// as supported, and reaches a reader as a quotation of somebody else's mail.
+    /// <para>
+    /// Indenting is the escape rather than dropping the line, because a bracket opening a line is ordinary in mail —
+    /// a quoted reply, a mailing-list tag, a bracketed aside — and losing it would lose text a fact may rest on. A
+    /// header this method writes is never indented, so an indented line cannot be one, and the reader keeps its words.
+    /// </para>
+    /// </remarks>
+    private static string WithoutForgedHeaders(string extract) =>
+        string.Join('\n', extract.Split('\n').Select(line => line.StartsWith('[') ? " " + line : line));
 
     /// <summary>Says which of the answer's parts this question needs, from the intent the plan already read it as.</summary>
     /// <remarks>

@@ -114,12 +114,6 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             plan.Intent,
             await this.GuardAsync(sources, cancellationToken));
 
-        ChatRequestBounds.Require(
-            [new ChatMessage(ChatRole.User, turn)],
-            this.plan.MaximumMessagesPerRequest,
-            this.plan.MaximumRequestCharacters,
-            this.plan.MaximumRequestImageOctets);
-
         var answerText = await this.AskAsync(turn, cancellationToken);
         var composed = DiscoveryCompositionReading.Read(answerText, plan, sources, evidence, coverage);
 
@@ -187,6 +181,12 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     /// what a run's availability gate reads. What differs is what is lost: a failed derivation costs a worse plan,
     /// while a failed composition costs the answer itself, and the result says exactly that rather than pretending to
     /// one.
+    /// <para>
+    /// The request bound is applied inside that same handling rather than in front of it, because it refuses rather
+    /// than truncates. This turn carries the run's extracts, so a deployment whose passage ceiling and request ceiling
+    /// leave it no room reaches the bound on an ordinary question — and a run that ended in an unhandled refusal would
+    /// be a composition that failed, which is the one thing this one does not do.
+    /// </para>
     /// </remarks>
     private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
     {
@@ -194,6 +194,12 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
         try
         {
+            ChatRequestBounds.Require(
+                [new ChatMessage(ChatRole.User, turn)],
+                this.plan.MaximumMessagesPerRequest,
+                this.plan.MaximumRequestCharacters,
+                this.plan.MaximumRequestImageOctets);
+
             // Opened per composition and released with it, so a rotated key is picked up by the next question and the
             // material exists for one call rather than for process uptime.
             using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
@@ -220,6 +226,13 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
             return response.Text;
+        }
+        catch (ArgumentException)
+        {
+            // The turn is past what this deployment sends in one request, which is a question whose mail does not fit
+            // rather than a defect: the result says the sources do not answer it, and the operator's own ceilings are
+            // what decides whether a mailbox this size is answerable here.
+            return null;
         }
         catch (ChatGenerationFailedException)
         {

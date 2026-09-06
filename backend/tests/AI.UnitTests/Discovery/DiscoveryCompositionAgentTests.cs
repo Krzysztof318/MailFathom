@@ -134,6 +134,29 @@ public sealed class DiscoveryCompositionAgentTests
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
     }
 
+    /// <summary>The question is the owner's own words and leaves this deployment in the same turn, so it is guarded like an extract.</summary>
+    [Fact]
+    public async Task ComposeAsync_AQuestionCarryingASecret_SendsTheProviderTheGuardedQuestion()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(
+            """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var actingFor = egress.ActingForOwner();
+        var composer = provider.ComposerOver(egressGuard: egress.Guard);
+
+        // Act
+        await composer.ComposeAsync(
+            Question($"was {Marker} the key they sent"),
+            Plan(DiscoveryIntent.FindFact),
+            Evidence("we accept the revised figure"),
+            Coverage(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
+    }
+
     /// <summary>What a plan quotes is the owner's own mail going back to the owner, so it is not redacted on the way.</summary>
     [Fact]
     public async Task ComposeAsync_AnExtractCarryingASecret_StillQuotesItBackToTheOwner()
@@ -179,9 +202,9 @@ public sealed class DiscoveryCompositionAgentTests
         Assert.Equal(1, provider.RequestCount);
     }
 
-    private static MailQuestion Question() =>
+    private static MailQuestion Question(string text = "which supplier quoted least") =>
         new(
-            MailQuestionText.Create("which supplier quoted least"),
+            MailQuestionText.Create(text),
             MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], []));
 
     private static DiscoveryRunPlan Plan(DiscoveryIntent intent) =>

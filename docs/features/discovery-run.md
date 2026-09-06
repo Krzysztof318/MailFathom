@@ -25,8 +25,13 @@ The composition is derived in code, from the kind of question, through a mapping
 | `findFact` — one fact somebody stated | An answer paragraph |
 | `trackChange` — how something moved over time | A timeline |
 | `compareTerms` — several offers, terms, or positions held against each other | A fact table |
-| `findDocuments` — which documents exist and where | An attachment gallery |
+| `findDocuments` — which documents exist and where | An answer paragraph |
 | `unclassified` — none of the above, or nothing readable came back | An answer paragraph |
+
+A question about documents opens with an answer paragraph rather than with the attachment gallery the catalogue holds,
+because a gallery entry names an attachment inside a message and retrieval returns a passage that carries no attachment
+coordinate. The gallery waits on a passage that carries one; until then, saying which documents exist in prose over the
+messages that hold them is what a run can honestly compose.
 
 Every composition then ends with an evidence list, because a Discover answer is only worth as much as the mail behind
 it, and the list is where a reader goes from a claim to the message that made it.
@@ -109,6 +114,10 @@ extracts and nothing else about the mailbox.
 declares one source per distinct message it retrieved, names it `s1`, `s2`, and so on, and shows the model those names.
 A name the model invents resolves to nothing, so the claim resting on it is read as resting on nothing — which is what
 makes a composed answer checkable at all. Nothing a model writes ever becomes a reference to mail.
+
+**At most twenty-four distinct messages become sources of one run**, taken in the order retrieval ranked them. A message
+past that is neither shown to the model nor listed in the evidence, so a run over a wide question answers from the
+mail it names rather than from mail a reader has no way to reach.
 
 **Four judgements are the composition's own and are not negotiable by what the model wrote.**
 

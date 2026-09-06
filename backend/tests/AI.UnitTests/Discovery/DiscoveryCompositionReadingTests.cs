@@ -6,6 +6,7 @@ using MailFathom.AI.Discovery;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Presentation.Blocks;
+using MailFathom.Application.Discovery.Presentation.Citations;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
@@ -422,6 +423,54 @@ public sealed class DiscoveryCompositionReadingTests
 
         // Assert
         Assert.Contains(PresentationLimitation.SemanticRankingUnavailable, plan.Limitations);
+    }
+
+    /// <summary>A shape nothing backs is not a shape: an unsupported result opens with the sentence about the run rather than with an empty table.</summary>
+    [Fact]
+    public void Read_AQuestionComparingOffersThatNothingBacks_FallsBackToTheAnswerItself()
+    {
+        // Arrange
+        const string answer = """
+            {
+              "answer": "They quoted different figures.",
+              "sources": [],
+              "columns": ["supplier", "price"],
+              "rows": [{ "cells": [{ "value": "Northwind", "sources": [] }, { "value": "1200", "sources": [] }] }]
+            }
+            """;
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.CompareTerms, Sources("a quotation"));
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationSupport.Unsupported, block.Evidence.Support);
+    }
+
+    /// <summary>The evidence list names what a claim could have rested on, so it stops where a block's own citations stop.</summary>
+    [Fact]
+    public void Read_MoreSourcesThanOneBlockMayCite_ListsAsManyAsABlockMayRestOn()
+    {
+        // Arrange
+        var sources = Enumerable
+            .Range(1, PresentationEvidence.MaxCitations + 3)
+            .Select(index => new DiscoveryComposedSource(
+                new PresentationCitation(
+                    PresentationCitationId.Create($"s{index}"),
+                    new EmailCitationTarget(StoredEmailId.Create(Guid.CreateVersion7())),
+                    PresentationText.Create($"extract {index}"),
+                    PresentationSourceMedium.Written),
+                Work,
+                $"extract {index}",
+                Relevance: 0.5))
+            .ToArray();
+
+        // Act
+        var plan = Read("""{ "answer": "They accepted.", "sources": [] }""", DiscoveryIntent.FindFact, sources);
+
+        // Assert
+        var listed = Assert.IsType<EvidenceListBlock>(plan.Blocks[^1]);
+        Assert.Equal(PresentationEvidence.MaxCitations, listed.Entries.Count);
     }
 
     private static PresentationPlan Read(

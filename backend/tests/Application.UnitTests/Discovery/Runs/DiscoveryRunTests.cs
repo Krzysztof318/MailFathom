@@ -80,7 +80,7 @@ public sealed class DiscoveryRunTests
 
     /// <summary>How current each account was is read before the answer is composed, so the composition can state it.</summary>
     [Fact]
-    public async Task RunAsync_AnAccountWhoseLocalCopyIsBehind_ComposesTheAnswerOverWhatItRead()
+    public async Task RunAsync_AnAccountTheScopeReached_ComposesTheAnswerOverItsCoverage()
     {
         // Arrange
         var composer = ComposerReturning(PresentationPlanExample.Compose());

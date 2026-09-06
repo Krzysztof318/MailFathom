@@ -62,7 +62,7 @@ public sealed class DiscoveryCoverageReaderTests
         };
 
         // Act
-        var coverage = await reader.ReadAsync(Scope(), passages, TestContext.Current.CancellationToken);
+        var coverage = await reader.ReadAsync(Scope(Work), passages, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(Now.AddDays(-30), coverage[0].EarliestReceivedAt);
@@ -82,7 +82,7 @@ public sealed class DiscoveryCoverageReaderTests
             new MailSynchronizationRunLedger(new FakeTimeProvider(Now)));
 
         // Act
-        var coverage = await reader.ReadAsync(Scope(), [], TestContext.Current.CancellationToken);
+        var coverage = await reader.ReadAsync(Scope(Work), [], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(PresentationStaleness.Current, coverage[0].Freshness.Staleness);
@@ -104,10 +104,47 @@ public sealed class DiscoveryCoverageReaderTests
         var reader = ReaderOver([Folder(Work, Now.AddHours(-1))], ledger);
 
         // Act
-        var coverage = await reader.ReadAsync(Scope(), [], TestContext.Current.CancellationToken);
+        var coverage = await reader.ReadAsync(Scope(Work), [], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(PresentationStaleness.Stale, coverage[0].Freshness.Staleness);
+    }
+
+    /// <summary>An account whose own run ended with a folder it could not finish is behind whatever its folders last committed.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountWhoseOwnRunFailed_ReportsTheAccountAsBehind()
+    {
+        // Arrange
+        var ledger = new MailSynchronizationRunLedger(new FakeTimeProvider(Now));
+        ledger.RecordRunEnded(
+            Work,
+            scheduledFolderCount: 3,
+            failedFolderCount: 1,
+            mutationConvergenceFailed: false);
+        var reader = ReaderOver([Folder(Work, Now.AddHours(-1))], ledger);
+
+        // Act
+        var coverage = await reader.ReadAsync(Scope(Work), [], TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(PresentationStaleness.Stale, coverage[0].Freshness.Staleness);
+    }
+
+    /// <summary>A mailbox the scope reached that local state holds no folder of is reported rather than passed over in silence.</summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountInScopeWithNoFolderInLocalState_IsReportedWithUnknownFreshness()
+    {
+        // Arrange
+        var reader = ReaderOver(
+            [Folder(Work, Now.AddHours(-1))],
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Now)));
+
+        // Act
+        var coverage = await reader.ReadAsync(Scope(), [], TestContext.Current.CancellationToken);
+
+        // Assert
+        var archive = Assert.Single(coverage, account => account.Account.Value == "archive");
+        Assert.Equal(PresentationStaleness.Unknown, archive.Freshness.Staleness);
     }
 
     /// <summary>An account nothing has reconciled is unknown rather than behind, because no elapsed time is read as staleness here.</summary>
@@ -120,7 +157,7 @@ public sealed class DiscoveryCoverageReaderTests
             new MailSynchronizationRunLedger(new FakeTimeProvider(Now)));
 
         // Act
-        var coverage = await reader.ReadAsync(Scope(), [], TestContext.Current.CancellationToken);
+        var coverage = await reader.ReadAsync(Scope(Work), [], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(PresentationStaleness.Unknown, coverage[0].Freshness.Staleness);
@@ -168,6 +205,9 @@ public sealed class DiscoveryCoverageReaderTests
             ReceivedAt = receivedAt,
         };
 
-    private static MailboxScope Scope() =>
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [Work, Archive], []);
+    private static MailboxScope Scope(params MailAccountId[] accountIds) =>
+        MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
+            accountIds.Length is 0 ? [Work, Archive] : accountIds,
+            []);
 }

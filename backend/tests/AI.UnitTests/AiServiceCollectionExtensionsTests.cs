@@ -378,7 +378,7 @@ public sealed class AiServiceCollectionExtensionsTests
     /// is read once per scope so a run stays on the plan it began with.
     /// </summary>
     [Fact]
-    public void AddDiscoveryRunPlanner_ResolvesThePlanningPortOncePerScope()
+    public void AddDiscoveryRunAgents_ResolvesThePlanningPortOncePerScope()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -396,7 +396,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddChatProviderAdapter();
 
         // Act
-        services.AddDiscoveryRunPlanner();
+        services.AddDiscoveryRunAgents();
 
         // Assert
         using var provider = services.BuildServiceProvider();
@@ -410,7 +410,7 @@ public sealed class AiServiceCollectionExtensionsTests
 
     /// <summary>Both halves of a run's chat configuration arrive together, so a deployment that derives a plan composes a result from it.</summary>
     [Fact]
-    public void AddDiscoveryRunPlanner_ADeploymentThatDerivesAPlan_AlsoResolvesTheCompositionOncePerScope()
+    public void AddDiscoveryRunAgents_ADeploymentThatDerivesAPlan_AlsoResolvesTheCompositionOncePerScope()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -426,7 +426,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddChatProviderAdapter();
 
         // Act
-        services.AddDiscoveryRunPlanner();
+        services.AddDiscoveryRunAgents();
 
         // Assert
         using var provider = services.BuildServiceProvider();
@@ -440,7 +440,7 @@ public sealed class AiServiceCollectionExtensionsTests
 
     /// <summary>The envelope is a seam a deployment fills, so the planner keeps one that is already registered.</summary>
     [Fact]
-    public void AddDiscoveryRunPlanner_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
+    public void AddDiscoveryRunAgents_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -448,7 +448,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(declared);
 
         // Act
-        services.AddDiscoveryRunPlanner();
+        services.AddDiscoveryRunAgents();
 
         // Assert
         using var provider = services.BuildServiceProvider();
@@ -457,10 +457,10 @@ public sealed class AiServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddDiscoveryRunPlanner_WithoutAServiceCollection_IsRefused()
+    public void AddDiscoveryRunAgents_WithoutAServiceCollection_IsRefused()
     {
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunPlanner(null!));
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunAgents(null!));
     }
 
     /// <summary>

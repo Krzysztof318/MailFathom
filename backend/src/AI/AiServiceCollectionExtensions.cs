@@ -249,7 +249,7 @@ public static class AiServiceCollectionExtensions
     /// cannot compose an answer from would refuse in the middle of a question rather than before it.
     /// </para>
     /// </remarks>
-    public static IServiceCollection AddDiscoveryRunPlanner(this IServiceCollection services)
+    public static IServiceCollection AddDiscoveryRunAgents(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 

@@ -97,6 +97,13 @@ internal static class DiscoveryCompositionReading
     /// rows, and inventing either is the failure this whole contract exists to prevent. A question looking for files is
     /// always answered this way today, because a passage carries the message it was cut from and not the attachment
     /// within it, so a gallery entry would name a file this run cannot resolve.
+    /// <para>
+    /// An unsupported answer takes it as well, whatever the intent and whatever material the model supplied. A model
+    /// told to leave its sources empty where the extracts do not answer may still fill in events or rows, and both an
+    /// entry and a cell may name no source at all — so a shaped block over an unsupported answer would present dated
+    /// events, or a comparison, written entirely by the model and cited to nothing. That is the same substitution
+    /// <see cref="Answer" /> refuses for prose, and it is refused here in the one place both shapes pass through.
+    /// </para>
     /// </remarks>
     private static PresentationBlock OpeningBlock(
         DiscoveryIntent intent,
@@ -105,12 +112,14 @@ internal static class DiscoveryCompositionReading
         Dictionary<string, DiscoveryComposedSource> restedOn,
         PresentationSupport support)
     {
-        PresentationBlock? shaped = intent.OpensWith.Identity switch
-        {
-            PresentationBlockType.TimelineIdentity => Timeline(document?.Events, evidence, restedOn),
-            PresentationBlockType.FactTableIdentity => FactTable(document, evidence, restedOn),
-            _ => null,
-        };
+        PresentationBlock? shaped = support is PresentationSupport.Unsupported
+            ? null
+            : intent.OpensWith.Identity switch
+            {
+                PresentationBlockType.TimelineIdentity => Timeline(document?.Events, evidence, restedOn),
+                PresentationBlockType.FactTableIdentity => FactTable(document, evidence, restedOn),
+                _ => null,
+            };
 
         return shaped ?? Answer(document, evidence, support);
     }
@@ -228,7 +237,9 @@ internal static class DiscoveryCompositionReading
             return [];
         }
 
-        var listed = sources.Take(EvidenceListBlock.MaxEntries).ToArray();
+        // Bounded by what one block may cite rather than by what a list may hold, the two being different numbers: the
+        // entries and their citations are the same set here, so the smaller of the two is the one that binds.
+        var listed = sources.Take(PresentationEvidence.MaxCitations).ToArray();
         var blockFreshness = freshness.Of(listed);
 
         IReadOnlyList<EvidenceEntry> entries =

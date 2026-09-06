@@ -82,15 +82,36 @@ public sealed class DiscoveryCoverageReader
                     Earliest: group.Min(passage => passage.ReceivedAt),
                     Latest: group.Max(passage => passage.ReceivedAt)));
 
+        var byAccount = folders
+            .GroupBy(folder => folder.AccountId)
+            .ToDictionary(account => account.Key, account => account.ToArray());
+
         return
         [
-            .. folders
-                .GroupBy(folder => folder.AccountId)
-                .OrderBy(account => account.Key.Value, StringComparer.Ordinal)
-                .Take(PresentationPlan.MaxAccountsCovered)
-                .Select(account => this.Summarize(account.Key, [.. account], found)),
+            .. AccountsReached(scope, folders)
+                .Select(accountId => this.Summarize(accountId, byAccount.GetValueOrDefault(accountId, []), found)),
         ];
     }
+
+    /// <summary>Names every account the run's scope reached, whether or not local state holds a folder of it.</summary>
+    /// <remarks>
+    /// Read from three places rather than from the freshness reading alone, because that reading is silent about a
+    /// folder nothing has ever discovered — so a mailbox an operator configured and synchronization has not yet run
+    /// would appear in no entry at all, and the plan would be silent about a mailbox the run searched. That is exactly
+    /// the account whose freshness matters most, and a run that reported nothing about it would be answering from a
+    /// mailbox it never mentions. The scope's own account list and the folders configuration admits are what carry it,
+    /// and the three overlap for every account that has been reconciled once.
+    /// </remarks>
+    private static IEnumerable<MailAccountId> AccountsReached(
+        MailboxScope scope,
+        IReadOnlyList<MailboxFolderFreshness> folders) =>
+        folders
+            .Select(folder => folder.AccountId)
+            .Concat(scope.AccountIds)
+            .Concat(scope.ReadableFolders.Select(folder => folder.AccountId))
+            .Distinct()
+            .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
+            .Take(PresentationPlan.MaxAccountsCovered);
 
     private AccountCoverage Summarize(
         MailAccountId accountId,
@@ -110,7 +131,9 @@ public sealed class DiscoveryCoverageReader
     /// <remarks>
     /// The timestamp is the newest of the account's folders, for the reason the account directory gives: it answers
     /// "when did this mailbox last take anything in", and a folder that has been empty since it was mapped would
-    /// otherwise hold the whole account at the beginning of time.
+    /// otherwise hold the whole account at the beginning of time. An account local state holds no folder of at all
+    /// reaches this with none, and is unknown for the same reason an account whose folders have never committed
+    /// progress is: nothing has been established about how current it is.
     /// <para>
     /// Behind means something known rather than something guessed. A folder whose last turn left mail it had not taken
     /// in, or an account whose own run failed, is behind the mail server as a fact this process observed; an account

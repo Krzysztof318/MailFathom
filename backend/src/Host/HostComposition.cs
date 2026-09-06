@@ -844,7 +844,7 @@ internal static class HostComposition
             builder.Services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
             builder.Services.AddChatProviderAdapter();
             builder.Services.AddMailAnsweringAgent();
-            builder.Services.AddDiscoveryRunPlanner();
+            builder.Services.AddDiscoveryRunAgents();
 
             // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
             // AddInfrastructure below, because it decorates the retrieval that call registers. Scoped for the reason the
