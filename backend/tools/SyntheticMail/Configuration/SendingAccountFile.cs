@@ -245,7 +245,7 @@ internal static class SendingAccountFile
         }
 
         throw new SyntheticMailFailure(
-            $"'{securityKey}' in '{path}' is '{nameof(MailTransportSecurity.Unsecured)}', which sends the password in the clear, and '{hostKey}' is '{host}', which is neither a loopback nor a container bridge address. It exists for a mail server running beside this command — 'localhost', an address in 127.0.0.0/8 or ::1, a container on 172.17.0.0/16, 10.88.0.0/16, or 10.89.0.0/16, or 'host.docker.internal' — so publish the server's port on loopback and name that, or secure the connection with {nameof(MailTransportSecurity.StartTls)} or {nameof(MailTransportSecurity.ImplicitTls)}.");
+            $"'{securityKey}' in '{path}' is '{nameof(MailTransportSecurity.Unsecured)}', which sends the password in the clear, and '{hostKey}' is '{host}', which is neither a loopback nor a container bridge address. It exists for a mail server running beside this command, which is 'localhost' or any name ending '.localhost', an address in 127.0.0.0/8 or ::1, a container on 172.17.0.0/16, 10.88.0.0/16, or 10.89.0.0/16, or the host as a container sees it — 'host.docker.internal' under Docker, 'host.containers.internal' under Podman. Name one of those, or secure the connection with {nameof(MailTransportSecurity.StartTls)} or {nameof(MailTransportSecurity.ImplicitTls)}.");
     }
 
     /// <summary>Reports whether a host as written reaches this machine or the container host beside it.</summary>
