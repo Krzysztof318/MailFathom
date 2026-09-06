@@ -60,6 +60,7 @@ const refusalSaid = {
     ceilingReached: 'compose.refusedCeiling',
     contentRefused: 'compose.refusedContent',
     notFullyScanned: 'compose.refusedNotScanned',
+    attachmentNotRead: 'compose.refusedAttachmentNotRead',
     screeningUnavailable: 'compose.refusedScreeningUnavailable',
     refusedForAnotherReason: 'compose.refusedForAnotherReason',
 } as const satisfies Readonly<Record<string, MessageKey>>;

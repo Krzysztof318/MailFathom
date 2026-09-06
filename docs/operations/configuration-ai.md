@@ -462,6 +462,17 @@ attachment because retrieval was off would pass a file out unread while reportin
 a sender or a downloading client waits, so a deployment raising it towards the hour the range permits is lengthening a
 request rather than only a background pass.
 
+**On those two paths crossing a ceiling refuses the act rather than skipping the indexing**, which is the part worth
+reading before either value is lowered. An attachment above `MaxInputOctets` is never opened, and an attachment
+that was not read is never treated as clean — so on a screened deployment that message is refused with `59003` and that
+download answers `409`. The same holds for `Formats`, whose row above reads as an indexing choice and is not one here:
+a document in a format the list excludes answers `FormatNotExtracted`, which refuses the send and the download exactly
+as an encrypted file does. A format the list never named at all — a photograph, an archive, a plain-text note — is
+outside the ten `AttachmentDocumentFormats` recognizes, is passed over rather than refused, and leaves unscreened;
+[sensitive-content scanning](../features/sensitive-content-scanning.md) holds that distinction in full. So narrowing
+`Formats` or lowering `MaxInputOctets` to cut indexing cost blocks sends and downloads on a screened deployment, and
+this is the page both are set from.
+
 **Turning it on reads mail that is already stored, once.** A message keeps a stamp saying its attachments were read, so
 each one is opened once and never again unless it changes; turning the switch off leaves what was already read in
 place, since nothing here deletes a stored reading.

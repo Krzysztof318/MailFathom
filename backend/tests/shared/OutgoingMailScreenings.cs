@@ -60,7 +60,12 @@ internal static class OutgoingMailScreenings
     private sealed class PlainTextOutgoingMailTextReader(OutgoingAttachmentRefusal? attachmentRefusal)
         : IOutgoingMailTextReader
     {
-        public Task<OutgoingMailText> ReadAsync(
+        public Task<OutgoingMailText> ReadWordsAsync(
+            ReadOnlyMemory<byte> rawMime,
+            CancellationToken cancellationToken) =>
+            this.ReadForScreeningAsync(rawMime, cancellationToken);
+
+        public Task<OutgoingMailText> ReadForScreeningAsync(
             ReadOnlyMemory<byte> rawMime,
             CancellationToken cancellationToken)
         {

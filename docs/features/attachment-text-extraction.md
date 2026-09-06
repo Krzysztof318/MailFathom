@@ -92,7 +92,7 @@ Every outcome is one of a closed set, and each is distinguishable from every oth
 | `ContainerBoundExceeded` | An archive passed its decompression total, its inflation ratio, its part count, its element depth, or — for a workbook — the number of entries its string table may hold, and for an OpenDocument file the number of pages one content part may declare | Treat it as an attachment worth looking at rather than a ceiling to raise, unless the document really is that large: a workbook of more than `MaxExtractedTextCharacters` distinct strings, or a spreadsheet of more than `MaxContainerParts` sheets, is stopped here rather than by the ceiling those keys name for their own outcome |
 | `Encrypted` | The document is password-protected and this system holds no password for it | Nothing automatic; no password is stored anywhere here |
 | `Malformed` | The bytes do not parse as the format they declare | Nothing; badly formed documents are expected of real mail |
-| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at — the message keeps no stamp and is read again on a later run |
+| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at — the message keeps no stamp and is read again on a later run — which is the account run's answer alone, a screened send or a screened download having no later run to wait for and refusing the act instead |
 
 **`Encrypted` currently also answers for one document that is not locked.** A password-protected Open XML package is
 not an archive at all — the package is encrypted whole and wrapped in an OLE compound file — and that wrapper is what

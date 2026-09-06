@@ -983,7 +983,10 @@ address the operator publishes MailFathom at. `no-store` is there because this i
 response is mail content, and the deployments this surface is documented for put a reverse proxy in front of it.
 
 **The octets are streamed rather than buffered**, decoded from the stored copy straight into the response, so a large
-attachment costs the copy buffer rather than its own size on either side.
+attachment costs the copy buffer rather than its own size on either side — on a deployment that screens nothing. Where
+screening is on the file is read whole before a byte leaves, because every parser behind the extraction seeks, so a
+16 MiB attachment costs its own size for the length of one extraction and the claim above describes the answer rather
+than the whole request.
 
 **It is the client's own route rather than the signed link the tool surface mints**, and the difference is who is being
 served. [A download link](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential) exists to be handed

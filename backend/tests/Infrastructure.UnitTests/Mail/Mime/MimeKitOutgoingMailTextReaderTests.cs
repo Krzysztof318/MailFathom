@@ -39,13 +39,13 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             this.timeProvider);
 
     [Fact]
-    public async Task ReadAsync_AMessageWithBothRepresentations_ReadsTheSubjectAndBoth()
+    public async Task ReadForScreeningAsync_AMessageWithBothRepresentations_ReadsTheSubjectAndBoth()
     {
         // Arrange
         var raw = Compose("Quarterly figures", "the plain text", "<p>the markup</p>");
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("Quarterly figures", text.Subject);
@@ -54,13 +54,13 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     }
 
     [Fact]
-    public async Task ReadAsync_AMessageWithNoMarkup_ReportsTheAbsenceRatherThanEmptyText()
+    public async Task ReadForScreeningAsync_AMessageWithNoMarkup_ReportsTheAbsenceRatherThanEmptyText()
     {
         // Arrange
         var raw = Compose("Quarterly figures", "the plain text", htmlBody: null);
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(text.HtmlBody);
@@ -70,13 +70,13 @@ public sealed class MimeKitOutgoingMailTextReaderTests
 
     /// <summary>A message nobody titled reads as empty text, so the value list drops it rather than scanning nothing.</summary>
     [Fact]
-    public async Task ReadAsync_AMessageWithNoSubject_ReadsItAsEmptyText()
+    public async Task ReadForScreeningAsync_AMessageWithNoSubject_ReadsItAsEmptyText()
     {
         // Arrange
         var raw = Compose(subject: null, "the plain text", htmlBody: null);
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(string.Empty, text.Subject);
@@ -88,7 +88,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// because an attribute a sanitizer strips still leaves in the message.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_MarkupASanitizerWouldStrip_ReadsItBackWhole()
+    public async Task ReadForScreeningAsync_MarkupASanitizerWouldStrip_ReadsItBackWhole()
     {
         // Arrange
         var raw = Compose(
@@ -97,7 +97,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             "<p title=\"AKIAEXAMPLEKEY\">the markup</p><!-- AKIAEXAMPLEKEY -->");
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(text.HtmlBody);
@@ -110,7 +110,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// the attached document is one of the values a screen is handed rather than something that leaves unexamined.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AMessageCarryingAReadableDocument_ScreensItsTextBesideTheBody()
+    public async Task ReadForScreeningAsync_AMessageCarryingAReadableDocument_ScreensItsTextBesideTheBody()
     {
         // Arrange
         this.extractor.Reads("terms.pdf", "the signing key is AKIAEXAMPLEKEY");
@@ -118,7 +118,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var raw = MessageAttaching(Attachment("terms.pdf", "application/pdf", "%PDF-1.7"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the signing key is AKIAEXAMPLEKEY", Assert.Single(text.AttachmentTexts));
@@ -131,18 +131,86 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// and no text scanner ever undertook to read a photograph of anything.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AnAttachmentNoReaderRecognizes_ContributesNothingAndRefusesNothing()
+    public async Task ReadForScreeningAsync_AnAttachmentNoReaderRecognizes_ContributesNothingAndRefusesNothing()
     {
         // Arrange
         var raw = MessageAttaching(Attachment("photo.png", "image/png", "not really a picture"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(text.AttachmentTexts);
         Assert.Null(text.AttachmentRefusal);
         Assert.Equal(2, text.ScreenedValues.Count);
+    }
+
+    /// <summary>
+    /// The words-only read opens no attachment at all, which is what keeps a document parser off every path that only
+    /// wants what a message says: a caller handing an author their own draft back reads the bodies and discards the
+    /// rest, so running the parsers there would charge a request for work nothing ever looks at.
+    /// </summary>
+    [Fact]
+    public async Task ReadWordsAsync_AMessageCarryingReadableDocuments_ReadsNoneOfThemAndRefusesNothing()
+    {
+        // Arrange
+        this.extractor.Reads("invoice.pdf", "the signing key is AKIAEXAMPLEKEY");
+
+        var raw = MessageAttaching(Attachment("invoice.pdf", "application/pdf", "%PDF-1.7 one"));
+
+        // Act
+        var text = await this.reader.ReadWordsAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.extractor.ReadFileNames);
+        Assert.Empty(text.AttachmentTexts);
+        Assert.Null(text.AttachmentRefusal);
+    }
+
+    /// <summary>
+    /// A file nothing could read refuses only the read that would have judged it. The words-only read is not asked to
+    /// judge anything, so the same message comes back as its words rather than as a refusal nobody would act on.
+    /// </summary>
+    [Fact]
+    public async Task ReadWordsAsync_AMessageCarryingADocumentNothingCouldRead_RefusesNothing()
+    {
+        // Arrange
+        this.extractor.Reports("locked.pdf", AttachmentTextExtractionResult.Encrypted());
+
+        var raw = MessageAttaching(Attachment("locked.pdf", "application/pdf", "%PDF-1.7 one"));
+
+        // Act
+        var text = await this.reader.ReadWordsAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(text.AttachmentRefusal);
+        Assert.Empty(this.extractor.ReadFileNames);
+    }
+
+    /// <summary>
+    /// The attachment the reader opens is offered to the extractor as the octets that part actually carries, decoded
+    /// out of the message rather than named by it. Nothing else in the repository reads a byte through that opened
+    /// attachment, so a reader handing over the wrong part, or nothing at all, would leave a screened deployment
+    /// scanning an empty document while every assertion about names and outcomes stayed green.
+    /// </summary>
+    [Fact]
+    public async Task ReadForScreeningAsync_ADocumentTheExtractorWritesOut_OffersTheOctetsThatPartCarries()
+    {
+        // Arrange
+        const string Contents = "%PDF-1.7 the signing key is AKIAEXAMPLEKEY";
+
+        this.extractor.Reads("invoice.pdf", "the signing key is AKIAEXAMPLEKEY");
+
+        var raw = MessageAttaching(
+            Attachment("note.txt", "text/plain", "nothing here"),
+            Attachment("invoice.pdf", "application/pdf", Contents));
+
+        // Act
+        await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Encoding.UTF8.GetBytes(Contents), this.extractor.WrittenOctets["invoice.pdf"]);
+        Assert.Equal(Encoding.UTF8.GetBytes("nothing here"), this.extractor.WrittenOctets["note.txt"]);
     }
 
     /// <summary>
@@ -156,7 +224,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     [InlineData(nameof(AttachmentTextExtractionOutcome.TimedOut))]
     [InlineData(nameof(AttachmentTextExtractionOutcome.InputTooLarge))]
     [InlineData(nameof(AttachmentTextExtractionOutcome.ContainerBoundExceeded))]
-    public async Task ReadAsync_ADocumentNothingCouldRead_RefusesForTheFileAndReadsNoText(string outcome)
+    public async Task ReadForScreeningAsync_ADocumentNothingCouldRead_RefusesForTheFileAndReadsNoText(string outcome)
     {
         // Arrange
         this.extractor.Reports("locked.docx", UnreadableResult(outcome));
@@ -164,7 +232,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var raw = MessageAttaching(Attachment("locked.docx", "application/octet-stream", "PK"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.NotRead, text.AttachmentRefusal);
@@ -176,7 +244,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// on: screening part of a message the screen has already decided it cannot judge would be worse than not screening.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_ADocumentNothingCouldRead_StopsTheWalkAndDropsWhatCameBefore()
+    public async Task ReadForScreeningAsync_ADocumentNothingCouldRead_StopsTheWalkAndDropsWhatCameBefore()
     {
         // Arrange
         this.extractor.Reads("first.pdf", "an ordinary invoice");
@@ -189,7 +257,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             Attachment("third.pdf", "application/pdf", "%PDF-1.7 three"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.NotRead, text.AttachmentRefusal);
@@ -203,7 +271,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// read successfully and telling the author to convert one would name a file that was never the problem.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_DocumentsHoldingMoreOctetsThanTheMessageCeiling_RefusesForTheMessage()
+    public async Task ReadForScreeningAsync_DocumentsHoldingMoreOctetsThanTheMessageCeiling_RefusesForTheMessage()
     {
         // Arrange
         var reader = new MimeKitOutgoingMailTextReader(
@@ -220,7 +288,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             Attachment("second.pdf", "application/pdf", "0123456789"));
 
         // Act
-        var text = await reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
@@ -232,7 +300,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// would tell its author to convert something nothing was wrong with.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_TwoDocumentsThatFitTheMessageCeilingTogether_ReadsBothAndRefusesNothing()
+    public async Task ReadForScreeningAsync_TwoDocumentsThatFitTheMessageCeilingTogether_ReadsBothAndRefusesNothing()
     {
         // Arrange
         this.extractor.Reads("first.pdf", "an ordinary invoice");
@@ -243,7 +311,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             Attachment("second.pdf", "application/pdf", "0123456789"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(text.AttachmentRefusal);
@@ -256,7 +324,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// discover there are a thousand is work spent on a send that is not happening.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_MoreAttachmentsThanTheMessageCeiling_RefusesBeforeAnythingIsOpened()
+    public async Task ReadForScreeningAsync_MoreAttachmentsThanTheMessageCeiling_RefusesBeforeAnythingIsOpened()
     {
         // Arrange
         var reader = new MimeKitOutgoingMailTextReader(
@@ -273,7 +341,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             Attachment("second.pdf", "application/pdf", "%PDF-1.7 two"));
 
         // Act
-        var text = await reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
@@ -285,7 +353,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// however many small documents they chose to attach.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_DocumentsTakingLongerThanTheCeilingTogether_RefusesForTheTime()
+    public async Task ReadForScreeningAsync_DocumentsTakingLongerThanTheCeilingTogether_RefusesForTheTime()
     {
         // Arrange
         var bounds = new AttachmentTextExtractionOptions();
@@ -298,7 +366,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
             Attachment("second.pdf", "application/pdf", "%PDF-1.7 two"));
 
         // Act
-        var text = await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        var text = await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
@@ -310,7 +378,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     /// handed has to be the one measured from this message rather than anything a caller stated.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AnAttachedDocument_IsOfferedTheDescriptionMeasuredFromTheMessage()
+    public async Task ReadForScreeningAsync_AnAttachedDocument_IsOfferedTheDescriptionMeasuredFromTheMessage()
     {
         // Arrange
         this.extractor.Reads("terms.pdf", "an ordinary invoice");
@@ -318,7 +386,7 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         var raw = MessageAttaching(Attachment("terms.pdf", "application/pdf", "%PDF-1.7"));
 
         // Act
-        await this.reader.ReadAsync(raw, TestContext.Current.CancellationToken);
+        await this.reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
 
         // Assert
         var offered = Assert.Single(this.extractor.Offered);
@@ -328,11 +396,11 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     }
 
     [Fact]
-    public async Task ReadAsync_NoMimeAtAll_Refuses()
+    public async Task ReadForScreeningAsync_NoMimeAtAll_Refuses()
     {
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
-            () => this.reader.ReadAsync(ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
+            () => this.reader.ReadForScreeningAsync(ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
     }
 
     /// <summary>The message-wide ceilings, narrowed to whichever one a test is about.</summary>
@@ -432,6 +500,15 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         /// <summary>Gets what the reader handed over, in the order it did.</summary>
         public IReadOnlyList<ExtractedEmailAttachment> Offered => this.offered;
 
+        /// <summary>Gets the octets each offered attachment wrote out, keyed by the file name it declared.</summary>
+        /// <remarks>
+        /// The fake writes rather than only inspects, because the opened attachment the reader hands over is
+        /// production code nothing else can reach: an implementation that decoded the wrong part, wrote nothing, or
+        /// failed against a persistent parse mid-walk would leave every assertion about names and outcomes green while
+        /// a screened deployment scanned an empty document.
+        /// </remarks>
+        public Dictionary<string, byte[]> WrittenOctets { get; } = new(StringComparer.Ordinal);
+
         /// <summary>Gets the names of the files this extractor was asked about.</summary>
         public IReadOnlyList<string> ReadFileNames =>
             [.. this.offered.Select(attachment => attachment.FileName?.Value ?? string.Empty)];
@@ -448,19 +525,25 @@ public sealed class MimeKitOutgoingMailTextReaderTests
         public void Reports(string fileName, AttachmentTextExtractionResult result) =>
             this.scripted[fileName] = result;
 
-        public Task<AttachmentTextExtractionResult> ExtractTextAsync(
+        public async Task<AttachmentTextExtractionResult> ExtractTextAsync(
             IOpenedEmailAttachment attachment,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(attachment);
 
             this.offered.Add(attachment.Description);
+
+            var fileName = attachment.Description.FileName?.Value ?? string.Empty;
+
+            using var content = new MemoryStream();
+            await attachment.WriteContentToAsync(content, cancellationToken);
+            this.WrittenOctets[fileName] = content.ToArray();
+
             this.WhileReading?.Invoke();
 
-            return Task.FromResult(
-                this.scripted.TryGetValue(attachment.Description.FileName?.Value ?? string.Empty, out var scripted)
-                    ? scripted
-                    : AttachmentTextExtractionResult.FormatNotRecognized());
+            return this.scripted.TryGetValue(fileName, out var scripted)
+                ? scripted
+                : AttachmentTextExtractionResult.FormatNotRecognized();
         }
     }
 }

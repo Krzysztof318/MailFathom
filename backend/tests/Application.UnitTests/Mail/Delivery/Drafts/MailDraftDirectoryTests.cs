@@ -206,7 +206,12 @@ public sealed class MailDraftDirectoryTests
     /// </remarks>
     private sealed class HeaderReadingOutgoingMailText : IOutgoingMailTextReader
     {
-        public Task<OutgoingMailText> ReadAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
+        public Task<OutgoingMailText> ReadForScreeningAsync(
+            ReadOnlyMemory<byte> rawMime,
+            CancellationToken cancellationToken) =>
+            this.ReadWordsAsync(rawMime, cancellationToken);
+
+        public Task<OutgoingMailText> ReadWordsAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
         {
             var message = Encoding.ASCII.GetString(rawMime.Span).Split("\r\n\r\n", 2);
             var subject = message[0].StartsWith("Subject: ", StringComparison.Ordinal)

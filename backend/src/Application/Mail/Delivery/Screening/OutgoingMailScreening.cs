@@ -81,7 +81,7 @@ public sealed class OutgoingMailScreening(
             return null;
         }
 
-        var composed = await textReader.ReadAsync(rawMime, cancellationToken);
+        var composed = await textReader.ReadForScreeningAsync(rawMime, cancellationToken);
 
         var found = await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,

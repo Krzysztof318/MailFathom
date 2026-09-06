@@ -61,8 +61,21 @@ internal sealed class MimeKitOutgoingMailTextReader(
     TimeProvider timeProvider) : IOutgoingMailTextReader
 {
     /// <inheritdoc />
-    public async Task<OutgoingMailText> ReadAsync(
+    public Task<OutgoingMailText> ReadWordsAsync(
         ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        this.ReadAsync(rawMime, readAttachments: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<OutgoingMailText> ReadForScreeningAsync(
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        this.ReadAsync(rawMime, readAttachments: true, cancellationToken);
+
+    /// <summary>Parses the message once, and opens its attachments only where the caller will judge them.</summary>
+    private async Task<OutgoingMailText> ReadAsync(
+        ReadOnlyMemory<byte> rawMime,
+        bool readAttachments,
         CancellationToken cancellationToken)
     {
         if (rawMime.IsEmpty)
@@ -80,7 +93,9 @@ internal sealed class MimeKitOutgoingMailTextReader(
             persistent: true,
             cancellationToken);
 
-        var attachments = await this.ReadAttachmentsAsync(message, cancellationToken);
+        var attachments = readAttachments
+            ? await this.ReadAttachmentsAsync(message, cancellationToken)
+            : new ReadAttachments([], Refusal: null);
 
         // Each of the three is empty rather than absent where the message carries none, except the markup, which stays
         // absent: a message with no HTML alternative and a message whose HTML alternative is empty are the same thing

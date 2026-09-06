@@ -516,6 +516,11 @@ public sealed class EmailAttachmentDownloadReaderTests
         // Assert
         Assert.True(download.Screened);
         Assert.Null(download.Attachment);
+
+        // The point the stop is recorded under is what an operator reads it by, so a download attributed to a listing
+        // would be a series naming the wrong surface rather than a missing one.
+        var stopped = Assert.Single(egress.Telemetry.Stopped);
+        Assert.Equal(SensitiveContentEgressPoint.AttachmentDownload, stopped.EgressPoint);
     }
 
     /// <summary>A screened deployment serves a file carrying nothing it screens for exactly as an unscreened one does.</summary>

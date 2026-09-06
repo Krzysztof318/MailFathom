@@ -109,6 +109,7 @@ export type MailSendRefusal =
     | 'ceilingReached'
     | 'contentRefused'
     | 'notFullyScanned'
+    | 'attachmentNotRead'
     | 'screeningUnavailable'
     | 'refusedForAnotherReason';
 
@@ -122,6 +123,7 @@ const refusalsByCode: Readonly<Record<number, MailSendRefusal>> = {
     57_002: 'ceilingReached',
     59_001: 'contentRefused',
     59_002: 'notFullyScanned',
+    59_003: 'attachmentNotRead',
     81_001: 'screeningUnavailable',
 };
 

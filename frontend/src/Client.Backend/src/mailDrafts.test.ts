@@ -381,6 +381,7 @@ describe('sendMailDraft', () => {
         { status: 409, errorCode: 57_002, refusal: 'ceilingReached' },
         { status: 409, errorCode: 59_001, refusal: 'contentRefused' },
         { status: 409, errorCode: 59_002, refusal: 'notFullyScanned' },
+        { status: 409, errorCode: 59_003, refusal: 'attachmentNotRead' },
         { status: 503, errorCode: 81_001, refusal: 'screeningUnavailable' },
     ])('reads the deployment refusing with $errorCode as $refusal', async ({ status, errorCode, refusal }) => {
         const answer = await sendMailDraft(session, answering(refusing(status, errorCode)), draftId);

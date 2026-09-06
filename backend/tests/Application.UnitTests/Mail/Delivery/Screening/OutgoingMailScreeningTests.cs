@@ -44,7 +44,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Assert
         Assert.Null(refusal);
-        await reader.DidNotReceive().ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await reader.DidNotReceive().ReadForScreeningAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Assert
         Assert.Equal("rawMime", refusal.ParamName);
-        await reader.DidNotReceive().ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await reader.DidNotReceive().ReadForScreeningAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>What is screened is the composed message rather than anything an author supplied, which is what covers every route into the outbox identically.</summary>
@@ -83,7 +83,7 @@ public sealed class OutgoingMailScreeningTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         var reader = Substitute.For<IOutgoingMailTextReader>();
-        reader.ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        reader.ReadForScreeningAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(new OutgoingMailText("a subject", $"the key is {Marker}", HtmlBody: null));
 
         var screening = new OutgoingMailScreening(reader, egress.Screen);
@@ -113,7 +113,7 @@ public sealed class OutgoingMailScreeningTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         var reader = Substitute.For<IOutgoingMailTextReader>();
-        reader.ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
+        reader.ReadForScreeningAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
             .Returns(new OutgoingMailText("a subject", "an ordinary message", "<p>an ordinary message</p>"));
 
         var screening = new OutgoingMailScreening(reader, egress.Screen);
@@ -189,6 +189,37 @@ public sealed class OutgoingMailScreeningTests
     }
 
     /// <summary>
+    /// A message whose attachments together outran what a whole message may be read within is refused for the ceiling
+    /// rather than for a file, because every document in it was read successfully — telling its author to convert one
+    /// would name a file that was never the problem, and only a shorter message or a raised ceiling changes the answer.
+    /// </summary>
+    [Fact]
+    public async Task FindRefusalAsync_AttachmentsReachingAMessageCeiling_StopsTheActAsNotFullyScanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var screening = ScreeningOver(
+            egress,
+            new OutgoingMailText("a subject", "the files are attached", HtmlBody: null)
+            {
+                AttachmentRefusal = OutgoingAttachmentRefusal.MessageCeilingReached,
+            });
+
+        // Act
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(refusal);
+        Assert.Equal(SensitiveContentEgressRefusalReason.TextExceededScanCeiling, refusal.Reason);
+        Assert.Null(refusal.Scanner);
+        Assert.Null(refusal.Category);
+    }
+
+    /// <summary>
     /// A message carrying both is refused for the finding, because that is the half its author can act on. Reporting an
     /// unreadable file first would send them looking at an archive for a credential the scanner found in the body.
     /// </summary>
@@ -222,7 +253,7 @@ public sealed class OutgoingMailScreeningTests
         OutgoingMailText composed)
     {
         var reader = Substitute.For<IOutgoingMailTextReader>();
-        reader.ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>()).Returns(composed);
+        reader.ReadForScreeningAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>()).Returns(composed);
 
         return new OutgoingMailScreening(reader, egress.Screen);
     }

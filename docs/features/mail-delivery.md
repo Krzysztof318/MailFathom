@@ -569,9 +569,13 @@ what is judged is the message leaving rather than when it was composed.
 **What is read is the composed MIME**: the subject, both body representations, and the text of every attached document,
 exactly as they would be transmitted. Each attached document is opened through
 [attachment text extraction](attachment-text-extraction.md) under that feature's own bounds, so what a scanner sees is
-the words of the file rather than its octets; nothing is executed, nothing is written to disk, and a file whose format
-this deployment reads no text from — an image, an archive, anything that is not one of the document formats — is passed
-over rather than refused. The addresses are still not read: an address is what the message is for rather than text to
+the words of the file rather than its octets; nothing is executed and nothing is written to disk. A file no reader
+*recognizes* — an image, a recording, an archive, a plain-text note, anything outside the ten formats
+`AttachmentDocumentFormats` names — is passed over rather than refused, because no text scanner ever undertook to read
+one. A file whose format is recognized and which yields no text is the opposite: a `.doc`, `.xls`, or `.ppt`, or any
+format an operator excluded from `Embeddings:AttachmentText:Formats`, stops the act with `59003` exactly as an
+encrypted or malformed document does, because a format this deployment knows about and cannot read is a document
+leaving unscreened rather than something that was never a document. The addresses are still not read: an address is what the message is for rather than text to
 examine, on the same line every other guarded point here draws.
 
 **The refusal is asked after the grant, the recipient policy, and the ceilings above, and before the transaction that

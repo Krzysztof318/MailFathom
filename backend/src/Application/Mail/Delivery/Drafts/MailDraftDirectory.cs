@@ -134,6 +134,6 @@ public sealed class MailDraftDirectory(
             return null;
         }
 
-        return new MailDraftReading(draft, await text.ReadAsync(content.RawMime, cancellationToken));
+        return new MailDraftReading(draft, await text.ReadWordsAsync(content.RawMime, cancellationToken));
     }
 }
