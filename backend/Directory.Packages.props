@@ -134,6 +134,13 @@
          around it has to guarantee. -->
     <PackageVersion Include="NCalc" Version="7.1.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- The PDF reader an attachment's text is extracted with. Referenced by Infrastructure alone, so every PdfPig type
+         stays inside the adapter under Documents/ and the application port sees characters and a closed set of reasons.
+         It declares no package dependency at all on the net8.0 assets .NET 10 resolves, which is most of why it was
+         chosen over the alternatives: the three Office Open XML formats are read by the base class library here, so
+         this is the only parser the register has to admit. Apache-2.0, and it carries a row in
+         THIRD_PARTY_LICENSES.md. -->
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
     <PackageVersion Include="NSubstitute" Version="6.0.0" />
     <PackageVersion Include="Roslynator.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.13.1" />

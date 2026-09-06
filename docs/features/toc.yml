@@ -22,6 +22,9 @@
 - name: Email content
   href: email-content.md
   description: What the content of a named message returns — normalized headers, body, attachments — and the limits every part of it is bounded by.
+- name: Attachment text extraction
+  href: attachment-text-extraction.md
+  description: Which document attachments are read for their words, what every ceiling around a hostile one refuses, and what each reason a read reports means.
 - name: Message chunks
   href: message-chunks.md
   description: Why a message is cut into overlapping passages, how a chunk is identified, and what is stored beside it.
