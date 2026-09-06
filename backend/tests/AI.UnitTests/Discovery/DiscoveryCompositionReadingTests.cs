@@ -31,6 +31,10 @@ public sealed class DiscoveryCompositionReadingTests
 
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
+    private static readonly MailAccountId Archive = MailAccountId.Create("archive");
+
+    private static readonly DateTimeOffset BehindSince = ObservedAt.AddDays(-3);
+
     [Fact]
     public void Read_AnAnswerRestingOnAnOfferedSource_ComposesItAsWhatTheCorrespondenceSays()
     {
@@ -473,6 +477,77 @@ public sealed class DiscoveryCompositionReadingTests
         Assert.Equal(PresentationEvidence.MaxCitations, listed.Entries.Count);
     }
 
+    /// <summary>A block resting on a current account and one that is behind is only as current as the worse of them.</summary>
+    [Fact]
+    public void Read_SourcesFromACurrentAccountAndOneBehind_IsStaleOverTheOlderInstant()
+    {
+        // Arrange
+        const string answer = """
+            { "answer": "They accepted.", "confidence": "high", "sources": ["s1", "s2"] }
+            """;
+        var sources = DiscoveryComposedSources.Declare(
+            [Passage("we accept", Work), Passage("they confirmed", Archive)]);
+
+        // Act
+        var plan = Read(
+            answer,
+            DiscoveryIntent.FindFact,
+            sources,
+            coverage:
+            [
+                Coverage(Work, PresentationFreshness.CurrentAt(ObservedAt)),
+                Coverage(Archive, PresentationFreshness.StaleSince(BehindSince)),
+            ]);
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationSupport.Stale, block.Evidence.Support);
+        Assert.Equal(BehindSince, block.Evidence.Freshness.ObservedAt);
+    }
+
+    /// <summary>A run that found more messages than it may declare as sources reached less than the question asked about.</summary>
+    [Fact]
+    public void Read_MoreMessagesThanTheRunMayDeclare_SaysRetrievalWasTruncated()
+    {
+        // Arrange
+        var passages = Enumerable
+            .Range(0, PresentationEvidence.MaxCitations + 6)
+            .Select(index => Passage($"extract {index}"))
+            .ToArray();
+        var sources = DiscoveryComposedSources.Declare(passages);
+
+        // Act
+        var plan = Read(
+            """{ "answer": "They accepted.", "sources": ["s1"] }""",
+            DiscoveryIntent.FindFact,
+            sources,
+            evidence: new DiscoveryEvidence(
+                passages,
+                EmailSearchRetrievalMode.Hybrid,
+                LookupsRun: 6,
+                LookupsRefused: 0));
+
+        // Assert
+        Assert.Contains(PresentationLimitation.RetrievalTruncated, plan.Limitations);
+    }
+
+    /// <summary>An answer past what a block may carry is cut, because dropping it would cite mail while saying no mail answered.</summary>
+    [Fact]
+    public void Read_AnAnswerLongerThanABlockMayCarry_CutsItRatherThanDroppingIt()
+    {
+        // Arrange
+        var overlong = new string('a', PresentationText.MaxLength + 100);
+        var answer = $$"""{ "answer": "{{overlong}}", "confidence": "high", "sources": ["s1"] }""";
+
+        // Act
+        var plan = Read(answer, DiscoveryIntent.FindFact, Sources("we accept"));
+
+        // Assert
+        var block = Assert.IsType<AnswerBlock>(plan.Blocks[0]);
+        Assert.Equal(PresentationText.MaxLength, block.Text.Value.Length);
+        Assert.Equal(PresentationSupport.Supported, block.Evidence.Support);
+    }
+
     private static PresentationPlan Read(
         string? answerText,
         DiscoveryIntent intent,
@@ -507,10 +582,12 @@ public sealed class DiscoveryCompositionReadingTests
             earliestReceivedAt: null,
             latestReceivedAt: null);
 
-    private static EmailKnowledgePassage Passage(string text) => new()
+    private static EmailKnowledgePassage Passage(string text) => Passage(text, Work);
+
+    private static EmailKnowledgePassage Passage(string text, MailAccountId accountId) => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        AccountId = Work,
+        AccountId = accountId,
         FolderAlias = MailFolderAlias.Create("INBOX"),
         Subject = null,
         ReceivedAt = null,

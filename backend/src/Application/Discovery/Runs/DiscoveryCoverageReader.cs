@@ -95,12 +95,19 @@ public sealed class DiscoveryCoverageReader
 
     /// <summary>Names every account the run's scope reached, whether or not local state holds a folder of it.</summary>
     /// <remarks>
-    /// Read from three places rather than from the freshness reading alone, because that reading is silent about a
-    /// folder nothing has ever discovered — so a mailbox an operator configured and synchronization has not yet run
-    /// would appear in no entry at all, and the plan would be silent about a mailbox the run searched. That is exactly
-    /// the account whose freshness matters most, and a run that reported nothing about it would be answering from a
-    /// mailbox it never mentions. The scope's own account list and the folders configuration admits are what carry it,
-    /// and the three overlap for every account that has been reconciled once.
+    /// The scope's own account list is read beside the freshness reading, because that reading is silent about a folder
+    /// nothing has ever discovered — so a mailbox an operator configured and synchronization has not yet run would
+    /// appear in no entry at all, and the plan would be silent about a mailbox the run searched. That is exactly the
+    /// account whose freshness matters most, and a run that reported nothing about it would be answering from a mailbox
+    /// it never mentions. The two overlap for every account that has been reconciled once.
+    /// <para>
+    /// <see cref="MailboxScope.ReadableFolders" /> is deliberately not a third source. It is the deployment's folder
+    /// participation rather than this owner's, so it names folders of every account the deployment serves; taking
+    /// account identifiers from it would put another owner's configured names on this owner's plan, and — the ordering
+    /// below being ordinal — could displace one of the caller's own accounts from what the plan may report.
+    /// <see cref="MailboxScope.AccountIds" /> already names every account the scope reached, a caller who owns none
+    /// having resolved to a scope that admits nothing before this is reached.
+    /// </para>
     /// </remarks>
     private static IEnumerable<MailAccountId> AccountsReached(
         MailboxScope scope,
@@ -108,7 +115,6 @@ public sealed class DiscoveryCoverageReader
         folders
             .Select(folder => folder.AccountId)
             .Concat(scope.AccountIds)
-            .Concat(scope.ReadableFolders.Select(folder => folder.AccountId))
             .Distinct()
             .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
             .Take(PresentationPlan.MaxAccountsCovered);

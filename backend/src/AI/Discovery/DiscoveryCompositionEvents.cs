@@ -31,4 +31,22 @@ internal static partial class DiscoveryCompositionEvents
         Level = LogLevel.Warning,
         Message = "The composing agent at {EndpointAlias} answered with nothing this build could read, so the result says the sources do not answer the question.")]
     internal static partial void LogResultUnreadable(ILogger logger, string endpointAlias);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Warning,
+        Message = "A composing turn for {EndpointAlias} was past what this deployment sends in one request, so no call was made and the result says the sources do not answer the question.")]
+    internal static partial void LogRequestPastItsBound(ILogger logger, string endpointAlias);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Warning,
+        Message = "The composing call to {EndpointAlias} failed, so the result says the sources do not answer the question.")]
+    internal static partial void LogGenerationFailed(ILogger logger, string endpointAlias);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Warning,
+        Message = "The endpoint {EndpointAlias} or its credential did not resolve, so no composing call was made and the result says the sources do not answer the question.")]
+    internal static partial void LogEndpointUnresolved(ILogger logger, string endpointAlias);
 }

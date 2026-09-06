@@ -147,7 +147,10 @@ read is a state the plan expresses and nothing yet produces.
 
 **What the run says about its own reading** is composed here too: one coverage entry per account the scope reached, and
 the limitations the run observed rather than was told — the local copy behind where an account is known to be, sources
-unavailable where a lookup was refused, and semantic ranking unavailable where the deployment fell back to words alone.
+unavailable where a lookup was refused, semantic ranking unavailable where the deployment fell back to words alone, and
+retrieval truncated where the run found more distinct messages than the twenty-four it may declare as sources. A plan
+carrying no limitation states that the run reached everything it was asked about, so a run composed over a cut set says
+so rather than staying silent.
 
 ### What leaves the deployment, and what does not
 

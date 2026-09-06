@@ -117,11 +117,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         var answerText = await this.AskAsync(turn, cancellationToken);
         var composed = DiscoveryCompositionReading.Read(answerText, plan, sources, evidence, coverage);
 
-        if (answerText is null)
-        {
-            DiscoveryCompositionEvents.LogResultUnreadable(this.logger, this.plan.Endpoint.Alias);
-        }
-        else
+        if (answerText is not null)
         {
             DiscoveryCompositionEvents.LogResultComposed(
                 this.logger,
@@ -199,7 +195,20 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
                 this.plan.MaximumMessagesPerRequest,
                 this.plan.MaximumRequestCharacters,
                 this.plan.MaximumRequestImageOctets);
+        }
+        catch (ArgumentException)
+        {
+            // The turn is past what this deployment sends in one request, which is a question whose mail does not fit
+            // rather than a defect: the result says the sources do not answer it, and the operator's own ceilings are
+            // what decides whether a mailbox this size is answerable here. Caught around the bound alone, because
+            // every argument failure below it is a wiring defect that must not read as a mailbox holding no answer.
+            DiscoveryCompositionEvents.LogRequestPastItsBound(this.logger, endpoint.Alias);
 
+            return null;
+        }
+
+        try
+        {
             // Opened per composition and released with it, so a rotated key is picked up by the next question and the
             // material exists for one call rather than for process uptime.
             using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
@@ -225,17 +234,19 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
             var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
+            if (string.IsNullOrWhiteSpace(response.Text))
+            {
+                DiscoveryCompositionEvents.LogResultUnreadable(this.logger, endpoint.Alias);
+
+                return null;
+            }
+
             return response.Text;
-        }
-        catch (ArgumentException)
-        {
-            // The turn is past what this deployment sends in one request, which is a question whose mail does not fit
-            // rather than a defect: the result says the sources do not answer it, and the operator's own ceilings are
-            // what decides whether a mailbox this size is answerable here.
-            return null;
         }
         catch (ChatGenerationFailedException)
         {
+            DiscoveryCompositionEvents.LogGenerationFailed(this.logger, endpoint.Alias);
+
             return null;
         }
         catch (InvalidOperationException)
@@ -243,6 +254,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             // The whole of what the credential source publishes: the alias names no endpoint the configuration in
             // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
             // health record behind, the resilience decorator not yet existing to write one.
+            DiscoveryCompositionEvents.LogEndpointUnresolved(this.logger, endpoint.Alias);
+
             return null;
         }
     }

@@ -87,7 +87,7 @@ internal static class DiscoveryCompositionReading
             blocks,
             [.. sources.Select(source => source.Citation)],
             coverage,
-            Limitations(evidence, coverage));
+            Limitations(evidence, coverage, sources.Count));
     }
 
     /// <summary>Composes the opening block the intent names, or the answer that says the sources do not settle the question.</summary>
@@ -129,14 +129,23 @@ internal static class DiscoveryCompositionReading
     /// The text is the model's own words where it wrote any and the answer is backed, and a stated absence otherwise —
     /// an unsupported block's own prose would be exactly the sentence nobody wrote that the state exists to refuse. The
     /// sentence used instead is deliberately about the run rather than about the subject, so it carries no claim.
+    /// <para>
+    /// An answer past what a block may carry is cut rather than dropped, the same way an extract is quoted. Dropping it
+    /// would leave a block citing mail while stating that no mail answered, which is a false sentence to the person
+    /// rather than the honest absence that sentence is for.
+    /// </para>
     /// </remarks>
     private static AnswerBlock Answer(
         DiscoveryResultDocument? document,
         PresentationEvidence evidence,
         PresentationSupport support)
     {
+        var answer = document?.Answer is { Length: > PresentationText.MaxLength } overlong
+            ? overlong[..PresentationText.MaxLength]
+            : document?.Answer;
+
         var text = support is not PresentationSupport.Unsupported
-            && PresentationText.TryCreate(document?.Answer, out var written)
+            && PresentationText.TryCreate(answer, out var written)
             ? written
             : UnansweredText;
 
@@ -353,15 +362,22 @@ internal static class DiscoveryCompositionReading
 
     /// <summary>States what the run knows about its own reach, from what it observed rather than from what it was told.</summary>
     /// <remarks>
-    /// Both members are read off the run itself. A lookup the deployment refused is mail the answer would have rested
+    /// Every member is read off the run itself. A lookup the deployment refused is mail the answer would have rested
     /// on and did not, and a ranking that fell back to words alone is a question answered without any reading of
     /// meaning — which is why a thin answer to a well-posed question is worth saying out loud.
+    /// <para>
+    /// The truncation is this composition's own rather than retrieval's: a run may find more distinct messages than a
+    /// block may rest on, and the surplus is neither shown to the model nor listed in the evidence. A plan carrying no
+    /// limitation states that the run reached everything it was asked about, so a plan composed over a cut set that
+    /// said nothing would be claiming a reach it did not have.
+    /// </para>
     /// </remarks>
     private static List<PresentationLimitation> Limitations(
         DiscoveryEvidence evidence,
-        IReadOnlyList<AccountCoverage> coverage)
+        IReadOnlyList<AccountCoverage> coverage,
+        int declaredSourceCount)
     {
-        var limitations = new List<PresentationLimitation>(3);
+        var limitations = new List<PresentationLimitation>(4);
 
         if (coverage.Any(account => account.Freshness.Staleness is PresentationStaleness.Stale))
         {
@@ -376,6 +392,11 @@ internal static class DiscoveryCompositionReading
         if (evidence.RetrievalMode is EmailSearchRetrievalMode.Lexical)
         {
             limitations.Add(PresentationLimitation.SemanticRankingUnavailable);
+        }
+
+        if (declaredSourceCount < evidence.Passages.Select(passage => passage.StoredEmailId).Distinct().Count())
+        {
+            limitations.Add(PresentationLimitation.RetrievalTruncated);
         }
 
         return limitations;
