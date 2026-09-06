@@ -70,18 +70,21 @@ internal sealed partial class DiscoveryRunLauncher
     /// <param name="question">The question and the resolved scope bounding what may be read to answer it.</param>
     /// <param name="journal">Where the run publishes, which the caller has already registered.</param>
     /// <param name="caller">The principal the transport admitted, which the run executes under.</param>
+    /// <returns>The task this process finishes with the run on, which the request that asked the question ignores.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// Nothing is awaited and nothing is observed, because the run reports itself: every ending it can reach is
-    /// published to its own stream, so a task result would carry what the client has already been told.
+    /// The route awaits nothing and observes nothing, because the run reports itself: every ending it can reach is
+    /// published to its own stream, so a task result would carry what the client has already been told. What the task
+    /// does say is when this process has finished with the run — the ending is published a moment before the registry is
+    /// told — which is why it is handed back rather than discarded here.
     /// </remarks>
-    internal void Start(MailQuestion question, DiscoveryRunJournal journal, AuthorizedPrincipal caller)
+    internal Task Start(MailQuestion question, DiscoveryRunJournal journal, AuthorizedPrincipal caller)
     {
         ArgumentNullException.ThrowIfNull(question);
         ArgumentNullException.ThrowIfNull(journal);
         ArgumentNullException.ThrowIfNull(caller);
 
-        _ = Task.Run(() => this.ExecuteAsync(question, journal, caller));
+        return Task.Run(() => this.ExecuteAsync(question, journal, caller));
     }
 
     /// <summary>Executes one run on a scope of its own and leaves it ended however it went.</summary>

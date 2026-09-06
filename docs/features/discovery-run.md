@@ -197,7 +197,7 @@ metered budget is separate work.
 
 | Bound | What it is | What happens when it is reached |
 |---|---|---|
-| The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `timedOut` |
+| The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `TimedOut` |
 | Events one run may publish | Fifty-two — one opening, six lookups, twenty-four sources, twenty blocks, one ending | Nothing further is composed, and the run still ends: it completes stating `BlocksOmitted` |
 | Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
 | How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |

@@ -160,7 +160,7 @@ internal static class ClientDiscoveryRunEndpoints
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
-        launcher.Start(question, journal, caller);
+        _ = launcher.Start(question, journal, caller);
 
         return TypedResults.Accepted(
             EventsAddressOf(journal.Id),
