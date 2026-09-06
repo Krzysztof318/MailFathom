@@ -245,7 +245,7 @@ internal static class SendingAccountFile
         }
 
         throw new SyntheticMailFailure(
-            $"'{securityKey}' in '{path}' is '{nameof(MailTransportSecurity.Unsecured)}', which sends the password in the clear, and '{hostKey}' is '{host}', which is neither a loopback nor a container address. It exists for a mail server running beside this command — 'localhost', an address in 127.0.0.0/8 or ::1, a private range a container bridge hands out, or 'host.docker.internal' — so name one of those or secure the connection with {nameof(MailTransportSecurity.StartTls)} or {nameof(MailTransportSecurity.ImplicitTls)}.");
+            $"'{securityKey}' in '{path}' is '{nameof(MailTransportSecurity.Unsecured)}', which sends the password in the clear, and '{hostKey}' is '{host}', which is neither a loopback nor a container bridge address. It exists for a mail server running beside this command — 'localhost', an address in 127.0.0.0/8 or ::1, a container on 172.17.0.0/16, 10.88.0.0/16, or 10.89.0.0/16, or 'host.docker.internal' — so publish the server's port on loopback and name that, or secure the connection with {nameof(MailTransportSecurity.StartTls)} or {nameof(MailTransportSecurity.ImplicitTls)}.");
     }
 
     /// <summary>Reports whether a host as written reaches this machine or the container host beside it.</summary>
@@ -255,23 +255,18 @@ internal static class SendingAccountFile
             : LocalHostNames.Contains(host, StringComparer.OrdinalIgnoreCase)
                 || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Reports whether an address is one a container runtime hands out rather than one that leaves the machine.</summary>
+    /// <summary>Reports whether an address is one a container bridge hands out rather than one on a network the machine merely belongs to.</summary>
     /// <remarks>
-    /// The private ranges are what a bridge network allocates — Docker's default is in 172.16.0.0/12 and Podman's in
-    /// 10.0.0.0/8 — and the link-local ones are what a host with no allocation falls back to. Every one of them is
-    /// still a network a password would travel on, which is why this permits an unsecured connection only in a tool
-    /// that fabricates its own mail and holds a throwaway credential by construction.
+    /// The two subnets are the default bridges themselves — Docker's <c>docker0</c> on 172.17.0.0/16, and Podman's
+    /// netavark bridges on 10.88.0.0/16 and 10.89.0.0/16 — rather than the private blocks those sit inside. Admitting
+    /// a whole block would read a developer's home network on 192.168.0.0/16 or an employer's on 10.0.0.0/8 as though
+    /// it were beside this command, and a real mail server reached at its own private address would then take the
+    /// password in the clear across that network. A container reachable at neither of these is reached the way the
+    /// documentation reaches one anyway: over a published port on loopback, or through the host alias.
     /// </remarks>
     private static bool IsContainerAddress(IPAddress address) =>
-        address.AddressFamily switch
-        {
-            AddressFamily.InterNetwork => address.GetAddressBytes() is
-                [10, ..] or [172, >= 16 and <= 31, ..] or [192, 168, ..] or [169, 254, ..],
-            AddressFamily.InterNetworkV6 => address.IsIPv6LinkLocal
-                || address.IsIPv6UniqueLocal
-                || (address.IsIPv4MappedToIPv6 && IsContainerAddress(address.MapToIPv4())),
-            _ => false,
-        };
+        address.AddressFamily == AddressFamily.InterNetwork
+            && address.GetAddressBytes() is [172, 17, ..] or [10, 88 or 89, ..];
 
     private static SyntheticAuthorIdentity ParseAuthorIdentity(string? author, string path)
     {

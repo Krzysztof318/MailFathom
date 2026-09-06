@@ -109,6 +109,7 @@ public sealed class SendingAccountFileTests
     [InlineData("::1")]
     [InlineData("172.17.0.2")]
     [InlineData("10.88.0.4")]
+    [InlineData("10.89.1.7")]
     [InlineData("host.docker.internal")]
     [InlineData("host.containers.internal")]
     public void ReadFrom_AnUnsecuredConnectionToAHostBesideTheCommand_IsRead(string host)
@@ -131,6 +132,11 @@ public sealed class SendingAccountFileTests
     [InlineData("localhost.example.test")]
     [InlineData("93.184.216.34")]
     [InlineData("2606:2800:220:1:248:1893:25c8:1946")]
+    [InlineData("192.168.1.50")]
+    [InlineData("10.4.2.9")]
+    [InlineData("172.20.3.4")]
+    [InlineData("169.254.7.7")]
+    [InlineData("fd00::1")]
     public void ReadFrom_AnUnsecuredConnectionToAnythingElse_IsRefusedNamingBothKeys(string host)
     {
         // Arrange
@@ -142,7 +148,9 @@ public sealed class SendingAccountFileTests
         // Assert
         // The host is judged as written rather than resolved, so a name nothing here recognizes is refused instead of
         // being looked up — a reader that made a network call could be pointed at a loopback answer today and
-        // somewhere else tomorrow, with the password on the wire either way.
+        // somewhere else tomorrow, with the password on the wire either way. The private addresses here are the point
+        // of the narrow match: a home network, an employer's, a bridge nobody's runtime hands out by default, and a
+        // link-local fallback are all networks a real mail server can sit on, and none of them is beside this command.
         Assert.Contains($"'security' in '{Origin}' is 'Unsecured'", failure.Message, StringComparison.Ordinal);
         Assert.Contains($"'host' is '{host}'", failure.Message, StringComparison.Ordinal);
     }

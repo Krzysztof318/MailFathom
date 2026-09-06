@@ -559,9 +559,12 @@ outside 0 to 65535 rather than carried as far as the connection.
 
 `Unsecured` puts the password on the wire and therefore also permits clear-text authentication; there is no second
 setting, because a plain connection whose credential could not be presented in the clear would reach nothing. It is
-refused against any host that is not loopback, `localhost`, a private range a container bridge hands out, or
-`host.docker.internal`, and the host is judged as written rather than resolved — a name nothing recognizes is refused
-instead of looked up, because a lookup is a network call and today's loopback answer is not tomorrow's.
+refused against any host that is not loopback, `localhost`, a default container bridge — Docker's 172.17.0.0/16, and
+Podman's 10.88.0.0/16 and 10.89.0.0/16 — or `host.docker.internal`. Those are the bridges themselves rather than the
+private blocks around them, deliberately: a home network on 192.168.0.0/16 or an employer's on 10.0.0.0/8 is not beside
+this command, and a real mail server at its own private address would otherwise take the password in the clear across
+it. The host is judged as written rather than resolved — a name nothing recognizes is refused instead of looked up,
+because a lookup is a network call and today's loopback answer is not tomorrow's.
 
 ### Reaching a test mail server on the machine
 
