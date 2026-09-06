@@ -39,18 +39,29 @@ public sealed class PlannedMailRetrieval
     /// <summary>Runs the plan's lookups in order until enough distinct passages have been found or the plan runs out.</summary>
     /// <param name="question">The question, whose scope bounds every lookup.</param>
     /// <param name="plan">The plan to run.</param>
+    /// <param name="progress">Told how far the plan has got as each lookup settles, or <see langword="null" /> where nobody is watching.</param>
     /// <param name="cancellationToken">Cancels the retrieval between and during lookups.</param>
     /// <returns>What the run may answer from, with what it took to find it.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Every lookup the plan holds carried a filter this deployment refuses.</exception>
     /// <remarks>
+    /// <para>
     /// One refused lookup is skipped rather than fatal: the filters are derived from a question by a model, and a
     /// question is not unanswerable because one of several wordings named an address that is not one. A plan whose every
     /// lookup was refused is a different thing — there is nothing left to answer from, and the caller is told why rather
     /// than handed an empty result that reads as a mailbox holding nothing.
+    /// </para>
+    /// <para>
+    /// The progress callback is a plain delegate rather than an <see cref="IProgress{T}" />, and it is called on the
+    /// thread the lookup finished on. That is the whole reason: the standard implementation posts each report to a
+    /// synchronization context or to the thread pool, so two reports can be observed in the order they were scheduled
+    /// rather than the order they were made — and a caller turning them into a numbered event stream would publish a
+    /// plan that went backwards. A caller wanting them elsewhere hands over a delegate that puts them there.
+    /// </para>
     /// </remarks>
     public async Task<DiscoveryEvidence> RetrieveAsync(
         MailQuestion question,
         RetrievalPlan plan,
+        Action<DiscoveryRetrievalProgress>? progress,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
@@ -74,6 +85,8 @@ public sealed class PlannedMailRetrieval
             {
                 lastRefusal = refusal;
                 lookupsRefused++;
+                Report();
+
                 continue;
             }
 
@@ -93,6 +106,8 @@ public sealed class PlannedMailRetrieval
                 }
             }
 
+            Report();
+
             if (found.Count >= plan.SufficientPassages)
             {
                 break;
@@ -109,5 +124,11 @@ public sealed class PlannedMailRetrieval
             retrievalMode,
             lookupsRun,
             lookupsRefused);
+
+        void Report() => progress?.Invoke(new DiscoveryRetrievalProgress(
+            lookupsRun,
+            lookupsRefused,
+            plan.Lookups.Count,
+            Math.Min(found.Count, plan.SufficientPassages)));
     }
 }

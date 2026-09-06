@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -101,6 +101,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
 | `POST /api/client/portrait` | `mailfathom.mail.read` |
 | `DELETE /api/client/portrait` | `mailfathom.mail.read` |
+| `POST /api/client/discovery/runs` | `mailfathom.mail.ask` |
+| `GET /api/client/discovery/runs/{runId}/events` | `mailfathom.mail.ask` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
@@ -1627,6 +1629,50 @@ write grant and still has to be able to clear their own bell.
 **A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
 rather than lost anything.
+
+### The Discover routes
+
+A question about the mailbox takes as long as a model and a mailbox take, so it is asked on one route and read on
+another. The first answers as soon as the question is known to be answerable, with the run's identifier and the address
+its events are read at:
+
+```http
+POST /api/client/discovery/runs
+Content-Type: application/json
+
+{ "question": "which supplier quoted least for the racking", "folders": ["role:Inbox"] }
+```
+
+```http
+202 Accepted
+Location: /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/events
+
+{ "runId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90" }
+```
+
+The second is a `text/event-stream`, and each event carries its sequence as the event id and its kind as the event name:
+
+```http
+GET /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/events
+Last-Event-ID: 3
+```
+
+```text
+event: block
+id: 4
+data: {"event":"block","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":4,"block":{ … }}
+
+event: completed
+id: 5
+data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[]}
+```
+
+A run outlives the connection that asked for it, so a client that lost its network reattaches to the second route with
+`Last-Event-ID` and is given what it missed — which a browser's own `EventSource` sends without being asked to. The run
+belongs to the owner who asked for it: somebody else's reads as `404` rather than as a refusal. The asking route answers
+`429` while this process is already running as many as it may, and `400` naming what was wrong with the question or the
+mail it named. [The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each
+event carries, what bounds a run, and why the transport is this one.
 
 ### The telemetry routes
 

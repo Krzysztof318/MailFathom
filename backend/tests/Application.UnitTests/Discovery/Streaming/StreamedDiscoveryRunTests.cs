@@ -1,0 +1,260 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.AiProviders;
+using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Discovery.Streaming;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Retrieval;
+using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
+using Xunit;
+
+namespace MailFathom.Application.UnitTests.Discovery.Streaming;
+
+/// <summary>Covers what a watched run publishes, in what order, and what it publishes instead when it ends badly.</summary>
+public sealed class StreamedDiscoveryRunTests
+{
+    private const int SufficientPassages = 5;
+
+    private static readonly MailQuestion Question = new(
+        MailQuestionText.Create("which supplier quoted least"),
+        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
+
+    /// <summary>A person watching sees the run open, work, declare its sources, and only then read a block.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatRetrievedMail_PublishesTheOpeningTheProgressTheSourcesAndThenTheBlocks()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(new ScriptedEmailKnowledgeSearch()
+            .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                DiscoveryRunStarted.Kind,
+                DiscoveryRetrievalProgressed.Kind,
+                DiscoveryCitationDeclared.Kind,
+                DiscoveryBlockComposed.Kind,
+                DiscoveryRunCompleted.Kind,
+            ],
+            Published(journal).Select(@event => @event.EventName));
+    }
+
+    /// <summary>A source is declared before the block naming it, so a client renders a block the moment it arrives.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatRetrievedMail_DeclaresEverySourceBeforeTheBlockNamingIt()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(new ScriptedEmailKnowledgeSearch()
+            .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Published(journal);
+        var declared = published.OfType<DiscoveryCitationDeclared>().ToArray();
+        var composed = published.OfType<DiscoveryBlockComposed>().ToArray();
+        Assert.Equal(
+            declared.Select(@event => @event.Citation.Id.Value),
+            composed.SelectMany(@event => @event.Block.ReferencedCitations)
+                .Select(citation => citation.Value)
+                .Distinct());
+        Assert.True(declared.Max(@event => @event.Sequence) < composed.Min(@event => @event.Sequence));
+    }
+
+    /// <summary>Retrieval reports as each lookup settles, so a run reading a large mailbox does not look stalled.</summary>
+    [Fact]
+    public async Task RunAsync_APlanOfSeveralLookups_ReportsRetrievalAsEachOfThemSettles()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(
+            new ScriptedEmailKnowledgeSearch()
+                .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation"))
+                .Returning("oferta", ScriptedEmailKnowledgeSearch.Passage("the oferta")),
+            "quotation",
+            "oferta");
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        var reported = Published(journal).OfType<DiscoveryRetrievalProgressed>().Select(@event => @event.Progress);
+        Assert.Equal([1, 2], reported.Select(progress => progress.LookupsRun));
+        Assert.Equal([1, 2], reported.Select(progress => progress.PassagesFound));
+    }
+
+    /// <summary>What made the answer narrower than the question is stated on the ending rather than left to be inferred.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatStoppedAtEnough_StatesThatItReadNoFurther()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(
+            new ScriptedEmailKnowledgeSearch().Returning(
+                "quotation",
+                ScriptedEmailKnowledgeSearch.Passage("the quotation"),
+                ScriptedEmailKnowledgeSearch.Passage("the revision")),
+            sufficientPassages: 2,
+            "quotation");
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        var completed = Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
+        Assert.Equal([PresentationLimitation.RetrievalTruncated], completed.Limitations);
+    }
+
+    /// <summary>A mailbox holding nothing on the subject is a run that completed, not one that failed.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatRetrievedNothing_CompletesWithNoBlock()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(new ScriptedEmailKnowledgeSearch());
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
+        Assert.Empty(Published(journal).OfType<DiscoveryBlockComposed>());
+    }
+
+    /// <summary>A deployment that answers no question at all says so as the run's ending, since nobody is left to throw at.</summary>
+    [Fact]
+    public async Task RunAsync_ADeploymentThatAnswersNoQuestions_EndsTheRunAsUnavailable()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = new StreamedDiscoveryRun(
+            DiscoveryRuns.Composing(planner: null, new ScriptedEmailKnowledgeSearch()));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.Unavailable, Failure(journal));
+    }
+
+    /// <summary>A provider refusing right now is told apart from a deployment that answers nothing, on the stream too.</summary>
+    [Fact]
+    public async Task RunAsync_AChatProviderRefusingRecently_EndsTheRunAsTemporarilyUnavailable()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = new StreamedDiscoveryRun(DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            chatState: AiProviderHealthState.Unavailable));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.TemporarilyUnavailable, Failure(journal));
+    }
+
+    /// <summary>A plan the deployment refused every lookup of ends as a refusal rather than as an empty answer.</summary>
+    [Fact]
+    public async Task RunAsync_EveryLookupRefused_EndsTheRunAsRefusedRetrieval()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(new ScriptedEmailKnowledgeSearch().Refusing("quotation"));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.RetrievalRefused, Failure(journal));
+    }
+
+    /// <summary>What the run published before it failed stays published, which is the whole of keeping what came before.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatFailedAfterReportingProgress_KeepsWhatItHadAlreadyPublished()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(
+            new ScriptedEmailKnowledgeSearch().Refusing("quotation").Refusing("oferta"),
+            "quotation",
+            "oferta");
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [DiscoveryRunStarted.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRetrievalProgressed.Kind, DiscoveryRunFailed.Kind],
+            Published(journal).Select(@event => @event.EventName));
+    }
+
+    /// <summary>A run stopped at the longest one may take says so, rather than leaving a client on a connection that closes.</summary>
+    [Fact]
+    public async Task RunAsync_ARunStopped_EndsTheRunAsTimedOut()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = RunOver(new StoppedEmailKnowledgeSearch());
+        using var stopped = new CancellationTokenSource();
+        await stopped.CancelAsync();
+
+        // Act
+        await run.RunAsync(Question, journal, stopped.Token);
+
+        // Assert
+        Assert.Equal(DiscoveryRunFailure.TimedOut, Failure(journal));
+    }
+
+    /// <summary>Retrieval as it behaves once the run has been stopped, which is what the longest a run may take does.</summary>
+    private sealed class StoppedEmailKnowledgeSearch : IEmailKnowledgeSearch
+    {
+        public Task<EmailKnowledgeLookup> FindPassagesAsync(
+            MailboxScope scope,
+            EmailKnowledgeQuery query,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            throw new InvalidOperationException("The run was expected to have been stopped before retrieval ran.");
+        }
+    }
+
+    private static StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search) =>
+        RunOver(search, SufficientPassages, "quotation");
+
+    private static StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search, params string[] queries) =>
+        RunOver(search, SufficientPassages, queries);
+
+    private static StreamedDiscoveryRun RunOver(
+        IEmailKnowledgeSearch search,
+        int sufficientPassages,
+        params string[] queries) =>
+        new(DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, sufficientPassages, queries),
+            search));
+
+    private static DiscoveryRunJournal NewJournal() =>
+        new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment);
+
+    private static DiscoveryRunFailure Failure(DiscoveryRunJournal journal) =>
+        Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]).Failure;
+
+    private static DiscoveryRunEvent[] Published(DiscoveryRunJournal journal) =>
+    [
+        .. journal.ReadFromAsync(afterSequence: 0, TestContext.Current.CancellationToken)
+            .ToBlockingEnumerable(TestContext.Current.CancellationToken),
+    ];
+}

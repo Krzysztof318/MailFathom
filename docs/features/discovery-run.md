@@ -1,6 +1,6 @@
 # The Discover run
 
-<!-- describes: backend/src/AI/Discovery/**, backend/src/Application/Discovery/Planning/**, backend/src/Application/Discovery/Runs/** -->
+<!-- describes: backend/src/AI/Discovery/**, backend/src/Application/Discovery/Planning/**, backend/src/Application/Discovery/Runs/**, backend/src/Application/Discovery/Streaming/**, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Api/DiscoveryRunLauncher.cs -->
 
 A question about a mailbox arrives as words and a scope: *which supplier quoted least for the racking*, asked about one
 conversation, about four selected messages, or about every folder of every account. Before anything is read, that has to
@@ -8,7 +8,9 @@ become two decisions — what to retrieve, and what an answer to it will look li
 made, what bounds each of them, and what a deployment does when it cannot make them at all.
 
 What the decisions produce is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in.
-Filling that plan with facts and citations is separate work again.
+The plan does not cross the wire whole — a run publishes its parts as they become ready, which is
+[what a client watches](#a-run-is-watched-rather-than-waited-for) — and filling a derived block with facts is separate
+work again.
 
 ---
 
@@ -111,9 +113,119 @@ Two refusals come before any of the above, and neither is a fallback.
   and *degraded* is one that does and cannot right now, which is worth retrying. A build with no planner configured
   reports the first of those, because a deployment that cannot derive a plan does not run Discover.
 
+## A run is watched rather than waited for
+
+A run takes as long as a model and a mailbox take, and what it produces becomes readable in pieces — so it is delivered
+as it happens rather than as one answer at the end. Two routes do that, both under the
+[client endpoint](../operations/client-endpoint.md) and both published under the same grant that governs asking a
+question anywhere else:
+
+| Route | What it does |
+|---|---|
+| `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address its events are read at, as soon as the question and its scope are known to be answerable. |
+| `GET /api/client/discovery/runs/{runId}/events` | Reads that run, from its beginning or from wherever a dropped connection left off. |
+
+Two routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
+loses its reading connection and nothing else: the run goes on executing, and the client comes back to the second route
+and is given what it missed. A single route that streamed the answer over the connection that asked would lose the whole
+run instead, which is exactly the case this surface exists for.
+
+### What a client is told, and in what order
+
+Every event names its run and carries a sequence that starts at `1` and never skips, so a client renders in arrival
+order and never has to sort. Six kinds are published, and the run ends on exactly one of the last two:
+
+| Event | What it carries |
+|---|---|
+| `started` | The revision of the [presentation contract](presentation-plan.md), which is what a client keys its renderers by |
+| `retrieval` | How far retrieval has got: lookups run, lookups refused, lookups planned, passages found — counts, and no mail |
+| `citation` | One source the run declares, ready to be named by a block |
+| `block` | One composed block, ready to be drawn |
+| `completed` | The run finished, with what made the answer narrower than the question |
+| `failed` | The run stopped, as one of `unavailable`, `temporarilyUnavailable`, `retrievalRefused`, `timedOut`, or `failed` |
+
+Two orderings hold within that. **A source is always declared before the block naming it**, so a block can be drawn the
+moment it arrives instead of being held until the run closes. And **an ending is the last thing a run publishes** —
+nothing is appended after it, so a client that has seen one has seen the whole run.
+
+Nothing crosses the wire as a whole presentation plan. What a client assembles is the plan; what the run publishes is
+its parts. That is what makes *a failure keeps what came before* fall out rather than being arranged: the blocks that
+arrived stay exactly where they were, and the failure is one more event behind them.
+
+A run belongs to the owner who asked for it. Reading somebody else's is answered as **no such run** rather than as a
+refusal, so an identifier says nothing about whether it exists.
+
+### Resuming a dropped connection
+
+Resumption is the protocol's own: each event goes out under its sequence as the event id, and a client reattaching
+sends the last one it holds back in `Last-Event-ID`. A browser's `EventSource` does that by itself, so a client that
+never wrote the reconnection gets the resumption too.
+
+A header that is absent, blank, or names a place this run never reached reads as the beginning. That is the safe
+direction: no client can hold such a value honestly — a sequence is only ever learned by being sent it — so what it
+means is a client whose state belongs to some other run, and replaying costs it a few events it already has rather than
+an answer it never receives.
+
+### Why Server-Sent Events, and why not SignalR
+
+A run is one-directional, its events are small JSON documents, and the resumption above is already in the protocol. So
+what a plain chunked HTTP stream would need built by hand — framing, event names, an identifier per event, a
+reconnection that says where it left off — is what this gets from the browser's own `EventSource` and from
+`TypedResults.ServerSentEvents` on the server.
+
+SignalR would carry it too, and is deliberately not introduced. What it adds over this is multi-directional messaging
+and a connection lifecycle of its own, and a run has no use for either: nothing is sent back up the stream, and the run
+is addressed by an identifier rather than by a connection. Nothing about the events depends on the choice, which is the
+point — the contract is the sequence, so a deployment that ever needed a different transport would serve the same events
+over it.
+
+### What bounds a run
+
+Four bounds, each with a stated behaviour when it is reached. All four are constants of this build rather than settings,
+because none of them is a deployment decision an operator has any basis to take differently — and a Discover run's own
+metered budget is separate work.
+
+| Bound | What it is | What happens when it is reached |
+|---|---|---|
+| The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `timedOut` |
+| Events one run may publish | Fifty-two — one opening, six lookups, twenty-four sources, twenty blocks, one ending | Nothing further is composed, and the run still ends: it completes stating `blocksOmitted` |
+| Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
+| How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
+
+Nothing is held past the first two of those together, ended or not: a run older than that is one whose execution never
+reported at all, and holding it would spend one of the eight slots until the process was restarted.
+
+The buffer is bounded and **never evicts**, which is what makes resumption exact rather than best-effort: there is no
+state in which a client asks for what it missed and is told the run has moved on. The last slot is reserved for the
+ending, so a run that filled its buffer still says so instead of leaving a reader waiting. And a run that is still
+executing is never forgotten however long it has been held — only a run that has ended starts its retention window, so
+a client reconnecting to a slow run is never told it never existed.
+
+### What a run composes today
+
+Out of the correspondence alone, a run composes the one block whose contract is satisfied by the mail itself: an
+evidence list, quoting the extracts it answered from, in the order retrieval handed them over. One citation per distinct
+message, so two facts drawn from one message are visibly the same source, labelled by the message's subject where it
+carried one a plan may carry and by the account and folder it was read from where it did not. The relevance beside each
+entry is the place retrieval gave it expressed as a fraction, because retrieval attaches no score and the ordering is
+the whole of what is known.
+
+The blocks that state something *about* the correspondence rather than showing it — an answer, a timeline, a fact table
+— need a derivation, and a composition that filled one from passage order would be inventing the facts a citation exists
+to make checkable. Those are filled by separate work.
+
+### None of it reaches a log
+
+Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these two
+routes and nowhere else. The events that describe how a run is *going* carry counts and closed values alone, which is
+what makes a run observable without any of the mail: a failure names one of five words, and retrieval progress names
+four numbers.
+
 ## What is deliberately not here
 
-- **Filling the plan.** Which facts, columns, dates, and citations the composed blocks end up carrying is separate work.
+- **Filling the plan.** Which facts, columns, dates, and citations a derived block ends up carrying is separate work;
+  what a run composes without one is the evidence list above.
 - **What a run spent.** The single derivation call is not metered against a run ledger, because one turn with no tools
-  cannot iterate; a Discover run's own budget is separate work, and the derivation joins it when it exists.
+  cannot iterate; a Discover run's own budget is separate work, and the derivation and the bounds above join it when it
+  exists.
 - **Rendering.** No client draws a presentation plan yet.

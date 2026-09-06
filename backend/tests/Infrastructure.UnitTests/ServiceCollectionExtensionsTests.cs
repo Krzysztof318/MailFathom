@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
+using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
@@ -287,6 +288,11 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     /// this instance derives no plans. Its planner belongs to the AI boundary and arrives only where a chat endpoint
     /// was declared, so the registration resolves it optionally rather than requiring it.
     /// </summary>
+    /// <remarks>
+    /// The registry's lifetime is asserted beside them because it is the one here that decides behaviour rather than
+    /// cost: a run outlives the request that opened it and is read back over a second one, so a registry resolved per
+    /// scope would hold each run where nothing could reach it and every reconnection would report no such run.
+    /// </remarks>
     [Fact]
     public void AddInfrastructure_WithoutAChatEndpoint_StillResolvesADiscoveryRunThatDerivesNoPlan()
     {
@@ -308,6 +314,14 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             services,
             descriptor => descriptor.ServiceType == typeof(DiscoveryRun)
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(StreamedDiscoveryRun)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(DiscoveryRunRegistry)
+                && descriptor.Lifetime == ServiceLifetime.Singleton);
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDiscoveryRunPlanner));
     }
 

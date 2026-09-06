@@ -37,6 +37,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -58,6 +59,7 @@ public sealed class PlannedMailRetrievalTests
         await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(scope),
             PlanOf(sufficientPassages: 10, "invoice"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -80,6 +82,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice", "faktura"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -102,6 +105,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -122,6 +126,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -144,6 +149,7 @@ public sealed class PlannedMailRetrievalTests
         var refusal = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => retrieval.RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+            progress: null,
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -163,6 +169,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -184,6 +191,7 @@ public sealed class PlannedMailRetrievalTests
         var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice"),
+            progress: null,
             TestContext.Current.CancellationToken);
 
         // Assert
