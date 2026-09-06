@@ -39,9 +39,18 @@ internal sealed class StoredEmailEnrichmentStore(
 {
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// Ordering is by the primary key, which is total, stable, and already indexed. No resume position travels with the
     /// batch, because writing a message's record is what takes it out of this query: a pass that repeats the read after
     /// committing sees the next messages rather than the ones it just derived from.
+    /// </para>
+    /// <para>
+    /// A message's passages are ordered body first and only then by attachment, because an attachment's ordinals run
+    /// from zero alongside the body's rather than after them, so the ordinal alone puts no order between a body passage
+    /// and an attachment passage carrying the same number. Taking the leading passages by ordinal alone would hand a
+    /// derivation an arbitrary mix, and on a message with several attachments it could hand it no body text at all —
+    /// which is the opposite of the opening this derivation reads a message for.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<EnrichableEmail>> GetEmailsAwaitingEnrichmentAsync(
         MailAccountIdentity account,
@@ -70,7 +79,9 @@ internal sealed class StoredEmailEnrichmentStore(
                 email.Subject,
                 email.ReceivedAt,
                 email.Chunks
-                    .OrderBy(chunk => chunk.Ordinal)
+                    .OrderBy(chunk => chunk.AttachmentPosition == null ? 0 : 1)
+                    .ThenBy(chunk => chunk.AttachmentPosition)
+                    .ThenBy(chunk => chunk.Ordinal)
                     .Take(maximumPassagesPerEmail)
                     .Select(chunk => new EnrichablePassageRow(chunk.Id, chunk.Ordinal, chunk.Text))
                     .ToList()))

@@ -10,9 +10,11 @@ namespace MailFathom.Host.Api;
 /// <param name="DerivedAt">When the derivation ran.</param>
 /// <param name="Marks">What it concluded, which is empty where it found nothing to say.</param>
 /// <remarks>
-/// The whole object is absent for a message no derivation has reached, so a client tells *nothing has been derived yet*
-/// from *a derivation had nothing to say* without a third field saying which — the first is a missing object and the
-/// second an empty array.
+/// The field carrying this object is on every row of every response and is never omitted, so the two states are told
+/// apart by what it holds rather than by whether it is there: <see langword="null" /> for a message no derivation has
+/// reached, and this object with an empty <see cref="Marks" /> list for one a derivation settled with nothing to say. A
+/// client therefore tells *nothing has been derived yet* from *a derivation had nothing to say* without a third field
+/// saying which.
 /// </remarks>
 internal sealed record ClientMailEnrichmentResponse(DateTimeOffset DerivedAt, IReadOnlyList<ClientMailMarkResponse> Marks)
 {

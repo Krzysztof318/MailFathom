@@ -69,6 +69,12 @@ derivation is a provider call, and every other account is waiting behind the one
 message is what says what it is about; a long thread's later passages are quoted history the cut kept because somebody
 wrote around it.
 
+*Leading* is read body first. An attachment's passages are numbered from zero alongside the body's rather than after
+them, so the number alone puts no order between a body passage and an attachment passage carrying the same one. The six
+are therefore taken from the message's own text, and an attachment's passages join only where the body has fewer — on a
+message with several attachments the other ordering could have handed a derivation no body text at all, which is the
+opposite of the opening it reads a message for.
+
 **No cursor exists and none is needed.** A message leaves the selection by being derived from, so an interrupted pass
 repeats nothing and skips nothing. That is also the whole of how an existing mailbox is backfilled: a deployment that
 turns enrichment on drains its stored mail over successive runs, eight messages at a time, and each run reports how far

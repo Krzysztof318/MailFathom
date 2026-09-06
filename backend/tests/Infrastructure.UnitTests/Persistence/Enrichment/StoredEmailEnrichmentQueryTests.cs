@@ -58,7 +58,9 @@ public sealed class StoredEmailEnrichmentQueryTests
             {
                 email.Id,
                 Passages = email.Chunks
-                    .OrderBy(chunk => chunk.Ordinal)
+                    .OrderBy(chunk => chunk.AttachmentPosition == null ? 0 : 1)
+                    .ThenBy(chunk => chunk.AttachmentPosition)
+                    .ThenBy(chunk => chunk.Ordinal)
                     .Take(6)
                     .Select(chunk => chunk.Text)
                     .ToList(),
@@ -69,5 +71,13 @@ public sealed class StoredEmailEnrichmentQueryTests
         Assert.Contains("EXISTS (", sql, StringComparison.Ordinal);
         Assert.Contains("NOT EXISTS (", sql, StringComparison.Ordinal);
         Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+
+        var byBodyFirst = sql.IndexOf("CASE", StringComparison.Ordinal);
+        var byAttachment = sql.IndexOf("\"AttachmentPosition\"", byBodyFirst + 1, StringComparison.Ordinal);
+        var byOrdinal = sql.IndexOf("\"Ordinal\"", byAttachment + 1, StringComparison.Ordinal);
+
+        Assert.True(byBodyFirst >= 0, sql);
+        Assert.True(byAttachment > byBodyFirst, sql);
+        Assert.True(byOrdinal > byAttachment, sql);
     }
 }

@@ -577,12 +577,12 @@ question, so correcting a model the provider refused — the ordinary case, beca
 a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
 connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
 next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
-fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the pair
-that decides which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
+fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the three
+settings that decide which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
 `Chat:RelevanceFilter:Enabled` turns the second pass on, and whether `Chat:Enrichment:Enabled` turns the arrival
-derivation on. Renaming a declared alias reloads, because the credential and
-the resilience circuit are both looked up by whatever the declaration in force calls it; going from no chat section to
-one, or the reverse, does not, and is refused with that message rather than silently ignored.
+derivation on. Renaming a declared alias reloads, because the credential and the resilience circuit are both looked
+up by whatever the declaration in force calls it; going from no chat section to one, or the reverse, does not, and is
+refused with that message rather than silently ignored.
 
 **What the declared model has to be able to do.** `ask_mail` answers by offering the model a retrieval tool and reading mail when the model calls it, so a model that cannot be given function tools cannot answer a question here whatever else is written above. That is what the two settings in the middle of the table exist for: a current reasoning model refuses function tools beside an *unstated* reasoning effort and names the responses API as the way to have both, so such a model needs `Chat:Api` set to `Responses` and `Chat:ReasoningEffort` written — including written as `none`, which states an effort rather than omitting the parameter. A model this deployment cannot use is not detected at startup, because nothing here can ask a provider what a routed name supports without paying for a call; it surfaces as *request refused* on the first question. [Chat generation](../features/chat-generation.md#two-apis-and-the-deployment-says-which) holds the whole reasoning, and [Mail answering](../features/mail-answering.md) describes the run that imposes the requirement.
 
