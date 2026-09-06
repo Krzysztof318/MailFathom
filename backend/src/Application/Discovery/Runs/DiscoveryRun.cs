@@ -37,6 +37,7 @@ public sealed class DiscoveryRun
     private readonly AccessAuthorization authorization;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly DiscoveryCoverageReader coverageReader;
+    private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly IDiscoveryRunPlanner? planner;
     private readonly IDiscoveryResultComposer? composer;
 
@@ -46,6 +47,7 @@ public sealed class DiscoveryRun
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <param name="egressGuard">Withholds from a provider whatever this owner's posture withholds.</param>
     /// <param name="coverageReader">Reads which accounts the run drew on and how current each one's local copy was.</param>
+    /// <param name="spendLedger">Admits the run against what the current period may still spend, and is what stops the next question.</param>
     /// <param name="planner">The derivation, absent on a deployment that composes no chat agent.</param>
     /// <param name="composer">The composition, absent on the same deployments the derivation is.</param>
     public DiscoveryRun(
@@ -54,6 +56,7 @@ public sealed class DiscoveryRun
         AccessAuthorization authorization,
         SensitiveContentEgressGuard egressGuard,
         DiscoveryCoverageReader coverageReader,
+        IMailAnsweringSpendLedger spendLedger,
         IDiscoveryRunPlanner? planner,
         IDiscoveryResultComposer? composer)
     {
@@ -62,12 +65,14 @@ public sealed class DiscoveryRun
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(coverageReader);
+        ArgumentNullException.ThrowIfNull(spendLedger);
 
         this.capability = capability;
         this.retrieval = retrieval;
         this.authorization = authorization;
         this.egressGuard = egressGuard;
         this.coverageReader = coverageReader;
+        this.spendLedger = spendLedger;
         this.planner = planner;
         this.composer = composer;
     }
@@ -78,12 +83,20 @@ public sealed class DiscoveryRun
     /// <param name="cancellationToken">Cancels the derivation and the retrieval.</param>
     /// <returns>What the run decided, what it found, and what it composed out of it.</returns>
     /// <exception cref="MailAnsweringUnavailableException">This deployment answers no questions about mail, or currently cannot.</exception>
+    /// <exception cref="MailAnsweringBudgetExhaustedException">The current period has no allowance left for another question, or the run reached what one question may spend.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">The caller does not hold <see cref="MailFathomPermission.MailAsk" />.</exception>
     /// <remarks>
+    /// <para>
     /// The two refusals are distinguishable on purpose and carry the availability that produced them. A deployment that
     /// configured no chat provider, or no embedding profile for the question to be placed beside mail with, answers
     /// nothing and will go on answering nothing until an operator changes that; one whose provider is refusing right now
     /// answers nothing about this request and says so. Neither is a silent degradation into a run answered from less.
+    /// </para>
+    /// <para>
+    /// The two ceilings are distinguishable for the same reason, and by the scope the refusal carries: a period that is
+    /// spent turns over, so the same question asked later is answered, while a question that grew past what one question
+    /// may cost reaches the same ceiling however often it is asked again.
+    /// </para>
     /// </remarks>
     public async Task<DiscoveryRunResult> RunAsync(
         MailQuestion question,
@@ -107,6 +120,17 @@ public sealed class DiscoveryRun
             throw availability is MailAnsweringAvailability.Inactive
                 ? MailAnsweringUnavailableException.NotServed()
                 : MailAnsweringUnavailableException.TemporarilyUnable();
+        }
+
+        // Taken after the capability is read and before anything is derived, which is the last point at which nothing
+        // has been spent — the same placement the MCP surface's question reader uses, and for the same reason: taking
+        // it earlier would count a question this deployment was never going to answer against a ceiling on what it
+        // spends. It is never handed back, cancellation included: the allowance is what keeps concurrent questions from
+        // all believing they are first, and returning it would let a client cycle admissions while spending the
+        // period's tokens.
+        if (!this.spendLedger.TryAdmitRun())
+        {
+            throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }
 
         // Stated before the derivation rather than inside it, because the question is this owner's text and the guard

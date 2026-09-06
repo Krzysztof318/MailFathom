@@ -68,6 +68,7 @@ public sealed class DiscoveryRunRegistry
     /// is a number a client is told, so it has to be the number rather than approximately it.
     /// </para>
     /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the source passes to the held run; it is disposed when the registry forgets the run, and here when the entry was not taken.")]
     public bool TryOpen(MailOwnerId owner, [NotNullWhen(true)] out DiscoveryRunJournal? journal)
     {
         lock (this.opening)
@@ -81,10 +82,22 @@ public sealed class DiscoveryRunRegistry
                 return false;
             }
 
-            var opened = new DiscoveryRunJournal(DiscoveryRunId.New(), owner);
+            var stopping = new CancellationTokenSource();
+            var opened = new DiscoveryRunJournal(DiscoveryRunId.New(), owner, stopping.Token);
+
+            if (!this.runs.TryAdd(opened.Id, new HeldRun(opened, stopping, this.timeProvider.GetUtcNow())))
+            {
+                // Unreachable while identifiers are drawn fresh under this lock, and handled rather than assumed away:
+                // a run nothing holds is a run nothing will ever forget, so its source would be the one leak here.
+                stopping.Dispose();
+                journal = null;
+
+                return false;
+            }
+
             journal = opened;
 
-            return this.runs.TryAdd(opened.Id, new HeldRun(opened, this.timeProvider.GetUtcNow()));
+            return true;
         }
     }
 
@@ -107,6 +120,37 @@ public sealed class DiscoveryRunRegistry
 
         this.runs[id] = held with { LastUsedAt = this.timeProvider.GetUtcNow() };
         journal = held.Journal;
+
+        return true;
+    }
+
+    /// <summary>Stops a run this owner started, so it makes no further provider call and abandons the retrieval it is waiting on.</summary>
+    /// <param name="id">The run the caller is stopping.</param>
+    /// <param name="owner">The owner the caller was admitted for.</param>
+    /// <returns><see langword="true" /> when the run was found and stopped; <see langword="false" /> when it belongs to somebody else, has been forgotten, or never existed.</returns>
+    /// <remarks>
+    /// Found the same way a read is, against the same owner, and for the same reason: an identifier is a bearer value
+    /// that travelled to a client and back, so somebody else's run is reported as no such run rather than as a refusal.
+    /// A run that has already ended is stopped successfully and nothing happens, because whoever asked could not have
+    /// known it finished a moment earlier — and reporting that as a failure would make a control that worked look
+    /// broken.
+    /// </remarks>
+    public bool TryStop(DiscoveryRunId id, MailOwnerId owner)
+    {
+        if (!this.TryFind(id, owner, out var journal) || !this.runs.TryGetValue(journal.Id, out var held))
+        {
+            return false;
+        }
+
+        // A run forgotten between the lookup above and here is one the source was already released for, which reads as
+        // no such run rather than as a fault: nothing is executing to stop, and whoever asked could not have known.
+        try
+        {
+            held.Stopping.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
 
         return true;
     }
@@ -158,13 +202,24 @@ public sealed class DiscoveryRunRegistry
                 ? held >= DiscoveryRunBounds.RetentionAfterLastUse
                 : held >= DiscoveryRunBounds.MaximumDuration + DiscoveryRunBounds.RetentionAfterLastUse;
 
-            if (forgettable)
+            if (forgettable && this.runs.TryRemove(entry))
             {
-                this.runs.TryRemove(entry);
+                // Forgetting is where the run's cancellation source is released, this being the point past which
+                // nothing can stop the run or read it. Removing first is what keeps two sweepers from disposing one
+                // source twice: only the caller whose removal took the entry disposes it.
+                entry.Value.Stopping.Dispose();
             }
         }
     }
 
-    /// <summary>One run and when anything last read or wrote it.</summary>
-    private sealed record HeldRun(DiscoveryRunJournal Journal, DateTimeOffset LastUsedAt);
+    /// <summary>One run, the source a stop reaches it through, and when anything last read or wrote it.</summary>
+    /// <remarks>
+    /// The source is held here rather than on the journal because this is what knows the run's lifetime: it opens the
+    /// run, it is where a later request finds it to stop it, and it is what forgets the run — which is the one moment at
+    /// which releasing the source is safe.
+    /// </remarks>
+    private sealed record HeldRun(
+        DiscoveryRunJournal Journal,
+        CancellationTokenSource Stopping,
+        DateTimeOffset LastUsedAt);
 }

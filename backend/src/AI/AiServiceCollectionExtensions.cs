@@ -19,6 +19,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -257,6 +258,16 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IDiscoveryRunPlanner, DiscoveryPlanningAgent>();
         services.AddScoped<IDiscoveryResultComposer, DiscoveryCompositionAgent>();
+        // What a run tells the person who asked it about the endpoint that answered them. Registered here rather than
+        // beside the plan because only a deployment declaring a chat endpoint has one to name, and scoped off the plan
+        // rather than mapped once so an operator editing the published name is obeyed by the next run rather than by
+        // the next restart. Neither the address nor the routed model name crosses this boundary.
+        services.AddScoped(provider =>
+        {
+            var endpoint = provider.GetRequiredService<ChatGenerationPlan>().Endpoint;
+
+            return new AnsweringEndpointIdentity(endpoint.Alias, endpoint.PublishedModelName);
+        });
 
         return services;
     }

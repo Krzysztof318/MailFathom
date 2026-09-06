@@ -20,6 +20,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -243,7 +244,8 @@ public sealed class DiscoveryCompositionAgentTests
             [.. extracts.Select(Passage)],
             EmailSearchRetrievalMode.Hybrid,
             LookupsRun: 1,
-            LookupsRefused: 0);
+            LookupsRefused: 0,
+            RetrievalTruncated: false);
 
     private static IReadOnlyList<AccountCoverage> Coverage() =>
     [
@@ -307,7 +309,9 @@ public sealed class DiscoveryCompositionAgentTests
         public DiscoveryCompositionAgent ComposerOver(
             SensitiveContentEgressGuard? egressGuard = null,
             Exception? credentialFailure = null,
-            ChatGenerationPlan? plan = null)
+            ChatGenerationPlan? plan = null,
+            MailAnsweringRunLedger? runLedger = null,
+            IMailAnsweringSpendLedger? spendLedger = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -339,6 +343,8 @@ public sealed class DiscoveryCompositionAgentTests
 
             return new DiscoveryCompositionAgent(
                 plan ?? ChatDeclarations.Plan(),
+                runLedger ?? new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+                spendLedger ?? Substitute.For<IMailAnsweringSpendLedger>(),
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,

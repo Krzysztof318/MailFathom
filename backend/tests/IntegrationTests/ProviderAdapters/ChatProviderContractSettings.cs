@@ -49,7 +49,8 @@ internal static class ChatProviderContractSettings
             "contract",
             address is { Length: > 0 } ? new Uri(address, UriKind.Absolute) : null,
             model,
-            api);
+            api,
+            PublishedModelName: string.Empty);
 
         // Neither sampling parameter is sent, because several current models reject one outright and a contract run
         // exists to learn what the provider does with a request MailFathom actually makes, not to learn that a

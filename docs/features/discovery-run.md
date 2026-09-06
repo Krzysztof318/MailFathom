@@ -101,6 +101,12 @@ failing. So does a call the deployment never managed to make: an endpoint the co
 or a key behind a reference that did not resolve, ends the derivation exactly as a refusal does rather than ending the
 run around it.
 
+**A spend ceiling is the one exception**, in the derivation and in the composition alike. Every other failure leaves a
+worse plan and the run goes on, because a question answered less well is better than a question refused. A ceiling is
+not that: it is the reason the run is being stopped, so falling back would spend the next call against a budget that
+has already run out and would tell somebody their answer was thin when what happened was that the deployment stopped
+paying.
+
 The fallback plan is the one a deployment with no model at all would run: a single lookup for the question's own words,
 classified as `unclassified`, which opens with an answer and its evidence. It is a worse plan than a derived one and it
 is a plan, which is the difference between a question answered less well and a question refused. A derivation that fell
@@ -162,7 +168,9 @@ own mail going back to the owner, and redacting it there would hide from somebod
 of each extract exist for the length of one call — the guarded one the provider is shown, and the owner's own one the
 evidence list quotes.
 
-One call leaves per composition, with no tools, so a question costs two turns however much mail it read.
+One call leaves per composition, with no tools, so a question costs two turns however much mail it read. Both of them
+are charged to the run's own ledger and to the deployment's period ledger before they are sent, which is what makes the
+ceilings in [what bounds a run](#what-bounds-a-run) real rather than nominal.
 
 ### When the composing model does not answer
 
@@ -194,11 +202,18 @@ question anywhere else:
 |---|---|
 | `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address its events are read at, as soon as the question and its scope are known to be answerable. |
 | `GET /api/client/discovery/runs/{runId}/events` | Reads that run, from its beginning or from wherever a dropped connection left off. |
+| `DELETE /api/client/discovery/runs/{runId}` | Stops that run. Answers `204` once the run has been told to stop, and `404` for a run this owner did not start or this process no longer holds. |
 
-Two routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
-loses its reading connection and nothing else: the run goes on executing, and the client comes back to the second route
+Several routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
+loses its reading connection and nothing else: the run goes on executing, and the client comes back to the reading route
 and is given what it missed. A single route that streamed the answer over the connection that asked would lose the whole
 run instead, which is exactly the case this surface exists for.
+
+That is also why stopping is a route rather than a closed connection. A client that stops reading has said nothing about
+the run, which goes on calling the provider and drawing mail out of the mailbox for nobody — so **closing the stream is
+looking away and the `DELETE` is stopping**, and only the second one stops the spending. A run that finished a moment
+before the request arrives answers `204` as well, because whoever asked could not have known it ended and reporting that
+as a failure would make a control that worked look broken.
 
 ### What a client is told, and in what order
 
@@ -207,22 +222,46 @@ order and never has to sort. Six kinds are published, and the run ends on exactl
 
 | Event | What it carries |
 |---|---|
-| `started` | The revision of the [presentation contract](presentation-plan.md), which is what a client keys its renderers by |
-| `retrieval` | How far retrieval has got: lookups run, lookups refused, lookups planned, passages found — counts, and no mail |
+| `started` | The revision of the [presentation contract](presentation-plan.md), which is what a client keys its renderers by; the ceilings that will stop this run; and the endpoint alias and published model name that will answer it |
+| `retrieval` | How far retrieval has got: lookups run, lookups refused, lookups planned, passages found — counts, and no mail — beside what the run has spent so far |
 | `citation` | One source the run declares, ready to be named by a block |
 | `block` | One composed block, ready to be drawn |
-| `completed` | The run finished, with what made the answer narrower than the question and what it read of each account |
-| `failed` | The run stopped, as one of `Unavailable`, `TemporarilyUnavailable`, `RetrievalRefused`, `TimedOut`, `Stopped`, or `Failed` |
+| `completed` | The run finished, with what made the answer narrower than the question, what it read of each account, and what it spent |
+| `failed` | The run stopped, as one of `Unavailable`, `TemporarilyUnavailable`, `RetrievalRefused`, `TimedOut`, `Stopped`, `Failed`, `Cancelled`, `PeriodSpent`, or `RunSpent`, with what the run had spent when it stopped and, for `PeriodSpent`, when asking again would be admitted |
 
 Those six cross the wire as written here. This surface applies no naming policy to an enum, so the value is the member's
 own name — unlike the same kind of value on the MCP surface, where the tool contract's serializer lower-cases the first
 letter, and a client matching the wrong spelling falls through every branch it has.
 
-`TimedOut` and `Stopped` are the pair worth telling apart, because the same cancellation produces both: the first says
-the run spent the longest a run may take, the second says the deployment shut down while it was executing. One is about
-the question having been more than a run could answer and the other says nothing about the question at all, so a client
-offering to retry has a reason to offer it differently. `Failed` is the value that carries nothing: the reason is in the
-deployment's own logs, which is where it is written when a run ends on something it has no name for.
+`TimedOut`, `Stopped`, and `Cancelled` are the three worth telling apart, because the same cancellation mechanism
+produces all of them: the first says the run spent the longest a run may take, the second says the deployment shut down
+while it was executing, and the third says somebody asked for it to stop. One is about the question having been more
+than a run could answer, one says nothing about the question at all, and one is the answer to a control the person
+themselves used — so a client offering to retry has a reason to offer it differently, or not to offer it at all.
+`Failed` is the value that carries nothing: the reason is in the deployment's own logs, which is where it is written
+when a run ends on something it has no name for.
+
+**A spend ceiling is a state rather than an error**, which is what the last two are for. `PeriodSpent` says the
+deployment has answered as many questions this period as it may and carries the instant the period rolls over, so a
+client can say *available again at* rather than *something went wrong*; `RunSpent` says this one question reached what a
+single question may cost and carries no instant, because waiting is not what would let it through. Neither of them names
+an amount anybody else spent: what a refusal carries is this run's own consumption and nothing about the period's total,
+so what one person is told about a shared ceiling is never a reading of what another person did with it.
+
+### Which model answered
+
+A person comparing two answers reads a fast cheap one differently from a careful one, so the run says which model
+produced it — on the `started` event, before anything has been composed.
+
+Two names go out, and they answer different questions. **The endpoint alias is always published**: it is the operator's
+own name for a configured endpoint, it names nothing outside this deployment, and it is what an operator matches an
+answer against their own configuration by. **The published model name is whatever the operator chose to publish**, and
+it is a setting of its own — `Chat:PublishedModel`, described under
+[the AI configuration](../operations/configuration-ai.md) — rather than the routed model name the deployment sends to
+the provider. Those are separate because a routed name can carry a deployment identifier, a tenant, or an internal
+routing label that is nobody's business outside the deployment, and publishing it by default would leak the
+configuration to every client. An operator that sets nothing publishes nothing: the field arrives empty, and a client
+shows the alias alone.
 
 Two orderings hold within that. **A source is always declared before the block naming it**, so a block can be drawn the
 moment it arrives instead of being held until the run closes. And **an ending is the last thing a run publishes** —
@@ -261,9 +300,12 @@ over it.
 
 ### What bounds a run
 
-Four bounds, each with a stated behaviour when it is reached. All four are constants of this build rather than settings,
-because none of them is a deployment decision an operator has any basis to take differently — and a Discover run's own
-metered budget is separate work.
+Seven bounds, each with a stated behaviour when it is reached. The first four are constants of this build rather than
+settings, because none of them is a deployment decision an operator has any basis to take differently. The last three
+are the deployment's own answering ceilings, configured where
+[mail answering](mail-answering.md#what-one-question-may-spend) describes them, and Discover is bound by exactly the
+ceilings every other question is — a second set of Discover-specific budgets would be a second thing to keep in step
+with the first.
 
 | Bound | What it is | What happens when it is reached |
 |---|---|---|
@@ -271,6 +313,14 @@ metered budget is separate work.
 | Events one run may publish | Two hundred and twenty-eight — one opening, six lookups, two hundred sources, twenty blocks, one ending | Nothing further is published, and the run still ends: it completes stating `BlocksOmitted` |
 | Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
 | How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
+| What one run may draw out of the mailbox | The deployment's own per-run character ceiling | Retrieval is trimmed to whole passages that fit and the run answers from them, stating `RetrievalTruncated` |
+| What one run may call and consume | The deployment's own per-run call and token ceilings | The next call is refused before it is sent, and the run ends as `failed` with `RunSpent` |
+| What every run of one period may add up to | The deployment's own per-period run and token ceilings | The question is refused before anything is read or derived, and the run ends as `failed` with `PeriodSpent` |
+
+The retrieval ceiling is the one that trims rather than refuses, because a question with some mail already retrieved is
+answerable and the model is told there is no more. Everything a spend ceiling stops is stopped before it is spent, with
+the one exception the ledger states: a token ceiling can only be checked against what earlier calls reported, so the call
+that crosses it is paid for.
 
 Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
 is one whose execution never reported at all: a task that never ran, or a fault between the run being opened and being
@@ -303,10 +353,11 @@ stream is a delivery of the plan rather than a summary of one.
 
 ### None of it reaches a log
 
-Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these two
+Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these
 routes and nowhere else. The events that describe how a run is *going* carry counts and closed values alone, which is
-what makes a run observable without any of the mail: a failure names one of six words, and retrieval progress names
-four numbers.
+what makes a run observable without any of the mail: a failure names one of nine words, retrieval progress names four
+numbers, and what a run spent is four more. **No cost record carries mail content, a query, or an address** — a spend is
+a count of characters and messages rather than of which ones, so nothing about what a run cost says what it read.
 
 The one thing that does reach a log is the failure a run has no word for. `failed` promises an operator can read what
 happened, so the run itself publishes only the endings it can name and lets the rest travel out to the composition root,
@@ -318,6 +369,10 @@ nothing about the question or the mail it read.
 - **The blocks a composition does not fill.** People, thread state, attachment galleries, drafts, and suggested actions
   are part of the contract and are composed by nothing here: the intent decides between an answer, a timeline, and a
   fact table, and the rest wait for the surfaces that produce them.
-- **What a run spent.** Neither call is metered against a run ledger, because a turn with no tools cannot iterate; a
-  Discover run's own budget is separate work, and both calls and the bounds above join it when it exists.
+- **A price.** What a run reports is its own consumption against the ceilings that will stop it — calls, tokens,
+  characters, and messages — and never a currency amount. What those cost is a matter between an operator and a provider
+  whose prices MailFathom does not know and would be wrong about the moment they changed.
+- **A live Case's own updates.** Nothing here updates an answer on its own yet. When something does, it runs through the
+  same ledgers as a question somebody asked, so unattended spend is bounded by what is written above rather than by a
+  second mechanism.
 - **Rendering.** No client draws a presentation plan yet.

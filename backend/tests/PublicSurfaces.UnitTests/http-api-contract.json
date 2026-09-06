@@ -3129,10 +3129,14 @@
               "integer",
               "string"
             ]
+          },
+          "spend": {
+            "$ref": "#/components/schemas/MailAnsweringRunSpend"
           }
         },
         "required": [
-          "progress"
+          "progress",
+          "spend"
         ]
       },
       "DiscoveryRunEventDiscoveryRunCompleted": {
@@ -3165,11 +3169,15 @@
               "integer",
               "string"
             ]
+          },
+          "spend": {
+            "$ref": "#/components/schemas/MailAnsweringRunSpend"
           }
         },
         "required": [
           "limitations",
-          "coverage"
+          "coverage",
+          "spend"
         ]
       },
       "DiscoveryRunEventDiscoveryRunFailed": {
@@ -3183,6 +3191,13 @@
           "failure": {
             "$ref": "#/components/schemas/DiscoveryRunFailure"
           },
+          "retryAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "runId": {
             "$ref": "#/components/schemas/DiscoveryRunId"
           },
@@ -3193,14 +3208,24 @@
               "integer",
               "string"
             ]
+          },
+          "spend": {
+            "$ref": "#/components/schemas/MailAnsweringRunSpend"
           }
         },
         "required": [
-          "failure"
+          "failure",
+          "spend"
         ]
       },
       "DiscoveryRunEventDiscoveryRunStarted": {
         "properties": {
+          "bounds": {
+            "$ref": "#/components/schemas/MailAnsweringRunBounds"
+          },
+          "endpointAlias": {
+            "type": "string"
+          },
           "event": {
             "enum": [
               "started"
@@ -3214,6 +3239,9 @@
               "integer",
               "string"
             ]
+          },
+          "publishedModel": {
+            "type": "string"
           },
           "runId": {
             "$ref": "#/components/schemas/DiscoveryRunId"
@@ -3235,7 +3263,10 @@
           "RetrievalRefused",
           "TimedOut",
           "Failed",
-          "Stopped"
+          "Stopped",
+          "Cancelled",
+          "PeriodSpent",
+          "RunSpent"
         ]
       },
       "DiscoveryRunId": {
@@ -3888,6 +3919,78 @@
           "email",
           "position",
           "wasCited"
+        ],
+        "type": "object"
+      },
+      "MailAnsweringRunBounds": {
+        "properties": {
+          "maximumProviderCalls": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "maximumRetrievedCharacters": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "maximumTokens": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MailAnsweringRunSpend": {
+        "properties": {
+          "messagesRetrieved": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "providerCalls": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "retrievedCharacters": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "tokens": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "providerCalls",
+          "tokens",
+          "retrievedCharacters",
+          "messagesRetrieved"
         ],
         "type": "object"
       },
@@ -10130,6 +10233,37 @@
               }
             },
             "description": "Accepted"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/discovery/runs/{runId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

@@ -34,7 +34,7 @@ public sealed class PlannedMailRetrievalTests
             .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("the faktura"));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
             progress: null,
@@ -56,7 +56,7 @@ public sealed class PlannedMailRetrievalTests
         var search = new ScriptedEmailKnowledgeSearch();
 
         // Act
-        await new PlannedMailRetrieval(search).RetrieveAsync(
+        await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(scope),
             PlanOf(sufficientPassages: 10, "invoice"),
             progress: null,
@@ -79,7 +79,7 @@ public sealed class PlannedMailRetrievalTests
             .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("third"));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice", "faktura"),
             progress: null,
@@ -102,7 +102,7 @@ public sealed class PlannedMailRetrievalTests
             .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("the same words", storedEmailId));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
             progress: null,
@@ -123,7 +123,7 @@ public sealed class PlannedMailRetrievalTests
             .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("the faktura"));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
             progress: null,
@@ -146,7 +146,7 @@ public sealed class PlannedMailRetrievalTests
         List<DiscoveryRetrievalProgress> reported = [];
 
         // Act
-        await new PlannedMailRetrieval(search).RetrieveAsync(
+        await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice", "faktura"),
             reported.Add,
@@ -169,7 +169,7 @@ public sealed class PlannedMailRetrievalTests
         var search = new ScriptedEmailKnowledgeSearch()
             .Refusing("invoice")
             .Refusing("faktura");
-        var retrieval = new PlannedMailRetrieval(search);
+        var retrieval = new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger());
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => retrieval.RetrieveAsync(
@@ -192,7 +192,7 @@ public sealed class PlannedMailRetrievalTests
             .Returning("invoice", ScriptedEmailKnowledgeSearch.Passage("the invoice"));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 10, "invoice"),
             progress: null,
@@ -214,7 +214,7 @@ public sealed class PlannedMailRetrievalTests
             ScriptedEmailKnowledgeSearch.Passage("third"));
 
         // Act
-        var evidence = await new PlannedMailRetrieval(search).RetrieveAsync(
+        var evidence = await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice"),
             progress: null,
@@ -237,7 +237,7 @@ public sealed class PlannedMailRetrievalTests
         List<DiscoveryRetrievalProgress> reported = [];
 
         // Act
-        await new PlannedMailRetrieval(search).RetrieveAsync(
+        await new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
             Question(WholeMailbox),
             PlanOf(sufficientPassages: 2, "invoice"),
             reported.Add,
@@ -247,6 +247,56 @@ public sealed class PlannedMailRetrievalTests
         Assert.Equal(
             [new DiscoveryRetrievalProgress(LookupsRun: 1, LookupsRefused: 0, LookupsPlanned: 1, PassagesFound: 2)],
             reported);
+    }
+
+    /// <summary>A run that may draw no more mail out of the mailbox answers from what it drew, and says the reading was cut.</summary>
+    /// <remarks>
+    /// The retrieval ceiling is the one bound that trims rather than refuses, because a question with some mail already
+    /// retrieved is answerable. What the run owes in exchange is saying so, which is what the composition turns into the
+    /// limitation a reader sees.
+    /// </remarks>
+    [Fact]
+    public async Task RetrieveAsync_MoreMailThanTheRunMaySend_AnswersFromWhatFitAndStatesThatItWasCut()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch().Returning(
+            "invoice",
+            ScriptedEmailKnowledgeSearch.Passage("first"),
+            ScriptedEmailKnowledgeSearch.Passage("second"));
+        var ledger = DiscoveryRuns.NewRunLedger(retrievedCharacters: "first".Length);
+
+        // Act
+        var evidence = await new PlannedMailRetrieval(search, ledger).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 10, "invoice"),
+            progress: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["first"], evidence.Passages.Select(passage => passage.Text));
+        Assert.True(evidence.RetrievalTruncated);
+        Assert.Equal("first".Length, ledger.Read().RetrievedCharacters);
+    }
+
+    /// <summary>A run stopped mid-plan abandons the lookups it had not reached, rather than reading them for nobody.</summary>
+    [Fact]
+    public async Task RetrieveAsync_ARunStoppedDuringALookup_LeavesTheRestOfThePlanUnrun()
+    {
+        // Arrange
+        using var stopping = new CancellationTokenSource();
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Stopping("invoice", stopping)
+            .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("the faktura"));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            new PlannedMailRetrieval(search, DiscoveryRuns.NewRunLedger()).RetrieveAsync(
+                Question(WholeMailbox),
+                PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+                progress: null,
+                stopping.Token));
+
+        Assert.Equal(["invoice"], search.Lookups.Select(lookup => lookup.QueryText));
     }
 
     private static MailQuestion Question(MailboxScope scope) =>

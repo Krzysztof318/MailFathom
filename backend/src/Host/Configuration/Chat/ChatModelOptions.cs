@@ -55,6 +55,18 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>For a cloud deployment this is the name the operator gave the deployment rather than the vendor's model identifier, because that is the string the endpoint recognizes.</remarks>
     public string Model { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the model name a client is told answered its question, and empty to publish nothing beyond the alias.</summary>
+    /// <remarks>
+    /// A second name beside <see cref="Model" /> rather than a reuse of it, because that one is a routing name: for a
+    /// cloud deployment it is whatever the operator called the resource, and it can carry a tenant, a project, or an
+    /// environment in it. Publishing it to every signed-in client would disclose deployment topology to answer a
+    /// question about model quality, so
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+    /// makes the disclosure a declaration: write the vendor's identifier as you wish it stated — <c>gpt-4o</c> while
+    /// requests route to <c>prod-eu-4o-2</c> — or leave it empty and a run names the alias alone.
+    /// </remarks>
+    public string PublishedModel { get; set; } = string.Empty;
+
     /// <summary>Gets or sets which of the provider's two request APIs a call is conducted through.</summary>
     /// <remarks>
     /// Declared rather than derived from the model, because the routed model name is not a model identity: for a cloud
@@ -182,6 +194,7 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
             // writes by accident. The bounds and the timeout contribute nothing either way, because a deployment that
             // accepted their defaults is indistinguishable from one that wrote them out.
             if (this.Model.Trim().Length > 0
+                || this.PublishedModel.Trim().Length > 0
                 || this.Address.Trim().Length > 0
                 || this.Api != ChatProviderApi.ChatCompletions
                 || this.ReasoningEffort is not null
@@ -256,5 +269,6 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
         this.Alias.Trim(),
         this.Address is { Length: > 0 } address ? new Uri(address, UriKind.Absolute) : null,
         this.Model.Trim(),
-        this.Api);
+        this.Api,
+        this.PublishedModel.Trim());
 }

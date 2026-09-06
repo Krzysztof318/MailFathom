@@ -27,6 +27,8 @@ internal sealed class ScriptedEmailKnowledgeSearch : IEmailKnowledgeSearch
 
     private readonly HashSet<string> refusedQueries = new(StringComparer.Ordinal);
 
+    private readonly Dictionary<string, CancellationTokenSource> stoppedQueries = new(StringComparer.Ordinal);
+
     private EmailSearchRetrievalMode retrievalMode = EmailSearchRetrievalMode.Hybrid;
 
     /// <summary>Gets the lookups that ran, in order.</summary>
@@ -52,6 +54,22 @@ internal sealed class ScriptedEmailKnowledgeSearch : IEmailKnowledgeSearch
     public ScriptedEmailKnowledgeSearch Refusing(string queryText)
     {
         this.refusedQueries.Add(queryText);
+
+        return this;
+    }
+
+    /// <summary>Arranges a query during which somebody stops the run, which is where a cancellation actually reaches one.</summary>
+    /// <param name="queryText">The query the stop arrives during.</param>
+    /// <param name="stopping">The source the stop is signalled through.</param>
+    /// <returns>This retrieval, so arrangement reads as one statement.</returns>
+    /// <remarks>
+    /// Stopping from inside the lookup rather than before the run is what makes the claim a cancellation claim: the run
+    /// is already executing, the retrieval is what it is waiting on, and the token it observes is the linked one the run
+    /// composed rather than the one a test holds.
+    /// </remarks>
+    public ScriptedEmailKnowledgeSearch Stopping(string queryText, CancellationTokenSource stopping)
+    {
+        this.stoppedQueries[queryText] = stopping;
 
         return this;
     }
@@ -94,6 +112,12 @@ internal sealed class ScriptedEmailKnowledgeSearch : IEmailKnowledgeSearch
 
         this.lookups.Add(query);
         this.LastScope = scope;
+
+        if (this.stoppedQueries.TryGetValue(query.QueryText, out var stopping))
+        {
+            stopping.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
 
         if (this.refusedQueries.Contains(query.QueryText))
         {

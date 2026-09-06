@@ -10,10 +10,12 @@ using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -167,15 +169,65 @@ public sealed class DiscoveryPlanningAgentTests
         Assert.Equal(1, provider.RequestCount);
     }
 
+    /// <summary>What a derivation cost is charged to the run that asked, which is what the run then reports having spent.</summary>
+    [Fact]
+    public async Task DerivePlanAsync_AProviderThatReportedItsUsage_ChargesTheCallToTheRunAndToThePeriod()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(
+            """{\"intent\": \"findFact\", \"lookups\": [{\"queryText\": \"invoice\"}]}""",
+            inputTokens: 11,
+            outputTokens: 7));
+        var runLedger = new MailAnsweringRunLedger(MailAnsweringRunBounds.Default);
+        var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
+        var planner = provider.PlannerOver(runLedger: runLedger, spendLedger: spendLedger);
+
+        // Act
+        await planner.DerivePlanAsync(Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(new MailAnsweringRunSpend(1, 18, 0, 0), runLedger.Read());
+        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(11, 7));
+    }
+
+    /// <summary>A run with no allowance left for another call is refused before anything leaves the deployment.</summary>
+    /// <remarks>
+    /// The one exception to the derivation's never-fail fallback: every other failure leaves a worse plan and the run
+    /// goes on, while a spend ceiling is what the run is being stopped by and must reach the person who asked.
+    /// </remarks>
+    [Fact]
+    public async Task DerivePlanAsync_ARunThatHasSpentItsCallAllowance_RefusesBeforeReachingTheProvider()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(
+            """{\"intent\": \"findFact\", \"lookups\": [{\"queryText\": \"invoice\"}]}"""));
+        var runLedger = new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(20_000, maximumProviderCalls: 1, 80_000));
+        runLedger.RequireAllowanceForNextCall();
+        var planner = provider.PlannerOver(runLedger: runLedger);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(() =>
+            planner.DerivePlanAsync(Question(), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailAnsweringBudgetScope.Run, refusal.Scope);
+        Assert.Equal(0, provider.RequestCount);
+    }
+
     private static MailQuestion Question() =>
         new(MailQuestionText.Create("which supplier quoted least"), WholeMailbox);
 
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>
-    private static string Completion(string content) =>
+    private static string Completion(string content, int? inputTokens = null, int? outputTokens = null) =>
         "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
         + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\""
         + content
-        + "\"},\"finish_reason\":\"stop\"}]}";
+        + "\"},\"finish_reason\":\"stop\"}]"
+        + (inputTokens is null
+            ? string.Empty
+            : $",\"usage\":{{\"prompt_tokens\":{inputTokens},\"completion_tokens\":{outputTokens},"
+              + $"\"total_tokens\":{inputTokens + outputTokens}}}")
+        + "}";
 
     /// <summary>A provider that answers from a script, so the derivation is exercised over a real client and no network.</summary>
     private sealed class ScriptedTransport : IDisposable
@@ -210,7 +262,9 @@ public sealed class DiscoveryPlanningAgentTests
 
         public DiscoveryPlanningAgent PlannerOver(
             SensitiveContentEgressGuard? egressGuard = null,
-            Exception? credentialFailure = null)
+            Exception? credentialFailure = null,
+            MailAnsweringRunLedger? runLedger = null,
+            IMailAnsweringSpendLedger? spendLedger = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -243,6 +297,8 @@ public sealed class DiscoveryPlanningAgentTests
             return new DiscoveryPlanningAgent(
                 ChatDeclarations.Plan(),
                 EmailKnowledgeBounds.Default,
+                runLedger ?? new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+                spendLedger ?? Substitute.For<IMailAnsweringSpendLedger>(),
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,

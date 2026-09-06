@@ -525,7 +525,8 @@ public sealed class DiscoveryCompositionReadingTests
                 passages,
                 EmailSearchRetrievalMode.Hybrid,
                 LookupsRun: 6,
-                LookupsRefused: 0));
+                LookupsRefused: 0,
+                RetrievalTruncated: false));
 
         // Assert
         Assert.Contains(PresentationLimitation.RetrievalTruncated, plan.Limitations);
@@ -573,7 +574,12 @@ public sealed class DiscoveryCompositionReadingTests
         IReadOnlyList<DiscoveryComposedSource> sources,
         EmailSearchRetrievalMode retrievalMode,
         int lookupsRefused) =>
-        new([.. sources.Select(source => Passage(source.Extract))], retrievalMode, LookupsRun: 1, lookupsRefused);
+        new(
+            [.. sources.Select(source => Passage(source.Extract))],
+            retrievalMode,
+            LookupsRun: 1,
+            lookupsRefused,
+            RetrievalTruncated: false);
 
     private static AccountCoverage Coverage(MailAccountId accountId, PresentationFreshness freshness) =>
         new(

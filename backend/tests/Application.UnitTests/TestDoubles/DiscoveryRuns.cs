@@ -47,6 +47,8 @@ internal static class DiscoveryRuns
     /// <param name="egressGuard">What this owner's posture withholds, defaulting to a deployment that scans nobody.</param>
     /// <param name="composer">What the run composes its answer through, defaulting to one returning the contract's own example.</param>
     /// <param name="folders">How current each folder the run read was, defaulting to a scope reporting none.</param>
+    /// <param name="ledger">What this run has spent, defaulting to an untouched ledger under the deployment's default ceilings.</param>
+    /// <param name="spendLedger">What the current period has spent, defaulting to a period that admits the run.</param>
     /// <returns>The composed run.</returns>
     public static DiscoveryRun Composing(
         IDiscoveryRunPlanner? planner,
@@ -56,7 +58,9 @@ internal static class DiscoveryRuns
         AccessAuthorization? authorization = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IDiscoveryResultComposer? composer = null,
-        IReadOnlyList<MailboxFolderFreshness>? folders = null)
+        IReadOnlyList<MailboxFolderFreshness>? folders = null,
+        MailAnsweringRunLedger? ledger = null,
+        IMailAnsweringSpendLedger? spendLedger = null)
     {
         // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
         var healthReader = Substitute.For<IAiProviderHealthReader>();
@@ -88,14 +92,46 @@ internal static class DiscoveryRuns
                 // The answering agent stands in for the chat half of the configuration, which is the half the
                 // capability reads: this deployment registers the planner and the answerer behind one declaration.
                 planner is null ? null : new RecordingMailQuestionAnswerer()),
-            new PlannedMailRetrieval(search),
+            new PlannedMailRetrieval(search, ledger ?? NewRunLedger()),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
+            spendLedger ?? PeriodAdmitting(),
             planner,
             // The two halves of one deployment's chat configuration: an instance that derives a plan composes a result
             // from it, and an instance that declared no endpoint has neither.
             planner is null ? null : composer ?? ComposerReturning(PresentationPlanExample.Compose()));
+    }
+
+    /// <summary>Builds a ledger for one run under this deployment's default ceilings, or under ceilings a test states.</summary>
+    /// <param name="retrievedCharacters">What one run may draw out of the mailbox.</param>
+    /// <param name="providerCalls">What one run may call.</param>
+    /// <param name="tokens">What one run may consume.</param>
+    /// <returns>The ledger.</returns>
+    public static MailAnsweringRunLedger NewRunLedger(
+        int retrievedCharacters = 20_000,
+        int providerCalls = 8,
+        long tokens = 80_000) =>
+        new(MailAnsweringRunBounds.Create(retrievedCharacters, providerCalls, tokens));
+
+    /// <summary>Stands in for a period with allowance left, which is what every test but the refusal's own arranges.</summary>
+    /// <returns>The ledger.</returns>
+    public static IMailAnsweringSpendLedger PeriodAdmitting()
+    {
+        var ledger = Substitute.For<IMailAnsweringSpendLedger>();
+        ledger.TryAdmitRun().Returns(true);
+
+        return ledger;
+    }
+
+    /// <summary>Stands in for a period that has spent its allowance, so the next question is refused before it runs.</summary>
+    /// <returns>The ledger.</returns>
+    public static IMailAnsweringSpendLedger PeriodSpent()
+    {
+        var ledger = Substitute.For<IMailAnsweringSpendLedger>();
+        ledger.TryAdmitRun().Returns(false);
+
+        return ledger;
     }
 
     /// <summary>Stands in for the composition, answering with the plan a test wants streamed rather than reading anything.</summary>
@@ -133,6 +169,23 @@ internal static class DiscoveryRuns
                     EmailKnowledgeBounds.Default,
                     [.. queries.Select(EmailKnowledgeQuery.ForText)],
                     sufficientPassages)));
+
+        return planner;
+    }
+
+    /// <summary>Stands in for a derivation that reached a ceiling, which is where a run's own spend refusal comes from.</summary>
+    /// <param name="refusal">The refusal the derivation raises.</param>
+    /// <returns>The derivation.</returns>
+    /// <remarks>
+    /// The chat client the agents wrap is what counts a call against the run and the period, so a ceiling reached mid-run
+    /// arrives at the run as this exception out of whichever port was calling. Raising it from the derivation exercises
+    /// that path without composing a provider.
+    /// </remarks>
+    public static IDiscoveryRunPlanner PlannerRefusing(MailAnsweringBudgetExhaustedException refusal)
+    {
+        var planner = Substitute.For<IDiscoveryRunPlanner>();
+        planner.DerivePlanAsync(Arg.Any<MailQuestion>(), Arg.Any<CancellationToken>())
+            .Returns<DiscoveryRunPlan>(_ => throw refusal);
 
         return planner;
     }

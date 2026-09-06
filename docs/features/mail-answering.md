@@ -204,6 +204,12 @@ provider call rather than reported after the run.
 | Provider calls per run | `MailAnswering:MaxProviderCallsPerRun` | 8 | The run stops with `57001` |
 | Tokens per run | `MailAnswering:MaxTokensPerRun` | 80 000 | The run stops with `57001` |
 
+**The same three bound a [Discover run](discovery-run.md#what-bounds-a-run)**, and so does the period ceiling below.
+They are one deployment's answer to what a question may cost rather than this surface's, so a run started from the
+client endpoint is charged to the same ledgers as one an MCP caller asked for — a second set of ceilings per surface
+would be a second thing to keep in step with the first, and a client looping over one surface would spend past what the
+operator agreed to on the other.
+
 Three numbers because they fail in three different ways. The retrieved-character ceiling is the privacy one — the total
 amount of somebody's mail that may leave the process to answer one question, whatever the model asks for. The token
 ceiling is the cost one, and the only one stated in the unit a provider bills by. The call ceiling is the one that

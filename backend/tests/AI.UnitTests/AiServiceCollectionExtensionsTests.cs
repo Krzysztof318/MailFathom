@@ -391,6 +391,8 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
         services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
 
         // Beside the adapter, as the composition root registers them: a derivation sends over the transport that call names.
         services.AddChatProviderAdapter();
@@ -423,6 +425,8 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
         services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
         services.AddChatProviderAdapter();
 
         // Act
