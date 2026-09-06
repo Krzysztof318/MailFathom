@@ -90,6 +90,25 @@ public sealed class DiscoveryPlanningAgentTests
         Assert.Single(plan.Retrieval.Lookups);
     }
 
+    /// <summary>A key that would not resolve never reaches the endpoint, and is the same worse plan a refusal is.</summary>
+    [Fact]
+    public async Task DerivePlanAsync_ACredentialThatCannotBeResolved_StillProducesARunnablePlan()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(
+            """{\"intent\": \"findFact\", \"lookups\": [{\"queryText\": \"invoice\"}]}"""));
+        var planner = provider.PlannerOver(credentialFailure: new InvalidOperationException(
+            "The provider key of AI endpoint 'a-chat-endpoint' could not be resolved."));
+
+        // Act
+        var plan = await planner.DerivePlanAsync(Question(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DiscoveryIntent.Unclassified, plan.Intent);
+        Assert.Single(plan.Retrieval.Lookups);
+        Assert.Equal(0, provider.RequestCount);
+    }
+
     /// <summary>A question is a prompt somebody wrote, so what a deployment withholds from a provider is withheld here too.</summary>
     [Fact]
     public async Task DerivePlanAsync_AQuestionCarryingASecret_SendsTheProviderTheGuardedText()
@@ -189,7 +208,9 @@ public sealed class DiscoveryPlanningAgentTests
         public static ScriptedTransport Refusing(HttpStatusCode status) =>
             new() { status = status, payload = "{\"error\":{\"message\":\"no\"}}" };
 
-        public DiscoveryPlanningAgent PlannerOver(SensitiveContentEgressGuard? egressGuard = null)
+        public DiscoveryPlanningAgent PlannerOver(
+            SensitiveContentEgressGuard? egressGuard = null,
+            Exception? credentialFailure = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -199,8 +220,9 @@ public sealed class DiscoveryPlanningAgentTests
             var credentialSource = Substitute.For<IProviderEndpointCredentialSource>();
             credentialSource
                 .ResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns(_ => Task.FromResult(
-                    ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null)));
+                .Returns(_ => credentialFailure is null
+                    ? Task.FromResult(ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null))
+                    : Task.FromException<ProviderEndpointCredential>(credentialFailure));
 
             var operationRunner = Substitute.For<IOutboundOperationRunner>();
             operationRunner

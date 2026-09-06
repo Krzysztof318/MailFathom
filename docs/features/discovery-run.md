@@ -90,7 +90,9 @@ cannot spend more than the single turn it was given.
 Nothing about a derivation is allowed to end a question. An answer that is not JSON, is JSON of the wrong shape, is
 fenced in a code block, is wrapped in a sentence, names a kind of question this build does not know, or never arrives
 because the provider refused the call — every one of those is read as far as it can be and then falls back rather than
-failing.
+failing. So does a call the deployment never managed to make: an endpoint the configuration in force no longer declares,
+or a key behind a reference that did not resolve, ends the derivation exactly as a refusal does rather than ending the
+run around it.
 
 The fallback plan is the one a deployment with no model at all would run: a single lookup for the question's own words,
 classified as `unclassified`, which opens with an answer and its evidence. It is a worse plan than a derived one and it

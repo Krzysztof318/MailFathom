@@ -116,7 +116,8 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, turn)],
             this.plan.MaximumMessagesPerRequest,
-            this.plan.MaximumRequestCharacters);
+            this.plan.MaximumRequestCharacters,
+            this.plan.MaximumRequestImageOctets);
 
         var answerText = await this.AskAsync(turn, cancellationToken);
         var outcome = DiscoveryPlanReading.Read(answerText, question.Text, this.retrievalBounds);
@@ -140,46 +141,61 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
 
     /// <summary>Makes the one provider call, answering with nothing where it failed.</summary>
     /// <remarks>
+    /// <para>
     /// A failure is swallowed here rather than raised because the caller already has a usable plan for that case, and
     /// the endpoint's own health record — which the resilience decorator wrote before this returned — is what a run's
     /// availability gate reads. Losing the derivation is a worse plan; losing the run would be no answer at all.
+    /// </para>
+    /// <para>
+    /// Opening the call is inside that guarantee rather than in front of it, because a derivation that never reached
+    /// the endpoint failed the same way as one the endpoint refused: an unresolvable key would otherwise end the run
+    /// around it. A cancellation stays outside, being the caller withdrawing the question rather than a provider
+    /// failing to answer it.
+    /// </para>
     /// </remarks>
     private async Task<string?> AskAsync(string turn, CancellationToken cancellationToken)
     {
         var endpoint = this.plan.Endpoint;
 
-        // Opened per derivation and released with it, so a rotated key is picked up by the next question and the
-        // material exists for one call rather than for process uptime. It is the sequence an answering run opens with
-        // as well; the run ledger is deliberately absent, for the reason below.
-        using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
-        using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
-        using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-
-        // ponytail: no spend ledger around this call — one turn with no tools cannot iterate, so the ceiling a run
-        // ledger enforces has nothing to bound here. What it does mean is that the tokens a derivation costs are
-        // unaccounted; wrap this in the run's own budget when #1172 gives a Discover run one.
-        using var chatClient = new ResilientChatClient(
-            providerClient,
-            endpoint,
-            this.plan.RequestTimeout,
-            this.operationRunner,
-            this.healthRecorder,
-            this.loggerFactory.CreateLogger<ResilientChatClient>());
-
-        var agent = DiscoveryPlanningAgentComposition.Compose(
-            chatClient,
-            this.plan,
-            this.instructionEnvelope,
-            this.loggerFactory);
-
         try
         {
+            // Opened per derivation and released with it, so a rotated key is picked up by the next question and the
+            // material exists for one call rather than for process uptime. It is the sequence an answering run opens
+            // with as well; the run ledger is deliberately absent, for the reason below.
+            using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
+            using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
+            using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
+
+            // ponytail: no spend ledger around this call — one turn with no tools cannot iterate, so the ceiling a run
+            // ledger enforces has nothing to bound here. What it does mean is that the tokens a derivation costs are
+            // unaccounted; wrap this in the run's own budget when #1172 gives a Discover run one.
+            using var chatClient = new ResilientChatClient(
+                providerClient,
+                endpoint,
+                this.plan.RequestTimeout,
+                this.operationRunner,
+                this.healthRecorder,
+                this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+            var agent = DiscoveryPlanningAgentComposition.Compose(
+                chatClient,
+                this.plan,
+                this.instructionEnvelope,
+                this.loggerFactory);
+
             var response = await agent.RunAsync(turn, session: null, options: null, cancellationToken);
 
             return response.Text;
         }
         catch (ChatGenerationFailedException)
         {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            // The whole of what the credential source publishes: the alias names no endpoint the configuration in
+            // force declares, or the secret behind it did not resolve. It is also the one failure here that leaves no
+            // health record behind, the resilience decorator not yet existing to write one.
             return null;
         }
     }
