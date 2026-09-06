@@ -13,9 +13,13 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -54,6 +58,55 @@ public sealed class DiscoveryRunTests
         Assert.Equal(DiscoveryIntent.CompareTerms, result.Plan.Intent);
         Assert.Equal(PresentationBlockType.FactTable, result.Plan.Composition[0]);
         Assert.Equal(["the quotation"], result.Evidence.Passages.Select(passage => passage.Text));
+    }
+
+    /// <summary>A run's answer is the composition's, so what the composer produced is what the caller receives.</summary>
+    [Fact]
+    public async Task RunAsync_ADeploymentThatAnswersQuestions_RecordsWhatTheCompositionProduced()
+    {
+        // Arrange
+        var presentation = PresentationPlanExample.Compose();
+        var run = RunOver(
+            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            composer: ComposerReturning(presentation));
+
+        // Act
+        var result = await run.RunAsync(Question, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(presentation, result.Presentation);
+    }
+
+    /// <summary>How current each account was is read before the answer is composed, so the composition can state it.</summary>
+    [Fact]
+    public async Task RunAsync_AnAccountTheScopeReached_ComposesTheAnswerOverItsCoverage()
+    {
+        // Arrange
+        var composer = ComposerReturning(PresentationPlanExample.Compose());
+        var run = RunOver(
+            PlannerDeriving(DiscoveryIntent.FindFact, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            composer: composer,
+            folders:
+            [
+                new MailboxFolderFreshness(
+                    MailAccountId.Create("primary"),
+                    MailFolderAlias.Create("INBOX"),
+                    Now.AddHours(-1)),
+            ]);
+
+        // Act
+        await run.RunAsync(Question, TestContext.Current.CancellationToken);
+
+        // Assert
+        await composer.Received(1).ComposeAsync(
+            Arg.Any<MailQuestion>(),
+            Arg.Any<DiscoveryRunPlan>(),
+            Arg.Any<DiscoveryEvidence>(),
+            Arg.Is<IReadOnlyList<AccountCoverage>>(coverage =>
+                coverage != null && coverage.Count == 1 && coverage[0].Account.Value == "primary"),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>The plan the derivation produced is what runs, so the lookups reaching retrieval are its own.</summary>
@@ -159,6 +212,20 @@ public sealed class DiscoveryRunTests
         Assert.Empty(planner.ReceivedCalls());
     }
 
+    private static IDiscoveryResultComposer ComposerReturning(PresentationPlan presentation)
+    {
+        var composer = Substitute.For<IDiscoveryResultComposer>();
+        composer.ComposeAsync(
+                Arg.Any<MailQuestion>(),
+                Arg.Any<DiscoveryRunPlan>(),
+                Arg.Any<DiscoveryEvidence>(),
+                Arg.Any<IReadOnlyList<AccountCoverage>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(presentation);
+
+        return composer;
+    }
+
     private static IDiscoveryRunPlanner PlannerDeriving(DiscoveryIntent intent, params string[] queries)
     {
         var planner = Substitute.For<IDiscoveryRunPlanner>();
@@ -226,7 +293,9 @@ public sealed class DiscoveryRunTests
         bool embeddingProfileActive = true,
         AiProviderHealthState chatState = AiProviderHealthState.Serving,
         AccessAuthorization? authorization = null,
-        SensitiveContentEgressGuard? egressGuard = null)
+        SensitiveContentEgressGuard? egressGuard = null,
+        IDiscoveryResultComposer? composer = null,
+        IReadOnlyList<MailboxFolderFreshness>? folders = null)
     {
         // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
         var healthReader = Substitute.For<IAiProviderHealthReader>();
@@ -240,6 +309,10 @@ public sealed class DiscoveryRunTests
             .Returns(embeddingProfileActive ? new RegisteredEmbeddingProfile(ProfileId, Identity()) : null);
 
         var timeProvider = new FakeTimeProvider(Now);
+
+        var freshnessReader = Substitute.For<ISynchronizationFreshnessReader>();
+        freshnessReader.ReadAsync(Arg.Any<MailboxScope>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(folders ?? []));
 
         return new DiscoveryRun(
             new MailAnsweringCapability(
@@ -257,7 +330,11 @@ public sealed class DiscoveryRunTests
             new PlannedMailRetrieval(search),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            planner);
+            new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
+            planner,
+            // The two halves of one deployment's chat configuration: an instance that derives a plan composes a result
+            // from it, and an instance that declared no endpoint has neither.
+            planner is null ? null : composer ?? ComposerReturning(PresentationPlanExample.Compose()));
     }
 
     private static EmbeddingProfileIdentity Identity() => EmbeddingProfileIdentity.Create(

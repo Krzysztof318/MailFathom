@@ -28,8 +28,13 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <para>
 /// Citations are declared once, here, and referred to by name from the blocks that rest on them — so two facts drawn
 /// from one message are visibly the same source, and a client can list what a whole run rested on. The constructor
-/// refuses a plan whose blocks name a citation it does not declare, which is the one way a citation contract fails
-/// quietly rather than loudly.
+/// refuses a plan whose blocks name a citation it does not declare, and refuses a backed block resting on a source the
+/// plan itself says nobody could read; those are the two ways a citation contract fails quietly rather than loudly.
+/// </para>
+/// <para>
+/// <see cref="Coverage" /> is what the run says about its own reading rather than about any one block. A client reads a
+/// synchronized copy, so which accounts an answer drew on, how far the mail it drew on reached, and how current each of
+/// those accounts was are part of the answer rather than a footnote under it.
 /// </para>
 /// <para>
 /// A plan is composed from somebody's correspondence and is sensitive throughout: its texts are quoted or summarized
@@ -46,7 +51,7 @@ public sealed record PresentationPlan
     /// separately. It moves independently of the application's version, and a release that changes neither leaves it
     /// where it is.
     /// </remarks>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     /// <summary>The greatest number of blocks one plan may hold.</summary>
     /// <remarks>
@@ -58,6 +63,13 @@ public sealed record PresentationPlan
     /// <summary>The greatest number of citations one plan may declare.</summary>
     public const int MaxCitations = 200;
 
+    /// <summary>The greatest number of accounts one run may report having read.</summary>
+    /// <remarks>
+    /// A person's own mailboxes rather than a directory. A question reaching more accounts than this is a deployment
+    /// serving something other than one person's correspondence, which is not what a Discover run is bounded for.
+    /// </remarks>
+    public const int MaxAccountsCovered = 32;
+
     /// <summary>The greatest number of limitations a plan can state, which is one of each the catalogue holds.</summary>
     private static readonly int LimitationCount = Enum.GetValues<PresentationLimitation>().Length;
 
@@ -65,24 +77,33 @@ public sealed record PresentationPlan
     /// <param name="schemaVersion">The revision of this contract the plan was written against.</param>
     /// <param name="blocks">The blocks, in the order they are read.</param>
     /// <param name="citations">The sources the blocks rest on, declared once each.</param>
+    /// <param name="coverage">What the run read, one entry per account it drew on.</param>
     /// <param name="limitations">What the run knows about its own reach.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="blocks" />, <paramref name="citations" />, or <paramref name="limitations" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="blocks" />, <paramref name="citations" />, <paramref name="coverage" />, or <paramref name="limitations" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="schemaVersion" /> is below <c>1</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when a list is empty where it may not be or is oversized, a citation is declared twice, a limitation is named twice, or a block names a citation the plan does not declare.</exception>
+    /// <exception cref="ArgumentException">Thrown when a list is empty where it may not be or is oversized, a citation is declared twice, an account is reported twice, a limitation is named twice, a block names a citation the plan does not declare, or a backed block rests on a source the plan says nobody could read.</exception>
     public PresentationPlan(
         int schemaVersion,
         IReadOnlyList<PresentationBlock> blocks,
         IReadOnlyList<PresentationCitation> citations,
+        IReadOnlyList<AccountCoverage> coverage,
         IReadOnlyList<PresentationLimitation> limitations)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(schemaVersion, 1);
 
         var composedBlocks = PresentationRequirement.RequiredItems(blocks, MaxBlocks, nameof(blocks));
         var declaredCitations = PresentationRequirement.OptionalItems(citations, MaxCitations, nameof(citations));
+        var readAccounts = PresentationRequirement.OptionalItems(coverage, MaxAccountsCovered, nameof(coverage));
         var statedLimitations = PresentationRequirement.OptionalItems(limitations, LimitationCount, nameof(limitations));
 
         EnsureCitationsAreDeclaredOnce(declaredCitations);
         EnsureEveryReferenceResolves(composedBlocks, declaredCitations);
+        EnsureNoFactRestsOnAnUnreadableSource(composedBlocks, declaredCitations);
+
+        if (readAccounts.Select(account => account.Account).Distinct().Count() != readAccounts.Count)
+        {
+            throw new ArgumentException("A plan reports each account it read once.", nameof(coverage));
+        }
 
         if (statedLimitations.Distinct().Count() != statedLimitations.Count)
         {
@@ -92,6 +113,7 @@ public sealed record PresentationPlan
         this.SchemaVersion = schemaVersion;
         this.Blocks = composedBlocks;
         this.Citations = declaredCitations;
+        this.Coverage = readAccounts;
         this.Limitations = statedLimitations;
     }
 
@@ -104,12 +126,16 @@ public sealed record PresentationPlan
     /// <summary>Gets the sources the blocks rest on, declared once each.</summary>
     public IReadOnlyList<PresentationCitation> Citations { get; }
 
+    /// <summary>Gets what the run read, one entry per account it drew on, which is empty where it drew on no account at all.</summary>
+    public IReadOnlyList<AccountCoverage> Coverage { get; }
+
     /// <summary>Gets what the run knows about its own reach, which is empty where it reached everything it was asked about.</summary>
     public IReadOnlyList<PresentationLimitation> Limitations { get; }
 
     /// <summary>Composes a plan against the revision of the contract this build writes.</summary>
     /// <param name="blocks">The blocks, in the order they are read.</param>
     /// <param name="citations">The sources the blocks rest on, declared once each.</param>
+    /// <param name="coverage">What the run read, one entry per account it drew on.</param>
     /// <param name="limitations">What the run knows about its own reach.</param>
     /// <returns>The plan, stamped with <see cref="CurrentSchemaVersion" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -122,8 +148,34 @@ public sealed record PresentationPlan
     public static PresentationPlan Compose(
         IReadOnlyList<PresentationBlock> blocks,
         IReadOnlyList<PresentationCitation> citations,
+        IReadOnlyList<AccountCoverage> coverage,
         IReadOnlyList<PresentationLimitation> limitations) =>
-        new(CurrentSchemaVersion, blocks, citations, limitations);
+        new(CurrentSchemaVersion, blocks, citations, coverage, limitations);
+
+    /// <summary>Reports whether every source one block rests on is a description of a picture rather than something somebody wrote.</summary>
+    /// <param name="block">The block to read.</param>
+    /// <returns><see langword="true" /> when the block rests on at least one source this plan declares and every one of them is depicted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="block" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The corroboration test
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+    /// fixes, answered here rather than stored as a value of its own so that it cannot come to disagree with the
+    /// citations it is about. A block this reports true of rests on this deployment's reading of images and on nothing
+    /// anybody wrote, which is corroboration rather than evidence and is drawn as such.
+    /// </remarks>
+    public bool RestsOnDepictedSourcesOnly(PresentationBlock block)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+
+        var declared = this.Citations.ToDictionary(citation => citation.Id);
+        var rested = block.ReferencedCitations.Distinct().ToArray();
+
+        // A block of another plan answers false rather than throwing: the question is about what this plan declares,
+        // and a reference it does not declare is not a depicted source of it.
+        return rested.Length != 0
+            && rested.All(reference => declared.TryGetValue(reference, out var citation)
+                && citation.Medium is PresentationSourceMedium.Depicted);
+    }
 
     private static void EnsureCitationsAreDeclaredOnce(IReadOnlyList<PresentationCitation> citations)
     {
@@ -155,6 +207,42 @@ public sealed record PresentationPlan
         {
             throw new ArgumentException(
                 $"The plan declares no citation named {string.Join(", ", unresolved)}.",
+                nameof(blocks));
+        }
+    }
+
+    /// <summary>Refuses a block that states something the correspondence backs while resting on a source nobody could read.</summary>
+    /// <remarks>
+    /// An unreadable source is declared so that a run can say a contract existed and yielded nothing; a fact resting on
+    /// one would be a fact drawn from exactly that nothing, which is the failure the state was added to prevent. An
+    /// unsupported block rests on no citation at all and is therefore untouched, which is how a plan says "the file is
+    /// there, it is encrypted, and this is why the question is unanswered".
+    /// </remarks>
+    private static void EnsureNoFactRestsOnAnUnreadableSource(
+        IReadOnlyList<PresentationBlock> blocks,
+        IReadOnlyList<PresentationCitation> citations)
+    {
+        var unreadable = citations
+            .Where(citation => citation.Unreadable is not null)
+            .Select(citation => citation.Id)
+            .ToHashSet();
+
+        if (unreadable.Count is 0)
+        {
+            return;
+        }
+
+        var restedOn = blocks
+            .SelectMany(block => block.ReferencedCitations)
+            .Where(unreadable.Contains)
+            .Select(reference => reference.Value)
+            .Distinct()
+            .ToArray();
+
+        if (restedOn.Length != 0)
+        {
+            throw new ArgumentException(
+                $"Nothing read the source named {string.Join(", ", restedOn)}, so no block may rest on it.",
                 nameof(blocks));
         }
     }

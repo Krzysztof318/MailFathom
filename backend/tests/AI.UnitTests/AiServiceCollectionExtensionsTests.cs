@@ -12,6 +12,7 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
@@ -377,7 +378,7 @@ public sealed class AiServiceCollectionExtensionsTests
     /// is read once per scope so a run stays on the plan it began with.
     /// </summary>
     [Fact]
-    public void AddDiscoveryRunPlanner_ResolvesThePlanningPortOncePerScope()
+    public void AddDiscoveryRunAgents_ResolvesThePlanningPortOncePerScope()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -395,7 +396,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddChatProviderAdapter();
 
         // Act
-        services.AddDiscoveryRunPlanner();
+        services.AddDiscoveryRunAgents();
 
         // Assert
         using var provider = services.BuildServiceProvider();
@@ -407,9 +408,39 @@ public sealed class AiServiceCollectionExtensionsTests
             otherScope.ServiceProvider.GetRequiredService<IDiscoveryRunPlanner>());
     }
 
+    /// <summary>Both halves of a run's chat configuration arrive together, so a deployment that derives a plan composes a result from it.</summary>
+    [Fact]
+    public void AddDiscoveryRunAgents_ADeploymentThatDerivesAPlan_AlsoResolvesTheCompositionOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddDiscoveryRunAgents();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>(),
+            otherScope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>());
+    }
+
     /// <summary>The envelope is a seam a deployment fills, so the planner keeps one that is already registered.</summary>
     [Fact]
-    public void AddDiscoveryRunPlanner_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
+    public void AddDiscoveryRunAgents_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -417,7 +448,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(declared);
 
         // Act
-        services.AddDiscoveryRunPlanner();
+        services.AddDiscoveryRunAgents();
 
         // Assert
         using var provider = services.BuildServiceProvider();
@@ -426,10 +457,10 @@ public sealed class AiServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddDiscoveryRunPlanner_WithoutAServiceCollection_IsRefused()
+    public void AddDiscoveryRunAgents_WithoutAServiceCollection_IsRefused()
     {
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunPlanner(null!));
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunAgents(null!));
     }
 
     /// <summary>

@@ -1397,6 +1397,24 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Same(adopted, found);
     }
 
+    /// <summary>A Discover result reports the account identifier back, so one a result may not carry fails the start rather than every question.</summary>
+    [Theory]
+    [InlineData("<work>")]
+    [InlineData("work\u0007mail")]
+    public void ValidateForSynchronization_AccountIdentifierAResultMayNotReport_IsRefusedAtStartup(string accountId)
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Accounts = [CreateAccount(accountId)] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(
+            messages,
+            message => message!.Contains("must be text a result may report back", StringComparison.Ordinal));
+    }
+
     private static TrustAnchorLoader CreateTrustAnchorLoader() =>
         new(new PlaintextOnlySecretReferenceResolver());
 

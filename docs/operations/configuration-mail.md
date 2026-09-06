@@ -157,7 +157,10 @@ that names an account, and either spelling may be used to narrow a listing, a se
 There is deliberately no default, because a name MailFathom invented would be published to callers as though you had
 chosen it. The two share one naming space so that a name can never select two mailboxes, which is why startup refuses a
 display name that another account's identifier or display name already carries; a display name equal to the account's
-*own* identifier is fine, since both spellings then reach the same mailbox.
+*own* identifier is fine, since both spellings then reach the same mailbox. The identifier is also reported back inside
+a Discover result, which names every account the run read, so startup refuses one that carries a control character, is
+written as markup, or runs past four thousand characters — a name a result cannot carry would otherwise start and
+synchronize, and then refuse every question.
 
 **That naming space belongs to the owner, not to the deployment.** An account identifier names one mailbox within the
 owner who declared it, and MailFathom stores it that way — the account row is keyed by the owner and the identifier

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Presentation.Citations;
 using MailFathom.Domain.Emails;
 using Xunit;
@@ -19,7 +20,8 @@ public sealed class PresentationCitationTests
         Assert.Throws<ArgumentNullException>(() => new PresentationCitation(
             PresentationPlanExample.FirstCitation,
             target: null!,
-            PresentationPlanExample.Text("Revised figures")));
+            PresentationPlanExample.Text("Revised figures"),
+            PresentationSourceMedium.Written));
     }
 
     /// <summary>A label is what the source reads as before it is followed, so a citation without one presents nothing.</summary>
@@ -30,6 +32,7 @@ public sealed class PresentationCitationTests
         Assert.Throws<ArgumentException>(() => new PresentationCitation(
             PresentationPlanExample.FirstCitation,
             new EmailCitationTarget(StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111"))),
-            label: default));
+            label: default,
+            PresentationSourceMedium.Written));
     }
 }

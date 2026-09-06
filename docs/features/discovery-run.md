@@ -4,11 +4,11 @@
 
 A question about a mailbox arrives as words and a scope: *which supplier quoted least for the racking*, asked about one
 conversation, about four selected messages, or about every folder of every account. Before anything is read, that has to
-become two decisions — what to retrieve, and what an answer to it will look like. This page describes how those two are
-made, what bounds each of them, and what a deployment does when it cannot make them at all.
+become two decisions — what to retrieve, and what an answer to it will look like. The mail is then read, and what it
+says is composed into the answer. This page describes how those decisions are made, what bounds each of them, what the
+composition may and may not say, and what a deployment does when it cannot do any of it.
 
-What the decisions produce is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in.
-Filling that plan with facts and citations is separate work again.
+What a run produces is a [presentation plan](presentation-plan.md): the typed contract an answer is delivered in.
 
 ---
 
@@ -25,8 +25,13 @@ The composition is derived in code, from the kind of question, through a mapping
 | `findFact` — one fact somebody stated | An answer paragraph |
 | `trackChange` — how something moved over time | A timeline |
 | `compareTerms` — several offers, terms, or positions held against each other | A fact table |
-| `findDocuments` — which documents exist and where | An attachment gallery |
+| `findDocuments` — which documents exist and where | An answer paragraph |
 | `unclassified` — none of the above, or nothing readable came back | An answer paragraph |
+
+A question about documents opens with an answer paragraph rather than with the attachment gallery the catalogue holds,
+because a gallery entry names an attachment inside a message and retrieval returns a passage that carries no attachment
+coordinate. The gallery waits on a passage that carries one; until then, saying which documents exist in prose over the
+messages that hold them is what a run can honestly compose.
 
 Every composition then ends with an evidence list, because a Discover answer is only worth as much as the mail behind
 it, and the list is where a reader goes from a claim to the message that made it.
@@ -99,6 +104,71 @@ classified as `unclassified`, which opens with an answer and its evidence. It is
 is a plan, which is the difference between a question answered less well and a question refused. A derivation that fell
 back is logged as unreadable, with no question text in the record.
 
+## Composing the answer, and what it may not say
+
+Once the plan has run, a second call puts the question and the extracts to a composing agent — its own instruction, its
+own name, no tools at all, and the same instruction envelope every agent here carries. It is shown a numbered set of
+extracts and nothing else about the mailbox.
+
+**The citations are minted before the model sees anything, and they are the only ones a claim may rest on.** The run
+declares one source per distinct message it retrieved, names it `s1`, `s2`, and so on, and shows the model those names.
+A name the model invents resolves to nothing, so the claim resting on it is read as resting on nothing — which is what
+makes a composed answer checkable at all. Nothing a model writes ever becomes a reference to mail.
+
+**At most twenty-four distinct messages become sources of one run**, taken in the order retrieval ranked them. A message
+past that is neither shown to the model nor listed in the evidence, so a run over a wide question answers from the
+mail it names rather than from mail a reader has no way to reach.
+
+**Four judgements are the composition's own and are not negotiable by what the model wrote.**
+
+- **The support** follows from whether the cited names resolve, whether the model reported a disagreement between them,
+  and how current the accounts they were read from are — supported, unsupported, conflicting, or stale, in the sense
+  [the presentation plan](presentation-plan.md#what-the-correspondence-does-for-a-block) fixes. An answer resting on
+  nothing carries a sentence about the run rather than the model's own prose, because an unsupported block's prose
+  would be exactly the sentence nobody wrote.
+- **The disagreement is kept as a disagreement.** Where the model reports two or more sides, each naming sources it was
+  actually offered, the block carries every side with its own citations rather than one figure the run chose.
+- **The confidence is capped by the support**, on the definition that page states, so a model cannot report a settled
+  answer over a contradiction, over sources that are all behind, or over no source at all.
+- **The freshness of a block is the freshness of the accounts its own sources came from**, reduced to the worst of them:
+  a block resting on one current message and one from a mailbox that is behind is a block a reader should treat as
+  behind.
+
+**The evidence list is built from what retrieval returned rather than from what the model cited**, so a reader checking
+a thin answer sees the mail the run actually read. And the material the model is asked for follows the intent: events
+for a question about change, columns and rows for a comparison, and the answer alone otherwise. What it gives back is
+held to the contract — a column the catalogue does not hold is dropped, a row whose cells do not match the columns is
+dropped rather than padded, and a shape that ends up empty falls back to the answer itself rather than to an invented
+one.
+
+A question looking for documents is answered this way today as well. A passage carries the message it was cut from and
+not the attachment within it, so a gallery entry would name a file this run cannot resolve; an attachment nothing could
+read is a state the plan expresses and nothing yet produces.
+
+**What the run says about its own reading** is composed here too: one coverage entry per account the scope reached, and
+the limitations the run observed rather than was told — the local copy behind where an account is known to be, sources
+unavailable where a lookup was refused, semantic ranking unavailable where the deployment fell back to words alone, and
+retrieval truncated where the run found more distinct messages than the twenty-four it may declare as sources. A plan
+carrying no limitation states that the run reached everything it was asked about, so a run composed over a cut set says
+so rather than staying silent.
+
+### What leaves the deployment, and what does not
+
+The extracts are mail, and they pass the [sensitive-content egress guard](sensitive-content-scanning.md) on the way to
+the provider exactly as the question does. What the **plan** quotes is not guarded, deliberately: that is the owner's
+own mail going back to the owner, and redacting it there would hide from somebody what they already have. So two copies
+of each extract exist for the length of one call — the guarded one the provider is shown, and the owner's own one the
+evidence list quotes.
+
+One call leaves per composition, with no tools, so a question costs two turns however much mail it read.
+
+### When the composing model does not answer
+
+A provider that failed, timed out, or answered with something unreadable does not end the run. The composition falls
+back to a result saying the sources do not answer the question, over the same citations, the same evidence list, and
+the same account coverage — which is the honest answer for a run whose model was unavailable, and the one a person is
+owed rather than an error page: the mail was read, and what could not be done was the reading of it.
+
 ## When a deployment refuses the question outright
 
 Two refusals come before any of the above, and neither is a fallback.
@@ -113,7 +183,9 @@ Two refusals come before any of the above, and neither is a fallback.
 
 ## What is deliberately not here
 
-- **Filling the plan.** Which facts, columns, dates, and citations the composed blocks end up carrying is separate work.
-- **What a run spent.** The single derivation call is not metered against a run ledger, because one turn with no tools
-  cannot iterate; a Discover run's own budget is separate work, and the derivation joins it when it exists.
+- **The blocks a composition does not fill.** People, thread state, attachment galleries, drafts, and suggested actions
+  are part of the contract and are composed by nothing here: the intent decides between an answer, a timeline, and a
+  fact table, and the rest wait for the surfaces that produce them.
+- **What a run spent.** Neither call is metered against a run ledger, because a turn with no tools cannot iterate; a
+  Discover run's own budget is separate work, and both calls join it when it exists.
 - **Rendering.** No client draws a presentation plan yet.
