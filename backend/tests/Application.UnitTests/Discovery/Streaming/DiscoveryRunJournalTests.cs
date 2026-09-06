@@ -5,6 +5,7 @@
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Discovery.Streaming;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -28,7 +29,7 @@ public sealed class DiscoveryRunJournalTests
         // Act
         journal.Append(new DiscoveryRunStarted());
         journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Assert
         var published = Published(journal);
@@ -42,7 +43,7 @@ public sealed class DiscoveryRunJournalTests
     {
         // Arrange
         var journal = NewJournal();
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var accepted = journal.Append(Progressed(1));
@@ -65,7 +66,7 @@ public sealed class DiscoveryRunJournalTests
 
         // Act
         var refused = journal.Append(Progressed(DiscoveryRunBounds.MaximumEvents));
-        var ending = journal.Append(new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted], []));
+        var ending = journal.Append(new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted], [], MailAnsweringRunSpend.Nothing));
 
         // Assert
         Assert.False(refused);
@@ -81,7 +82,7 @@ public sealed class DiscoveryRunJournalTests
         var journal = NewJournal();
         journal.Append(new DiscoveryRunStarted());
         journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var resumed = await journal
@@ -99,7 +100,7 @@ public sealed class DiscoveryRunJournalTests
         // Arrange
         var journal = NewJournal();
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var resumed = await journal
@@ -129,7 +130,7 @@ public sealed class DiscoveryRunJournalTests
         Assert.IsType<DiscoveryRunStarted>(reader.Current);
         Assert.False(journal.HasEnded);
 
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         await reader.DisposeAsync();
     }
 
@@ -137,7 +138,9 @@ public sealed class DiscoveryRunJournalTests
         new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment);
 
     private static DiscoveryRetrievalProgressed Progressed(int lookupsRun) =>
-        new(new DiscoveryRetrievalProgress(lookupsRun, LookupsRefused: 0, LookupsPlanned: 6, PassagesFound: 0));
+        new(
+            new DiscoveryRetrievalProgress(lookupsRun, LookupsRefused: 0, LookupsPlanned: 6, PassagesFound: 0),
+            MailAnsweringRunSpend.Nothing);
 
     private static DiscoveryRunEvent[] Published(DiscoveryRunJournal journal) =>
         [

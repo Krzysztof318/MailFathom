@@ -230,6 +230,55 @@ public sealed class DiscoveryRunTests
         Assert.DoesNotContain(Marker, guarding.Guarded, StringComparison.Ordinal);
     }
 
+    /// <summary>A period that has spent its allowance refuses the question before anything is read or derived.</summary>
+    /// <remarks>
+    /// Admission is taken at the start rather than at the first provider call, because a run refused after it retrieved
+    /// has already spent the retrieval — and the refusal a client renders as a state is about the question rather than
+    /// about how far it got.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_APeriodThatHasSpentItsAllowance_RefusesBeforeReadingAnything()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch();
+        var planner = DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation");
+        var run = DiscoveryRuns.Composing(planner, search, spendLedger: DiscoveryRuns.PeriodSpent());
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(() =>
+            run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailAnsweringBudgetScope.Period, refusal.Scope);
+        Assert.Empty(search.Lookups);
+        await planner.DidNotReceive().DerivePlanAsync(Arg.Any<MailQuestion>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>What a run spent is counted while it runs, so the ledger a stream reads is the one retrieval charged.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatRetrievedMail_ChargesTheRetrievalToThatRunsOwnLedger()
+    {
+        // Arrange
+        var ledger = DiscoveryRuns.NewRunLedger();
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+            new ScriptedEmailKnowledgeSearch()
+                .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")),
+            ledger: ledger);
+
+        // Act
+        await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            new MailAnsweringRunSpend(
+                ProviderCalls: 0,
+                Tokens: 0,
+                RetrievedCharacters: "the quotation".Length,
+                MessagesRetrieved: 1),
+            ledger.Read());
+    }
+
     /// <summary>A derivation as the real one behaves at the egress point, without a provider behind it.</summary>
     private sealed class GuardingDiscoveryRunPlanner(SensitiveContentEgressGuard egressGuard) : IDiscoveryRunPlanner
     {

@@ -190,6 +190,11 @@ every question, which the section below states in full.
 
 - `Model` is what a request is routed to. For a cloud deployment that is the name the operator gave the deployment
   rather than the vendor's model identifier, because that is the string the endpoint recognizes.
+- `PublishedModel` is what a client is told answered, and it is a separate setting rather than a reading of `Model` for
+  exactly the reason above: a routed name is a deployment's own, may carry a tenant or an internal routing label, and is
+  nobody's business outside the deployment. An operator that writes one publishes it on a
+  [Discover run](discovery-run.md#which-model-answered)'s opening event; one that writes nothing publishes nothing, and
+  the endpoint alias — which names nothing outside this deployment — goes out either way.
 - `MaxOutputTokens` bounds what one answer may occupy. It is the one generation parameter with no useful provider
   default: left unset, a model is free to generate until it stops and a deployment cannot bound what a single call
   costs.

@@ -29,6 +29,12 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// The owner is carried because what a run holds is that person's mail. Whoever looks a run up is checked against it,
 /// which is what makes a guessed identifier useless rather than merely unlikely.
 /// </para>
+/// <para>
+/// <strong>It also carries the token a stop arrives on.</strong> A run outlives every connection it is reached over, so
+/// the execution has to be reachable from a later request, and the journal is the one object per run that both the
+/// execution and that request already hold. What owns the cancellation is whatever holds the run — see
+/// <see cref="DiscoveryRunRegistry" /> — because that is what knows when nothing can stop the run any more.
+/// </para>
 /// </remarks>
 public sealed class DiscoveryRunJournal
 {
@@ -41,10 +47,12 @@ public sealed class DiscoveryRunJournal
     /// <summary>Initializes the stream of one run.</summary>
     /// <param name="id">The identifier the run is addressed by.</param>
     /// <param name="owner">Whose mail the run reads, which is who may read what it publishes.</param>
-    public DiscoveryRunJournal(DiscoveryRunId id, MailOwnerId owner)
+    /// <param name="stopping">Cancelled when the run is stopped, which is what the execution links its own cancellation to.</param>
+    public DiscoveryRunJournal(DiscoveryRunId id, MailOwnerId owner, CancellationToken stopping = default)
     {
         this.Id = id;
         this.Owner = owner;
+        this.Stopping = stopping;
     }
 
     /// <summary>Gets the identifier the run is addressed by.</summary>
@@ -64,6 +72,10 @@ public sealed class DiscoveryRunJournal
             }
         }
     }
+
+    /// <summary>Gets the token a stop reaches the execution through, which the run links its own cancellation to.</summary>
+    /// <remarks>Never cancelled where the run was opened without one, which is a run nothing can stop — the shape a test states when a stop is not what it is about.</remarks>
+    public CancellationToken Stopping { get; }
 
     /// <summary>Gets how many events the run has published.</summary>
     public int PublishedCount

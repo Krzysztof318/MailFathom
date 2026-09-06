@@ -11,6 +11,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using Microsoft.Extensions.Logging;
 
@@ -29,11 +30,18 @@ namespace MailFathom.AI.Discovery;
 /// is an optimization of retrieval rather than the answer, and a question is not unanswerable because the derivation
 /// was unavailable for a moment.
 /// </para>
+/// <para>
+/// <strong>A spend ceiling is the exception to that.</strong> A call the run's own ledger refuses never leaves, and
+/// falling back to the question's own words would spend the retrieval and the composition on a run the deployment had
+/// already declined to pay for. So the refusal propagates and the run ends stating which ceiling stopped it.
+/// </para>
 /// </remarks>
 internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
 {
     private readonly ChatGenerationPlan plan;
     private readonly EmailKnowledgeBounds retrievalBounds;
+    private readonly MailAnsweringRunLedger runLedger;
+    private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly IProviderEndpointCredentialSource credentialSource;
     private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
@@ -47,6 +55,8 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     /// <summary>Creates the derivation one Discover run reaches the model through.</summary>
     /// <param name="plan">The generation parameters this deployment configured.</param>
     /// <param name="retrievalBounds">What this deployment's retrieval returns at most, which bounds what a plan may ask for.</param>
+    /// <param name="runLedger">Counts what this run has spent and refuses the call that would take it past its ceiling.</param>
+    /// <param name="spendLedger">Counts what the current period has spent across every run.</param>
     /// <param name="credentialSource">Resolves the endpoint's credential for the one call.</param>
     /// <param name="clientFactory">Opens the provider client.</param>
     /// <param name="transportFactory">Supplies the named outbound transport that client speaks over.</param>
@@ -59,6 +69,8 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     public DiscoveryPlanningAgent(
         ChatGenerationPlan plan,
         EmailKnowledgeBounds retrievalBounds,
+        MailAnsweringRunLedger runLedger,
+        IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,
         OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
@@ -71,6 +83,8 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(retrievalBounds);
+        ArgumentNullException.ThrowIfNull(runLedger);
+        ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(credentialSource);
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
@@ -83,6 +97,8 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
 
         this.plan = plan;
         this.retrievalBounds = retrievalBounds;
+        this.runLedger = runLedger;
+        this.spendLedger = spendLedger;
         this.credentialSource = credentialSource;
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
@@ -161,21 +177,23 @@ internal sealed class DiscoveryPlanningAgent : IDiscoveryRunPlanner
         {
             // Opened per derivation and released with it, so a rotated key is picked up by the next question and the
             // material exists for one call rather than for process uptime. It is the sequence an answering run opens
-            // with as well; the run ledger is deliberately absent, for the reason below.
+            // with as well.
             using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
             using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
             using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 
-            // ponytail: no spend ledger around this call — one turn with no tools cannot iterate, so the ceiling a run
-            // ledger enforces has nothing to bound here. What it does mean is that the tokens a derivation costs are
-            // unaccounted; wrap this in the run's own budget when #1172 gives a Discover run one.
-            using var chatClient = new ResilientChatClient(
+            using var resilientClient = new ResilientChatClient(
                 providerClient,
                 endpoint,
                 this.plan.RequestTimeout,
                 this.operationRunner,
                 this.healthRecorder,
                 this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+            // the run's and the period's: this call is the first of the two a Discover run makes, and both are charged.
+            using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
 
             var agent = DiscoveryPlanningAgentComposition.Compose(
                 chatClient,

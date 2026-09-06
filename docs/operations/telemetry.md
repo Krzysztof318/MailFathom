@@ -1017,12 +1017,20 @@ call-count form as well. [Mail answering § What one question may
 spend](../features/mail-answering.md#what-one-question-may-spend) holds the ceilings these are read against, and
 [`MailAnswering`](configuration-ai.md#mailanswering) the keys.
 
+**A [Discover run](../features/discovery-run.md#what-bounds-a-run) charges these too**, because it is charged to the
+same ledgers as a question asked over MCP. So these four report what this deployment spends answering questions rather
+than what one surface spends: a client asking on the client endpoint and an agent asking over MCP are both counted here,
+and neither is separable from the other in these instruments.
+
 ### What a run records
 
 Those instruments describe what answering costs across a deployment. One span describes a single run, and it is the only
-place a slow or degraded question is attributable to itself. Every run opens `answer_mail_question` on the `MailFathom`
-activity source, inside the MCP tool call it happened in — so the SDK's own span for the call is its parent, the
-provider calls the run makes are its children, and its duration is the run's own.
+place a slow or degraded question is attributable to itself. Every `ask_mail` run opens `answer_mail_question` on the
+`MailFathom` activity source, inside the MCP tool call it happened in — so the SDK's own span for the call is its
+parent, the provider calls the run makes are its children, and its duration is the run's own. A Discover run opens none
+of this: it publishes what it is doing and what it is spending to the person who asked, over
+[its own event stream](../features/discovery-run.md#what-a-client-is-told-and-in-what-order), and what it spends reaches
+the instruments above like any other run.
 
 | Tag | What it carries |
 | --- | --- |

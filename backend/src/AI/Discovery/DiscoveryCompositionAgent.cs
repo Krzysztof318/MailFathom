@@ -13,6 +13,7 @@ using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
 using Microsoft.Extensions.Logging;
 
@@ -31,10 +32,18 @@ namespace MailFathom.AI.Discovery;
 /// the honest answer for a run whose model was unavailable, and it is the answer a person is owed rather than an error
 /// page — the mail was read, and what could not be done was the reading of it.
 /// </para>
+/// <para>
+/// <strong>A spend ceiling is the exception to that, and it is meant to be.</strong> A call the run's own ledger refuses
+/// never leaves and there is nothing to compose a result from, so the refusal propagates and the run ends stating which
+/// ceiling stopped it. A fallback there would tell somebody their mail holds no answer when what happened is that the
+/// deployment declined to pay for one.
+/// </para>
 /// </remarks>
 internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 {
     private readonly ChatGenerationPlan plan;
+    private readonly MailAnsweringRunLedger runLedger;
+    private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly IProviderEndpointCredentialSource credentialSource;
     private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
@@ -47,6 +56,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
 
     /// <summary>Creates the composition one Discover run reaches the model through.</summary>
     /// <param name="plan">The generation parameters this deployment configured.</param>
+    /// <param name="runLedger">Counts what this run has spent and refuses the call that would take it past its ceiling.</param>
+    /// <param name="spendLedger">Counts what the current period has spent across every run.</param>
     /// <param name="credentialSource">Resolves the endpoint's credential for the one call.</param>
     /// <param name="clientFactory">Opens the provider client.</param>
     /// <param name="transportFactory">Supplies the named outbound transport that client speaks over.</param>
@@ -58,6 +69,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     /// <param name="logger">The log this composition reports to.</param>
     public DiscoveryCompositionAgent(
         ChatGenerationPlan plan,
+        MailAnsweringRunLedger runLedger,
+        IMailAnsweringSpendLedger spendLedger,
         IProviderEndpointCredentialSource credentialSource,
         OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
@@ -69,6 +82,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         ILogger<DiscoveryCompositionAgent> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(runLedger);
+        ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(credentialSource);
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
@@ -80,6 +95,8 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
         ArgumentNullException.ThrowIfNull(logger);
 
         this.plan = plan;
+        this.runLedger = runLedger;
+        this.spendLedger = spendLedger;
         this.credentialSource = credentialSource;
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
@@ -215,16 +232,18 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
             using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
             using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 
-            // ponytail: no spend ledger around this call — one turn with no tools cannot iterate, so the ceiling a run
-            // ledger enforces has nothing to bound here. What it does mean is that the tokens a composition costs are
-            // unaccounted; wrap this in the run's own budget when #1172 gives a Discover run one.
-            using var chatClient = new ResilientChatClient(
+            using var resilientClient = new ResilientChatClient(
                 providerClient,
                 endpoint,
                 this.plan.RequestTimeout,
                 this.operationRunner,
                 this.healthRecorder,
                 this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+            // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused
+            // never reaches the endpoint's circuit, its concurrency budget, or its health record. The two ledgers are
+            // the run's and the period's: this call is one of the two a Discover run makes, and both are charged.
+            using var chatClient = new BudgetedChatClient(resilientClient, this.runLedger, this.spendLedger);
 
             var agent = DiscoveryCompositionAgentComposition.Compose(
                 chatClient,

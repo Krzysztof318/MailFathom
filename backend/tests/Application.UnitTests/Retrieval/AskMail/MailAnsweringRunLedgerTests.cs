@@ -2,14 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.AI.Orchestration;
-using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.UnitTests.TestDoubles;
 using Xunit;
 
-namespace MailFathom.AI.UnitTests.Orchestration;
+namespace MailFathom.Application.UnitTests.Retrieval.AskMail;
 
 /// <summary>Covers what one run is allowed to send, call, and consume, and which of those refusals cuts rather than stops.</summary>
 /// <remarks>
@@ -169,5 +168,5 @@ public sealed class MailAnsweringRunLedgerTests
         new(MailAnsweringRunBounds.Create(retrievedCharacters, providerCalls, tokens));
 
     private static IReadOnlyList<EmailKnowledgePassage> PassagesOf(params int[] lengths) =>
-        [.. lengths.Select(length => KnowledgePassages.Create(new string('a', length)))];
+        [.. lengths.Select(length => ScriptedEmailKnowledgeSearch.Passage(new string('a', length)))];
 }

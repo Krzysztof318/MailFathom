@@ -398,7 +398,11 @@ internal static class DiscoveryCompositionReading
             limitations.Add(PresentationLimitation.SemanticRankingUnavailable);
         }
 
-        if (declaredSourceCount < evidence.Passages.Select(passage => passage.StoredEmailId).Distinct().Count())
+        // Either cut says the same thing to a reader — mail matching the question was left unread — so they produce one
+        // limitation rather than two: the run's own ceiling on retrieved characters stopped the plan, or more distinct
+        // messages were found than a run may declare as sources.
+        if (evidence.RetrievalTruncated
+            || declaredSourceCount < evidence.Passages.Select(passage => passage.StoredEmailId).Distinct().Count())
         {
             limitations.Add(PresentationLimitation.RetrievalTruncated);
         }

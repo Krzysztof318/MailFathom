@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.TestSupport;
@@ -21,11 +22,11 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
 
-/// <summary>Covers what the two Discover routes accept off the wire, what they refuse, and what a reader is streamed.</summary>
+/// <summary>Covers what the three Discover routes accept off the wire, what they refuse, and what a reader is streamed.</summary>
 /// <remarks>
 /// The run itself is covered where it happens. What is asserted here is the transport: which questions are refused
-/// before a run is opened at all, that a run belongs to the owner who asked for it, and that a reconnecting client
-/// stating where it left off is given what it missed rather than the run over again.
+/// before a run is opened at all, that a run belongs to the owner who asked for it whether it is being read or stopped,
+/// and that a reconnecting client stating where it left off is given what it missed rather than the run over again.
 /// </remarks>
 public sealed class ClientDiscoveryRunEndpointTests
 {
@@ -189,7 +190,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -216,7 +217,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -241,7 +242,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut));
+        journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut, MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -272,7 +273,8 @@ public sealed class ClientDiscoveryRunEndpointTests
                     PresentationFreshness.CurrentAt(Now),
                     Now.AddDays(-30),
                     Now),
-            ]));
+            ],
+            MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -294,7 +296,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated], []));
+        journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: "1");
@@ -318,7 +320,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom);
@@ -326,6 +328,53 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Assert
         Assert.Contains("id: 1", streamed, StringComparison.Ordinal);
     }
+
+    /// <summary>Stopping is a client-composed path too, and it is the same run address the reading path is built on.</summary>
+    [Fact]
+    public void DiscoveryRunRoute_IsThePathAClientComposes() =>
+        Assert.Equal("/discovery/runs/{runId:guid}", ClientDiscoveryRunEndpoints.DiscoveryRunRoute);
+
+    /// <summary>A run this owner started is stopped and answered with nothing, which is all a client that stopped reading needs.</summary>
+    [Fact]
+    public void Stop_ARunThisOwnerHolds_StopsItAndAnswersWithNoContent()
+    {
+        // Arrange
+        var registry = NewRegistry();
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+
+        // Act
+        var answered = Stop(journal.Id.Value, registry);
+
+        // Assert
+        Assert.IsType<NoContent>(answered.Result);
+        Assert.True(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>An identifier is a bearer value, so stopping somebody else's run reads as no such run and leaves it running.</summary>
+    [Fact]
+    public void Stop_ARunAnotherOwnerStarted_ReportsNoSuchRunAndLeavesItRunning()
+    {
+        // Arrange
+        var registry = NewRegistry();
+        registry.TryOpen(SyntheticMailOwner.Another, out var journal);
+        Assert.NotNull(journal);
+
+        // Act
+        var answered = Stop(journal.Id.Value, registry);
+
+        // Assert
+        Assert.IsType<NotFound>(answered.Result);
+        Assert.False(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>An identifier no run could carry is answered as no such run rather than reaching the registry at all.</summary>
+    [Fact]
+    public void Stop_AnIdentifierNoRunCouldCarry_ReportsNoSuchRun() =>
+        Assert.IsType<NotFound>(Stop(Guid.Empty, NewRegistry()).Result);
+
+    private static Results<NoContent, NotFound> Stop(Guid runId, DiscoveryRunRegistry registry) =>
+        ClientDiscoveryRunEndpoints.Stop(runId, ResolverFor(SyntheticMailOwner.Deployment), registry);
 
     private static Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult> Start(
         ClientDiscoveryRunRequest request,

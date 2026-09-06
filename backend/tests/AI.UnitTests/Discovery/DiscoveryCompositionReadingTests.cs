@@ -525,9 +525,40 @@ public sealed class DiscoveryCompositionReadingTests
                 passages,
                 EmailSearchRetrievalMode.Hybrid,
                 LookupsRun: 6,
-                LookupsRefused: 0));
+                LookupsRefused: 0,
+                RetrievalTruncated: false));
 
         // Assert
+        Assert.Contains(PresentationLimitation.RetrievalTruncated, plan.Limitations);
+    }
+
+    /// <summary>A run its own character ceiling cut says so too, on the same limitation and with every message it found declared.</summary>
+    /// <remarks>
+    /// The other half of that limitation, and the one no other case here reaches: every source the run found is
+    /// declared, so the count comparison above says nothing, and what a reader has to be told comes from retrieval
+    /// having stopped rather than from a source list that was trimmed.
+    /// </remarks>
+    [Fact]
+    public void Read_ARunItsOwnCeilingCut_SaysRetrievalWasTruncated()
+    {
+        // Arrange
+        var sources = Sources("we accept");
+        var passages = new[] { Passage("we accept") };
+
+        // Act
+        var plan = Read(
+            """{ "answer": "They accepted.", "sources": ["s1"] }""",
+            DiscoveryIntent.FindFact,
+            sources,
+            evidence: new DiscoveryEvidence(
+                passages,
+                EmailSearchRetrievalMode.Hybrid,
+                LookupsRun: 1,
+                LookupsRefused: 0,
+                RetrievalTruncated: true));
+
+        // Assert
+        Assert.Equal(sources.Count, passages.Select(passage => passage.StoredEmailId).Distinct().Count());
         Assert.Contains(PresentationLimitation.RetrievalTruncated, plan.Limitations);
     }
 
@@ -573,7 +604,12 @@ public sealed class DiscoveryCompositionReadingTests
         IReadOnlyList<DiscoveryComposedSource> sources,
         EmailSearchRetrievalMode retrievalMode,
         int lookupsRefused) =>
-        new([.. sources.Select(source => Passage(source.Extract))], retrievalMode, LookupsRun: 1, lookupsRefused);
+        new(
+            [.. sources.Select(source => Passage(source.Extract))],
+            retrievalMode,
+            LookupsRun: 1,
+            lookupsRefused,
+            RetrievalTruncated: false);
 
     private static AccountCoverage Coverage(MailAccountId accountId, PresentationFreshness freshness) =>
         new(

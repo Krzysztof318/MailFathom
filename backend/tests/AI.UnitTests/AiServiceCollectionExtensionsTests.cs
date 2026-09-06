@@ -391,6 +391,8 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
         services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
 
         // Beside the adapter, as the composition root registers them: a derivation sends over the transport that call names.
         services.AddChatProviderAdapter();
@@ -423,6 +425,8 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
         services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
         services.AddChatProviderAdapter();
 
         // Act
@@ -436,6 +440,47 @@ public sealed class AiServiceCollectionExtensionsTests
         Assert.NotSame(
             scope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>(),
             otherScope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>());
+    }
+
+    /// <summary>What a run tells the person who asked which endpoint answered them, and never how it is reached.</summary>
+    /// <remarks>
+    /// The one mapping in this call that decides what leaves the deployment rather than which port resolves: a swap of
+    /// the two names, or a reading of the routed name in place of the published one, would compile and would publish an
+    /// operator's own resource name to every client.
+    /// </remarks>
+    [Fact]
+    public void AddDiscoveryRunAgents_ADeclaredChatEndpoint_ResolvesTheNamesARunPublishesAndNeitherOfTheOthers()
+    {
+        // Arrange
+        var declared = ChatDeclarations.Endpoint(
+            alias: "answering",
+            routedModelName: "prod-eu-4o-2",
+            publishedModelName: "gpt-4o");
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource(ChatDeclarations.Plan(declared)));
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddDiscoveryRunAgents();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var identity = scope.ServiceProvider.GetRequiredService<AnsweringEndpointIdentity>();
+        Assert.Equal(declared.Alias, identity.Alias);
+        Assert.Equal(declared.PublishedModelName, identity.PublishedModel);
+        Assert.DoesNotContain(declared.RoutedModelName, $"{identity.Alias} {identity.PublishedModel}", StringComparison.Ordinal);
     }
 
     /// <summary>The envelope is a seam a deployment fills, so the planner keeps one that is already registered.</summary>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Discovery.Streaming;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -77,7 +78,7 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
 
         // Act
@@ -133,7 +134,7 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunCompleted([], []));
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
 
         // Act
@@ -143,5 +144,72 @@ public sealed class DiscoveryRunRegistryTests
 
         // Assert
         Assert.True(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _));
+    }
+
+    /// <summary>Stopping a run signals the token the run composed its own cancellation from, which is what reaches the provider call.</summary>
+    [Fact]
+    public void TryStop_ARunThisOwnerStarted_SignalsTheRunsOwnStoppingToken()
+    {
+        // Arrange
+        var registry = new DiscoveryRunRegistry(this.timeProvider);
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+
+        // Act
+        var stopped = registry.TryStop(journal.Id, SyntheticMailOwner.Deployment);
+
+        // Assert
+        Assert.True(stopped);
+        Assert.True(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>A run belongs to whoever started it, so somebody else's is reported as no such run and goes on running.</summary>
+    [Fact]
+    public void TryStop_ARunAnotherOwnerStarted_ReportsNoSuchRunAndLeavesItRunning()
+    {
+        // Arrange
+        var registry = new DiscoveryRunRegistry(this.timeProvider);
+        registry.TryOpen(SyntheticMailOwner.Another, out var journal);
+        Assert.NotNull(journal);
+
+        // Act
+        var stopped = registry.TryStop(journal.Id, SyntheticMailOwner.Deployment);
+
+        // Assert
+        Assert.False(stopped);
+        Assert.False(journal.Stopping.IsCancellationRequested);
+    }
+
+    /// <summary>A run that finished a moment earlier is stopped successfully, because whoever asked could not have known.</summary>
+    [Fact]
+    public void TryStop_ARunThatHasAlreadyEnded_StillReportsItStopped()
+    {
+        // Arrange
+        var registry = new DiscoveryRunRegistry(this.timeProvider);
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        registry.MarkEnded(journal.Id);
+
+        // Act, Assert
+        Assert.True(registry.TryStop(journal.Id, SyntheticMailOwner.Deployment));
+    }
+
+    /// <summary>A run this process has forgotten is no such run, which is the same answer a read of it gets.</summary>
+    [Fact]
+    public void TryStop_ARunThisProcessHasForgotten_ReportsNoSuchRun()
+    {
+        // Arrange
+        var registry = new DiscoveryRunRegistry(this.timeProvider);
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+        journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
+        registry.MarkEnded(journal.Id);
+
+        // Act
+        this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
+
+        // Assert
+        Assert.False(registry.TryStop(journal.Id, SyntheticMailOwner.Deployment));
     }
 }

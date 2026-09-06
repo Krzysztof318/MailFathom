@@ -9,6 +9,7 @@ namespace MailFathom.AI.Chat;
 /// <param name="Address">The base address requests are sent to, or <see langword="null" /> for the provider's own default.</param>
 /// <param name="RoutedModelName">What is sent as the model of a request, which for a cloud deployment is the deployment's name rather than the vendor's model identifier.</param>
 /// <param name="Api">Which of the provider's two request APIs a call is conducted through.</param>
+/// <param name="PublishedModelName">The model name the operator declared for publication to a client, and empty where they declared none.</param>
 /// <remarks>
 /// <para>
 /// The alias exists because the other two members are an address and a routing name, and an address may not be written
@@ -19,10 +20,17 @@ namespace MailFathom.AI.Chat;
 /// included, because a credential, a circuit, and a log line are all keyed by it.
 /// </para>
 /// <para>
-/// There is no vendor and no model identity beside the routed name, and that is the difference from an embedding
-/// endpoint rather than an omission. A vector is stored and later compared against other vectors, so which model
-/// produced it has to be recorded and proved; an answer is produced, presented, and gone, so nothing downstream ever
-/// has to ask which model wrote it.
+/// There is no vendor identity beside the routed name, and that is the difference from an embedding endpoint rather
+/// than an omission. A vector is stored and later compared against other vectors, so which model produced it has to be
+/// recorded and proved; an answer is produced, presented, and gone, so nothing downstream ever has to ask which model
+/// wrote it.
+/// </para>
+/// <para>
+/// What the published name adds is not that identity either. It is the operator's own statement of what a person should
+/// be told answered them — <c>gpt-4o</c> while the request routes to <c>prod-eu-4o-2</c> — because the routed name is a
+/// resource name that can carry a tenant, a project, or an environment in it, and
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
+/// refuses to publish that. Nothing reads it but what a client is shown, and empty means a run names the alias alone.
 /// </para>
 /// <para>
 /// The API belongs here rather than beside the generation parameters because it is part of where a request goes: the two
@@ -30,4 +38,9 @@ namespace MailFathom.AI.Chat;
 /// move to the other one is correcting how its endpoint is reached, not how its model is asked to answer.
 /// </para>
 /// </remarks>
-public sealed record ChatEndpoint(string Alias, Uri? Address, string RoutedModelName, ChatProviderApi Api);
+public sealed record ChatEndpoint(
+    string Alias,
+    Uri? Address,
+    string RoutedModelName,
+    ChatProviderApi Api,
+    string PublishedModelName);

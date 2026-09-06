@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Api;
@@ -98,11 +99,17 @@ internal sealed partial class DiscoveryRunLauncher
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Nothing awaits this task, so an escaping exception would be observed by nobody and would leave the run unended; it is logged and the run is ended instead.")]
     private async Task ExecuteAsync(MailQuestion question, DiscoveryRunJournal journal, AuthorizedPrincipal caller)
     {
+        // Held outside the try so the ending can still say what the run spent. A scope this process could not compose
+        // has spent nothing and reports nothing; a run that faulted on its second provider call has spent what it spent,
+        // and an ending claiming otherwise would be the one place a cost figure lies.
+        MailAnsweringRunLedger? ledger = null;
+
         try
         {
             await using var scope = this.scopeFactory.CreateAsyncScope();
 
             scope.ServiceProvider.GetRequiredService<TransportAuthorizedPrincipalSource>().Assume(caller);
+            ledger = scope.ServiceProvider.GetRequiredService<MailAnsweringRunLedger>();
 
             await scope.ServiceProvider
                 .GetRequiredService<StreamedDiscoveryRun>()
@@ -112,7 +119,9 @@ internal sealed partial class DiscoveryRunLauncher
         {
             this.LogRunFailedWithoutANameForIt(failure);
 
-            journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.Failed));
+            journal.Append(new DiscoveryRunFailed(
+                DiscoveryRunFailure.Failed,
+                ledger?.Read() ?? MailAnsweringRunSpend.Nothing));
         }
         finally
         {

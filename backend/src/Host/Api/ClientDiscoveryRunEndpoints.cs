@@ -25,10 +25,11 @@ namespace MailFathom.Host.Api;
 /// <summary>Asks one question of the owner's mail and streams the run answering it.</summary>
 /// <remarks>
 /// <para>
-/// Two routes rather than one, because a run outlives the request that starts it. The first asks the question and
+/// Three routes rather than one, because a run outlives the request that starts it. The first asks the question and
 /// answers with the run's identifier as soon as the question and its scope are known to be answerable; the second reads
-/// the run, and reads it again after a dropped connection. A single route that streamed the answer over the connection
-/// that asked would lose the whole run when a phone changed network, which is exactly the case this surface exists for.
+/// the run, and reads it again after a dropped connection; the third stops it. A single route that streamed the answer
+/// over the connection that asked would lose the whole run when a phone changed network, which is exactly the case this
+/// surface exists for — and would leave stopping indistinguishable from looking away.
 /// </para>
 /// <para>
 /// <strong>The transport is Server-Sent Events, and the contract is the events rather than the transport.</strong>
@@ -58,6 +59,10 @@ internal static class ClientDiscoveryRunEndpoints
     /// <summary>The route a run is read at, relative to the client prefix.</summary>
     internal const string DiscoveryRunEventsRoute = "/discovery/runs/{runId:guid}/events";
 
+    /// <summary>The route a run is stopped at, relative to the client prefix.</summary>
+    /// <remarks>The run itself rather than a verb beneath it, because what a client asks for is that this run stop existing as work in progress — and a second request naming the same run is answered the same way.</remarks>
+    internal const string DiscoveryRunRoute = "/discovery/runs/{runId:guid}";
+
     /// <summary>The greatest size a question may have on the wire.</summary>
     /// <remarks>
     /// Generous against the question's own bound and against a scope naming as many accounts, folders, and messages as
@@ -81,6 +86,9 @@ internal static class ClientDiscoveryRunEndpoints
             .RequirePermission(MailFathomPermission.MailAsk);
 
         api.MapGet(DiscoveryRunEventsRoute, Watch)
+            .RequirePermission(MailFathomPermission.MailAsk);
+
+        api.MapDelete(DiscoveryRunRoute, Stop)
             .RequirePermission(MailFathomPermission.MailAsk);
     }
 
@@ -201,6 +209,42 @@ internal static class ClientDiscoveryRunEndpoints
 
         return TypedResults.ServerSentEvents(
             Published(journal, ResumedFrom(context), context.RequestAborted));
+    }
+
+    /// <summary>Stops one run, so it makes no further provider call and abandons the retrieval it is waiting on.</summary>
+    /// <param name="runId">The run the caller is stopping.</param>
+    /// <param name="scopeResolver">Names the acting owner, which is who may stop the run.</param>
+    /// <param name="registry">Holds the runs this process is executing or has not yet forgotten.</param>
+    /// <returns><c>204</c> where the run was this owner's and is now stopping, <c>404</c> where this process holds no such run for this owner, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Stopping stops the spending rather than the watching.</strong> Closing the reading connection ends one
+    /// read and nothing else, because a run is addressed by an identifier and outlives every connection it is reached
+    /// over — so a control that only disconnected would cost exactly what not stopping costs. This cancels the token the
+    /// execution runs under, which reaches the provider call and the retrieval.
+    /// </para>
+    /// <para>
+    /// What the run had already published stays published, and a client reading the stream is given the blocks that
+    /// arrived and then a <c>failed</c> event naming the stop. What the run had already spent stays spent, in the run's
+    /// own counts and in the period's: stopping buys the remainder rather than a refund.
+    /// </para>
+    /// <para>
+    /// A run that has already ended is stopped successfully and nothing happens, because whoever asked could not have
+    /// known it finished a moment earlier. A run belonging to somebody else is answered as no such run, exactly as
+    /// reading one is, so an identifier says nothing about whether it exists.
+    /// </para>
+    /// </remarks>
+    internal static Results<NoContent, NotFound> Stop(
+        [FromRoute] Guid runId,
+        [FromServices] MailboxScopeResolver scopeResolver,
+        [FromServices] DiscoveryRunRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(registry);
+
+        return runId != Guid.Empty && registry.TryStop(DiscoveryRunId.Create(runId), scopeResolver.Owner)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
     }
 
     /// <summary>Reads what a run publishes into the items the protocol carries.</summary>

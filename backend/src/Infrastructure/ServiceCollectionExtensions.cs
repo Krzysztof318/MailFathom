@@ -927,6 +927,12 @@ public static class ServiceCollectionExtensions
         // the same registration behind a declared chat endpoint — so both are asked for rather than required, and the
         // retrieval beside them is a reading of the same search every other caller reaches. The coverage reader is
         // required, because how current the mail a run read was is a fact every deployment holds.
+        // One ledger per scope, because a Discover run executes on a scope of its own and a ceiling on a question is
+        // meaningless if two questions share it. It is what both of the run's provider calls and its retrieval are
+        // charged to, and what the stream reads the counts it publishes from. The MCP answering agent makes its own
+        // per run and never resolves this, so a request scope holding one that nothing calls costs one object.
+        services.AddScoped(provider => new MailAnsweringRunLedger(
+            provider.GetRequiredService<MailAnsweringRunBounds>()));
         services.AddScoped<PlannedMailRetrieval>();
         services.AddScoped<DiscoveryCoverageReader>();
         services.AddScoped(provider => new DiscoveryRun(
@@ -935,9 +941,18 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<AccessAuthorization>(),
             provider.GetRequiredService<SensitiveContentEgressGuard>(),
             provider.GetRequiredService<DiscoveryCoverageReader>(),
+            provider.GetRequiredService<IMailAnsweringSpendLedger>(),
             provider.GetService<IDiscoveryRunPlanner>(),
             provider.GetService<IDiscoveryResultComposer>()));
-        services.AddScoped<StreamedDiscoveryRun>();
+        // Built by hand for the reason the run above is: the endpoint's identity is the one dependency a supported
+        // deployment may not have, and a run on an instance that declared no chat endpoint has to reach the refusal
+        // rather than fail to resolve — which is exactly the run that has nothing to attribute.
+        services.AddScoped(provider => new StreamedDiscoveryRun(
+            provider.GetRequiredService<DiscoveryRun>(),
+            provider.GetRequiredService<MailAnsweringRunLedger>(),
+            provider.GetRequiredService<MailAnsweringPeriodBounds>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<AnsweringEndpointIdentity>()));
         // A singleton because a run is held between the request that asks the question and the requests that read the
         // answer, which is exactly what neither a scope nor a request can hold. Nothing about it is a deployment's
         // configuration, so it is registered for every one of them: an instance that answers no question opens no run,

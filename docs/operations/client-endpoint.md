@@ -103,6 +103,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `DELETE /api/client/portrait` | `mailfathom.mail.read` |
 | `POST /api/client/discovery/runs` | `mailfathom.mail.ask` |
 | `GET /api/client/discovery/runs/{runId}/events` | `mailfathom.mail.ask` |
+| `DELETE /api/client/discovery/runs/{runId}` | `mailfathom.mail.ask` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
@@ -1632,9 +1633,9 @@ rather than lost anything.
 
 ### The Discover routes
 
-A question about the mailbox takes as long as a model and a mailbox take, so it is asked on one route and read on
-another. The first answers as soon as the question is known to be answerable, with the run's identifier and the address
-its events are read at:
+A question about the mailbox takes as long as a model and a mailbox take, so it is asked on one route, read on a second,
+and stopped on a third. The first answers as soon as the question is known to be answerable, with the run's identifier
+and the address its events are read at:
 
 ```http
 POST /api/client/discovery/runs
@@ -1664,15 +1665,32 @@ data: {"event":"block","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence"
 
 event: completed
 id: 5
-data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[],"coverage":[{ … }]}
+data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[],"coverage":[{ … }],"spend":{ … }}
 ```
+
+The third stops the run, and takes nothing:
+
+```http
+DELETE /api/client/discovery/runs/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90
+```
+
+```http
+204 No Content
+```
+
+**Closing the stream is looking away; the `DELETE` is stopping.** A client that only stops reading leaves the run
+calling the provider and reading mail for nobody, so a person who has read enough and wants to stop paying for the rest
+sends this. It stops the provider call and the retrieval, the run ends as `failed` with `Cancelled`, and everything it
+had already published stays published. A run that finished a moment earlier answers `204` as well, because whoever asked
+could not have known.
 
 A run outlives the connection that asked for it, so a client that lost its network reattaches to the second route with
 `Last-Event-ID` and is given what it missed — which a browser's own `EventSource` sends without being asked to. The run
-belongs to the owner who asked for it: somebody else's reads as `404` rather than as a refusal. The asking route answers
-`429` while this process is already running as many as it may, and `400` naming what was wrong with the question or the
-mail it named. [The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each
-event carries, what bounds a run, and why the transport is this one.
+belongs to the owner who asked for it: somebody else's reads as `404` rather than as a refusal, on the reading route and
+on the stopping one alike. The asking route answers `429` while this process is already running as many as it may, and
+`400` naming what was wrong with the question or the mail it named.
+[The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each event carries,
+what a run reports having spent, what bounds a run, and why the transport is this one.
 
 ### The telemetry routes
 
