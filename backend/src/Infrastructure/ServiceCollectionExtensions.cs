@@ -18,6 +18,7 @@ using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.BrowseThread;
 using MailFathom.Application.Emails.BrowseTimeline;
@@ -400,6 +401,16 @@ public static class ServiceCollectionExtensions
         // the metadata write does on its way past, because both of those stages may still change what a message is.
         services.AddScoped<IStoredEmailChunkingStore, StoredEmailChunkingStore>();
         services.AddScoped<MailChunkingPass>();
+        // The reading of what a message's attachments say, and the pass that performs it. A stage behind the cut rather
+        // than part of it, because it is the only one that parses octets a stranger composed and the only one that may
+        // reach a provider — so a message reaches retrieval on its own words first and gains its attachments' words
+        // when they arrive.
+        services.AddScoped<IStoredEmailAttachmentTextStore, StoredEmailAttachmentTextStore>();
+        services.AddScoped<EmailAttachmentTextDeriver>();
+        services.AddScoped<MailAttachmentTextPass>();
+        // The read half, which is a port of its own for the reason the cited-fragment reader is: an attachment passage
+        // is content a caller may legitimately receive, and a message passage is not.
+        services.AddScoped<IEmailAttachmentPassageReader, EmailAttachmentPassageReader>();
     }
 
     /// <summary>Registers the tables a message's vectors live in, the ceilings a generation is spent against, and the operator acts on a profile.</summary>

@@ -24,19 +24,25 @@ namespace MailFathom.Application.Emails.Chunking;
 /// ordinal, the offsets, and the length are the only members safe to report.
 /// </para>
 /// </remarks>
-/// <param name="Ordinal">The chunk's position in its message, counted from zero in reading order.</param>
+/// <param name="Ordinal">The chunk's position in the text it was cut from, counted from zero in reading order.</param>
 /// <param name="StartOffset">Where the chunk begins in the extracted text it was cut from.</param>
 /// <param name="Text">The passage itself.</param>
 /// <param name="ContentHash">What identifies this text under the rules that produced it.</param>
 /// <param name="RuleSetVersion">The version of the rules that produced it, copied so a backfill can select on it.</param>
 /// <param name="IsDerivedFromLossyHtml">Whether the text was inferred from markup rather than read from a plain-text part.</param>
+/// <param name="Attachment">
+/// The attachment this passage is a span of, or <see langword="null" /> when it is a span of the message body. It is
+/// what makes <see cref="StartOffset" /> mean something: the offsets index one text, and a message with attachments has
+/// several, so the ordinals and offsets of one attachment's passages run alongside the body's rather than after them.
+/// </param>
 public sealed record EmailTextChunk(
     int Ordinal,
     int StartOffset,
     string Text,
     EmailChunkContentHash ContentHash,
     int RuleSetVersion,
-    bool IsDerivedFromLossyHtml)
+    bool IsDerivedFromLossyHtml,
+    EmailChunkAttachmentSource? Attachment = null)
 {
     /// <summary>Gets where the chunk ends in the extracted text it was cut from, one past its last character.</summary>
     public int EndOffset => this.StartOffset + this.Text.Length;

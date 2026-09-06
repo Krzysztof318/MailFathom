@@ -19,7 +19,14 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// a later optical-character-recognition pass would read, which is why it is a list of pages rather than a flag on the
 /// document: a scanned page bound into an otherwise textual report is the ordinary case.
 /// </param>
+/// <param name="Segments">
+/// Where each of those pages begins in <see cref="Text" />, in reading order, so a passage cut out of the document can
+/// name the place it was read from. It holds one entry per counted page, including the ones that yielded nothing —
+/// a page that contributed no characters still begins where the next one does, and dropping it would move every later
+/// passage onto the wrong page.
+/// </param>
 public sealed record ExtractedAttachmentText(
     string Text,
     int PageCount,
-    IReadOnlyList<int> PagesWithoutText);
+    IReadOnlyList<int> PagesWithoutText,
+    IReadOnlyList<AttachmentTextSegment> Segments);

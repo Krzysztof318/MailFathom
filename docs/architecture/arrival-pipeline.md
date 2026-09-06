@@ -27,6 +27,7 @@ flowchart TD
         classify["Classification pass — only when somebody asked for a run over the whole mailbox"]
         rules["Rule evaluation pass"]
         cut["Cut the passages"]
+        read["Read the attachments — only where the deployment turned it on"]
         offer(["Offer the message to the embedding backlog"])
     end
 
@@ -34,6 +35,7 @@ flowchart TD
         direction TB
         presidio["Personal-data analyzer — shown the extracted body text"]
         spamd["Spam scanner — shown the raw MIME, deliberately unredacted"]
+        vision["Chat provider — shown one image attachment, to describe it"]
     end
 
     subgraph elsewhere["Executions outside the run"]
@@ -60,6 +62,9 @@ flowchart TD
     gate -- "released: unclassifiable, or waited longer than allowed" --> rules
     rules --> cut
     cut --> offer
+    cut --> read
+    read --> offer
+    read -. "one call per picture" .-> vision
     offer -.-> worker
     sweeps --> cut
     sweeps --> worker
@@ -216,6 +221,31 @@ What the ordering costs is one extra local transaction per message and nothing e
 the commit already wrote, so it reaches no mail server, no provider, and no sidecar. What it removes is a whole class of
 defect that is invisible when it happens.
 
+## Why reading attachments comes last
+
+Reading attachments is the run's fifth local stage and its last, and where it sits is the whole of what makes it safe.
+It is the only stage that parses octets a stranger composed, and the only one that may reach an AI provider inside the
+run — so a message reaches lexical and semantic retrieval on its **own** words first, in the stage before, and gains
+its attachments' words when they arrive. A body passage the cut produced is untouched by anything here: its digest, its
+ordinal, and its vector all stay exactly as they were, which is what stops attachments from re-billing a mailbox that
+was already embedded.
+
+It inherits the cut's own selection rather than judging anything again. The message has to be local, the rules have to
+have finished with it and not still be moving it, its folder has to be one an operator mapped to embed, and the
+classification gate has to admit it — so an attachment on a withheld message is excluded by the rule the pipeline
+already has, never by a second evaluation. Two conditions are its own: the message has to carry an attachment at all,
+and nothing may have read them yet.
+
+**Nothing is derived inside a transaction.** One message is read whole first — the content store, the document parsers,
+and where a picture is involved a chat provider — and only then is one statement committed carrying the readings, the
+passages cut from them, and the stamp that takes the message out of the selection. A crash between the two leaves the
+message exactly as it was, and the next run repeats the reading rather than half of it.
+
+Three ceilings bound it, and they are nested: what one attachment may cost to read is at most what its message may, and
+what a message may is at most what its account run may. A run that spends its budget stops where it is and writes
+nothing for the message it was holding, so the next run — which starts with a full budget — reaches that message first.
+The ordering is refused at startup rather than discovered as a message no run can ever afford.
+
 ## The paths that re-derive the same data
 
 Three paths produce derived data, and all three obey the order above rather than a version of it. Two of them wait for
@@ -289,6 +319,7 @@ has a scanner switched on.
 | Recording the people an account corresponds with | [Contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) |
 | The owner's rules and what a match asks for | [Mail rules](../features/mail-rules.md) |
 | Redaction, the stamp, and the egress guard | [Sensitive-content scanning](../features/sensitive-content-scanning.md) |
-| The boundary rules a cut obeys | [Message chunks](../features/message-chunks.md) |
+| The boundary rules a cut obeys, and what a passage of an attachment carries | [Message chunks](../features/message-chunks.md) |
+| What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |
 | Offering, embedding, and what a ceiling does | [Automatic embedding](../features/automatic-embedding.md) |
 | Reaching mail the live path missed | [Embedding backfill](../features/embedding-backfill.md) |

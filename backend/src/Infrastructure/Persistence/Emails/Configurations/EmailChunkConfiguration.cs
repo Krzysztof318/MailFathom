@@ -34,9 +34,19 @@ internal sealed class EmailChunkConfiguration : IEntityTypeConfiguration<EmailCh
 
         entity.Property(chunk => chunk.Text).IsRequired();
 
+        // Two filtered indexes rather than one over the triple, because PostgreSQL treats nulls as distinct in a unique
+        // index: a body passage's null attachment position would make every ordinal unique against every other and the
+        // constraint would hold nothing. Splitting them states the two rules separately — one numbering per message
+        // body, and one numbering per attachment of that message — and each is the index its own reader orders by.
         entity.HasIndex(chunk => new { chunk.StoredEmailId, chunk.Ordinal })
             .IsUnique()
+            .HasFilter("\"AttachmentPosition\" IS NULL")
             .HasDatabaseName(PersistenceConstraintNames.EmailChunkOrdinalUniqueIndexName);
+
+        entity.HasIndex(chunk => new { chunk.StoredEmailId, chunk.AttachmentPosition, chunk.Ordinal })
+            .IsUnique()
+            .HasFilter("\"AttachmentPosition\" IS NOT NULL")
+            .HasDatabaseName(PersistenceConstraintNames.EmailChunkAttachmentOrdinalUniqueIndexName);
 
         entity.HasOne(chunk => chunk.StoredEmail)
             .WithMany(email => email.Chunks)

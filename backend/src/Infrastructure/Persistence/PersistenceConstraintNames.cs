@@ -71,7 +71,18 @@ internal static class PersistenceConstraintNames
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
+    internal const string EmailAttachmentTextVectorIndexName = "ix_email_attachment_texts_search_vector";
+
+    /// <summary>The unique index over the ordinals of one message's body passages.</summary>
+    /// <remarks>
+    /// Filtered on the passages cut from the body, because a message with attachments has several texts and the
+    /// ordinals of each run from zero: a single index over the pair would report the first passage of the first
+    /// attachment as a duplicate of the first passage of the body.
+    /// </remarks>
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
+
+    /// <summary>The unique index over the ordinals of the passages cut from one attachment.</summary>
+    internal const string EmailChunkAttachmentOrdinalUniqueIndexName = "ix_email_chunks_email_attachment_ordinal";
 
     /// <summary>The unique index over an embedding profile's identity, which is what makes activation idempotent.</summary>
     /// <remarks>

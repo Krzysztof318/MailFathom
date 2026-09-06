@@ -453,6 +453,21 @@ internal sealed class StoredEmailEntity
     public ICollection<EmailChunkEntity> Chunks { get; } = [];
 
     /// <summary>
+    /// Gets or sets when this email's attachments were read, or <see langword="null" /> when nothing has read them yet.
+    /// </summary>
+    /// <remarks>
+    /// The stamp is what takes a message out of the attachment pass's selection, and it is a timestamp rather than a
+    /// flag for the reason every other derivation timestamp here is: it tells an original reading from a re-derivation.
+    /// It is written for a message that yielded nothing as well as one that yielded words — an attachment nothing could
+    /// read is a decided message, and leaving it unstamped would offer the same file to a parser on every run for ever.
+    /// A message carrying no attachment at all is never selected and never stamped.
+    /// </remarks>
+    public DateTimeOffset? AttachmentTextDerivedAt { get; set; }
+
+    /// <summary>Gets what each of this email's attachments yielded, which is empty until the attachment pass has run for it.</summary>
+    public ICollection<EmailAttachmentTextEntity> AttachmentTexts { get; } = [];
+
+    /// <summary>
     /// Gets the changes MailFathom recorded against this email before asking a mail server to make them, which are
     /// removed with it.
     /// </summary>

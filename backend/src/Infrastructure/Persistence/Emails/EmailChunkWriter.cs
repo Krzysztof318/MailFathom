@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
@@ -114,10 +115,74 @@ internal sealed class EmailChunkWriter(
         // all — survives it.
         this.RecordTruncation(storedEmail, cut);
 
-        // The change-tracker pass comes first for the reason the search document's does: passages staged earlier in
-        // this same uncommitted session are invisible to a set-based delete, and inserting beside them would violate
-        // the ordinal index at commit rather than replace them.
-        var staged = FindStaged(dbContext, storedEmail.Id);
+        await this.ReplaceAsync(dbContext, storedEmail, attachmentPosition: null, chunks, cancellationToken);
+    }
+
+    /// <summary>Saves the passages one message's attachments yield, leaving its body's passages and its unchanged attachments alone.</summary>
+    /// <param name="dbContext">The context whose transaction this write joins.</param>
+    /// <param name="storedEmail">The email the passages belong to, tracked or already persisted.</param>
+    /// <param name="attachmentTexts">What each attachment yielded, in walk order.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the writes have been issued or staged.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Each attachment is reconciled against its own stored passages rather than the message's whole set, which is what
+    /// makes an attachment arriving after the body cut cost nothing already paid for: the body's digests and ordinals
+    /// are untouched, so no vector hanging on them moves. Within one attachment the rule is the message's — an
+    /// unchanged reading cut to unchanged rules writes nothing at all, and anything else replaces that attachment's
+    /// passages whole, because a boundary change shifts every ordinal after the first difference.
+    /// </para>
+    /// <para>
+    /// An attachment that yielded no words has its passages removed rather than left behind. That is the path a
+    /// re-derivation takes when a document that used to parse no longer does, and passages nothing can be traced back
+    /// to are exactly what
+    /// <see cref="IEmailChunkStore" /> exists to prevent elsewhere.
+    /// </para>
+    /// </remarks>
+    public async Task SaveAttachmentChunksAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        IReadOnlyList<DerivedAttachmentText> attachmentTexts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(dbContext);
+        ArgumentNullException.ThrowIfNull(storedEmail);
+        ArgumentNullException.ThrowIfNull(attachmentTexts);
+
+        if (!await this.FolderGeneratesEmbeddingsAsync(dbContext, storedEmail, cancellationToken))
+        {
+            return;
+        }
+
+        foreach (var attachment in attachmentTexts)
+        {
+            var chunks = attachment.Text is { } text
+                ? chunker.DeriveAttachmentChunks(
+                    text,
+                    rules,
+                    inputBound,
+                    EmailChunkAttachmentSource.Create(attachment.Position, attachment.DeclaredMediaType)).Chunks
+                : [];
+
+            await this.ReplaceAsync(dbContext, storedEmail, attachment.Position, chunks, cancellationToken);
+        }
+    }
+
+    /// <summary>Replaces the passages of one of a message's texts, writing nothing where they are already what they should be.</summary>
+    /// <remarks>
+    /// The change-tracker pass comes first for the reason the search document's does: passages staged earlier in this
+    /// same uncommitted session are invisible to a set-based delete, and inserting beside them would violate the
+    /// ordinal index at commit rather than replace them.
+    /// </remarks>
+    private async Task ReplaceAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        int? attachmentPosition,
+        IReadOnlyList<EmailTextChunk> chunks,
+        CancellationToken cancellationToken)
+    {
+        var staged = FindStaged(dbContext, storedEmail.Id, attachmentPosition);
         if (staged.Length > 0)
         {
             if (Matches(staged, chunks))
@@ -126,13 +191,14 @@ internal sealed class EmailChunkWriter(
             }
 
             dbContext.EmailChunks.RemoveRange(staged);
-            this.Insert(dbContext, storedEmail, cut);
+            this.Insert(dbContext, storedEmail, attachmentPosition, chunks);
 
             return;
         }
 
         var storedIdentities = await dbContext.EmailChunks
-            .Where(candidate => candidate.StoredEmailId == storedEmail.Id)
+            .Where(candidate => candidate.StoredEmailId == storedEmail.Id
+                && candidate.AttachmentPosition == attachmentPosition)
             .OrderBy(candidate => candidate.Ordinal)
             .Select(candidate => new StoredChunkIdentity(candidate.Ordinal, candidate.ContentHash))
             .ToArrayAsync(cancellationToken);
@@ -145,13 +211,16 @@ internal sealed class EmailChunkWriter(
         if (storedIdentities.Length > 0)
         {
             // A set-based delete, so re-cutting a message never reads a mailbox's worth of passage text back into
-            // memory to decide that it is about to be replaced.
+            // memory to decide that it is about to be replaced. Narrowed to one text's passages, because the body and
+            // each attachment are cut by different passes against different texts: replacing them together would
+            // orphan vectors the cut in hand knows nothing about and could not rebuild.
             await dbContext.EmailChunks
-                .Where(candidate => candidate.StoredEmailId == storedEmail.Id)
+                .Where(candidate => candidate.StoredEmailId == storedEmail.Id
+                    && candidate.AttachmentPosition == attachmentPosition)
                 .ExecuteDeleteAsync(cancellationToken);
         }
 
-        this.Insert(dbContext, storedEmail, cut);
+        this.Insert(dbContext, storedEmail, attachmentPosition, chunks);
     }
 
     /// <summary>Reports whether the folder this message was read from is one an operator asked to have embedded.</summary>
@@ -184,9 +253,13 @@ internal sealed class EmailChunkWriter(
         return AccountScopedMailFolders.Contains(admitted, storedEmail.MailboxAccountId, folderAlias);
     }
 
-    private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>
+    private static EmailChunkEntity[] FindStaged(
+        MailFathomDbContext dbContext,
+        Guid storedEmailId,
+        int? attachmentPosition) =>
         [.. dbContext.EmailChunks.Local
-            .Where(candidate => candidate.StoredEmailId == storedEmailId)
+            .Where(candidate => candidate.StoredEmailId == storedEmailId
+                && candidate.AttachmentPosition == attachmentPosition)
             .OrderBy(candidate => candidate.Ordinal)];
 
     private static bool Matches(IReadOnlyList<EmailChunkEntity> stored, IReadOnlyList<EmailTextChunk> derived) =>
@@ -221,11 +294,12 @@ internal sealed class EmailChunkWriter(
     private void Insert(
         MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
-        EmailChunkingResult cut)
+        int? attachmentPosition,
+        IReadOnlyList<EmailTextChunk> chunks)
     {
         var derivedAt = timeProvider.GetUtcNow();
 
-        dbContext.EmailChunks.AddRange(cut.Chunks.Select(chunk => new EmailChunkEntity
+        dbContext.EmailChunks.AddRange(chunks.Select(chunk => new EmailChunkEntity
         {
             // Version 7 for the reason every other identifier MailFathom generates is: the passages of one message are
             // written together, so an identifier ordered by creation time keeps them on neighbouring index pages.
@@ -233,6 +307,7 @@ internal sealed class EmailChunkWriter(
             StoredEmailId = storedEmail.Id,
             StoredEmail = storedEmail,
             Ordinal = chunk.Ordinal,
+            AttachmentPosition = attachmentPosition,
             StartOffset = chunk.StartOffset,
             Text = chunk.Text,
             ContentHash = chunk.ContentHash.Value,

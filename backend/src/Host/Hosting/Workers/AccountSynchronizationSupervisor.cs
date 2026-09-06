@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -304,6 +305,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
                 await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
+                await this.ReadAttachmentsOfCutMailAsync(runSettings, workUnitToken);
                 await this.ReportRunToItsOwnerAsync(
                     runSettings,
                     scheduledFolders.Length,
@@ -811,6 +813,56 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogPassageCutFailed(exception, this.account.Id.Value);
+        }
+    }
+
+    /// <summary>Reads what the attachments of the account's already-cut mail say, and offers each message for embedding again.</summary>
+    /// <remarks>
+    /// <para>
+    /// Behind the cut rather than beside it, which is the ordering
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// asks for: this is the one stage that hands octets a stranger composed to a document parser and the one that may
+    /// call a provider about a picture, so a message reaches retrieval on its own words first and gains its
+    /// attachments' words when they arrive. The body's passages are untouched by it — their digests and vectors stay
+    /// exactly as the cut left them.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run, for the reason the three passes above it do not: nothing here reaches a mail
+    /// server, and a message whose attachments this pass did not read stays outstanding for the next one.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A reading that failed is logged and repeated by the next run rather than putting the account into backoff; the message stays outstanding because nothing was stamped.")]
+    private async Task ReadAttachmentsOfCutMailAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<MailAttachmentTextPass>()
+                .RunAsync(this.account, cancellationToken);
+
+            if (!report.IsEmpty)
+            {
+                this.LogAttachmentsRead(
+                    this.account.Id.Value,
+                    report.ReadEmailCount,
+                    report.RefusedOfferCount,
+                    report.RunBudgetExhausted,
+                    report.EmailsRemain);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogAttachmentReadingFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -1498,6 +1550,22 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Cutting the passages of the evaluated mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not cut stays outstanding for the next run and for the embedding sweep.")]
     private partial void LogPassageCutFailed(Exception exception, string accountId);
+
+    /// <summary>Reports one account's attachment reading in counts alone; no file name, media type, or word may reach a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Read the attachments of {ReadEmailCount} messages of account {AccountId}; the embedding backlog refused {RefusedOfferCount} of them, the run's octet budget ran out: {RunBudgetExhausted}, and messages remain: {EmailsRemain}.")]
+    private partial void LogAttachmentsRead(
+        string accountId,
+        int readEmailCount,
+        int refusedOfferCount,
+        bool runBudgetExhausted,
+        bool emailsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Reading the attachments of the mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not read stays outstanding for the next run.")]
+    private partial void LogAttachmentReadingFailed(Exception exception, string accountId);
 
     /// <summary>Reports one account run's share of a whole-mailbox classification run, in counts and the profile alone.</summary>
     [LoggerMessage(

@@ -1,0 +1,242 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Emails.Extraction.Images;
+using Xunit;
+
+namespace MailFathom.Application.UnitTests.Emails.AttachmentText;
+
+/// <summary>Covers what one attachment's reading records, and which of the two indexes the words it produced belong in.</summary>
+public sealed class DerivedAttachmentTextTests
+{
+    private const string Contract = "The tenant pays for the roof above the west stairwell.";
+
+    /// <summary>A document that was read carries its words, its pagination, and the word the extractor answered with.</summary>
+    [Fact]
+    public void FromExtraction_ADocumentThatWasRead_CarriesItsWordsPagesAndOutcome()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText(
+            Contract,
+            PageCount: 2,
+            PagesWithoutText: [2],
+            Segments: [Page(1, 0), Page(2, 20)]);
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Extracted(extracted));
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.Document, derived.Kind);
+        Assert.Equal(Contract, derived.Text);
+        Assert.Equal(2, derived.PageCount);
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted.ToString(), derived.Outcome);
+        Assert.Equal(2, derived.Segments.Count);
+    }
+
+    /// <summary>
+    /// An owner asking why their contract was never searched is owed the reason, so a refusal is a row rather than an
+    /// absence — and a row carrying no words reaches neither index.
+    /// </summary>
+    [Fact]
+    public void FromExtraction_AnExtractionThatReportedAReason_CarriesTheReasonAndNoWords()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            1,
+            "application/pdf",
+            "scan.pdf",
+            AttachmentTextExtractionResult.Encrypted());
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Encrypted.ToString(), derived.Outcome);
+        Assert.Null(derived.Text);
+        Assert.Equal(0, derived.PageCount);
+        Assert.Empty(derived.Segments);
+        Assert.False(derived.HasText);
+        Assert.False(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>
+    /// The one place ADR 0030's exclusion is decided. A word a model chose is not a word anybody wrote, so a description
+    /// reaches the vector index and never the lexical one, however ordinary its text looks beside a document's.
+    /// </summary>
+    [Fact]
+    public void FromDescription_AnImageThatWasDescribed_CarriesItsWordsAndStaysOutOfTheLexicalIndex()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromDescription(
+            2,
+            "image/png",
+            "roof.png",
+            ImageAttachmentDescription.Described("A tiled roof with a tarpaulin over one corner."));
+
+        // Assert
+        Assert.Equal(AttachmentTextKind.ImageDescription, derived.Kind);
+        Assert.True(derived.HasText);
+        Assert.False(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>
+    /// A description paginates nowhere, so it carries one place covering the whole of it — without which a passage cut
+    /// from a long description would resolve to no coordinate and a citation would have to special-case the kind.
+    /// </summary>
+    [Fact]
+    public void FromDescription_AnImageThatWasDescribed_CarriesOnePlaceCoveringTheWholeDescription()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromDescription(
+            0,
+            "image/png",
+            fileName: null,
+            ImageAttachmentDescription.Described("A tiled roof."));
+
+        // Assert
+        var segment = Assert.Single(derived.Segments);
+        Assert.Equal(AttachmentTextSegmentKind.Page, segment.Kind);
+        Assert.Equal(1, segment.Number);
+        Assert.Equal(0, segment.StartOffset);
+        Assert.Equal(1, derived.PageCount);
+    }
+
+    /// <summary>A picture nothing described says why, and carries no place either.</summary>
+    [Fact]
+    public void FromDescription_AnImageThatWasRefused_CarriesTheRefusalAndNoPlace()
+    {
+        // Act
+        var derived = DerivedAttachmentText.FromDescription(
+            0,
+            "image/png",
+            "roof.png",
+            ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ImageTooLarge));
+
+        // Assert
+        Assert.Equal(ImageDescriptionRefusal.ImageTooLarge.ToString(), derived.Outcome);
+        Assert.Null(derived.Text);
+        Assert.Empty(derived.Segments);
+        Assert.False(derived.HasText);
+    }
+
+    /// <summary>The words a document yielded are what a lexical match names the file by, so those do join the index.</summary>
+    [Fact]
+    public void BelongsInLexicalIndex_ADocumentThatYieldedWords_IsTrue()
+    {
+        // Arrange
+        var extracted = new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)]);
+
+        // Act
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Extracted(extracted));
+
+        // Assert
+        Assert.True(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>A ceiling that stopped a file is an answer rather than silence, and it opened nothing to read.</summary>
+    [Fact]
+    public void PastMessageBudget_AnAttachmentTheCeilingStopped_RecordsTheCeilingAndNothingElse()
+    {
+        // Act
+        var derived = DerivedAttachmentText.PastMessageBudget(21, "application/pdf", "appendix.pdf");
+
+        // Assert
+        Assert.Equal(21, derived.Position);
+        Assert.Equal("MessageBudgetExhausted", derived.Outcome);
+        Assert.Null(derived.Text);
+        Assert.Equal(0, derived.PageCount);
+        Assert.Empty(derived.Segments);
+        Assert.False(derived.BelongsInLexicalIndex);
+    }
+
+    /// <summary>A placeholder substitutes rather than deletes, so the ordinary redaction leaves every coordinate valid.</summary>
+    [Fact]
+    public void WithRedactedText_ARedactionOfTheSameLength_KeepsThePlacesItWasReadFrom()
+    {
+        // Arrange
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText("account 1234", PageCount: 1, [], [Page(1, 0)])));
+
+        // Act
+        var redacted = derived.WithRedactedText("account ####");
+
+        // Assert
+        Assert.Equal("account ####", redacted.Text);
+        Assert.Single(redacted.Segments);
+    }
+
+    /// <summary>
+    /// A redaction that changed the length moved every boundary with it, so a passage would resolve to the page before
+    /// or after the one it was read from. A citation that says nothing beats one that sends a reader to the wrong page.
+    /// </summary>
+    [Fact]
+    public void WithRedactedText_ARedactionOfADifferentLength_DropsThePlacesRatherThanPublishingThemStale()
+    {
+        // Arrange
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText("account 1234", PageCount: 2, [], [Page(1, 0), Page(2, 8)])));
+
+        // Act
+        var redacted = derived.WithRedactedText("account [redacted]");
+
+        // Assert
+        Assert.Equal("account [redacted]", redacted.Text);
+        Assert.Empty(redacted.Segments);
+        Assert.Equal(2, redacted.PageCount);
+    }
+
+    /// <summary>There is nothing to redact in an attachment that yielded no words, so the record is left as it was.</summary>
+    [Fact]
+    public void WithRedactedText_ARowCarryingNoWords_IsLeftExactlyAsItWas()
+    {
+        // Arrange
+        var derived = DerivedAttachmentText.PastMessageBudget(0, "application/pdf", "appendix.pdf");
+
+        // Act
+        var redacted = derived.WithRedactedText("anything");
+
+        // Assert
+        Assert.Same(derived, redacted);
+    }
+
+    /// <summary>Nothing can be recorded from arguments that are not there.</summary>
+    [Fact]
+    public void Factories_AMissingArgument_AreRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            DerivedAttachmentText.PastMessageBudget(0, null!, "appendix.pdf"));
+        Assert.Throws<ArgumentNullException>(() =>
+            DerivedAttachmentText.FromExtraction(0, null!, null, AttachmentTextExtractionResult.Encrypted()));
+        Assert.Throws<ArgumentNullException>(() =>
+            DerivedAttachmentText.FromExtraction(0, "application/pdf", null, null!));
+        Assert.Throws<ArgumentNullException>(() => DerivedAttachmentText.FromDescription(
+            0,
+            null!,
+            null,
+            ImageAttachmentDescription.Described("A tiled roof.")));
+        Assert.Throws<ArgumentNullException>(() =>
+            DerivedAttachmentText.FromDescription(0, "image/png", null, null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            DerivedAttachmentText.PastMessageBudget(0, "application/pdf", null).WithRedactedText(null!));
+    }
+
+    private static AttachmentTextSegment Page(int number, int startOffset) =>
+        new(AttachmentTextSegmentKind.Page, number, Label: null, startOffset);
+}

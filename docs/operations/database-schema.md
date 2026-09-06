@@ -212,6 +212,13 @@ already serving:
 - **Index creation on a large table takes time proportional to the table.** Stop MailFathom, or accept that its writes
   wait, for the duration.
 
+- **`AddAttachmentTextAndAttachmentChunks` rebuilds one index over the passage table.** It drops
+  `ix_email_chunks_email_ordinal` and creates two filtered indexes in its place, so `email_chunks` is read once to build
+  each — proportional to the passages a deployment has cut, and under a lock that blocks writes to that table for the
+  duration. Nothing else in it is proportional to anything already stored: the two added columns are nullable with no
+  default, which is a catalog change rather than a rewrite, and the table and GIN index it creates are both empty until
+  an attachment is read.
+
 - **A `CHECK` constraint added to a table that already holds rows is validated by scanning it.**
   `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, and
   `IndexObjectBackedContentAndRequireItsPayloadEmpty` replaces all four with a stricter form, so each table is scanned

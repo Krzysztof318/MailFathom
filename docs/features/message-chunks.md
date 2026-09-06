@@ -1,15 +1,17 @@
 # Message chunks
 
-<!-- describes: backend/src/AI/Chunking/**, backend/src/Application/Emails/Chunking/**, backend/src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, backend/src/Infrastructure/Persistence/Emails/EmailChunkStore.cs, backend/src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
+<!-- describes: backend/src/AI/Chunking/**, backend/src/Application/Emails/AttachmentText/**, backend/src/Application/Emails/Chunking/**, backend/src/Infrastructure/Persistence/Emails/EmailAttachmentPassageReader.cs, backend/src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, backend/src/Infrastructure/Persistence/Emails/EmailChunkStore.cs, backend/src/Infrastructure/Persistence/Emails/StoredEmailAttachmentTextStore.cs, backend/src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
 
 A message is often too big to be the unit a search answers with. A forwarded thread can carry twenty exchanges, and the
 one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts a message's extracted text
 into overlapping passages — chunks — and stores each of them with the span it came from and a hash that identifies it.
 Every message is cut unless its folder is mapped with `GenerateEmbeddings: false`.
 
-Nothing retrieves chunks yet. They exist because the passage, not the message, is what a vector is produced
-for, and because deriving them is free: chunking reaches no provider, opens no connection, and costs an instance with no
-embedding provider configured nothing but the rows. [Body text and the lexical index](imap-synchronization.md#body-text-and-the-lexical-index)
+No search surface answers with a chunk yet. They exist because the passage, not the message, is what a vector is
+produced for, and because deriving them is free: chunking reaches no provider, opens no connection, and costs an
+instance with no embedding provider configured nothing but the rows. A passage cut from an attachment is the exception
+to the second half — reading the file it came from is what costs — and to the first: its text is stored and can be read
+back, while a message chunk stays embedding-only. [Body text and the lexical index](imap-synchronization.md#body-text-and-the-lexical-index)
 describes the text they are cut from, and [Stored email schema](../architecture/stored-email-schema.md#message-chunks)
 describes the table they are stored in.
 
@@ -139,6 +141,40 @@ that grew past the ceiling while everything up to it stayed identical yields exa
 truncation, so the record is written from the current derivation rather than from whether any passage moved. An
 unchanged message still writes nothing — the value it would be given is the value it already has.
 
+## Passages cut from an attachment
+
+A deployment that sets `Embeddings:AttachmentText:Enabled` gains a second source of passages: the words a document
+attachment yielded, and the words a model used to describe a picture. They are **the same kind of passage in the same
+vector space**, distinguished by the text they are a span of and by nothing else — which is what
+[ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+decides and what keeps a single search over a message and its attachment one ranking rather than two fused.
+
+- **A body passage's digest does not move.** The attachment encoding is a hash domain of its own rather than a field
+  appended to the body's, so every vector a mailbox already paid for stays attached to the passage it was produced for.
+  Turning attachment reading on costs the attachments and nothing else.
+- **What the attachment digest covers** is the boundary rules, the passage's text, the attachment's zero-based walk
+  position, and the media type the part declared. The last two are what stop identical words in two files, or in a file
+  and the covering note, from being one passage under two names. The source form and the lossy-HTML marker are absent:
+  both name a reading of a *message body* and neither is a fact about a file.
+- **The offsets index the attachment's own stored text**, not the message's. That text is kept, which is what makes a
+  passage retrievable directly — a message chunk stays embedding-only, while an attachment passage can be read back
+  along with the file it came from and the page, slide, or sheet it sits on.
+- **Every attachment passage carries a coordinate.** The extraction records where each place begins, and a passage's
+  start offset resolves to the last boundary at or before it. A workbook resolves to a sheet rather than to a cell
+  range; a word-processing document, which records no pagination anywhere, resolves to one place covering the whole of
+  it.
+- **An attachment that reported a reason produces no passage.** A refusal is stored against the file so an owner asking
+  why their contract was never searched is given the reason, and nothing is cut from a row that carries no words.
+- **Reconciliation is per attachment.** The reading that arrives later replaces the passages of the attachment it read
+  and touches no other attachment's and none of the message's own, so an unchanged reading writes nothing exactly as an
+  unchanged body does.
+- **Re-cutting after a boundary-rule change opens no document.** The extracted text and its boundaries are stored, so a
+  changed rule set re-cuts from the stored reading and re-embeds only the passages whose digests moved. Nothing goes
+  back to a parser and nothing goes back to a vision model.
+
+An attachment reading is offered for embedding only where it produced words, and a message is stamped as read whether
+or not it did — which is what keeps a mailbox from being re-parsed on every run.
+
 ## The rule-set version
 
 Every chunk records the version of the rules it was cut to, in a column beside its hash. Nothing reads it to decide
@@ -155,7 +191,8 @@ A chunk's text is mail content and personal data by default, and it inherits the
 retention, access, export, and erasure obligations whole. Nothing about being derived makes it a lesser copy.
 
 - **Deleting a message deletes its passages.** The chunk rows cascade from the stored email, so the deletion path that
-  reaches a message reaches everything cut from it without a rule anybody has to remember.
+  reaches a message reaches everything cut from it without a rule anybody has to remember. An attachment's stored text
+  and its lexical document cascade the same way, so nothing derived from a file outlives the message it arrived on.
 - **No chunk text reaches a log, a metric, a trace, or an error message.** The ordinal, the offsets, and the length are
   the only things about a chunk that are safe to report; the digest identifies a passage and is treated the same way.
 - **The chunk copies none of the message's other coordinates.** The account, the folder, the sender, the recipients, the
@@ -172,4 +209,4 @@ from markup and read from a plain-text part are worth different amounts, so they
 
 ## What is not here
 
-Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what `search_emails` returns. Chunking attachment payloads, which extraction never opens in the first place.
+Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what `search_emails` returns. Serving an attachment passage or a citation into one through `search_emails`, `ask_mail`, or the client API, which is what those surfaces gain next.

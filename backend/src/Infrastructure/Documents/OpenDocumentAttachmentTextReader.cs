@@ -116,13 +116,19 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
     /// A word-processing document counts as one page for the same reason its Office Open XML equivalent does: the
     /// format records no pagination, and producing one would mean laying the document out.
     /// </remarks>
-    private static (string Namespace, string LocalName)? PageElementOf(AttachmentDocumentFormat format) => format switch
-    {
-        AttachmentDocumentFormat.OpenDocumentText => null,
-        AttachmentDocumentFormat.OpenDocumentSpreadsheet => (TableNamespace, "table"),
-        AttachmentDocumentFormat.OpenDocumentPresentation => (DrawingNamespace, "page"),
-        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The format is not an OpenDocument package."),
-    };
+    private static (string Namespace, string LocalName, AttachmentTextSegmentKind Kind)? PageElementOf(
+        AttachmentDocumentFormat format) => format switch
+        {
+            AttachmentDocumentFormat.OpenDocumentText => null,
+            AttachmentDocumentFormat.OpenDocumentSpreadsheet =>
+                (TableNamespace, "table", AttachmentTextSegmentKind.Sheet),
+            AttachmentDocumentFormat.OpenDocumentPresentation =>
+                (DrawingNamespace, "page", AttachmentTextSegmentKind.Slide),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(format),
+                format,
+                "The format is not an OpenDocument package."),
+        };
 
     /// <summary>Walks the content part, gathering paragraphs and closing a page where the format begins a new one.</summary>
     /// <remarks>
@@ -133,11 +139,12 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
     /// </remarks>
     private ExtractedAttachmentText ReadContent(
         XmlReader reader,
-        (string Namespace, string LocalName)? pageElement,
+        (string Namespace, string LocalName, AttachmentTextSegmentKind Kind)? pageElement,
         BoundedTextAccumulator text,
         CancellationToken cancellationToken)
     {
         var pagesWithoutText = new List<int>();
+        var segments = new List<AttachmentTextSegment>();
         var pageCount = pageElement is null ? 1 : 0;
         var pageDepth = -1;
         var pageCarriedText = false;
@@ -157,12 +164,17 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
 
                     // One content part holds every page of the document, so nothing else here counts them: the archive
                     // part ceiling bounds the other family's pages because each of those is a part of its own. A run of
-                    // self-closed page elements would otherwise grow two lists to whatever the inflation budget allows.
+                    // self-closed page elements would otherwise grow the lists below to whatever the inflation budget
+                    // allows.
                     if (pageCount > options.MaxContainerParts)
                     {
                         throw new AttachmentTextExtractionStoppedException(
                             AttachmentTextExtractionOutcome.ContainerBoundExceeded);
                     }
+
+                    // Recorded for every page the walk opens, empty ones included, because the boundary is what a
+                    // later passage's offset is resolved against rather than a record of where words were found.
+                    segments.Add(new AttachmentTextSegment(page.Kind, pageCount, Label: null, text.Length));
 
                     if (reader.IsEmptyElement)
                     {
@@ -214,8 +226,12 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
         }
 
         return pageElement is null
-            ? new ExtractedAttachmentText(text.ToText(), PageCount: 1, documentCarriedText ? [] : [1])
-            : new ExtractedAttachmentText(text.ToText(), pageCount, pagesWithoutText);
+            ? new ExtractedAttachmentText(
+                text.ToText(),
+                PageCount: 1,
+                documentCarriedText ? [] : [1],
+                [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 1, Label: null, StartOffset: 0)])
+            : new ExtractedAttachmentText(text.ToText(), pageCount, pagesWithoutText, segments);
     }
 
     /// <summary>Opens a paragraph, or writes the whitespace an element stands in for.</summary>

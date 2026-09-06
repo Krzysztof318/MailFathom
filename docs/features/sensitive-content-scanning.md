@@ -206,9 +206,12 @@ the plain-text body, and the HTML alternative exactly as it will leave, markup a
 rather than the arguments a caller sent is what makes the routes above one contract — a promotion and a recurring
 occasion carry bytes and no authored fields at all.
 
-**Attachments are not screened.** A scan is over text, and an attachment is a byte stream a caller supplied whose type
-this deployment does not undertake to parse. An operator who needs an attachment examined needs a different control
-than this one, and reporting it as covered here would be worse than saying it is not.
+**Attachments are not screened.** A scan is over text, and an attachment of an outgoing message is a byte stream a
+caller supplied whose type this deployment does not undertake to parse on the way out. An operator who needs an
+attachment examined before it leaves needs a different control than this one, and reporting it as covered here would be
+worse than saying it is not. That a deployment may read the attachments of *arriving* mail does not change it: reading
+one is a background derivation over stored mail under its own ceilings, and holding a send open on a document parser
+would be a different act with a different failure mode.
 
 **Nothing is written down when the screen stops the act.** No outbox row, no draft, no revision, no content row. The
 draft being revised keeps the text it already had, and the message is refused before the transaction the act would have
@@ -299,6 +302,15 @@ body is read out of the stored MIME, so a placeholder is what is stored, what is
 answer later returns; nothing downstream scans a second time and nothing downstream sees the original.
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws where that read sits among the stages around it, and
 why the spam scanner beside it is deliberately shown the message unredacted.
+
+**Words read out of an attachment go through it too**, where the deployment turned attachment reading on. A contract's
+extracted text and a model's description of a picture are both derived mail content — an invoice carries an account
+number and a model asked what a photograph shows will read out whatever is printed on it — so each is redacted before it
+is stored and each carries the same stamp. The scan happens in the account run's attachment stage rather than at the
+write, exactly as the body's does. [Message chunks § passages cut from an
+attachment](message-chunks.md#passages-cut-from-an-attachment) records what a redaction costs a citation: a placeholder
+is a substitution, so the ordinary case leaves every page boundary where it was, and a redaction that changed the length
+of the text drops the boundaries rather than publishing coordinates that would send a reader to the wrong page.
 
 **Only the body goes through it.** A subject, a display name, an address, a folder alias, and a thread identity are
 routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they

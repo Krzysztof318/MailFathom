@@ -31,8 +31,23 @@ internal sealed class EmailChunkEntity
 
     public required StoredEmailEntity StoredEmail { get; set; }
 
-    /// <summary>Gets or sets the chunk's position in its message, counted from zero in reading order.</summary>
+    /// <summary>Gets or sets the chunk's position in the text it was cut from, counted from zero in reading order.</summary>
     public int Ordinal { get; set; }
+
+    /// <summary>
+    /// Gets or sets the walk position of the attachment this passage is a span of, or <see langword="null" /> when it
+    /// is a span of the message body.
+    /// </summary>
+    /// <remarks>
+    /// The one column
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// adds, and it is what makes <see cref="StartOffset" /> mean anything: a message with attachments has several
+    /// texts, and an offset that did not say which one it indexed would name a different span in each. Nullable and
+    /// additive, which is the only migration shape the schema permits, and the reason the ordinals of an attachment's
+    /// passages run from zero alongside the body's rather than after them — a passage's number is its place in its own
+    /// text.
+    /// </remarks>
+    public int? AttachmentPosition { get; set; }
 
     /// <summary>Gets or sets where the passage begins in the extracted text it was cut from.</summary>
     public int StartOffset { get; set; }

@@ -41,12 +41,18 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
     {
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
         var pagesWithoutText = new List<int>();
+        var segments = new List<AttachmentTextSegment>();
 
         using var document = PdfDocument.Open(content, ReadOnlyParsingOptions());
 
         for (var page = 1; page <= document.NumberOfPages; page++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Recorded before the page's characters are added, and for every page rather than only the ones that
+            // carried words: the boundary is what a later passage's offset is resolved against, and a page skipped
+            // here would move every passage after it onto a page it was not read from.
+            segments.Add(new AttachmentTextSegment(AttachmentTextSegmentKind.Page, page, Label: null, text.Length));
 
             var pageText = ContentOrderTextExtractor.GetText(document.GetPage(page));
 
@@ -60,7 +66,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
             text.EndLine();
         }
 
-        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText);
+        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText, segments);
     }
 
     /// <summary>Builds the options every PDF here is opened under.</summary>

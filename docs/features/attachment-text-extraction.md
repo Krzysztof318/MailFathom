@@ -9,9 +9,17 @@ never with an exception raised by whatever read the document, and never with an 
 found". The one thing a caller does have to handle is a failure reading the stored content itself, which is about the
 attempt rather than about the document and is described under the posture below.
 
-Nothing in this release calls it yet. The pipeline that cuts and embeds what an attachment yields is separate work, and
-the switch deciding whether an attachment is read at all arrives with it. What exists today is the port, the parsers
-behind it, and every ceiling around them.
+What calls it is the account run's attachment-reading stage, which is off unless `Embeddings:AttachmentText:Enabled`
+says otherwise. That stage runs behind the passage cut, outside any transaction, and never on a read path — so no MCP
+call and no client request ever waits on a parser. What it does with the answer is
+[Message chunks](message-chunks.md): a document's text is cut into passages and embedded, and it joins the lexical index
+as a document of its own.
+
+A read also records **where each page, slide, or sheet begins** in the text it produced. That list is what turns a
+passage's offset into a place a citation can name, and it is written at extraction rather than re-derived later —
+re-cutting a mailbox after a boundary-rule change then reads the stored text and the stored boundaries, and opens no
+document again. A workbook records a boundary per sheet and not per cell range: a boundary per row would be tens of
+thousands of them for one exported table, which costs more to store than the text it points into.
 
 ## What is read, and what is only recognized
 

@@ -764,6 +764,10 @@ internal static class HostComposition
         // this installation rather than about a work unit, and the extractor that reads it holds nothing between calls.
         builder.Services.AddSingleton(provider =>
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.AttachmentText.ToExtractionOptions());
+        // The message and run ceilings beside it, and a singleton for the same reason. What they bound is the pass that
+        // walks a mailbox rather than one extraction, but they are as much a statement about this installation.
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.AttachmentText.ToAttachmentTextBounds());
         // A singleton because the reservation it hands out is what makes one process's requests add up to the declared
         // rate; one per scope would let every worker send at the full rate on its own.
         builder.Services.AddSingleton(provider => EmbeddingRequestPacer.Create(

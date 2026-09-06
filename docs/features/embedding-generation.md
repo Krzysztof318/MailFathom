@@ -391,8 +391,12 @@ one leaves every stored vector exactly as comparable as it was.
 
 A fifth block sits beside those four in the same section and counts something else. `Embeddings:AttachmentText` bounds
 what reading a document attachment costs to *parse* rather than what its text costs to send: a per-attachment cost over
-octets a stranger composed, which no character count predicts. [Attachment text
-extraction](attachment-text-extraction.md) holds it, and nothing in this release invokes it yet.
+octets a stranger composed, which no character count predicts. Its `Enabled` switch is what turns attachment reading on
+at all, and the three octet and count ceilings beside it bound one attachment, one message, and one account run.
+[Attachment text extraction](attachment-text-extraction.md) holds them. What the reading yields is cut into passages of
+the same kind a body is cut into and embedded through the same profile, so those passages are spent against the four
+ceilings above exactly as a body's are — the block below counts the parsing, and the block above counts the sending.
+[Message chunks](message-chunks.md#passages-cut-from-an-attachment) describes what is cut.
 
 Reaching the aggregate ceiling pauses embedding until the period rolls over, and nothing is lost by the pause: a
 passage with no vector is exactly the condition the [backfill](embedding-backfill.md) selects on. The wait is the

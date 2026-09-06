@@ -14,6 +14,9 @@ namespace MailFathom.AI.UnitTests.Chunking;
 /// <summary>Covers the boundary rules chunks are cut to, and the determinism every stored hash depends on.</summary>
 public sealed class DeterministicEmailTextChunkerTests
 {
+    private static readonly EmailChunkAttachmentSource PdfAtPositionZero =
+        EmailChunkAttachmentSource.Create(0, "application/pdf");
+
     private readonly DeterministicEmailTextChunker chunker = new();
 
     /// <summary>Nothing hangs on a passage of a message that carried no words, so nothing is cut for one.</summary>
@@ -415,6 +418,141 @@ public sealed class DeterministicEmailTextChunkerTests
         Assert.Equal(
             whole.Chunks.Take(bounded.Chunks.Count - 1).Select(chunk => chunk.ContentHash),
             bounded.Chunks.Take(bounded.Chunks.Count - 1).Select(chunk => chunk.ContentHash));
+    }
+
+    /// <summary>An attachment that yielded no words carries no passage, exactly as a message that carried none does.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \n\n  ")]
+    public void DeriveAttachmentChunks_TextWithoutWords_YieldsNoChunks(string text)
+    {
+        // Act
+        var cut = this.chunker.DeriveAttachmentChunks(
+            text,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero);
+
+        // Assert
+        Assert.Empty(cut.Chunks);
+    }
+
+    /// <summary>
+    /// The offsets index the attachment's own stored text, which is what makes a citation into a file resolvable: the
+    /// coordinate a reader is shown is found by reading that span back rather than by parsing the document again.
+    /// </summary>
+    [Fact]
+    public void DeriveAttachmentChunks_LongText_GivesEveryChunkOffsetsThatReadItsOwnTextBack()
+    {
+        // Arrange
+        var document = Paragraphs(count: 12);
+
+        // Act
+        var cut = this.chunker.DeriveAttachmentChunks(
+            document,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero);
+
+        // Assert
+        Assert.Equal(
+            cut.Chunks.Select(chunk => chunk.Text),
+            cut.Chunks.Select(chunk => document.Substring(chunk.StartOffset, chunk.Text.Length)));
+    }
+
+    /// <summary>
+    /// The boundaries are the same boundaries — one walk serves both texts — so what tells the two kinds of passage
+    /// apart is the identity each is stored under and the attachment each names, never where the cut fell.
+    /// </summary>
+    [Fact]
+    public void DeriveAttachmentChunks_TheSameTextAsABody_CutsItIdenticallyUnderItsOwnIdentity()
+    {
+        // Arrange
+        var document = Paragraphs(count: 12);
+        var text = ExtractedEmailText.FromPlainTextBody(document, document);
+
+        // Act
+        var fromBody = this.chunker.DeriveChunks(text, EmailChunkingRules.Current, EmbeddingInputBound.Default);
+        var fromAttachment = this.chunker.DeriveAttachmentChunks(
+            document,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero);
+
+        // Assert
+        Assert.Equal(
+            fromBody.Chunks.Select(chunk => (chunk.Ordinal, chunk.StartOffset, chunk.Text)),
+            fromAttachment.Chunks.Select(chunk => (chunk.Ordinal, chunk.StartOffset, chunk.Text)));
+        Assert.All(
+            fromBody.Chunks.Zip(fromAttachment.Chunks),
+            pair => Assert.NotEqual(pair.First.ContentHash, pair.Second.ContentHash));
+        Assert.All(fromBody.Chunks, chunk => Assert.Null(chunk.Attachment));
+        Assert.All(fromAttachment.Chunks, chunk => Assert.Equal(PdfAtPositionZero, chunk.Attachment));
+    }
+
+    /// <summary>A file is not a message body, so nothing about it may report itself as inferred from markup.</summary>
+    [Fact]
+    public void DeriveAttachmentChunks_AnyText_MarksNoPassageAsDerivedFromLossyHtml()
+    {
+        // Arrange
+        var document = Paragraphs(count: 4);
+
+        // Act
+        var cut = this.chunker.DeriveAttachmentChunks(
+            document,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero);
+
+        // Assert
+        Assert.NotEmpty(cut.Chunks);
+        Assert.All(cut.Chunks, chunk => Assert.False(chunk.IsDerivedFromLossyHtml));
+    }
+
+    /// <summary>An oversized attachment is bounded rather than refused, and the length it had is what the cut reports.</summary>
+    [Fact]
+    public void DeriveAttachmentChunks_TextBeyondTheInputBound_CutsToItAndReportsTheLengthItHad()
+    {
+        // Arrange
+        var document = Paragraphs(20);
+
+        // Act
+        var cut = this.chunker.DeriveAttachmentChunks(
+            document,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Create(document.Length / 2),
+            PdfAtPositionZero);
+
+        // Assert
+        Assert.Equal(document.Length, cut.TruncatedFromCharacterCount);
+        Assert.NotEmpty(cut.Chunks);
+    }
+
+    /// <summary>Nothing can be cut from arguments that are not there.</summary>
+    [Fact]
+    public void DeriveAttachmentChunks_MissingArgument_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveAttachmentChunks(
+            null!,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero));
+        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveAttachmentChunks(
+            "text",
+            null!,
+            EmbeddingInputBound.Default,
+            PdfAtPositionZero));
+        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveAttachmentChunks(
+            "text",
+            EmailChunkingRules.Current,
+            null!,
+            PdfAtPositionZero));
+        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveAttachmentChunks(
+            "text",
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Default,
+            null!));
     }
 
     public static TheoryData<ExtractedEmailText> TextsWithoutABody() =>

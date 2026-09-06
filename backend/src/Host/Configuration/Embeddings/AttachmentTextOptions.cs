@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction.Attachments;
 
 namespace MailFathom.Host.Configuration.Embeddings;
@@ -29,6 +30,28 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     /// deadline built from that would throw out of a port whose whole contract is that it answers instead.
     /// </remarks>
     private static readonly TimeSpan GreatestTimeout = TimeSpan.FromHours(1);
+
+    /// <summary>Gets or sets whether this deployment reads its mail's attachments at all.</summary>
+    /// <remarks>
+    /// Off by default, which is the whole of what
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// decides about what an instance does when it upgrades into this: an embedding is derived from message text
+    /// always, and from attachment text only where a deployment turns it on. Turning it on narrows the current
+    /// undertaking to parse nothing a stranger composed rather than reversing it — what is read is the allow-list
+    /// below and nothing else — and it means the most sensitive part of a mailbox starts travelling to whichever
+    /// provider embeds it. That is a decision an operator takes rather than one a release takes for them.
+    /// </remarks>
+    public bool Enabled { get; set; }
+
+    /// <summary>Gets or sets how many of one message's attachments are read at all, counted in walk order.</summary>
+    public int MaxAttachmentsPerEmail { get; set; } = EmailAttachmentTextBounds.DefaultMaxAttachmentsPerEmail;
+
+    /// <summary>Gets or sets how many octets one message's attachments may be read from together.</summary>
+    public long MaxInputOctetsPerEmail { get; set; } = EmailAttachmentTextBounds.DefaultMaxInputOctetsPerEmail;
+
+    /// <summary>Gets or sets how many octets one account run may read across every message it reaches.</summary>
+    public long MaxInputOctetsPerAccountRun { get; set; } =
+        EmailAttachmentTextBounds.DefaultMaxInputOctetsPerAccountRun;
 
     /// <summary>Gets the formats an attachment is offered to a parser for.</summary>
     /// <remarks>
@@ -75,6 +98,11 @@ internal sealed class AttachmentTextOptions : IValidatableObject
             yield return error;
         }
 
+        foreach (var error in this.FindCeilingOrderErrors())
+        {
+            yield return error;
+        }
+
         foreach (var refused in this.Formats.Where(format => !AttachmentDocumentFormats.IsExtracted(format)))
         {
             yield return new ValidationResult(
@@ -109,6 +137,43 @@ internal sealed class AttachmentTextOptions : IValidatableObject
         }
     }
 
+    /// <summary>Reports a set of ceilings written in an order that would leave a message no run could ever afford.</summary>
+    /// <remarks>
+    /// The three are nested rather than independent, and writing them otherwise produces a deployment that looks
+    /// configured and reads nothing: an attachment larger than what its message may spend is refused by every run for
+    /// ever, and a message larger than what its run may spend is passed over by every run for ever, since a run always
+    /// starts with a full budget and always meets that message with less than it needs. Refused at startup rather than
+    /// discovered as mail that is silently never searched.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindCeilingOrderErrors()
+    {
+        if (this.MaxInputOctetsPerEmail < this.MaxInputOctets)
+        {
+            yield return new ValidationResult(
+                "Embeddings AttachmentText MaxInputOctetsPerEmail is at least MaxInputOctets. Below it, an "
+                + "attachment this deployment says it may read is one no message may afford, so it would be recorded "
+                + "as past a ceiling on every run and never read.",
+                [nameof(this.MaxInputOctetsPerEmail)]);
+        }
+
+        if (this.MaxInputOctetsPerAccountRun < this.MaxInputOctetsPerEmail)
+        {
+            yield return new ValidationResult(
+                "Embeddings AttachmentText MaxInputOctetsPerAccountRun is at least MaxInputOctetsPerEmail. Below it, "
+                + "a message this deployment says it may read is one no run may afford, and since every run starts "
+                + "with a full budget that message would be passed over for ever.",
+                [nameof(this.MaxInputOctetsPerAccountRun)]);
+        }
+    }
+
+    /// <summary>Reads the ceilings one message and one account run are read under.</summary>
+    /// <returns>The bounds the pass applies.</returns>
+    internal EmailAttachmentTextBounds ToAttachmentTextBounds() => new(
+        this.Enabled,
+        this.MaxAttachmentsPerEmail,
+        this.MaxInputOctetsPerEmail,
+        this.MaxInputOctetsPerAccountRun);
+
     /// <summary>Names every numeric ceiling beside the range it is meaningful in.</summary>
     private IEnumerable<(string Name, long Value, long Least, long Greatest)> Ceilings() =>
     [
@@ -118,6 +183,9 @@ internal sealed class AttachmentTextOptions : IValidatableObject
         (nameof(this.MaxDecompressionRatio), this.MaxDecompressionRatio, 2, 10_000),
         (nameof(this.MaxContainerParts), this.MaxContainerParts, 1, 100_000),
         (nameof(this.MaxElementDepth), this.MaxElementDepth, 2, 10_000),
+        (nameof(this.MaxAttachmentsPerEmail), this.MaxAttachmentsPerEmail, 1, 1_000),
+        (nameof(this.MaxInputOctetsPerEmail), this.MaxInputOctetsPerEmail, 1024, 8L * 1024 * 1024 * 1024),
+        (nameof(this.MaxInputOctetsPerAccountRun), this.MaxInputOctetsPerAccountRun, 1024, 1024L * 1024 * 1024 * 1024),
     ];
 
     /// <summary>Reads the keys one extraction is bounded by.</summary>

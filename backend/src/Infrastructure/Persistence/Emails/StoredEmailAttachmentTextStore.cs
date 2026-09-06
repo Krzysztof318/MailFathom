@@ -1,0 +1,187 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Text.Json;
+using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Folders;
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Spam;
+using Microsoft.EntityFrameworkCore;
+
+namespace MailFathom.Infrastructure.Persistence.Emails;
+
+/// <summary>EF Core state for the reading of attachments the account run performs behind the cut.</summary>
+/// <remarks>
+/// The selection carries the cut's four conditions and two of its own. The four are the arrival pipeline's orderings —
+/// the message is still local, the rules have finished with it and are not still moving it, its folder is one an
+/// operator asked to have embedded, and the classification gate admits it — which is how withholding reaches an
+/// attachment without a second evaluation. The two are what makes the walk terminate and stay proportional: the message
+/// has to carry an attachment at all, and nothing may have read them yet.
+/// </remarks>
+[RequiresIntegrationCoverage]
+internal sealed class StoredEmailAttachmentTextStore(
+    MailFathomDbContext dbContext,
+    EmailChunkWriter chunkWriter,
+    IMailFolderParticipationReader folderParticipation,
+    DerivedWorkGate derivedWorkGate,
+    TimeProvider timeProvider)
+    : IStoredEmailAttachmentTextStore
+{
+    /// <inheritdoc />
+    /// <remarks>
+    /// Ordering is by the primary key, which is total, stable, and already indexed. No resume position travels with the
+    /// batch, because reading a message's attachments is what takes it out of this query.
+    /// </remarks>
+    public async Task<IReadOnlyList<EmailAwaitingAttachmentText>> GetEmailsAwaitingAttachmentTextAsync(
+        MailAccountIdentity account,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+
+        var ownerId = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
+
+        // One snapshot for both halves, exactly as the cut reads it: the predicate narrows the batch and the answer
+        // below names which of the gate's decisions admitted each row, so a second reading taken microseconds later
+        // could let the query select a row the answer then reported as still waiting.
+        var terms = derivedWorkGate.ReadTerms();
+
+        var candidates = await Selecting(
+                dbContext.StoredEmails.AsNoTracking(),
+                ownerId,
+                mailboxAccountId,
+                folderParticipation.FoldersGeneratingEmbeddings,
+                terms)
+            .OrderBy(email => email.Id)
+            .Take(batchSize)
+            .Select(email => new OutstandingAttachmentRow(
+                email.Id,
+                email.OwnerId,
+                email.AttachmentCount,
+                new StoredDerivedWorkCandidateRow(
+                    email.MailFolder.MailboxAccountId,
+                    email.MailFolder.Alias,
+                    email.StoredAt,
+                    email.ContentAvailability,
+                    email.SpamClassification == null ? null : email.SpamClassification.Verdict)))
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. candidates.Select(row => new EmailAwaitingAttachmentText(
+                StoredEmailId.Create(row.Id),
+                MailOwnerId.Create(row.OwnerId),
+                row.AttachmentCount,
+                row.Candidate.AdmittedUnder(terms))),
+        ];
+    }
+
+    /// <inheritdoc />
+    public async Task SaveAttachmentTextAsync(
+        IPersistenceSession session,
+        StoredEmailId emailId,
+        EmailAttachmentTextDerivation derived,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(derived);
+
+        var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        var storedEmail = await context.StoredEmails.FindAsync([emailId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Attachment text cannot be stored for a stored email that no longer exists.");
+
+        var derivedAt = timeProvider.GetUtcNow();
+
+        // Replaced whole rather than reconciled row by row, because a re-derivation is the only thing that reaches an
+        // already-read message and it has just re-read every attachment on it. The passages below are reconciled per
+        // attachment instead, which is where an unchanged reading has to write nothing.
+        await context.EmailAttachmentTexts
+            .Where(text => text.StoredEmailId == emailId.Value)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        context.EmailAttachmentTexts.AddRange(derived.Attachments.Select(attachment =>
+            new EmailAttachmentTextEntity
+            {
+                StoredEmailId = storedEmail.Id,
+                StoredEmail = storedEmail,
+                AttachmentPosition = attachment.Position,
+                Kind = attachment.Kind,
+                DeclaredMediaType = attachment.DeclaredMediaType,
+                FileName = attachment.FileName,
+                Outcome = attachment.Outcome,
+                Text = attachment.Text,
+                PageCount = attachment.PageCount,
+                Segments = SerializeSegments(attachment),
+                DerivedAt = derivedAt,
+                SensitiveContentStamp = derived.RedactedUnder?.Value,
+            }));
+
+        await chunkWriter.SaveAttachmentChunksAsync(context, storedEmail, derived.Attachments, cancellationToken);
+
+        // Written last and in the same statement as everything above. A message stamped without its readings would
+        // never be offered to a parser again, and readings without the stamp would be taken a second time next run.
+        storedEmail.AttachmentTextDerivedAt = derivedAt;
+    }
+
+    /// <summary>Narrows stored mail to the messages whose attachments nothing has read yet.</summary>
+    /// <param name="emails">The emails to narrow.</param>
+    /// <param name="ownerId">The owner whose account this pass belongs to, which is what the index leads with.</param>
+    /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
+    /// <param name="embeddedFolders">The folders a mapping admits to embedding, which is what decides the reading.</param>
+    /// <param name="terms">The classification terms the whole batch is decided under.</param>
+    /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
+    /// <remarks>
+    /// Written as a composable predicate rather than inline, so what selects a message is one statement that can be
+    /// asserted about directly. It is the cut's predicate with the search-document clause replaced: a body's words and
+    /// a file's words are independent, so a message whose body yielded nothing may still carry a contract worth
+    /// reading, and one whose attachments were already read is out of the walk whatever its body did.
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> Selecting(
+        IQueryable<StoredEmailEntity> emails,
+        Guid ownerId,
+        string mailboxAccountId,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
+        AccountScopedMailFolders.Admitting(
+            emails
+                .Where(StoredEmailTombstone.IsNotTombstoned)
+                .Where(email => email.OwnerId == ownerId
+                    && email.MailboxAccountId == mailboxAccountId
+                    && email.AttachmentCount > 0
+                    && email.AttachmentTextDerivedAt == null)
+                .Where(MailAwaitingRuleEvaluation.IsFinishedWith)
+                .Where(MailAwaitingRelocation.IsSettledWhereItIs),
+            embeddedFolders),
+        terms);
+
+    /// <summary>Writes one attachment's page boundaries as the document the row stores, or nothing where it has none.</summary>
+    /// <remarks>
+    /// Absent rather than an empty array for an attachment that yielded no words, so a row carrying no text carries no
+    /// coordinates either — the two absences are one fact and storing <c>[]</c> beside a null text would invite a
+    /// reader to treat them as different.
+    /// </remarks>
+    private static string? SerializeSegments(DerivedAttachmentText attachment) => attachment.Segments.Count == 0
+        ? null
+        : JsonSerializer.Serialize(
+            attachment.Segments,
+            AttachmentTextSegmentJsonContext.Default.IReadOnlyListAttachmentTextSegment);
+
+    /// <summary>One message awaiting a reading of its attachments, as the walk's projection returns it.</summary>
+    private sealed record OutstandingAttachmentRow(
+        Guid Id,
+        Guid OwnerId,
+        int AttachmentCount,
+        StoredDerivedWorkCandidateRow Candidate);
+}

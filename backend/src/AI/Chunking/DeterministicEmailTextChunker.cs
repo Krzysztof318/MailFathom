@@ -41,6 +41,64 @@ internal sealed class DeterministicEmailTextChunker : IEmailTextChunker
         ArgumentNullException.ThrowIfNull(bound);
 
         var selected = SelectSourceForm(text, rules);
+
+        return Cut(
+            selected,
+            rules,
+            bound,
+            (ordinal, start, passage) => new EmailTextChunk(
+                ordinal,
+                start,
+                passage,
+                EmailChunkContentHash.Compute(rules, text.IsDerivedFromHtml, passage),
+                rules.RuleSetVersion,
+                text.IsDerivedFromHtml));
+    }
+
+    /// <inheritdoc />
+    public EmailChunkingResult DeriveAttachmentChunks(
+        string text,
+        EmailChunkingRules rules,
+        EmbeddingInputBound bound,
+        EmailChunkAttachmentSource source)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(bound);
+        ArgumentNullException.ThrowIfNull(source);
+
+        return Cut(
+            text,
+            rules,
+            bound,
+            (ordinal, start, passage) => new EmailTextChunk(
+                ordinal,
+                start,
+                passage,
+                EmailChunkContentHash.ComputeForAttachment(rules, source, passage),
+                rules.RuleSetVersion,
+                IsDerivedFromLossyHtml: false,
+                source));
+    }
+
+    /// <summary>Walks one text once, cutting it along the strongest separator each window offers.</summary>
+    /// <param name="selected">The text to cut, which may be absent for a body that yielded none.</param>
+    /// <param name="rules">The boundaries to cut along.</param>
+    /// <param name="bound">How much of the text may be cut at all.</param>
+    /// <param name="passageAt">Builds one passage from its ordinal, its start offset, and its text.</param>
+    /// <returns>The passages in reading order and what the ceiling left out.</returns>
+    /// <remarks>
+    /// The walk is shared rather than duplicated because the boundaries are the same boundaries: what tells a passage
+    /// out of an attachment from a passage out of a body is the identity it is stored under, never where the cut fell.
+    /// The ordinal is counted here and handed to the factory, so the numbering stays the reading order of the passages
+    /// that exist whichever text is being cut.
+    /// </remarks>
+    private static EmailChunkingResult Cut(
+        string? selected,
+        EmailChunkingRules rules,
+        EmbeddingInputBound bound,
+        Func<int, int, string, EmailTextChunk> passageAt)
+    {
         if (string.IsNullOrEmpty(selected))
         {
             return EmailChunkingResult.NoText;
@@ -60,13 +118,7 @@ internal sealed class DeterministicEmailTextChunker : IEmailTextChunker
             // either: the numbering stays the reading order of the chunks that exist rather than of the windows walked.
             if (!string.IsNullOrWhiteSpace(passage))
             {
-                chunks.Add(new EmailTextChunk(
-                    chunks.Count,
-                    start,
-                    passage,
-                    EmailChunkContentHash.Compute(rules, text.IsDerivedFromHtml, passage),
-                    rules.RuleSetVersion,
-                    text.IsDerivedFromHtml));
+                chunks.Add(passageAt(chunks.Count, start, passage));
             }
 
             if (end >= source.Length)
