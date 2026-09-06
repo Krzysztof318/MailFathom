@@ -12,9 +12,11 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
@@ -45,6 +47,9 @@ public sealed class EmailAttachmentDownloadReaderTests
 {
     private const string ServedAccountId = "primary";
 
+    /// <summary>The literal a screened deployment in this suite stops at, which is never part of a refusal.</summary>
+    private const string ScreenedMarker = "sk-live-000111222333";
+
     /// <summary>The one attachment of the one email every capability in this suite is minted for.</summary>
     private const string AuthorizedObject = "/attachments/0198f0aa-0000-7000-8000-000000000000/0";
 
@@ -67,9 +72,9 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(summary, contentReader: contentReader);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.NotNull(attachment);
@@ -93,9 +98,9 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(summary, contentReader: contentReader);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 2),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Equal("file-2.pdf", attachment?.Description.FileName?.Value);
@@ -113,9 +118,9 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(summary: null, contentStore: contentStore);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -137,9 +142,9 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(summary, accountCatalog: CatalogServing(MailAccountId.Create(ServedAccountId)));
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -170,9 +175,9 @@ public sealed class EmailAttachmentDownloadReaderTests
             authorization: authorization);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -194,9 +199,9 @@ public sealed class EmailAttachmentDownloadReaderTests
                 .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -215,9 +220,9 @@ public sealed class EmailAttachmentDownloadReaderTests
         var reader = ReaderOver(summary, folderParticipation: StubMailFolderParticipation.Nothing);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -245,9 +250,9 @@ public sealed class EmailAttachmentDownloadReaderTests
             repairRequestStore: repairRequests);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -272,9 +277,9 @@ public sealed class EmailAttachmentDownloadReaderTests
             repairRequestStore: repairRequests);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.NotNull(attachment);
@@ -299,9 +304,9 @@ public sealed class EmailAttachmentDownloadReaderTests
             repairRequestStore: repairRequests);
 
         // Act
-        await using var attachment = await reader.OpenAsync(
+        await using var attachment = (await reader.OpenAsync(
             new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 7),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
@@ -371,10 +376,10 @@ public sealed class EmailAttachmentDownloadReaderTests
             authorization: AuthorizationOver(SignedInReader));
 
         // Act
-        await using var attachment = await reader.OpenForReaderAsync(
+        await using var attachment = (await reader.OpenForReaderAsync(
             summary.StoredEmailId,
             attachmentPosition: 1,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.NotNull(attachment);
@@ -401,10 +406,10 @@ public sealed class EmailAttachmentDownloadReaderTests
             authorization: AuthorizationOver(SignedInReader));
 
         // Act
-        await using var attachment = await reader.OpenForReaderAsync(
+        await using var attachment = (await reader.OpenForReaderAsync(
             summary.StoredEmailId,
             attachmentPosition: 2,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Equal("file-2.pdf", attachment?.Description.FileName?.Value);
@@ -475,16 +480,222 @@ public sealed class EmailAttachmentDownloadReaderTests
             authorization: AuthorizationOver(SignedInReader));
 
         // Act
-        await using var attachment = await reader.OpenForReaderAsync(
+        await using var attachment = (await reader.OpenForReaderAsync(
             summary.StoredEmailId,
             attachmentPosition: 0,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Attachment;
 
         // Assert
         Assert.Null(attachment);
         await contentStore.DidNotReceive().FindStoredContentAsync(
             Arg.Any<StoredEmailId>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The whole point of screening a download: a read that redacts a body must not hand the same material back inside
+    /// the file beside it. The refusal is distinct from every other one this use case answers, because whoever asked was
+    /// already told the file exists and what it is called.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_AttachmentCarryingScreenedMaterial_RefusesAsScreenedAndServesNothing()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReading($"the deployment key is {ScreenedMarker}"),
+            screen: egress.Screen);
+
+        // Act
+        var download = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(download.Screened);
+        Assert.Null(download.Attachment);
+    }
+
+    /// <summary>A screened deployment serves a file carrying nothing it screens for exactly as an unscreened one does.</summary>
+    [Fact]
+    public async Task OpenAsync_AttachmentCarryingNothingScreened_ServesTheFile()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReading("an ordinary invoice"),
+            screen: egress.Screen);
+
+        // Act
+        await using var attachment = (await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken)).Attachment;
+
+        // Assert
+        Assert.NotNull(attachment);
+    }
+
+    /// <summary>
+    /// A file nothing could read is refused rather than assumed clean, whichever way it defeated the reader. Serving one
+    /// would make the whole screen a property of the format the sender chose.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.Encrypted))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.Malformed))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.FormatNotExtracted))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.TimedOut))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.InputTooLarge))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.ExtractedTextTooLarge))]
+    [InlineData(nameof(AttachmentTextExtractionOutcome.ContainerBoundExceeded))]
+    public async Task OpenAsync_AttachmentNothingCouldRead_RefusesAsScreened(string outcome)
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReporting(UnreadableResult(outcome)),
+            screen: egress.Screen);
+
+        // Act
+        var download = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(download.Screened);
+        Assert.Null(download.Attachment);
+    }
+
+    /// <summary>
+    /// A photograph, a recording, and an archive are served as they always were. No text scanner ever undertook to read
+    /// one, so refusing them would refuse most of the mail a screened deployment carries rather than screen it.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_AttachmentNoReaderRecognizesAsADocument_ServesItWithoutScanningAnything()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReporting(AttachmentTextExtractionResult.FormatNotRecognized()),
+            screen: egress.Screen);
+
+        // Act
+        await using var attachment = (await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken)).Attachment;
+
+        // Assert
+        Assert.NotNull(attachment);
+        Assert.Empty(egress.Scanner.ScannedTexts);
+    }
+
+    /// <summary>
+    /// A scanner that could not answer refuses the download rather than travelling out as a fault. It is the same
+    /// fail-closed reading every guarded path takes, and it says nothing about the deployment's own analyzer.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_ScannerThatCannotAnswer_RefusesAsScreened()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReading("an ordinary invoice"),
+            screen: egress.Screen);
+
+        // Act
+        var download = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(download.Screened);
+        Assert.Null(download.Attachment);
+    }
+
+    /// <summary>
+    /// A refused download must not leave the parse behind the file alive: nothing beyond the use case holds a reference
+    /// to it once the screen has decided, so releasing it is the use case's own obligation.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_ScreenedOutAttachment_ReleasesTheFileItOpened()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        await using var opened = new StubOpenedEmailAttachment("secrets.pdf");
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            contentReader: ContentReaderReporting(OpenedEmailAttachmentResult.Opened(opened)),
+            attachmentText: ExtractorReading($"the deployment key is {ScreenedMarker}"),
+            screen: egress.Screen);
+
+        // Act
+        await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(opened.WasDisposed);
+    }
+
+    /// <summary>
+    /// A deployment screening nothing pays no document read at all. The test is worth stating because the read is the
+    /// largest cost on this path and an owner who switched nothing on must not meet it.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_DeploymentScreeningNothing_ServesTheFileWithoutReadingIt()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var extractor = ExtractorReading($"the deployment key is {ScreenedMarker}");
+        var reader = ReaderOver(summary, attachmentText: extractor);
+
+        // Act
+        await using var attachment = (await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken)).Attachment;
+
+        // Assert
+        Assert.NotNull(attachment);
+        await extractor
+            .DidNotReceive()
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// One rule in one place rather than two endpoints that each remembered: the client's own route resolves through
+    /// the same use case, so it meets the same screen without stating anything of its own.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_AttachmentCarryingScreenedMaterial_RefusesAsScreenedAndServesNothing()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        var reader = ReaderOver(
+            summary,
+            attachmentText: ExtractorReading($"the deployment key is {ScreenedMarker}"),
+            screen: egress.Screen,
+            authorization: AuthorizationOver(SignedInReader));
+
+        // Act
+        var download = await reader.OpenForReaderAsync(
+            summary.StoredEmailId,
+            attachmentPosition: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(download.Screened);
+        Assert.Null(download.Attachment);
     }
 
     /// <summary>
@@ -517,6 +728,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         IEmailContentStore? contentStore = null,
         IEmailAttachmentContentReader? contentReader = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
+        IAttachmentTextExtractor? attachmentText = null,
+        SensitiveContentEgressScreen? screen = null,
         ICallerMailAccountCatalog? accountCatalog = null,
         IMailFolderParticipationReader? folderParticipation = null,
         AccessAuthorization? authorization = null) => new(
@@ -524,12 +737,48 @@ public sealed class EmailAttachmentDownloadReaderTests
         contentStore ?? ContentStoreReturning(IntactContent()),
         contentReader ?? ContentReaderOpening("invoice.pdf"),
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
+        attachmentText ?? ExtractorReporting(AttachmentTextExtractionResult.FormatNotRecognized()),
+        screen ?? InactiveScreen(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
             folderParticipation ?? MappingFolderOf(summary),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         authorization ?? AuthorizationOver(RedeemedCapability));
+
+    /// <summary>The screen of a deployment that screens nothing, which is what every test not about screening arranges.</summary>
+    private static SensitiveContentEgressScreen InactiveScreen() => new(
+        FixedSensitiveContentPostures.ScanningNothing(),
+        new RecordingSensitiveContentEgressTelemetry(),
+        TimeProvider.System);
+
+    private static IAttachmentTextExtractor ExtractorReporting(AttachmentTextExtractionResult result)
+    {
+        var extractor = Substitute.For<IAttachmentTextExtractor>();
+        extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(result));
+
+        return extractor;
+    }
+
+    /// <summary>Reports a document that was read and says exactly what it said.</summary>
+    private static IAttachmentTextExtractor ExtractorReading(string text) => ExtractorReporting(
+        AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(text, PageCount: 1, [])));
+
+    /// <summary>Builds the result one of the several ways a document defeats a reader produces.</summary>
+    private static AttachmentTextExtractionResult UnreadableResult(string outcome) => outcome switch
+    {
+        nameof(AttachmentTextExtractionOutcome.Encrypted) => AttachmentTextExtractionResult.Encrypted(),
+        nameof(AttachmentTextExtractionOutcome.Malformed) => AttachmentTextExtractionResult.Malformed(),
+        nameof(AttachmentTextExtractionOutcome.FormatNotExtracted) =>
+            AttachmentTextExtractionResult.FormatNotExtracted(),
+        nameof(AttachmentTextExtractionOutcome.TimedOut) => AttachmentTextExtractionResult.TimedOut(),
+        nameof(AttachmentTextExtractionOutcome.InputTooLarge) => AttachmentTextExtractionResult.InputTooLarge(),
+        nameof(AttachmentTextExtractionOutcome.ExtractedTextTooLarge) =>
+            AttachmentTextExtractionResult.ExtractedTextTooLarge(),
+        _ => AttachmentTextExtractionResult.ContainerBoundExceeded(),
+    };
 
     /// <summary>Composes the authorization a use case asks, over whichever principal a test says reached it.</summary>
     private static AccessAuthorization AuthorizationOver(AuthorizedPrincipal? principal)
@@ -611,6 +860,9 @@ public sealed class EmailAttachmentDownloadReaderTests
             "application/pdf",
             DecodedSizeOctets: 16);
 
+        /// <summary>Gets whether whoever opened this released it, which is what a refused download owes.</summary>
+        public bool WasDisposed { get; private set; }
+
         public Task WriteContentToAsync(Stream destination, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(destination);
@@ -618,6 +870,11 @@ public sealed class EmailAttachmentDownloadReaderTests
             return Task.CompletedTask;
         }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync()
+        {
+            this.WasDisposed = true;
+
+            return ValueTask.CompletedTask;
+        }
     }
 }

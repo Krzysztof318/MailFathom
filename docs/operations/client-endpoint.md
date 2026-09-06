@@ -1000,6 +1000,16 @@ is answered `403`, as everywhere else on this surface.
 **It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
 and cannot set the remote `\Seen` flag.
 
+**A screened deployment reads the file before it streams it.** Where
+[sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
+is switched on for this owner, the document's own text is extracted and scanned, and the route answers `409` with
+`errorCode` `59004` rather than the octets when a scanner names something in it — and equally when nothing could read
+the file at all, since an attachment that was not read is never treated as clean. The answer names no scanner, no
+category, and nothing about the file, and it is deliberately a different status from the `404` above: this reader is
+already authenticated for this message and this position, so what they learn is that the deployment screens what it
+serves rather than anything about mail they may not read. Nothing is redacted — a file is served whole or refused —
+and an owner who screens nothing pays no extraction and reads exactly the answer the paragraphs above describe.
+
 ### The citation route
 
 ```http

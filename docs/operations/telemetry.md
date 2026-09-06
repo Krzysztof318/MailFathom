@@ -1073,7 +1073,8 @@ is counted.
 
 Sensitive-content scanning publishes six instruments, all of them tagged with
 `mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`,
-`mcp_email_content`, `outgoing_mail`, `client_mail_listing`, `client_mail_search`, or `client_citation_resolution`. The
+`mcp_email_content`, `outgoing_mail`, `client_mail_listing`, `client_mail_search`, `client_citation_resolution`, or
+`attachment_download`. The
 egress point is on every one
 of them because it is
 what an operator acts
@@ -1092,21 +1093,29 @@ beneath the read that asked for the payload, so one call's guarding is readable 
 
 | Instrument | What it answers |
 | --- | --- |
-| `mailfathom.sensitive_content.guarded` | How many texts were scanned, whatever followed. At `outgoing_mail` the text that stopped the act is counted here too, so this is not a count of what left |
-| `mailfathom.sensitive_content.findings` | How many detections were made, split by `mailfathom.sensitive_content.category`. What followed depends on the point: replaced at the four redacting ones, and at `outgoing_mail` either counted and let through or, where the deployment screens for that category, the reason the act was stopped |
-| `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than trust unscanned — dropped from what was published at the four redacting points, and at `outgoing_mail` the reason the act was stopped |
+| `mailfathom.sensitive_content.guarded` | How many texts were scanned, whatever followed. At the two screening points the text that stopped the act is counted here too, so this is not a count of what left |
+| `mailfathom.sensitive_content.findings` | How many detections were made, split by `mailfathom.sensitive_content.category`. What followed depends on the point: replaced at the redacting ones, and at the two screening ones either counted and let through or, where the deployment screens for that category, the reason the act was stopped |
+| `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than trust unscanned — dropped from what was published at the redacting points, and at the two screening ones the reason the act was stopped |
 | `mailfathom.sensitive_content.refusals` | How many operations a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |
 | `mailfathom.sensitive_content.stopped` | How many acts were cancelled because the material found is material this deployment will not let leave, by `mailfathom.sensitive_content.scanner` and `mailfathom.sensitive_content.category` |
 | `mailfathom.sensitive_content.scan.duration` | What scanning added to one guarded operation |
 
-**Three of these rows mean something slightly different at `outgoing_mail`**, because that point rewrites nothing:
-the redaction runs there only to reach its findings and the redacted text is discarded. So a detection counted at
-`outgoing_mail` is a detection *made* rather than one removed from something a reader received, and a message that was
-stopped never left at all. Reading `findings{egress_point="outgoing_mail"}` as credentials taken out of transmitted
+**Three of these rows mean something slightly different at `outgoing_mail` and at `attachment_download`**, because
+neither point rewrites anything: the redaction runs there only to reach its findings and the redacted text is
+discarded. So a detection counted at either is a detection *made* rather than one removed from something a reader
+received, and the message or the file it was made in never left at all. Reading
+`findings{egress_point="outgoing_mail"}` as credentials taken out of transmitted
 mail would be reading it exactly backwards — nothing was transmitted, and nothing was rewritten.
 
-**The stopped count is the one series about an act that did not happen**, and today `outgoing_mail` is the only point
-that produces it: everywhere else a finding is redacted and the operation continues. Both of its tags are written
+**What `attachment_download` scans is one file's extracted text**, so a guarded count of one covers a document of any
+size and the duration beside it is the scan alone — reading the document is
+[attachment text extraction](../features/attachment-text-extraction.md) and is not measured here. A download refused
+because nothing could read the file at all produces no series in this section, because no text was ever scanned: it is
+visible as a `409` on the route rather than as a finding, and by design nothing published here says which file it was.
+
+**The stopped count is the one series about an act that did not happen**, and `outgoing_mail` and
+`attachment_download` are the two points that produce it: everywhere else a finding is redacted and the operation
+continues. Both of its tags are written
 whatever stopped the act, and an act stopped because the analyzed ceiling cut the text reads `not_scanned` in each —
 a value rather than an absent tag, because a series missing one dimension is a second series and a query summing this
 counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's floor and the

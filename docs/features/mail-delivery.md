@@ -566,8 +566,12 @@ until a later moment, an occasion of a repeated send, a draft, a revision of one
 all judged the same way — including the promotion of a draft written before the operator switched screening on, since
 what is judged is the message leaving rather than when it was composed.
 
-**What is read is the composed MIME**: the subject and both body representations, exactly as they would be transmitted.
-Attachments are not read, and neither are the addresses — an address is what the message is for rather than text to
+**What is read is the composed MIME**: the subject, both body representations, and the text of every attached document,
+exactly as they would be transmitted. Each attached document is opened through
+[attachment text extraction](attachment-text-extraction.md) under that feature's own bounds, so what a scanner sees is
+the words of the file rather than its octets; nothing is executed, nothing is written to disk, and a file whose format
+this deployment reads no text from — an image, an archive, anything that is not one of the document formats — is passed
+over rather than refused. The addresses are still not read: an address is what the message is for rather than text to
 examine, on the same line every other guarded point here draws.
 
 **The refusal is asked after the grant, the recipient policy, and the ceilings above, and before the transaction that
@@ -579,10 +583,13 @@ used costs nothing further, since the charge is keyed on the send's own idempote
 that key is admitted without being charged again. Only a fresh key spends another message and its recipients. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
 records and the refusal writes none.
 
-A caller reads `59001` naming the category, or `59002` where one screened value — the subject or either body — was
-longer than the deployment's analyzed ceiling and nothing read the remainder of it; the ceiling is applied to each value
-on its own rather than to the message as a whole. Neither carries the rule, the position, or one character of what was
-found.
+A caller reads `59001` naming the category, `59002` where one screened value — the subject or either body — was
+longer than the deployment's analyzed ceiling and nothing read the remainder of it, or `59003` where an attached
+document could not be read at all and so nothing screened what would have left with it; the analyzed ceiling is applied
+to each value on its own rather than to the message as a whole, while the extraction bounds are applied per attachment
+and across the message together. None of the three carries the rule, the position, or one character of what was found,
+and `59003` names neither the file nor why it could not be read. A finding wins over an unread file: a message that
+carries both answers `59001`, which is the one of the two its author can act on.
 Which scanners stop a send is the operator's, defaults to secrets alone, and is
 [`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent); [sensitive-content
 scanning § outgoing mail is screened rather than

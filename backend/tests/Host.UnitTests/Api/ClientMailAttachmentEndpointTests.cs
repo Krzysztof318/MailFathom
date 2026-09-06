@@ -11,14 +11,18 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
+using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -37,7 +41,39 @@ namespace MailFathom.Host.UnitTests.Api;
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The endpoint under test takes ownership of the opened attachment and disposes it, which is the contract these tests exercise.")]
 public sealed class ClientMailAttachmentEndpointTests
 {
+    /// <summary>The literal a screened deployment in this suite stops at, which never reaches a response.</summary>
+    private const string ScreenedMarker = "sk-live-000111222333";
+
     private static readonly Guid Message = new("44444444-4444-4444-4444-444444444444");
+
+    /// <summary>
+    /// The client route meets the same screen the signed link does, because both resolve through one use case. It says
+    /// so rather than answering the uniform refusal, and it still says nothing about what was found.
+    /// </summary>
+    [Fact]
+    public async Task DownloadAsync_AttachmentTheScreenStopped_RefusesWithItsOwnCodeAndNamesNothing()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+
+        // Act
+        var result = await ClientMailAttachmentEndpoint.DownloadAsync(
+            Message,
+            position: 0,
+            AttachmentOpening(
+                new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()),
+                screensTheFile: true),
+            context,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, refused.StatusCode);
+        Assert.Equal(
+            MailFathomErrorCode.AttachmentDownloadScreened.Value,
+            refused.ProblemDetails.Extensions[RouteAuthorization.ErrorCodeExtension]);
+        Assert.DoesNotContain(ScreenedMarker, refused.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
 
     /// <summary>The path a client appends to the address it was configured with, pinned because the client composes it from a constant of its own.</summary>
     [Fact]
@@ -181,7 +217,8 @@ public sealed class ClientMailAttachmentEndpointTests
     /// </remarks>
     private static EmailAttachmentDownloadReader AttachmentOpening(
         IOpenedEmailAttachment? attachment,
-        IEmailContentStore? contentStore = null)
+        IEmailContentStore? contentStore = null,
+        bool screensTheFile = false)
     {
         var summary = SummaryOf();
 
@@ -213,6 +250,8 @@ public sealed class ClientMailAttachmentEndpointTests
             resolvedContentStore,
             contentReader,
             Substitute.For<IEmailContentRepairRequestStore>(),
+            AttachmentTextReading(screensTheFile),
+            ScreenRefusing(screensTheFile),
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation.Mapping(
@@ -271,4 +310,27 @@ public sealed class ClientMailAttachmentEndpointTests
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
+
+    /// <summary>Reads the attachment as one carrying whatever a screened deployment in this suite stops at.</summary>
+    private static IAttachmentTextExtractor AttachmentTextReading(bool screensTheFile)
+    {
+        var extractor = Substitute.For<IAttachmentTextExtractor>();
+        extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(screensTheFile
+                ? AttachmentTextExtractionResult.Extracted(
+                    new ExtractedAttachmentText(ScreenedMarker, PageCount: 1, []))
+                : AttachmentTextExtractionResult.FormatNotRecognized()));
+
+        return extractor;
+    }
+
+    /// <summary>Builds the screen of a deployment that stops at the marker, or of one that screens nothing at all.</summary>
+    private static SensitiveContentEgressScreen ScreenRefusing(bool screensTheFile) => screensTheFile
+        ? ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System).Screen
+        : new SensitiveContentEgressScreen(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            new RecordingSensitiveContentEgressTelemetry(),
+            TimeProvider.System);
+
 }

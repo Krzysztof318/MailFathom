@@ -42,6 +42,29 @@ public sealed class MimeKitEmailAttachmentContentReaderTests
     }
 
     /// <summary>
+    /// A screened deployment reads the file before it streams it, so the octets are written out twice from one opened
+    /// part. A part that answered the second caller with nothing would serve an empty file to whoever asked for it, and
+    /// nothing above this type could tell that from an attachment that really is empty.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_AttachmentWrittenOutTwice_WritesTheSameOctetsBothTimes()
+    {
+        // Arrange
+        var content = MessageAttaching(("report.pdf", "application/pdf", "%PDF-1.7 report"));
+
+        // Act
+        await using var attachment = await OpenAsync(content, attachmentPosition: 0);
+        using var screened = new MemoryStream();
+        await attachment.WriteContentToAsync(screened, TestContext.Current.CancellationToken);
+        using var served = new MemoryStream();
+        await attachment.WriteContentToAsync(served, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("%PDF-1.7 report"u8.ToArray(), screened.ToArray());
+        Assert.Equal(screened.ToArray(), served.ToArray());
+    }
+
+    /// <summary>
     /// The position a link names is a position in the read's own walk, so the two must agree part for part. Comparing
     /// them here is what stops a divergence from being discovered as a caller receiving the wrong file.
     /// </summary>

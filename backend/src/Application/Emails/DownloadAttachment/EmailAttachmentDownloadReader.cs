@@ -6,8 +6,11 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
@@ -40,6 +43,18 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// It reaches no mail server, for the reason the content read does not: the use case holds no mailbox port, so a
 /// download cannot fetch a message and cannot set the remote <c>\Seen</c> flag.
 /// </para>
+/// <para>
+/// <b>The screen is here rather than at either route</b>, for the reason every check above is: a deployment that
+/// redacts what a read publishes and serves the unredacted original beside it is not a screened deployment, and one
+/// rule in one place is what stops the two endpoints from each having to remember. What it screens is the attachment's
+/// own extracted text, read afresh — nothing here depends on what a derived pass stored, on the format being one a
+/// search stage indexes, or on the message having been read yet.
+/// </para>
+/// <para>
+/// Nothing is redacted, because there is nothing a redaction could honestly do to a byte stream: replacing a region
+/// inside one produces a file its author never composed and whose reader has no way of knowing it was changed. So the
+/// download is refused whole, and no partial stream is ever written.
+/// </para>
 /// </remarks>
 public sealed class EmailAttachmentDownloadReader
 {
@@ -47,6 +62,8 @@ public sealed class EmailAttachmentDownloadReader
     private readonly IEmailContentStore contentStore;
     private readonly IEmailAttachmentContentReader attachmentContentReader;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
+    private readonly IAttachmentTextExtractor attachmentText;
+    private readonly SensitiveContentEgressScreen screen;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly AccessAuthorization authorization;
 
@@ -55,7 +72,9 @@ public sealed class EmailAttachmentDownloadReader
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
     /// <param name="attachmentContentReader">Opens one attachment of that stored MIME by its position.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
-    /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from.</param>
+    /// <param name="attachmentText">Reads the attachment's text under its own ceilings, or says why it read none.</param>
+    /// <param name="screen">Judges that text against what this deployment refuses to let leave.</param>
+    /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from, and whose mail it is.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailAttachmentDownloadReader(
@@ -63,6 +82,8 @@ public sealed class EmailAttachmentDownloadReader
         IEmailContentStore contentStore,
         IEmailAttachmentContentReader attachmentContentReader,
         IEmailContentRepairRequestStore repairRequestStore,
+        IAttachmentTextExtractor attachmentText,
+        SensitiveContentEgressScreen screen,
         MailboxScopeResolver scopeResolver,
         AccessAuthorization authorization)
     {
@@ -70,6 +91,8 @@ public sealed class EmailAttachmentDownloadReader
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(attachmentContentReader);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
+        ArgumentNullException.ThrowIfNull(attachmentText);
+        ArgumentNullException.ThrowIfNull(screen);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(authorization);
 
@@ -77,6 +100,8 @@ public sealed class EmailAttachmentDownloadReader
         this.contentStore = contentStore;
         this.attachmentContentReader = attachmentContentReader;
         this.repairRequestStore = repairRequestStore;
+        this.attachmentText = attachmentText;
+        this.screen = screen;
         this.scopeResolver = scopeResolver;
         this.authorization = authorization;
     }
@@ -84,7 +109,7 @@ public sealed class EmailAttachmentDownloadReader
     /// <summary>Opens the attachment the ticket authorizes.</summary>
     /// <param name="ticket">What the redeemed capability authorizes.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
-    /// <returns>The opened attachment, which the caller owns and must dispose, or <see langword="null" /> when there is nothing to serve.</returns>
+    /// <returns>The opened attachment, which the caller owns and must dispose, or what refused it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="ticket" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached under anything but a capability this deployment signed.</exception>
     /// <remarks>
@@ -102,7 +127,7 @@ public sealed class EmailAttachmentDownloadReader
     /// database answered for because its object could not be vouched for records one too, and the download proceeds.
     /// </para>
     /// </remarks>
-    public async Task<IOpenedEmailAttachment?> OpenAsync(
+    public async Task<AttachmentDownloadOutcome> OpenAsync(
         AttachmentDownloadTicket ticket,
         CancellationToken cancellationToken)
     {
@@ -117,7 +142,7 @@ public sealed class EmailAttachmentDownloadReader
     /// <param name="storedEmailId">The email whose attachment to open, as a read of that email published it.</param>
     /// <param name="attachmentPosition">The attachment's zero-based position in the order a read of that email lists them.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
-    /// <returns>The opened attachment, which the caller owns and must dispose, or <see langword="null" /> when there is nothing to serve.</returns>
+    /// <returns>The opened attachment, which the caller owns and must dispose, or what refused it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// <para>
@@ -132,7 +157,7 @@ public sealed class EmailAttachmentDownloadReader
     /// a file the sender attached is part of the message a reader already holds rather than a wider disclosure.
     /// </para>
     /// </remarks>
-    public async Task<IOpenedEmailAttachment?> OpenForReaderAsync(
+    public async Task<AttachmentDownloadOutcome> OpenForReaderAsync(
         StoredEmailId storedEmailId,
         int attachmentPosition,
         CancellationToken cancellationToken)
@@ -148,7 +173,7 @@ public sealed class EmailAttachmentDownloadReader
     /// the mail rather than about the request, and a second copy of them would be a second place for one of them to be
     /// left out.
     /// </remarks>
-    private async Task<IOpenedEmailAttachment?> OpenPartAsync(
+    private async Task<AttachmentDownloadOutcome> OpenPartAsync(
         StoredEmailId storedEmailId,
         int attachmentPosition,
         CancellationToken cancellationToken)
@@ -161,7 +186,7 @@ public sealed class EmailAttachmentDownloadReader
         // an email that is no longer stored does.
         if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
         {
-            return null;
+            return AttachmentDownloadOutcome.NothingToServe();
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -190,11 +215,93 @@ public sealed class EmailAttachmentDownloadReader
             return await this.RefuseAndRequestRepairAsync(summary, EmailContentDefect.Unreadable, cancellationToken);
         }
 
-        return opened.Attachment;
+        return opened.Attachment is { } attachment
+            ? await this.ScreenedAsync(attachment, cancellationToken)
+            : AttachmentDownloadOutcome.NothingToServe();
+    }
+
+    /// <summary>Reads the opened attachment's text and answers whether this deployment will serve it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The screen is asked whether it is active for this owner before anything is read, exactly as the outgoing screen
+    /// asks before a message is parsed: a deployment that screens nothing pays no document read, no allocation, and no
+    /// scan for a download, and one owner's added category costs the owner beside them nothing.
+    /// </para>
+    /// <para>
+    /// An attachment nothing recognized as a document is served unchanged, because no text scanner ever undertook to
+    /// read a photograph, a recording, or an archive. Every other reason a read produced no text refuses the download:
+    /// an encrypted document, a format nothing here parses, bytes that do not parse as what they declare, and a read
+    /// that ran past a ceiling all mean the same thing, which is that the file is going out and nothing established
+    /// what is in it.
+    /// </para>
+    /// <para>
+    /// A scanner that could not answer refuses too, rather than travelling out as a fault. It is the same fail-closed
+    /// reading every guarded path takes, and answering it distinctly here would tell whoever holds a capability that
+    /// this deployment's analyzer is down — a fact about the deployment rather than about the file they asked for. The
+    /// instrument beside the screen is where an operator reads it.
+    /// </para>
+    /// </remarks>
+    private async Task<AttachmentDownloadOutcome> ScreenedAsync(
+        IOpenedEmailAttachment attachment,
+        CancellationToken cancellationToken)
+    {
+        if (!this.screen.IsActiveFor(this.scopeResolver.Owner))
+        {
+            return AttachmentDownloadOutcome.Served(attachment);
+        }
+
+        try
+        {
+            var extracted = await this.attachmentText.ExtractTextAsync(attachment, cancellationToken);
+
+            if (extracted.Outcome is AttachmentTextExtractionOutcome.FormatNotRecognized)
+            {
+                return AttachmentDownloadOutcome.Served(attachment);
+            }
+
+            if (extracted.Text is not { } read)
+            {
+                return await ScreenedOutAsync(attachment);
+            }
+
+            // A document that yielded no characters at all — every page of it a scan of paper — is served like the
+            // photograph it is made of rather than scanned, which is the one answer an empty text can honestly get.
+            var refusal = read.Text.Length == 0
+                ? null
+                : await this.screen.ScreenAsync(
+                    SensitiveContentEgressPoint.AttachmentDownload,
+                    this.scopeResolver.Owner,
+                    [read.Text],
+                    cancellationToken);
+
+            return refusal is null
+                ? AttachmentDownloadOutcome.Served(attachment)
+                : await ScreenedOutAsync(attachment);
+        }
+        catch (SensitiveContentScannerUnavailableException)
+        {
+            return await ScreenedOutAsync(attachment);
+        }
+        catch
+        {
+            // Whatever else a read or a scan raised travels on as itself, but never with the file still open: nothing
+            // beyond this method holds a reference to it, so a fault here would leave the parse behind it alive.
+            await attachment.DisposeAsync();
+
+            throw;
+        }
+    }
+
+    /// <summary>Releases the file the screen stopped, so nothing a refusal produced is left holding a parse open.</summary>
+    private static async Task<AttachmentDownloadOutcome> ScreenedOutAsync(IOpenedEmailAttachment attachment)
+    {
+        await attachment.DisposeAsync();
+
+        return AttachmentDownloadOutcome.ScreenedOut();
     }
 
     /// <summary>Records the defect durably and refuses the download.</summary>
-    private async Task<IOpenedEmailAttachment?> RefuseAndRequestRepairAsync(
+    private async Task<AttachmentDownloadOutcome> RefuseAndRequestRepairAsync(
         EmailSummary summary,
         EmailContentDefect defect,
         CancellationToken cancellationToken)
@@ -203,6 +310,6 @@ public sealed class EmailAttachmentDownloadReader
             new EmailContentRepairRequest(summary.StoredEmailId, defect),
             cancellationToken);
 
-        return null;
+        return AttachmentDownloadOutcome.NothingToServe();
     }
 }

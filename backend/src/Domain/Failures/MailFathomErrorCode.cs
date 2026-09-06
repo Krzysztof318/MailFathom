@@ -880,6 +880,42 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailNotFullyScanned { get; } = new(59002);
 
+    /// <summary>Gets subcategory 9, content policy: a file the message attaches could not be read, so nothing established what it carries.</summary>
+    /// <remarks>
+    /// <para>
+    /// A third code beside the two above because the author's remedy is a third one again. The first asks them to take
+    /// something out of the message and the second to make it shorter; this one says a file they attached is one this
+    /// deployment cannot read at all — it is encrypted, it is a format nothing here parses, it is malformed, or reading
+    /// it ran past a ceiling — so the only way the message goes is without that file, or with it in a form the screen
+    /// can read.
+    /// </para>
+    /// <para>
+    /// It names none of that. Which of the reasons stopped the read, which file it was, what the file is called, and
+    /// where in the message it sits are all withheld for the reason the codes above withhold a position: a refusal is a
+    /// line in a log, and a file name is mail content exactly as a body is. An attachment nothing recognized as a
+    /// document at all — a photograph, a recording, an archive — is not this code, because no screen ever undertook to
+    /// read one.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingMailAttachmentNotRead { get; } = new(59003);
+
+    /// <summary>Gets subcategory 9, content policy: an attachment this deployment screens was not served, because of what it carries or because nothing could read it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Separate from the three codes above because it stops a read rather than a write, and one code covers both of its
+    /// reasons because whoever asked can act on neither. An author told their own message was refused edits it; a caller
+    /// redeeming a download link holds nothing to edit, so telling them a category was found would publish a fact about
+    /// the file — that it carries a credential — to somebody the deployment has just decided may not have the file.
+    /// </para>
+    /// <para>
+    /// It is answered distinctly rather than folded into the refusal every other stopped download shares, because the
+    /// two disclose different things. That refusal is uniform so a capability cannot be used to learn what became of
+    /// mail; this one says only that the deployment screens what it serves and would not serve this, to somebody who
+    /// was already told the attachment exists and what it is called by the read that offered them the link.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode AttachmentDownloadScreened { get; } = new(59004);
+
     #endregion
 
     #region Category 6 — Embedding providers
@@ -1073,6 +1109,8 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailNoLongerCancellable,
         OutgoingMailContentRefused,
         OutgoingMailNotFullyScanned,
+        OutgoingMailAttachmentNotRead,
+        AttachmentDownloadScreened,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

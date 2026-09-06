@@ -19,11 +19,15 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// reads it and owns nothing.
 /// </para>
 /// <para>
-/// Reading an attachment is the largest attack surface this system has, so an implementation runs it as background work
-/// and never on a path a caller waits on — not a synchronization transaction, not an MCP request, not a client read.
-/// Everything it consumes is bounded by <see cref="AttachmentTextExtractionOptions" />, nothing it reads is written to
-/// the file system, and nothing a document declares as a macro, a script, an embedded object, or any other active
-/// content is executed, evaluated, or handed to anything that would.
+/// Reading an attachment is the largest attack surface this system has, so an implementation never runs it inside a
+/// synchronization transaction, where a hostile document would stall a checkpoint and hold a database transaction open
+/// for as long as it took. It does run on paths a caller waits on: a message being screened before it is sent or saved
+/// as a draft, and an attachment being screened before it is streamed to whoever asked for it. Both are acts that must
+/// be judged on the whole of what would leave, and neither can be answered later. What bounds the delay a caller pays
+/// there is <see cref="AttachmentTextExtractionOptions" />, which every implementation applies per attachment and which
+/// such a caller applies across the message as well. Nothing an implementation reads is written to the file system, and
+/// nothing a document declares as a macro, a script, an embedded object, or any other active content is executed,
+/// evaluated, or handed to anything that would.
 /// </para>
 /// <para>
 /// An attachment an antivirus pass has judged infected is not excluded here, because no such pass exists yet. When one

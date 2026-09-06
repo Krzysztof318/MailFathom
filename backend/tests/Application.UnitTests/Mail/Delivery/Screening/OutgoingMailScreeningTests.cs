@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -127,5 +128,103 @@ public sealed class OutgoingMailScreeningTests
         // Assert
         Assert.Null(refusal);
         Assert.Equal(3, egress.Scanner.ScannedTexts.Count);
+    }
+
+    /// <summary>
+    /// The point of screening an attachment at all: a credential inside the attached document is judged with the one
+    /// typed into the covering note, so what protects an author does not depend on which half they put it in.
+    /// </summary>
+    [Fact]
+    public async Task FindRefusalAsync_AnAttachmentCarryingScreenedMaterial_StopsTheAct()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var screening = ScreeningOver(
+            egress,
+            new OutgoingMailText("a subject", "the file is attached", HtmlBody: null)
+            {
+                AttachmentTexts = [$"the key is {Marker}"],
+            });
+
+        // Act
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(refusal);
+        Assert.Equal(SensitiveContentEgressRefusalReason.ContentFound, refusal.Reason);
+        Assert.Equal(["a subject", "the file is attached", $"the key is {Marker}"], egress.Scanner.ScannedTexts);
+    }
+
+    /// <summary>
+    /// A file nothing could read stops the act rather than passing as clean, which is the whole difference between
+    /// screening a message and screening the half of it somebody happened to type.
+    /// </summary>
+    [Fact]
+    public async Task FindRefusalAsync_AnAttachmentNothingCouldRead_StopsTheActWithoutNamingWhy()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var screening = ScreeningOver(
+            egress,
+            new OutgoingMailText("a subject", "the file is attached", HtmlBody: null)
+            {
+                UnreadableAttachment = AttachmentTextExtractionOutcome.Encrypted,
+            });
+
+        // Act
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(refusal);
+        Assert.Equal(SensitiveContentEgressRefusalReason.AttachmentNotRead, refusal.Reason);
+        Assert.Null(refusal.Scanner);
+        Assert.Null(refusal.Category);
+    }
+
+    /// <summary>
+    /// A message carrying both is refused for the finding, because that is the half its author can act on. Reporting an
+    /// unreadable file first would send them looking at an archive for a credential the scanner found in the body.
+    /// </summary>
+    [Fact]
+    public async Task FindRefusalAsync_AMessageCarryingBothAFindingAndAnUnreadableFile_StopsForTheFinding()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var screening = ScreeningOver(
+            egress,
+            new OutgoingMailText("a subject", $"the key is {Marker}", HtmlBody: null)
+            {
+                UnreadableAttachment = AttachmentTextExtractionOutcome.Encrypted,
+            });
+
+        // Act
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(refusal);
+        Assert.Equal(SensitiveContentEgressRefusalReason.ContentFound, refusal.Reason);
+    }
+
+    /// <summary>Composes the screening over a reader that answers with one message, whatever bytes it is handed.</summary>
+    private static OutgoingMailScreening ScreeningOver(
+        ScanningSensitiveContentEgress egress,
+        OutgoingMailText composed)
+    {
+        var reader = Substitute.For<IOutgoingMailTextReader>();
+        reader.ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>()).Returns(composed);
+
+        return new OutgoingMailScreening(reader, egress.Screen);
     }
 }

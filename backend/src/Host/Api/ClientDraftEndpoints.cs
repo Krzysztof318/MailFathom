@@ -607,6 +607,7 @@ internal static class ClientDraftEndpoints
             ? StatusCodes.Status404NotFound
             : refusal.ErrorCode == MailFathomErrorCode.OutgoingMailContentRefused
                 || refusal.ErrorCode == MailFathomErrorCode.OutgoingMailNotFullyScanned
+                || refusal.ErrorCode == MailFathomErrorCode.OutgoingMailAttachmentNotRead
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status400BadRequest);
 

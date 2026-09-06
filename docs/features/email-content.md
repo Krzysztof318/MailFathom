@@ -258,6 +258,15 @@ same body — telling them apart would let whoever holds a capability learn what
 damaged or missing local copy records a repair request first, exactly as a read of the same message would, because the
 finding is about the stored copy rather than about who asked for it.
 
+**A screened deployment reads the file before it streams it**, on both entrypoints, under
+[sensitive-content scanning § an attachment is screened on the way out as well](sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well).
+The document's own text is extracted and scanned, and a file carrying something a scanner names is not served; neither
+is one nothing could read. That refusal is the one exception to the paragraph above, and it is `409` with
+`errorCode` `59004` rather than `404`, because it is about the file this caller was admitted to fetch rather than about
+what became of mail they may no longer read — a holder who already knows the message and the position learns only that
+this deployment screens what it serves. Nothing else changes: the same reads, the same repair request, the same `404`
+for every other refusal, and no extraction at all where the owner screens nothing.
+
 The response states the attachment's own media type and file name, both of which are text a sender wrote: the media type
 is parsed before it is echoed and falls back to `application/octet-stream` when it is not a media type, and the file name
 travels through the header type that applies RFC 5987 encoding. It is always served as `Content-Disposition: attachment`
@@ -428,6 +437,12 @@ redacted the plain text while publishing the tree unscanned would hand a reader 
 what it withheld through the other. The addresses
 beside those names, the identifiers, the sizes, the flags, the two domains the sender verdict's evidence publishes, and
 every attachment's file name are left as they are, on the line that page draws between a routing identity and free text.
+
+**This section reaches the text of the message and no attachment's octets.** An attachment is served whole or not at
+all: a redacted document would be a file MailFathom rewrote, whose length, structure, and every offset into it no longer
+match what the sender attached, and the read here is the one that hands a caller a link rather than the one that
+redeems it. What the file itself is judged by is the screen the redemption applies above, which refuses rather than
+rewrites.
 
 The first 500 texts of a reduced document are scanned, and past that the text is withheld rather than published
 unscanned, with `Truncated` saying the document was cut. How many texts one document holds is the sender's choice — a

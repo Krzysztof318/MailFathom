@@ -181,6 +181,9 @@ public sealed class OutgoingMailRefusedException : MailFathomException
             SensitiveContentEgressRefusalReason.TextExceededScanCeiling => new OutgoingMailRefusedException(
                 MailFathomErrorCode.OutgoingMailNotFullyScanned,
                 "This message is longer than one sensitive-content scan analyzes, so nothing established what all of it carries and nothing was queued. Send a shorter message, or ask the operator to raise the analyzed ceiling."),
+            SensitiveContentEgressRefusalReason.AttachmentNotRead => new OutgoingMailRefusedException(
+                MailFathomErrorCode.OutgoingMailAttachmentNotRead,
+                "This deployment screens the mail it sends, and one file attached to this message could not be read, so nothing established what it carries and nothing was queued. Send the message without that file, or attach it in a form that can be read."),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(refusal),
                 refusal.Reason,

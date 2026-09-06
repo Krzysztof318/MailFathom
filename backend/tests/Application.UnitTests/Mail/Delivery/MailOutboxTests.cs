@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Governance;
@@ -463,6 +464,45 @@ public sealed class MailOutboxTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.OutgoingMailNotFullyScanned, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+    }
+
+    /// <summary>
+    /// A file nothing could read is refused for the file rather than for a category, because nothing established what
+    /// it carries. The remedy is a third one again — send the message without that file — so it is a code of its own,
+    /// and the answer never says which shape of unreadable file this deployment stopped at.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_MessageAttachingAFileNothingCouldRead_RefusesForTheFileAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var signal = new MailOutboxSignal(capacity: 4);
+
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Authored));
+
+        var outbox = CreateOutbox(
+            store,
+            ContentStores.Substituted(),
+            signal: signal,
+            screening: OutgoingMailScreenings.Through(
+                egress.Screen,
+                AttachmentTextExtractionOutcome.Encrypted));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(
+                CreateRequest("mfctl-4f2a"),
+                Encoding.UTF8.GetBytes("an ordinary covering note"),
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailAttachmentNotRead, refusal.ErrorCode);
+        Assert.DoesNotContain(
+            nameof(AttachmentTextExtractionOutcome.Encrypted),
+            refusal.Message,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
     }

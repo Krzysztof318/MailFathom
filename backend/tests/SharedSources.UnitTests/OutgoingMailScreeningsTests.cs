@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.TestSupport;
@@ -56,6 +57,32 @@ public sealed class OutgoingMailScreeningsTests
         Assert.NotNull(refusal);
         Assert.Equal(SensitiveContentEgressRefusalReason.ContentFound, refusal.Reason);
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
+    }
+
+    /// <summary>
+    /// The unreadable-attachment shape is what every consumer's own refusal test is arranged with, so it has to produce
+    /// that refusal and no other — a helper that quietly reported a finding instead would make four suites assert the
+    /// wrong code and pass.
+    /// </summary>
+    [Fact]
+    public async Task Through_AMessageCarryingAFileNothingCouldRead_StopsTheActForTheFileRatherThanAFinding()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        var screening = OutgoingMailScreenings.Through(
+            egress.Screen,
+            AttachmentTextExtractionOutcome.Encrypted);
+
+        // Act
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            MimeOf("an ordinary message"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(refusal);
+        Assert.Equal(SensitiveContentEgressRefusalReason.AttachmentNotRead, refusal.Reason);
+        Assert.Null(refusal.Category);
     }
 
     /// <summary>What the reader hands the screen is the message's own words, so an ordinary one reaches the write.</summary>

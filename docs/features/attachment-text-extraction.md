@@ -9,17 +9,24 @@ never with an exception raised by whatever read the document, and never with an 
 found". The one thing a caller does have to handle is a failure reading the stored content itself, which is about the
 attempt rather than about the document and is described under the posture below.
 
-What calls it is the account run's attachment-reading stage, which is off unless `Embeddings:AttachmentText:Enabled`
-says otherwise. That stage runs behind the passage cut, outside any transaction, and never on a read path — so no MCP
-call and no client request ever waits on a parser. What it does with the answer is
-[Message chunks](message-chunks.md): a document's text is cut into passages and embedded, and it joins the lexical index
-as a document of its own.
+**Three paths call it, and only one of them is background work.** The account run's attachment-reading stage is that
+one: it is off unless `Embeddings:AttachmentText:Enabled` says otherwise, runs behind the passage cut and outside any
+transaction, and what it does with the answer is [Message chunks](message-chunks.md) — a document's text is cut into
+passages and embedded, and it joins the lexical index as a document of its own.
+
+The other two are paths a caller waits on. A message being sent or saved as a draft is screened whole on a deployment
+that screens outgoing mail, and an attachment about to be streamed is screened before its first octet leaves —
+[sensitive-content scanning](sensitive-content-scanning.md#outgoing-mail-is-screened-rather-than-redacted) holds both.
+Neither depends on the switch above, because what they judge is what would leave rather than what is worth indexing, and
+neither can be answered later. So the bounds below are what stands between a caller and a hostile document rather than a
+courtesy to a worker, and a screening deployment reads a document on a request whatever it decided about embedding one.
 
 A read also records **where each page, slide, or sheet begins** in the text it produced. That list is what turns a
 passage's offset into a place a citation can name, and it is written at extraction rather than re-derived later —
 re-cutting a mailbox after a boundary-rule change then reads the stored text and the stored boundaries, and opens no
 document again. A workbook records a boundary per sheet and not per cell range: a boundary per row would be tens of
-thousands of them for one exported table, which costs more to store than the text it points into.
+thousands of them for one exported table, which costs more to store than the text it points into. A screen reads none of
+that: it takes the text and discards it with the answer.
 
 ## What is read, and what is only recognized
 
@@ -176,9 +183,12 @@ somebody keeps.
   never revisit would turn it into a permanently unreadable attachment.
 - **The extracted text is untrusted output.** It is never logged, never rendered as markup, and nothing downstream may
   treat it as anything but opaque characters.
-- **It is background work.** Reading an attachment never happens inside a synchronization transaction and is never
-  reachable from an MCP or client read path, so a slow or hostile attachment cannot make a caller wait or a checkpoint
-  stall.
+- **It never happens inside a synchronization transaction.** A checkpoint cannot stall behind a document parser, and no
+  database transaction is held open while one runs. What has changed is the other half of that claim: two egress paths
+  read an attachment while their caller waits — a send or a draft being screened, and a download being screened — so a
+  hostile document does delay the caller who supplied or requested it. The ceilings below are what bounds that delay,
+  and they are applied per attachment and across the whole message together, so a hundred small files cost no more
+  than one large one.
 
 The timeout is honest about its own limit: it is observed between units of work — a page, an archive part, an element —
 because no parser here accepts a cancellation token and .NET cannot abort a thread. A parser that never returns from a

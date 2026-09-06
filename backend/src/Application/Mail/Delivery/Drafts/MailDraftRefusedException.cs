@@ -161,6 +161,9 @@ public sealed class MailDraftRefusedException : MailFathomException
             SensitiveContentEgressRefusalReason.TextExceededScanCeiling => new MailDraftRefusedException(
                 MailFathomErrorCode.OutgoingMailNotFullyScanned,
                 "This message is longer than one sensitive-content scan analyzes, so nothing established what all of it carries and no draft was written. Save a shorter message, or ask the operator to raise the analyzed ceiling."),
+            SensitiveContentEgressRefusalReason.AttachmentNotRead => new MailDraftRefusedException(
+                MailFathomErrorCode.OutgoingMailAttachmentNotRead,
+                "This deployment screens what it puts on a mail server, and one file attached to this message could not be read, so nothing established what it carries and no draft was written. Save the message without that file, or attach it in a form that can be read."),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(refusal),
                 refusal.Reason,

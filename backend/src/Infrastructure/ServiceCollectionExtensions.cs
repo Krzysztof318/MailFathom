@@ -1105,12 +1105,15 @@ public static class ServiceCollectionExtensions
         // against one reload of the account list it was scheduled from.
         services.AddScoped<IOutgoingMailUsageReader, OutgoingMailUsageReader>();
         services.AddScoped<OutgoingMailGovernor>();
-        // What the message says, asked beside what the bounds allow and by the same two callers. Both are singletons
-        // because neither holds anything: the reader is handed bytes and parses them, and the screening composes it
-        // with the process-wide screen over the process-wide policy. A scope would resolve the same two objects it
-        // did last time, so scoping it would allocate per work unit and buy nothing.
-        services.AddSingleton<IOutgoingMailTextReader, MimeKitOutgoingMailTextReader>();
-        services.AddSingleton<OutgoingMailScreening>();
+        // What the message says, asked beside what the bounds allow and by the same two callers. Both are scoped, and
+        // neither holds anything between calls: what decides the lifetime is that the reader reads the message's
+        // attachments through the extractor, which is scoped like every other reader of stored octets, and the
+        // screening composes that reader with the process-wide screen over the process-wide policy.
+        services.AddScoped<IOutgoingMailTextReader>(provider => new MimeKitOutgoingMailTextReader(
+            provider.GetRequiredService<IAttachmentTextExtractor>(),
+            provider.GetRequiredService<AttachmentTextExtractionOptions>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<OutgoingMailScreening>();
         services.AddScoped<MailOutbox>();
         // The operator's view of the same records, registered beside the outbox rather than with the administrative
         // endpoint that serves it today: the grant is asked in the use case, so a second entrypoint reaching it is

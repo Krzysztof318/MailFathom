@@ -4,6 +4,7 @@
 
 using System.Text;
 using MailFathom.Application.Access;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
@@ -437,6 +438,38 @@ public sealed class MailDraftBookTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.OutgoingMailNotFullyScanned, refusal.ErrorCode);
+        Assert.Empty(harness.Drafts.Drafts);
+        Assert.Equal(0, harness.AppendCount);
+    }
+
+    /// <summary>
+    /// A draft is put on a mail server exactly as a send is, so a file nothing could read stops it there too — and with
+    /// the same code, because the remedy is the same one and the sentence beside it is what tells the two acts apart.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_DraftAttachingAFileNothingCouldRead_RefusesForTheFileAndWritesNoDraft()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
+
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
+
+        harness.ScreenWith(OutgoingMailScreenings.Through(
+            egress.Screen,
+            AttachmentTextExtractionOutcome.Encrypted));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.SaveAsync(
+                Account,
+                OutgoingEmailRequester.Command("mfctl-4f2a"),
+                Composed("an ordinary covering note"),
+                revises: null,
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailAttachmentNotRead, refusal.ErrorCode);
         Assert.Empty(harness.Drafts.Drafts);
         Assert.Equal(0, harness.AppendCount);
     }
