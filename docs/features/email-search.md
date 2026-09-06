@@ -30,11 +30,34 @@ The lexical index covers the subject, the normalized participant addresses, and 
 message. [Extracted text and the full-text index](imap-synchronization.md) records how that document is derived, and
 [Message chunks](message-chunks.md) records the passages the vectors hang on.
 
-**Words that appear only inside an attachment payload are not searchable.** Text extraction never opens an attachment, so
-a PDF, a spreadsheet, or a scanned image contributes nothing, and a message whose information lives entirely in an
-attachment is findable by its subject and its participants alone. That is a deliberate limit rather than an oversight:
-attachment extraction is an unbounded-cost path and document parsers are a far larger hostile-input surface than MIME
-parsing.
+**A document attachment's words are indexed as a document of their own, and only where a deployment turned reading on.**
+`Embeddings:AttachmentText:Enabled` is off unless an operator sets it, and while it is off a PDF, a spreadsheet, or a
+presentation contributes nothing and a message whose information lives entirely in an attachment is findable by its
+subject and its participants alone. Where it is on, each attachment that yielded words carries its own `tsvector`, built
+from the file name beside the text — never added to the message's own document.
+
+That separation is the point rather than an implementation detail. **A message's own snippet never quotes attachment
+text**, because `ts_headline` cuts extracts from the message's document and that document is byte for byte what it was
+before attachments were read; a match inside a contract is a match on the file, named by the file and by the page,
+sheet, or slide it sits on, rather than words a reader would take the covering note to have said.
+[ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+records the decision and [Message chunks § passages cut from an
+attachment](message-chunks.md#passages-cut-from-an-attachment) what a passage of one carries.
+
+**An image attachment's description is never lexically indexed.** A model asked what a picture shows produces words
+nobody wrote, and matching them as though somebody had is exactly what
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+refuses. The exclusion is in the database rather than in a writer: the generated column produces a vector for a
+document's text and nothing at all for a description, so a word occurring only in a description returns no lexical
+match whatever a later writer does with the row. A depicted match reaches retrieval through the vector index alone.
+
+The two halves have landed to different depths, and the difference is what an operator is told. **The lexical rows and
+their GIN index exist and nothing reads them yet**: `search_emails` matches a message on its own words alone, so a word
+that occurs only inside a PDF returns nothing there, and the surface that reads the attachment index is separate work.
+**The vector index already answers with an attachment match**: an attachment passage is embedded through the active
+profile exactly as a body passage is, and a semantic search ranks a message on whichever of its passages is nearest — so
+on a deployment with attachment reading on and a profile active, `search_emails` already returns a message whose only
+near passage was cut from an attachment, including one cut from a description of a picture.
 
 **Where a sensitive-content scanner is switched on, the indexed body text is the redacted text.** Redaction happens as
 the message is extracted, so what `search_vector` is generated from is what a reader of a result would see, and a word

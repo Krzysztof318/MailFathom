@@ -12,6 +12,9 @@ public sealed class EmailChunkContentHashTests
 {
     private const string Passage = "The roof above the west stairwell is leaking again after Tuesday's storm.";
 
+    private static readonly EmailChunkAttachmentSource PdfAtPositionZero =
+        EmailChunkAttachmentSource.Create(0, "application/pdf");
+
     /// <summary>An unchanged message under unchanged rules must cost nothing, which is the digest agreeing with itself.</summary>
     [Fact]
     public void Compute_SameTextAndRules_ProducesTheSameDigest()
@@ -155,6 +158,179 @@ public sealed class EmailChunkContentHashTests
         Assert.Throws<ArgumentNullException>(() => EmailChunkContentHash.Create(null!));
     }
 
+    /// <summary>
+    /// The one assertion that makes taking ADR 0029 free. Every vector a delivered mailbox already paid for hangs on a
+    /// body passage's digest, so the attachment encoding beside it may add nothing to this one: a field appended here,
+    /// even a constant one, re-cuts every mailbox and re-bills every vector at a provider's rate. The value is written
+    /// out rather than recomputed, because a test comparing the encoding against itself would agree with any change.
+    /// </summary>
+    [Fact]
+    public void Compute_ThePassageThisRecordPins_ProducesTheDigestStoredMailAlreadyHangsOn()
+    {
+        // Act
+        var hash = EmailChunkContentHash.Compute(EmailChunkingRules.Current, isDerivedFromLossyHtml: false, Passage);
+
+        // Assert
+        Assert.Equal("5efac46dd244627f07beb6c0f4934686ba4325a9dc42ef54a720b395dd57400b", hash.Value);
+    }
+
+    /// <summary>
+    /// What the body pin above is to a delivered mailbox, this is to every attachment passage after the first
+    /// deployment sets <c>Embeddings:AttachmentText:Enabled</c>. Reordering the fields this encoding appends, or
+    /// adding one to it, re-cuts and re-embeds every attachment passage at a provider's rate — and every other test
+    /// here compares the encoding against itself, so each of them would stay green through exactly that change. The
+    /// value was computed from the encoding rather than read off a run.
+    /// </summary>
+    [Fact]
+    public void ComputeForAttachment_ThePassageThisRecordPins_ProducesTheDigestAStoredAttachmentHangsOn()
+    {
+        // Act
+        var hash = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+
+        // Assert
+        Assert.Equal("ff2bb1c617b7d23b0ad47d13447113c0dd9fce7a2a90b541229b2e0257ae85b9", hash.Value);
+    }
+
+    /// <summary>An unchanged attachment cut to unchanged rules must cost nothing either.</summary>
+    [Fact]
+    public void ComputeForAttachment_SameTextRulesAndSource_ProducesTheSameDigest()
+    {
+        // Act
+        var first = EmailChunkContentHash.ComputeForAttachment(EmailChunkingRules.Current, PdfAtPositionZero, Passage);
+        var second = EmailChunkContentHash.ComputeForAttachment(EmailChunkingRules.Current, PdfAtPositionZero, Passage);
+
+        // Assert
+        Assert.Equal(first, second);
+    }
+
+    /// <summary>
+    /// The domain separation the two encodings exist for. A covering note quoting a line of the contract it carries is
+    /// two passages that say the same words, and collapsing them into one digest would leave one vector standing for a
+    /// citation into a file and a citation into a message at the same time.
+    /// </summary>
+    [Fact]
+    public void ComputeForAttachment_TextIdenticalToABodyPassage_ProducesADifferentDigest()
+    {
+        // Act
+        var fromBody = EmailChunkContentHash.Compute(
+            EmailChunkingRules.Current,
+            isDerivedFromLossyHtml: false,
+            Passage);
+        var fromAttachment = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+
+        // Assert
+        Assert.NotEqual(fromBody, fromAttachment);
+    }
+
+    /// <summary>Two attachments of one message can carry the same words, and a citation has to reach the right file.</summary>
+    [Fact]
+    public void ComputeForAttachment_DifferentWalkPosition_ProducesADifferentDigest()
+    {
+        // Act
+        var first = EmailChunkContentHash.ComputeForAttachment(EmailChunkingRules.Current, PdfAtPositionZero, Passage);
+        var second = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            EmailChunkAttachmentSource.Create(1, "application/pdf"),
+            Passage);
+
+        // Assert
+        Assert.NotEqual(first, second);
+    }
+
+    /// <summary>The declared type chose the parser, so the same words read under two declarations are two readings.</summary>
+    [Fact]
+    public void ComputeForAttachment_DifferentDeclaredMediaType_ProducesADifferentDigest()
+    {
+        // Act
+        var asDocument = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+        var asSpreadsheet = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            EmailChunkAttachmentSource.Create(0, "application/vnd.ms-excel"),
+            Passage);
+
+        // Assert
+        Assert.NotEqual(asDocument, asSpreadsheet);
+    }
+
+    /// <summary>An attachment passage hangs on the boundary rules exactly as a body passage does.</summary>
+    [Theory]
+    [MemberData(nameof(RulesAnAttachmentPassageHangsOn))]
+    public void ComputeForAttachment_ChangedRulesAndUnchangedText_ProducesADifferentDigest(
+        EmailChunkingRules changedRules)
+    {
+        // Act
+        var current = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+        var changed = EmailChunkContentHash.ComputeForAttachment(changedRules, PdfAtPositionZero, Passage);
+
+        // Assert
+        Assert.NotEqual(current, changed);
+    }
+
+    /// <summary>
+    /// The source form names which reading of a <em>message body</em> was cut, so it says nothing about a file and does
+    /// not reach a file's identity. Encoding it as a default would publish an answer to a question nobody asked, and
+    /// would re-cut every attachment the day the body's own default moved.
+    /// </summary>
+    [Fact]
+    public void ComputeForAttachment_ADifferentBodySourceForm_ProducesTheSameDigest()
+    {
+        // Act
+        var underTrimmedText = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+        var underOriginalText = EmailChunkContentHash.ComputeForAttachment(
+            Vary(sourceForm: EmailChunkSourceForm.OriginalText),
+            PdfAtPositionZero,
+            Passage);
+
+        // Assert
+        Assert.Equal(underTrimmedText, underOriginalText);
+    }
+
+    /// <summary>The media type is length-prefixed like every other field, so it cannot run into the passage beside it.</summary>
+    [Fact]
+    public void ComputeForAttachment_MediaTypeRunOnIntoTheText_ProducesADifferentDigest()
+    {
+        // Act
+        var declared = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            EmailChunkAttachmentSource.Create(0, "text/csv"),
+            Passage);
+        var runOn = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            EmailChunkAttachmentSource.Create(0, "text/cs"),
+            "v" + Passage);
+
+        // Assert
+        Assert.NotEqual(declared, runOn);
+    }
+
+    /// <summary>Nothing can be identified from arguments that are not there.</summary>
+    [Fact]
+    public void ComputeForAttachment_MissingArgument_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() =>
+            EmailChunkContentHash.ComputeForAttachment(null!, PdfAtPositionZero, Passage));
+        Assert.Throws<ArgumentNullException>(() =>
+            EmailChunkContentHash.ComputeForAttachment(EmailChunkingRules.Current, null!, Passage));
+        Assert.Throws<ArgumentNullException>(() =>
+            EmailChunkContentHash.ComputeForAttachment(EmailChunkingRules.Current, PdfAtPositionZero, null!));
+    }
+
     public static TheoryData<EmailChunkingRules> RulesDifferingFromTheCurrentOnes()
     {
         var current = EmailChunkingRules.Current;
@@ -166,6 +342,21 @@ public sealed class EmailChunkContentHashTests
             Vary(minimumCharacterCount: current.MinimumCharacterCount + 1),
             Vary(overlapCharacterCount: current.OverlapCharacterCount + 1),
             Vary(sourceForm: EmailChunkSourceForm.OriginalText),
+            RulesWithSeparators(["\n"]),
+        ];
+    }
+
+    /// <summary>The same set without the source form, which is a fact about a body and not about a file.</summary>
+    public static TheoryData<EmailChunkingRules> RulesAnAttachmentPassageHangsOn()
+    {
+        var current = EmailChunkingRules.Current;
+
+        return
+        [
+            Vary(ruleSetVersion: current.RuleSetVersion + 1),
+            Vary(targetCharacterCount: current.TargetCharacterCount + 1),
+            Vary(minimumCharacterCount: current.MinimumCharacterCount + 1),
+            Vary(overlapCharacterCount: current.OverlapCharacterCount + 1),
             RulesWithSeparators(["\n"]),
         ];
     }

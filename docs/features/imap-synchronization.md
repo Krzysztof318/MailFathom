@@ -44,7 +44,8 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 starts one `AccountSynchronizationSupervisor` per configured account and supervises those supervisors; everything a
 run actually does belongs to the supervisor of the account it runs for.
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws what a run does after its folders have finished — the
-classification pass, the rules, and the cut that produces a message's passages — and in what order. A run also drains
+classification pass, the rules, the cut that produces a message's passages, and the reading of what its attachments say
+— and in what order. A run also drains
 the account's outbox there, which is what makes sending correct without anything watching for it;
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
@@ -1016,7 +1017,7 @@ readable by tools:
 | Switch | With it `false` |
 | --- | --- |
 | `Synchronize` | No run schedules the folder, so no connection is opened for it and nothing further of it is stored. |
-| `GenerateEmbeddings` | What is stored is never cut into passages and never reaches an embedding provider. |
+| `GenerateEmbeddings` | What is stored is never cut into passages, its attachments are never read, and nothing of it reaches an embedding provider. |
 | `VisibleToTools` | No MCP tool lists, searches, reads, or answers from the folder. |
 
 One role decides something beyond where the folder is too. A mapping of `SpecialUse: Junk` names the folder that

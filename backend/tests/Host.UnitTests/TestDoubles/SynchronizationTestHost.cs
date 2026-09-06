@@ -6,10 +6,15 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
@@ -26,6 +31,8 @@ using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Gating;
@@ -67,6 +74,9 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// </remarks>
 internal static class SynchronizationTestHost
 {
+    /// <summary>What a test asking the run to reach its attachment reading is bounded by: the defaults, with the switch on.</summary>
+    private static readonly EmailAttachmentTextBounds EnabledAttachmentTextBounds = EmailAttachmentTextBounds.Disabled with { IsEnabled = true };
+
     /// <summary>Configures one account whose folder aliases and remote paths are the same text, so a test names a folder once.</summary>
     internal static MailSynchronizationAccountOptions CreateAccount(string accountId, params string[] folders) => new()
     {
@@ -105,6 +115,11 @@ internal static class SynchronizationTestHost
     /// <param name="ruleEvaluationStore">Replaces the store a rule pass reads its candidates from; one with nothing to evaluate is the default.</param>
     /// <param name="classificationRunStore">Replaces the store the classification pass reads its outstanding run from; one with nothing outstanding is the default.</param>
     /// <param name="chunkingStore">Replaces the store the cut reads its candidates from; one with nothing awaiting passages is the default.</param>
+    /// <param name="attachmentTextStore">
+    /// Replaces the store the attachment reading reads its candidates from. Supplying one also turns attachment reading
+    /// on, because a run whose deployment left the switch off answers in one comparison and never reaches a store at
+    /// all — so a test that hands one over and got the default bounds would be watching a query that is never issued.
+    /// </param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -119,6 +134,7 @@ internal static class SynchronizationTestHost
         IMailRuleEvaluationStore? ruleEvaluationStore = null,
         ISpamClassificationRunStore? classificationRunStore = null,
         IStoredEmailChunkingStore? chunkingStore = null,
+        IStoredEmailAttachmentTextStore? attachmentTextStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -129,6 +145,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());
         services.AddSingleton(Substitute.For<IEmailContentStore>());
+        services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
         services.AddSingleton<IOwnerStoredContentLedger>(new InMemoryOwnerStoredContentLedger());
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());
@@ -289,6 +306,24 @@ internal static class SynchronizationTestHost
         services.AddSingleton(chunkingStore ?? CreateChunkingStoreWithNothingToCut());
         services.AddScoped<MailChunkingPass>();
 
+        // The reading of what the attachments of already-cut mail say is the run's last local step, behind the cut for
+        // the ordering the arrival pipeline is built on. A test that hands over no store gets the default bounds, which
+        // leave the reading off: the pass then answers in one comparison and reaches neither the store below nor any
+        // parser. Supplying one turns the reading on, which is the branch the two supervisor tests about this stage
+        // observe. Each collaborator is composed either way, because a pass that could not resolve one would fail the
+        // account run inside the supervisor's own catch rather than the assertion the test is about.
+        services.AddSingleton(attachmentTextStore is null ? EmailAttachmentTextBounds.Disabled : EnabledAttachmentTextBounds);
+        services.AddSingleton(attachmentTextStore ?? CreateAttachmentTextStoreWithNothingToRead());
+        services.AddSingleton(Substitute.For<IEmailAttachmentContentReader>());
+        services.AddSingleton(Substitute.For<IAttachmentTextExtractor>());
+        services.AddSingleton(Substitute.For<IEmailAttachmentImageDescriber>());
+        services.AddSingleton(new AttachmentTextExtractionOptions());
+        services.AddSingleton(Substitute.For<ISensitiveContentPostures>());
+        services.AddSingleton(Substitute.For<ISensitiveContentDerivationTelemetry>());
+        services.AddScoped<SensitiveContentDerivationGuard>();
+        services.AddScoped<EmailAttachmentTextDeriver>();
+        services.AddScoped<MailAttachmentTextPass>();
+
         // The history's retention pass rides the same run, and a supervisor resolves it from the same scope. These
         // tests configure no mail to evaluate, so it answers that there is nothing to erase.
         services.AddScoped<MailRuleHistoryRetention>();
@@ -332,6 +367,21 @@ internal static class SynchronizationTestHost
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
+
+        return store;
+    }
+
+    /// <summary>Answers that no message is awaiting a reading of its attachments, which is what a run these tests configure produces.</summary>
+    private static IStoredEmailAttachmentTextStore CreateAttachmentTextStoreWithNothingToRead()
+    {
+        var store = Substitute.For<IStoredEmailAttachmentTextStore>();
+
+        store.GetEmailsAwaitingAttachmentTextAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailAwaitingAttachmentText>>([]));
 
         return store;
     }

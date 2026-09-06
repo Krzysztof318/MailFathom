@@ -94,6 +94,12 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// single message can carry more text than a mailbox does in a month — and a message beyond this is bounded rather
     /// than refused: its opening is embedded and retrievable, and the length its text had is recorded on the message so
     /// that what was left out is a stored fact rather than something inferred from a chunk count.
+    /// <para>
+    /// It is charged twice per message and never more: once against the body's own text, and once against every
+    /// attachment of that message together, charged down in walk order. Handing it to each attachment in turn would
+    /// make it a per-text ceiling, and at the default attachment count one message could then cost twenty times the
+    /// figure named here.
+    /// </para>
     /// </remarks>
     [Range(1_000, 10_000_000)]
     public int MaxCharactersPerEmail { get; set; } = EmbeddingInputBound.DefaultMaximumCharacterCount;

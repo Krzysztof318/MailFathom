@@ -59,6 +59,13 @@ internal static class PersistenceConstraintNames
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
 
+    /// <summary>The queue of mail whose attachments nothing has read, which is read once per account run and is usually empty.</summary>
+    /// <remarks>
+    /// Filtered for the same reason the rule queue above is: in steady state every row of an account carries the stamp,
+    /// so an unfiltered index would be walked in full, once per run, for ever, to return nothing.
+    /// </remarks>
+    internal const string StoredEmailAwaitingAttachmentTextIndexName = "ix_stored_emails_awaiting_attachment_text";
+
     internal const string StoredEmailSenderIndexName = "ix_stored_emails_sender";
 
     internal const string StoredEmailToAddressesIndexName = "ix_stored_emails_to_addresses";
@@ -71,7 +78,39 @@ internal static class PersistenceConstraintNames
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
+    internal const string EmailAttachmentTextVectorIndexName = "ix_email_attachment_texts_search_vector";
+
+    /// <summary>The index covering every passage of one message, whichever text it was cut from.</summary>
+    /// <remarks>
+    /// Unfiltered, because the two indexes beside it are not: PostgreSQL uses a partial index only where the statement's
+    /// own predicate implies the index predicate, and the deletion that follows a message — an expunge, an owner
+    /// erasure, a junk verdict — asks for one message's chunks without saying anything about the attachment position.
+    /// Before the attachment split the unique pair covered the foreign key and EF's convention created no index of its
+    /// own; this restores the cover the split removed.
+    /// </remarks>
+    internal const string EmailChunkEmailIndexName = "ix_email_chunks_email";
+
+    /// <summary>The unique index over the ordinals of one message's body passages.</summary>
+    /// <remarks>
+    /// Filtered on the passages cut from the body, because a message with attachments has several texts and the
+    /// ordinals of each run from zero: a single index over the pair would report the first passage of the first
+    /// attachment as a duplicate of the first passage of the body.
+    /// </remarks>
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
+
+    /// <summary>The unique index over the ordinals of the passages cut from one attachment.</summary>
+    /// <remarks>
+    /// Named because a losing writer is recognized by the constraint its insert violated: two runs reading one
+    /// message's attachments at once resolve to the readings one of them committed rather than to a failure.
+    /// </remarks>
+    internal const string EmailChunkAttachmentOrdinalUniqueIndexName = "ix_email_chunks_email_attachment_ordinal";
+
+    /// <summary>The primary key over one message's attachment readings, one row per walk position.</summary>
+    /// <remarks>
+    /// Named for the reason the attachment ordinal index above is: the readings are replaced whole and re-inserted, so
+    /// a competing run losing that race violates this key and is retried rather than ending the account's run.
+    /// </remarks>
+    internal const string EmailAttachmentTextPrimaryKeyName = "PK_email_attachment_texts";
 
     /// <summary>The unique index over an embedding profile's identity, which is what makes activation idempotent.</summary>
     /// <remarks>

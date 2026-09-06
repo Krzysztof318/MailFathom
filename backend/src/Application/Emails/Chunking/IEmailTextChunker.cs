@@ -40,4 +40,25 @@ public interface IEmailTextChunker
         ExtractedEmailText text,
         EmailChunkingRules rules,
         EmbeddingInputBound bound);
+
+    /// <summary>Cuts the text one attachment yielded into chunks, in reading order, stopping at what one attachment may cost.</summary>
+    /// <param name="text">The text an extraction or a description derived from one attachment.</param>
+    /// <param name="rules">The boundaries to cut along, which are the message body's boundaries and not a second set.</param>
+    /// <param name="bound">How much of the text to cut, beyond which the attachment's remainder yields no passage.</param>
+    /// <param name="source">The attachment the passages are spans of.</param>
+    /// <returns>The chunks in reading order and what the ceiling left out, or an empty result when the attachment yielded no text.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The same walk, the same rules, and the same determinism as the body cut, which is the whole of what
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// means by one kind of passage: a passage out of a contract and a passage out of the note that carried it are
+    /// comparable because they were cut the same way and are embedded into the same space. What differs is the identity
+    /// each passage is stored under, which <paramref name="source" /> supplies, and the text being cut — the ordinals
+    /// and offsets returned here index this attachment's text and nothing else.
+    /// </remarks>
+    EmailChunkingResult DeriveAttachmentChunks(
+        string text,
+        EmailChunkingRules rules,
+        EmbeddingInputBound bound,
+        EmailChunkAttachmentSource source);
 }

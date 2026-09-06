@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
@@ -41,6 +42,9 @@ public sealed class EmailSpamClassifierTests
     private readonly IEmailContentStore contentStore = ContentStores.Substituted();
 
     private readonly IEmailChunkStore chunkStore = Substitute.For<IEmailChunkStore>();
+
+    private readonly IStoredEmailAttachmentTextStore attachmentTextStore =
+        Substitute.For<IStoredEmailAttachmentTextStore>();
 
     private readonly RecordingDerivedWorkGateTelemetry gateTelemetry = new();
 
@@ -160,10 +164,12 @@ public sealed class EmailSpamClassifierTests
 
     /// <summary>
     /// Ordering keeps derived data from being created for junk in the first place, so this reaches only mail that was
-    /// chunked and embedded before anybody scored it — which is what an on-demand run over an existing mailbox meets.
+    /// derived before anybody scored it — which is what an on-demand run over an existing mailbox meets. The attachment
+    /// readings go with the passages: a reading is a second durable copy of the same words, and one left behind is a
+    /// document's whole text still stored for a message the verdict called junk.
     /// </summary>
     [Fact]
-    public async Task ClassifyAsync_AVerdictOfSpam_RemovesThePassagesAndVectorsAlreadyDerivedFromTheMessage()
+    public async Task ClassifyAsync_AVerdictOfSpam_RemovesEverythingAlreadyDerivedFromTheMessage()
     {
         // Arrange
         this.chunkStore
@@ -184,6 +190,9 @@ public sealed class EmailSpamClassifierTests
         await this.chunkStore
             .Received(1)
             .DiscardChunksAsync(Arg.Any<IPersistenceSession>(), Occurrence, Arg.Any<CancellationToken>());
+        await this.attachmentTextStore
+            .Received(1)
+            .DiscardAttachmentTextAsync(Arg.Any<IPersistenceSession>(), Occurrence, Arg.Any<CancellationToken>());
         Assert.Equal([4], this.gateTelemetry.DiscardedPassageCounts);
     }
 
@@ -206,6 +215,10 @@ public sealed class EmailSpamClassifierTests
         // Assert
         Assert.NotEqual(SpamVerdict.Spam, Assert.Single(this.store.Saved).Verdict);
         await this.chunkStore.DidNotReceiveWithAnyArgs().DiscardChunksAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<CancellationToken>());
+        await this.attachmentTextStore.DidNotReceiveWithAnyArgs().DiscardAttachmentTextAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<StoredEmailId>(),
             Arg.Any<CancellationToken>());
@@ -519,6 +532,7 @@ public sealed class EmailSpamClassifierTests
             settingsReader,
             this.store,
             this.chunkStore,
+            this.attachmentTextStore,
             this.gateTelemetry,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,

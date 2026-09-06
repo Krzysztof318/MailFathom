@@ -201,10 +201,72 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailAttachmentTextEntity", b =>
+                {
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttachmentPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeclaredMediaType")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTimeOffset>("DerivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasComputedColumnSql("CASE WHEN \"Kind\" = 'Document' THEN to_tsvector('simple'::regconfig, coalesce(\"FileName\", '') || ' ' || coalesce(\"Text\", '')) END", true);
+
+                    b.Property<string>("Segments")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SensitiveContentStamp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text");
+
+                    b.HasKey("StoredEmailId", "AttachmentPosition");
+
+                    b.HasIndex("SearchVector")
+                        .HasDatabaseName("ix_email_attachment_texts_search_vector");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
+
+                    b.ToTable("email_attachment_texts", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("AttachmentPosition")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ContentHash")
                         .IsRequired()
@@ -236,9 +298,18 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("StoredEmailId")
+                        .HasDatabaseName("ix_email_chunks_email");
+
                     b.HasIndex("StoredEmailId", "Ordinal")
                         .IsUnique()
-                        .HasDatabaseName("ix_email_chunks_email_ordinal");
+                        .HasDatabaseName("ix_email_chunks_email_ordinal")
+                        .HasFilter("\"AttachmentPosition\" IS NULL");
+
+                    b.HasIndex("StoredEmailId", "AttachmentPosition", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("ix_email_chunks_email_attachment_ordinal")
+                        .HasFilter("\"AttachmentPosition\" IS NOT NULL");
 
                     b.ToTable("email_chunks", (string)null);
                 });
@@ -2292,6 +2363,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<int>("AttachmentCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("AttachmentTextDerivedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<long>("AttachmentTotalSizeOctets")
                         .HasColumnType("bigint");
 
@@ -2575,6 +2649,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasNullSortOrder(b.HasIndex("OwnerId", "MailboxAccountId", "ReceivedAt", "Id"), new[] { NullSortOrder.Unspecified, NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified });
 
+                    b.HasIndex(new[] { "OwnerId", "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_attachment_text")
+                        .HasDatabaseName("ix_stored_emails_awaiting_attachment_text")
+                        .HasFilter("\"AttachmentTextDerivedAt\" IS NULL AND \"AttachmentCount\" > 0");
+
                     b.HasIndex(new[] { "MailFolderId", "UidValidity", "Uid" }, "ix_stored_emails_awaiting_content")
                         .HasDatabaseName("ix_stored_emails_awaiting_content")
                         .HasFilter("\"ContentAvailability\" = 'AwaitingStorageHeadroom'");
@@ -2684,6 +2762,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailAttachmentTextEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
+                        .WithMany("AttachmentTexts")
+                        .HasForeignKey("StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoredEmail");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
@@ -3162,6 +3251,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
+                    b.Navigation("AttachmentTexts");
+
                     b.Navigation("Chunks");
 
                     b.Navigation("Content");

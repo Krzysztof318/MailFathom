@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
@@ -29,10 +30,11 @@ namespace MailFathom.Application.Spam;
 /// where the message lives.
 /// </para>
 /// <para>
-/// It writes one thing besides the classification, and only when the verdict is spam: the passages cut from the message
-/// and the vectors hanging off them are removed. Ordering classification ahead of chunking and embedding is what stops
-/// them being created for junk in the first place, so this reaches only mail that was chunked and embedded before
-/// anybody scored it — the case an on-demand run over an existing mailbox produces and the arrival path never does.
+/// It writes one thing besides the classification, and only when the verdict is spam: everything derived from the
+/// message's own content is removed — the passages cut from it, the vectors hanging off them, and the readings stored
+/// for its attachments. Ordering classification ahead of chunking and attachment reading is what stops them being
+/// created for junk in the first place, so this reaches only mail that was derived before anybody scored it — the case
+/// an on-demand run over an existing mailbox produces and the arrival path never does.
 /// </para>
 /// <para>
 /// Nothing it reads is loggable. The occurrence identifier, the folder alias, the outcome, and the verdict are safe to
@@ -50,6 +52,7 @@ public sealed class EmailSpamClassifier
     private readonly ISpamClassificationSettingsReader settingsReader;
     private readonly IEmailSpamClassificationStore classificationStore;
     private readonly IEmailChunkStore chunkStore;
+    private readonly IStoredEmailAttachmentTextStore attachmentTextStore;
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
     private readonly TimeProvider timeProvider;
@@ -64,6 +67,7 @@ public sealed class EmailSpamClassifier
     /// <param name="settingsReader">Answers what the occurrence's owner decided about their own mail.</param>
     /// <param name="classificationStore">Records the classification.</param>
     /// <param name="chunkStore">Removes the passages and vectors of a message the verdict calls junk.</param>
+    /// <param name="attachmentTextStore">Removes the attachment readings of a message the verdict calls junk.</param>
     /// <param name="gateTelemetry">Counts what a junk verdict had to remove, without describing any of it.</param>
     /// <param name="retryPolicy">Commits the record from a fresh read when a concurrent write conflicts.</param>
     /// <param name="timeProvider">Stamps the evaluation time.</param>
@@ -83,6 +87,7 @@ public sealed class EmailSpamClassifier
         ISpamClassificationSettingsReader settingsReader,
         IEmailSpamClassificationStore classificationStore,
         IEmailChunkStore chunkStore,
+        IStoredEmailAttachmentTextStore attachmentTextStore,
         IDerivedWorkGateTelemetry gateTelemetry,
         OptimisticConcurrencyRetryPolicy retryPolicy,
         TimeProvider timeProvider,
@@ -96,6 +101,7 @@ public sealed class EmailSpamClassifier
         ArgumentNullException.ThrowIfNull(settingsReader);
         ArgumentNullException.ThrowIfNull(classificationStore);
         ArgumentNullException.ThrowIfNull(chunkStore);
+        ArgumentNullException.ThrowIfNull(attachmentTextStore);
         ArgumentNullException.ThrowIfNull(gateTelemetry);
         ArgumentNullException.ThrowIfNull(retryPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -108,6 +114,7 @@ public sealed class EmailSpamClassifier
         this.settingsReader = settingsReader;
         this.classificationStore = classificationStore;
         this.chunkStore = chunkStore;
+        this.attachmentTextStore = attachmentTextStore;
         this.gateTelemetry = gateTelemetry;
         this.retryPolicy = retryPolicy;
         this.timeProvider = timeProvider;
@@ -182,12 +189,24 @@ public sealed class EmailSpamClassifier
                 await this.classificationStore.SaveAsync(session, classification, attemptCancellationToken);
 
                 // In the same transaction as the verdict that calls for it, so a crash never leaves a message recorded
-                // as junk while the vectors built from it are still retrievable. An attempt the retry policy replays
+                // as junk while what was derived from it is still retrievable. An attempt the retry policy replays
                 // reports what that attempt removed rather than the sum of every attempt, which is why the count is
                 // assigned rather than accumulated.
+                //
+                // The attachment readings go with the passages rather than after them: a reading is a second durable
+                // copy of the same words, so removing only what was cut from it would leave the document's whole text
+                // and the description of its pictures exactly where the verdict called for their removal.
                 discardedPassageCount = classification.Verdict is SpamVerdict.Spam
                     ? await this.chunkStore.DiscardChunksAsync(session, emailId, attemptCancellationToken)
                     : 0;
+
+                if (classification.Verdict is SpamVerdict.Spam)
+                {
+                    await this.attachmentTextStore.DiscardAttachmentTextAsync(
+                        session,
+                        emailId,
+                        attemptCancellationToken);
+                }
             },
             cancellationToken);
 

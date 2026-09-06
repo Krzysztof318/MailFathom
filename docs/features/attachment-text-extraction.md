@@ -1,6 +1,6 @@
 # Attachment text extraction
 
-<!-- describes: backend/src/Application/Emails/Extraction/Attachments/**, backend/src/Infrastructure/Documents/**, backend/src/Host/Configuration/Embeddings/AttachmentTextOptions.cs -->
+<!-- describes: backend/src/Application/Emails/Extraction/Attachments/**, backend/src/Application/Emails/Extraction/Images/**, backend/src/Application/Emails/AttachmentText/DerivedAttachmentText.cs, backend/src/Infrastructure/Documents/**, backend/src/Host/Configuration/Embeddings/AttachmentTextOptions.cs -->
 
 MailFathom reads the words inside a document somebody attached, so that a contract or an invoice is findable by what it
 says rather than only by the note it arrived with. `IAttachmentTextExtractor` is the one way that happens: it is handed
@@ -9,9 +9,17 @@ never with an exception raised by whatever read the document, and never with an 
 found". The one thing a caller does have to handle is a failure reading the stored content itself, which is about the
 attempt rather than about the document and is described under the posture below.
 
-Nothing in this release calls it yet. The pipeline that cuts and embeds what an attachment yields is separate work, and
-the switch deciding whether an attachment is read at all arrives with it. What exists today is the port, the parsers
-behind it, and every ceiling around them.
+What calls it is the account run's attachment-reading stage, which is off unless `Embeddings:AttachmentText:Enabled`
+says otherwise. That stage runs behind the passage cut, outside any transaction, and never on a read path — so no MCP
+call and no client request ever waits on a parser. What it does with the answer is
+[Message chunks](message-chunks.md): a document's text is cut into passages and embedded, and it joins the lexical index
+as a document of its own.
+
+A read also records **where each page, slide, or sheet begins** in the text it produced. That list is what turns a
+passage's offset into a place a citation can name, and it is written at extraction rather than re-derived later —
+re-cutting a mailbox after a boundary-rule change then reads the stored text and the stored boundaries, and opens no
+document again. A workbook records a boundary per sheet and not per cell range: a boundary per row would be tens of
+thousands of them for one exported table, which costs more to store than the text it points into.
 
 ## What is read, and what is only recognized
 
@@ -77,7 +85,7 @@ Every outcome is one of a closed set, and each is distinguishable from every oth
 | `ContainerBoundExceeded` | An archive passed its decompression total, its inflation ratio, its part count, its element depth, or — for a workbook — the number of entries its string table may hold, and for an OpenDocument file the number of pages one content part may declare | Treat it as an attachment worth looking at rather than a ceiling to raise, unless the document really is that large: a workbook of more than `MaxExtractedTextCharacters` distinct strings, or a spreadsheet of more than `MaxContainerParts` sheets, is stopped here rather than by the ceiling those keys name for their own outcome |
 | `Encrypted` | The document is password-protected and this system holds no password for it | Nothing automatic; no password is stored anywhere here |
 | `Malformed` | The bytes do not parse as the format they declare | Nothing; badly formed documents are expected of real mail |
-| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at |
+| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at — the message keeps no stamp and is read again on a later run |
 
 **`Encrypted` currently also answers for one document that is not locked.** A password-protected Open XML package is
 not an archive at all — the package is encrypted whole and wrapped in an OLE compound file — and that wrapper is what
@@ -106,6 +114,44 @@ number. #1682 is where that is tracked. An OpenDocument file holds one content p
 A "page" is what the format has one of: a PDF page, a presentation slide, an OpenDocument drawing page, and a sheet of
 either spreadsheet format each count as one. A word-processing document counts as one page whatever it prints as,
 because neither office format records pagination and reading one would mean laying the document out.
+
+## What a described picture reports, and what a message's own ceiling reports
+
+A picture is not read by a parser, so it carries a set of its own: `Described` where a description came back, and one of
+nine refusals where none did. The stored row names whichever word applies beside the word `Document` or
+`ImageDescription`, so the two sets never have to be told apart by guessing which one a value came from.
+
+| Outcome | What it means | What an operator or owner does |
+| --- | --- | --- |
+| `Described` | The provider answered, and the words it produced are the attachment's text | Nothing |
+| `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
+| `FormatNotSupported` | The octets are not one of the raster formats a request may carry | Nothing; the attachment is not a picture this can send |
+| `FormatExcluded` | The octets are a markup document — an SVG among them — rather than a raster picture | Nothing; rendering one is executing a document somebody else composed |
+| `ImageTooLarge` | The attachment holds more octets than one of the two ceilings it passes: `Embeddings:AttachmentText:MaxInputOctets`, which bounds what any attachment may cost to read, or `Chat:MaxRequestImageOctets`, which bounds what one request may carry | Raise whichever of the two refused it — the attachment ceiling is checked first, and neither constrains the other — deliberately, having seen what one request then costs |
+| `PixelGridTooLarge` | The image's header declares a grid larger than `Embeddings:ImageDescription:MaxPixels` | Raise the ceiling, or treat a file declaring an enormous grid as one worth looking at |
+| `ImageUnreadable` | The octets name a supported format and do not hold one | Nothing; truncated and malformed pictures are expected of real mail |
+| `ProviderTimedOut` | The request outlived the time one chat call is allowed | Raise the timeout, or accept that the message is read again on a later run |
+| `ProviderUnavailable` | The provider did not answer, and asking again later may produce one | Nothing; the message is read again on a later run |
+| `ProviderRefused` | The provider answered by refusing, and repeating cannot change that | Read the log line: a rejected credential is an operator's to fix, a refused request is not |
+
+`ProviderTimedOut` and `ProviderUnavailable` are the two refusals here that leave the message unsettled, so it is
+offered again on the next account run. The extractor's own `TimedOut` is the third outcome that does, for the same
+reason: a deadline reached under load says nothing about the file, while `Malformed` and `Encrypted` are properties of
+the octets that repeating cannot change. Every other refusal settles the message, including the ones a configuration
+change lifts — raising a ceiling or turning the switch on therefore changes what arrives next rather than what is
+already stored.
+
+**A message's own octet ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written
+for an attachment nothing was offered at all. `Embeddings:AttachmentText:MaxInputOctetsPerEmail` bounds what one
+message may cost to read, and an attachment past it is recorded as having yielded nothing rather than left absent —
+so an owner asking why their contract was not searched is given the ceiling as the answer. The row carries no text
+and no pages, and neither index holds anything for it.
+
+`MaxAttachmentsPerEmail` is the ceiling that writes nothing at all, because it bounds the walk rather than what the
+walk decides: a message declaring more parts than the deployment reads has the rest neither opened nor recorded, and
+what says how many that was is the attachment count on the message beside the rows actually stored. Opening each of
+them only to write a refusal down would let a sender choose how many MIME parts this stage reads and how many rows
+it stores.
 
 ## The posture every read is performed under
 

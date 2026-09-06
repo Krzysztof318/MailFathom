@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
@@ -942,8 +943,9 @@ public sealed class AccountSynchronizationSupervisorTests
 
     /// <summary>
     /// The arrival pipeline's order, asserted where it is composed. Classification runs first so that every later stage
-    /// reads a verdict instead of deciding without one, the rules run over what it did not settle, and the cut runs last
-    /// because a rule may still move the message into a folder mapped differently from the one it arrived in.
+    /// reads a verdict instead of deciding without one, the rules run over what it did not settle, the cut runs behind
+    /// them because a rule may still move the message into a folder mapped differently from the one it arrived in, and
+    /// the attachment reading runs behind the cut because it is the one stage that parses octets a stranger composed.
     /// </summary>
     /// <remarks>
     /// Classification is a seam in this release rather than a running job — nothing scores a message because it arrived,
@@ -952,11 +954,11 @@ public sealed class AccountSynchronizationSupervisorTests
     /// that ships now.
     /// </remarks>
     [Fact]
-    public async Task RunAsync_EveryRun_ClassifiesThenEvaluatesRulesThenCutsPassages()
+    public async Task RunAsync_EveryRun_ClassifiesThenEvaluatesRulesThenCutsPassagesThenReadsAttachments()
     {
         // Arrange
         var localSteps = new ConcurrentQueue<string>();
-        var cutReached = new TaskCompletionSource();
+        var readingReached = new TaskCompletionSource();
         var classificationRunStore = Substitute.For<ISpamClassificationRunStore>();
         classificationRunStore
             .FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
@@ -985,22 +987,74 @@ public sealed class AccountSynchronizationSupervisorTests
             .Returns(_ =>
             {
                 localSteps.Enqueue("cut");
-                cutReached.TrySetResult();
 
                 return Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]);
+            });
+        var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
+        attachmentTextStore
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("attachments");
+                readingReached.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<EmailAwaitingAttachmentText>>([]);
             });
         await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
             Substitute.For<IMailboxSessionFactory>(),
             ruleEvaluationStore: ruleStore,
             classificationRunStore: classificationRunStore,
-            chunkingStore: chunkingStore);
+            chunkingStore: chunkingStore,
+            attachmentTextStore: attachmentTextStore);
 
         // Act
-        await harness.SuperviseUntilAsync(cutReached.Task);
+        await harness.SuperviseUntilAsync(readingReached.Task);
 
         // Assert
-        Assert.Equal(["classification", "rules", "cut"], localSteps.Take(3));
+        Assert.Equal(["classification", "rules", "cut", "attachments"], localSteps.Take(4));
+    }
+
+    /// <summary>The reading reaches no mail server either, so failing one must not make the account fetch its mail less often.</summary>
+    [Fact]
+    public async Task RunAsync_ReadingAttachmentsFails_DoesNotDeferTheAccountsNextRun()
+    {
+        // Arrange
+        var passFailed = new TaskCompletionSource();
+        var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
+        attachmentTextStore
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<EmailAwaitingAttachmentText>>>(_ =>
+            {
+                passFailed.TrySetResult();
+
+                throw new InvalidOperationException("the reading failed");
+            });
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            attachmentTextStore: attachmentTextStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(passFailed.Task);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains(
+                "Reading the attachments of the mail of account primary ended unexpectedly",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("runs in a row", StringComparison.Ordinal));
     }
 
     /// <summary>The cut reaches no mail server either, so failing one must not make the account fetch its mail less often.</summary>
@@ -1272,6 +1326,7 @@ public sealed class AccountSynchronizationSupervisorTests
         IMailRuleEvaluationStore? ruleEvaluationStore = null,
         ISpamClassificationRunStore? classificationRunStore = null,
         IStoredEmailChunkingStore? chunkingStore = null,
+        IStoredEmailAttachmentTextStore? attachmentTextStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -1288,6 +1343,7 @@ public sealed class AccountSynchronizationSupervisorTests
             ruleEvaluationStore,
             classificationRunStore,
             chunkingStore,
+            attachmentTextStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

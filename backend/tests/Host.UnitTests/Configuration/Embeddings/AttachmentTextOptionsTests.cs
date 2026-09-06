@@ -90,6 +90,12 @@ public sealed class AttachmentTextOptionsTests
     [InlineData(nameof(AttachmentTextOptions.MaxContainerParts), 200_000L)]
     [InlineData(nameof(AttachmentTextOptions.MaxElementDepth), 1L)]
     [InlineData(nameof(AttachmentTextOptions.MaxElementDepth), 20_000L)]
+    [InlineData(nameof(AttachmentTextOptions.MaxAttachmentsPerEmail), 0L)]
+    [InlineData(nameof(AttachmentTextOptions.MaxAttachmentsPerEmail), 10_000L)]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerEmail), 512L)]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerEmail), 16L * 1024 * 1024 * 1024)]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun), 512L)]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun), 4096L * 1024 * 1024 * 1024)]
     public void Validate_ACeilingOutsideTheRangeItIsMeaningfulIn_IsRefused(string key, long value)
     {
         // Arrange
@@ -195,6 +201,91 @@ public sealed class AttachmentTextOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(nameof(AttachmentTextOptions.Timeout)));
     }
 
+    /// <summary>
+    /// The switch is what an operator turns on, so what it maps onto has to be the switch and the three numbers the
+    /// pass spends — a block bound correctly and then read as disabled would leave a deployment configured and silent.
+    /// </summary>
+    [Fact]
+    public void ToAttachmentTextBounds_ABlockWritingTheMessageAndRunCeilings_CarriesEachOfThemOntoThePass()
+    {
+        // Arrange
+        var settings = new AttachmentTextOptions
+        {
+            Enabled = true,
+            MaxAttachmentsPerEmail = 5,
+            MaxInputOctetsPerEmail = 32L * 1024 * 1024,
+            MaxInputOctetsPerAccountRun = 512L * 1024 * 1024,
+        };
+
+        // Act
+        var bounds = settings.ToAttachmentTextBounds();
+
+        // Assert
+        Assert.True(bounds.IsEnabled);
+        Assert.Equal(5, bounds.MaxAttachmentsPerEmail);
+        Assert.Equal(32L * 1024 * 1024, bounds.MaxInputOctetsPerEmail);
+        Assert.Equal(512L * 1024 * 1024, bounds.MaxInputOctetsPerAccountRun);
+    }
+
+    /// <summary>A deployment that wrote nothing reads no attachment, which is what ADR 0029 decides for an upgrade.</summary>
+    [Fact]
+    public void ToAttachmentTextBounds_ABlockNobodyWrote_ReadsNoAttachmentAtAll()
+    {
+        // Act
+        var bounds = new AttachmentTextOptions().ToAttachmentTextBounds();
+
+        // Assert
+        Assert.False(bounds.IsEnabled);
+    }
+
+    /// <summary>
+    /// The three octet ceilings are nested rather than independent. An attachment larger than what its message may
+    /// spend, or a message larger than what its run may, is refused by every run for ever — a deployment that looks
+    /// configured and reads nothing — so the order is refused at startup rather than found as mail nobody can search.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerEmail))]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun))]
+    public void Validate_ACeilingSmallerThanTheOneItHasToContain_IsRefused(string key)
+    {
+        // Arrange
+        var settings = new AttachmentTextOptions
+        {
+            MaxInputOctets = 16L * 1024 * 1024,
+            MaxInputOctetsPerEmail = key == nameof(AttachmentTextOptions.MaxInputOctetsPerEmail)
+                ? 8L * 1024 * 1024
+                : 32L * 1024 * 1024,
+            MaxInputOctetsPerAccountRun = key == nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun)
+                ? 16L * 1024 * 1024
+                : 64L * 1024 * 1024,
+        };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.MemberNames.Contains(key));
+    }
+
+    /// <summary>The three written equal is the tightest arrangement that still reads, so it is accepted.</summary>
+    [Fact]
+    public void Validate_TheThreeOctetCeilingsWrittenEqual_IsAccepted()
+    {
+        // Arrange
+        var settings = new AttachmentTextOptions
+        {
+            MaxInputOctets = 16L * 1024 * 1024,
+            MaxInputOctetsPerEmail = 16L * 1024 * 1024,
+            MaxInputOctetsPerAccountRun = 16L * 1024 * 1024,
+        };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(AttachmentTextOptions settings) =>
         [.. settings.Validate(new ValidationContext(settings))];
 
@@ -220,6 +311,25 @@ public sealed class AttachmentTextOptionsTests
 
             case nameof(AttachmentTextOptions.MaxContainerParts):
                 settings.MaxContainerParts = (int)value;
+                break;
+
+            case nameof(AttachmentTextOptions.MaxAttachmentsPerEmail):
+                settings.MaxAttachmentsPerEmail = (int)value;
+                break;
+
+            // The two per-scope octet ceilings are written with everything beneath them, so the value under test is the
+            // only thing the ordering check could complain about — and it cannot, because writing them down satisfies
+            // it. Without that, a value below the floor also inverts the order, the order error names the same member
+            // the range error would, and deleting the floor from the validator leaves the assertion green.
+            case nameof(AttachmentTextOptions.MaxInputOctetsPerEmail):
+                settings.MaxInputOctets = Math.Min(settings.MaxInputOctets, value);
+                settings.MaxInputOctetsPerEmail = value;
+                break;
+
+            case nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun):
+                settings.MaxInputOctets = Math.Min(settings.MaxInputOctets, value);
+                settings.MaxInputOctetsPerEmail = Math.Min(settings.MaxInputOctetsPerEmail, value);
+                settings.MaxInputOctetsPerAccountRun = value;
                 break;
 
             default:

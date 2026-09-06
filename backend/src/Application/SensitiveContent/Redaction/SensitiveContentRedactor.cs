@@ -79,7 +79,9 @@ public sealed class SensitiveContentRedactor
 
         var findings = await this.CollectFindingsAsync(analyzed, cancellationToken);
 
-        return RedactedText.Create(Apply(analyzed, findings), findings, text.Length - analyzed.Length);
+        var applied = Apply(analyzed, findings);
+
+        return RedactedText.Create(applied.Text, findings, text.Length - analyzed.Length, applied.Placements);
     }
 
     /// <summary>Finds where to cut an over-long text so the cut does not fall inside a character.</summary>
@@ -92,26 +94,35 @@ public sealed class SensitiveContentRedactor
         char.IsHighSurrogate(text[ceiling - 1]) ? ceiling - 1 : ceiling;
 
     /// <summary>Applies findings to the analyzed text, merging every overlap so no covered character survives.</summary>
-    private static string Apply(string analyzed, IReadOnlyList<SensitiveContentFinding> ordered)
+    /// <remarks>
+    /// It reports where each placeholder ended up as it goes, because that is knowledge only this walk has: a caller
+    /// holding the two texts alone cannot tell which characters moved, and an offset recorded against the analyzed text
+    /// — a page boundary inside an attachment — would have to be dropped rather than followed.
+    /// </remarks>
+    private static AppliedRedaction Apply(string analyzed, IReadOnlyList<SensitiveContentFinding> ordered)
     {
         if (ordered.Count == 0)
         {
-            return analyzed;
+            return new AppliedRedaction(analyzed, []);
         }
 
         var redacted = new StringBuilder(analyzed.Length);
+        var placements = new List<RedactedPlacement>(ordered.Count);
         var cursor = 0;
 
         foreach (var region in MergeRegions(ordered))
         {
+            var placeholder = SensitiveContentPlaceholder.For(region.Category);
+
             redacted.Append(analyzed, cursor, region.Span.Start - cursor);
-            redacted.Append(SensitiveContentPlaceholder.For(region.Category));
+            redacted.Append(placeholder);
+            placements.Add(new RedactedPlacement(region.Span.Start, region.Span.Length, placeholder.Length));
             cursor = region.Span.End;
         }
 
         redacted.Append(analyzed, cursor, analyzed.Length - cursor);
 
-        return redacted.ToString();
+        return new AppliedRedaction(redacted.ToString(), placements);
     }
 
     /// <summary>Collapses overlapping findings into the regions one placeholder each replaces.</summary>
@@ -242,4 +253,7 @@ public sealed class SensitiveContentRedactor
     }
 
     private readonly record struct RedactedRegion(SensitiveContentSpan Span, SensitiveContentCategory Category);
+
+    /// <summary>One application of the findings: the text it produced, and where each placeholder stands in it.</summary>
+    private readonly record struct AppliedRedaction(string Text, IReadOnlyList<RedactedPlacement> Placements);
 }

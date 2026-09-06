@@ -634,6 +634,50 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.InputTooLarge, result.Outcome);
     }
 
+    /// <summary>The page count a document declares is the sender's, and one boundary is stored per page.</summary>
+    /// <remarks>
+    /// A file well inside the input ceiling can name page objects that carry nothing, so the number of them is bounded
+    /// by the same ceiling the archive readers hold their own pages to: without it a small attachment would inflate
+    /// into an arbitrarily long boundary document stored against its row.
+    /// </remarks>
+    [Fact]
+    public async Task ExtractTextAsync_APdfDeclaringMorePagesThanAContainerMayHold_RefusesIt()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxContainerParts = 2 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("One", "Two", "Three"));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
+    /// <summary>The ceiling is a refusal past it rather than a narrowing of what an ordinary document yields.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfWithinTheContainerCeiling_ReadsItWholeAndRecordsEveryPage()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxContainerParts = 3 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("One", "Two", "Three"));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal(3, result.Text!.Segments.Count);
+    }
+
     /// <summary>A measured size is a second reading of the same bytes rather than a guarantee, so the copy is bounded too.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnAttachmentLongerThanItsDescriptionSays_RefusesItWhileItIsBeingCopied()
@@ -1099,6 +1143,125 @@ public sealed class BoundedAttachmentTextExtractorTests
             new BoundedAttachmentTextExtractor(Bounds(), new FakeTimeProvider()).ExtractTextAsync(
                 attachment,
                 caller.Token));
+    }
+
+    /// <summary>
+    /// The coordinate half of a citation. Every place the walk opened is recorded with the offset it began at, so a
+    /// passage cut later is resolved to a page by reading the boundaries rather than by parsing the document again —
+    /// which is what makes re-cutting after a boundary-rule change cost nothing at the parser.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfOfSeveralPages_RecordsWhereEachPageBeginsInTheTextItYielded()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "contract.pdf",
+            DocumentFixtures.Pdf("The roof is replaced by March", "Payment falls due on completion"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        var segments = result.Text?.Segments ?? [];
+        Assert.Equal([1, 2], segments.Select(segment => segment.Number));
+        Assert.All(segments, segment => Assert.Equal(AttachmentTextSegmentKind.Page, segment.Kind));
+        Assert.StartsWith(
+            "Payment falls due",
+            result.Text!.Text[segments[1].StartOffset..],
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A boundary records where a page began, never that words were found there, so a page that carried none still
+    /// takes one. Skipping it would shift every later page's number by one and send a citation to the wrong place.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_APdfWhoseMiddlePageIsEmpty_StillRecordsThatPagesBoundary()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/pdf",
+            "scan.pdf",
+            DocumentFixtures.Pdf("A covering note", string.Empty, "A closing note"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal([1, 2, 3], (result.Text?.Segments ?? []).Select(segment => segment.Number));
+    }
+
+    /// <summary>A word-processing document records no pagination, so it is one place beginning where the text does.</summary>
+    [Theory]
+    [InlineData("application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+    [InlineData("application/vnd.oasis.opendocument.text")]
+    public async Task ExtractTextAsync_AWordProcessingDocument_RecordsOnePlaceCoveringTheWholeOfIt(string mediaType)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            "letter",
+            SingleParagraphOf(mediaType));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        var segment = Assert.Single(result.Text?.Segments ?? []);
+        Assert.Equal(AttachmentTextSegmentKind.Page, segment.Kind);
+        Assert.Equal(1, segment.Number);
+        Assert.Equal(0, segment.StartOffset);
+    }
+
+    /// <summary>A citation into a deck names a slide, which is the format's own word for the place it points at.</summary>
+    [Theory]
+    [InlineData("application/vnd.openxmlformats-officedocument.presentationml.presentation")]
+    [InlineData("application/vnd.oasis.opendocument.presentation")]
+    public async Task ExtractTextAsync_APresentation_RecordsEachSlideAsASlide(string mediaType)
+    {
+        // Arrange
+        var content = mediaType.Contains("oasis", StringComparison.Ordinal)
+            ? DocumentFixtures.OpenDocumentPresentation("Opening the quarter", "Closing the quarter")
+            : DocumentFixtures.Presentation("Opening the quarter", "Closing the quarter");
+        await using var attachment = new FakeOpenedEmailAttachment(mediaType, "review", content);
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        var segments = result.Text?.Segments ?? [];
+        Assert.Equal([1, 2], segments.Select(segment => segment.Number));
+        Assert.All(segments, segment => Assert.Equal(AttachmentTextSegmentKind.Slide, segment.Kind));
+        Assert.StartsWith(
+            "Closing the quarter",
+            result.Text!.Text[segments[1].StartOffset..],
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A citation into a workbook names a sheet. A cell range would be finer and is deliberately not recorded: a
+    /// boundary per row would be tens of thousands of them for one exported table, which costs more to store than the
+    /// text it points into.
+    /// </summary>
+    [Theory]
+    [InlineData("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+    [InlineData("application/vnd.oasis.opendocument.spreadsheet")]
+    public async Task ExtractTextAsync_AWorkbook_RecordsEachSheetAsASheet(string mediaType)
+    {
+        // Arrange
+        var content = mediaType.Contains("oasis", StringComparison.Ordinal)
+            ? DocumentFixtures.OpenDocumentSpreadsheet(["Opening balance"], ["Closing balance"])
+            : DocumentFixtures.Workbook(["Opening balance"], ["Closing balance"]);
+        await using var attachment = new FakeOpenedEmailAttachment(mediaType, "ledger", content);
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        var segments = result.Text?.Segments ?? [];
+        Assert.Equal([1, 2], segments.Select(segment => segment.Number));
+        Assert.All(segments, segment => Assert.Equal(AttachmentTextSegmentKind.Sheet, segment.Kind));
     }
 
     /// <summary>Builds the same one-paragraph document in whichever format the media type names.</summary>

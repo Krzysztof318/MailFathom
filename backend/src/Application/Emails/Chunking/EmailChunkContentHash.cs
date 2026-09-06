@@ -30,6 +30,16 @@ public readonly record struct EmailChunkContentHash
     /// <summary>Names the scheme in the digest itself, so a later encoding cannot collide with this one.</summary>
     private const string HashDomain = "mailfathom.email-chunk.v1";
 
+    /// <summary>Names the scheme a passage cut from an attachment is identified under.</summary>
+    /// <remarks>
+    /// A domain of its own rather than a field added to the body encoding, which is what makes taking
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
+    /// cost a delivered mailbox nothing: a body passage's digest is the digest it already had, byte for byte, so no
+    /// stored vector moves and no mailbox is re-billed at a provider's rate. The two kinds still cannot collide,
+    /// because the domain is the first thing either encoding writes.
+    /// </remarks>
+    private const string AttachmentHashDomain = "mailfathom.email-attachment-chunk.v1";
+
     private EmailChunkContentHash(string value) => this.Value = value;
 
     /// <summary>Gets the digest as sixty-four lowercase hexadecimal characters.</summary>
@@ -60,19 +70,44 @@ public readonly record struct EmailChunkContentHash
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
         CanonicalDigest.AppendText(digest, HashDomain);
-        CanonicalDigest.AppendNumber(digest, rules.RuleSetVersion);
-        CanonicalDigest.AppendNumber(digest, rules.TargetCharacterCount);
-        CanonicalDigest.AppendNumber(digest, rules.MinimumCharacterCount);
-        CanonicalDigest.AppendNumber(digest, rules.OverlapCharacterCount);
+        AppendBounds(digest, rules);
         CanonicalDigest.AppendNumber(digest, (int)rules.SourceForm);
         CanonicalDigest.AppendNumber(digest, isDerivedFromLossyHtml ? 1 : 0);
-        CanonicalDigest.AppendNumber(digest, rules.BoundarySeparators.Count);
+        AppendSeparators(digest, rules);
+        CanonicalDigest.AppendText(digest, text);
 
-        foreach (var separator in rules.BoundarySeparators)
-        {
-            CanonicalDigest.AppendText(digest, separator);
-        }
+        return new EmailChunkContentHash(Convert.ToHexStringLower(digest.GetHashAndReset()));
+    }
 
+    /// <summary>Computes the identity of one passage cut out of an attachment.</summary>
+    /// <param name="rules">The boundary rules the passage was cut to.</param>
+    /// <param name="source">The attachment the passage is a span of.</param>
+    /// <param name="text">The passage's own text.</param>
+    /// <returns>The passage's content hash.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The two fields a body passage carries that an attachment passage does not are absent rather than written as
+    /// defaults: the source form names which reading of a <em>body</em> was cut, and the lossy marker names text
+    /// inferred from a message's markup. Neither is a fact about a file, and encoding either as a zero would publish an
+    /// answer to a question that was never asked. What replaces them is what the attachment actually is — its walk
+    /// position and the media type that decided which parser read it.
+    /// </remarks>
+    public static EmailChunkContentHash ComputeForAttachment(
+        EmailChunkingRules rules,
+        EmailChunkAttachmentSource source,
+        string text)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(text);
+
+        using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        CanonicalDigest.AppendText(digest, AttachmentHashDomain);
+        AppendBounds(digest, rules);
+        CanonicalDigest.AppendNumber(digest, source.Position);
+        CanonicalDigest.AppendText(digest, source.DeclaredMediaType);
+        AppendSeparators(digest, rules);
         CanonicalDigest.AppendText(digest, text);
 
         return new EmailChunkContentHash(Convert.ToHexStringLower(digest.GetHashAndReset()));
@@ -99,4 +134,24 @@ public readonly record struct EmailChunkContentHash
 
     /// <inheritdoc />
     public override string ToString() => this.Value;
+
+    /// <summary>Writes the numeric bounds both encodings share, in the order both have always written them.</summary>
+    private static void AppendBounds(IncrementalHash digest, EmailChunkingRules rules)
+    {
+        CanonicalDigest.AppendNumber(digest, rules.RuleSetVersion);
+        CanonicalDigest.AppendNumber(digest, rules.TargetCharacterCount);
+        CanonicalDigest.AppendNumber(digest, rules.MinimumCharacterCount);
+        CanonicalDigest.AppendNumber(digest, rules.OverlapCharacterCount);
+    }
+
+    /// <summary>Writes the separator ladder, length-prefixed by its own count so the encoding stays one-to-one.</summary>
+    private static void AppendSeparators(IncrementalHash digest, EmailChunkingRules rules)
+    {
+        CanonicalDigest.AppendNumber(digest, rules.BoundarySeparators.Count);
+
+        foreach (var separator in rules.BoundarySeparators)
+        {
+            CanonicalDigest.AppendText(digest, separator);
+        }
+    }
 }

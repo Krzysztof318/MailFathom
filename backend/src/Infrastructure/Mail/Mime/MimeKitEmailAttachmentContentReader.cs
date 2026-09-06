@@ -66,6 +66,78 @@ internal sealed class MimeKitEmailAttachmentContentReader : IEmailAttachmentCont
         return await OpenParsedAsync(content, attachmentPosition, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<OpenedEmailAttachmentWalkResult> OpenWalkAsync(
+        StoredEmailContent content,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        await using var structuralPass = RawMimeStream.Open(content.RawMime);
+
+        var exceededLimit = await MimeStructureLimitReader.FindExceededLimitAsync(
+            structuralPass,
+            this.structuralLimits,
+            cancellationToken);
+
+        if (exceededLimit != ExceededMimeStructureLimit.None)
+        {
+            return OpenedEmailAttachmentWalkResult.Unreadable();
+        }
+
+        return await OpenWalkOverParsedAsync(content, cancellationToken);
+    }
+
+    /// <summary>Parses the message once and hands the whole walk to the caller, or disposes everything it built.</summary>
+    /// <remarks>
+    /// The same ownership transfer <see cref="OpenParsedAsync" /> performs, one level up: the walk becomes the owner on
+    /// the single path that succeeds, and every other path releases both here.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The walk is the returned value and owns the parse; its caller disposes it, which is what the port's IAsyncDisposable contract states.")]
+    private static async Task<OpenedEmailAttachmentWalkResult> OpenWalkOverParsedAsync(
+        StoredEmailContent content,
+        CancellationToken cancellationToken)
+    {
+        var parsingPass = RawMimeStream.Open(content.RawMime);
+        MimeMessage? message = null;
+
+        try
+        {
+            message = await MimeMessage.LoadAsync(
+                ParserOptions.Default,
+                parsingPass,
+                persistent: true,
+                cancellationToken);
+
+            var walk = new MimeAttachmentWalk(
+                message,
+                parsingPass,
+                MimeAttachmentClassifier.FindAttachmentParts(message));
+
+            message = null;
+            parsingPass = null;
+
+            return OpenedEmailAttachmentWalkResult.Opened(walk);
+        }
+        catch (FormatException)
+        {
+            return OpenedEmailAttachmentWalkResult.Unreadable();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return OpenedEmailAttachmentWalkResult.Unreadable();
+        }
+        finally
+        {
+            message?.Dispose();
+
+            if (parsingPass is not null)
+            {
+                await parsingPass.DisposeAsync();
+            }
+        }
+    }
+
     /// <summary>Parses the message and opens the part at one position, or disposes everything it built.</summary>
     /// <remarks>
     /// Ownership of the parse moves to the opened attachment only on the one path that succeeds. Every other path

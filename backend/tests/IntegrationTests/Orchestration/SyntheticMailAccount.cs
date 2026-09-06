@@ -102,6 +102,7 @@ internal sealed class SyntheticMailAccount(
         "content-store",
         "convergence-inbox",
         "createdarchive",
+        "email-attachment-texts",
         "email-chunks",
         "email-chunks-unembedded",
         "email-embeddings",

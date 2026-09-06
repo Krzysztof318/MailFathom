@@ -29,6 +29,12 @@ namespace MailFathom.Infrastructure.Documents;
 /// ceiling on the octets that arrive and by a timeout observed between pages, and a page whose content stream inflates
 /// enormously is bounded by neither. Issue #1684 is where that gap is tracked.
 /// </para>
+/// <para>
+/// The one part-count bound that does reach here is the page count itself, refused against the same
+/// <see cref="AttachmentTextExtractionOptions.MaxContainerParts" /> the archive readers hold their pages to: a page
+/// costs a recorded boundary whether or not it carried a word, so the number of them a sender may declare is bounded
+/// before the walk rather than left to the input ceiling.
+/// </para>
 /// </remarks>
 internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions options)
 {
@@ -36,17 +42,33 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
     /// <param name="content">The attachment's octets, positioned at the start.</param>
     /// <param name="cancellationToken">Cancels the read between pages.</param>
     /// <returns>What the document yielded.</returns>
-    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the output ceiling is crossed.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the output ceiling is crossed, or when the document declares more pages than one container may hold.</exception>
     public ExtractedAttachmentText Read(Stream content, CancellationToken cancellationToken)
     {
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
         var pagesWithoutText = new List<int>();
+        var segments = new List<AttachmentTextSegment>();
 
         using var document = PdfDocument.Open(content, ReadOnlyParsingOptions());
+
+        // How many pages the document declares is the sender's, and one segment is recorded per page below, so without
+        // a ceiling a file well inside the input bound could name hundreds of thousands of near-empty page objects and
+        // have every one of them stored in this attachment's boundary document. The archive readers bound their own
+        // page counts by the same number, each of their pages being a part of the container.
+        if (document.NumberOfPages > options.MaxContainerParts)
+        {
+            throw new AttachmentTextExtractionStoppedException(
+                AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+        }
 
         for (var page = 1; page <= document.NumberOfPages; page++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Recorded before the page's characters are added, and for every page rather than only the ones that
+            // carried words: the boundary is what a later passage's offset is resolved against, and a page skipped
+            // here would move every passage after it onto a page it was not read from.
+            segments.Add(new AttachmentTextSegment(AttachmentTextSegmentKind.Page, page, Label: null, text.Length));
 
             var pageText = ContentOrderTextExtractor.GetText(document.GetPage(page));
 
@@ -60,7 +82,7 @@ internal sealed class PdfAttachmentTextReader(AttachmentTextExtractionOptions op
             text.EndLine();
         }
 
-        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText);
+        return new ExtractedAttachmentText(text.ToText(), document.NumberOfPages, pagesWithoutText, segments);
     }
 
     /// <summary>Builds the options every PDF here is opened under.</summary>

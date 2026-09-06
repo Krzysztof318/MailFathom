@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
@@ -120,6 +121,7 @@ internal sealed class SpamClassificationHarness
             settingsReader,
             this.Classifications,
             Substitute.For<IEmailChunkStore>(),
+            Substitute.For<IStoredEmailAttachmentTextStore>(),
             new RecordingDerivedWorkGateTelemetry(),
             commitPolicy,
             this.Clock);

@@ -181,6 +181,119 @@ public sealed class MimeKitEmailAttachmentContentReaderTests
         Assert.True(result.ContentIsUnreadable);
     }
 
+    /// <summary>
+    /// The walk parses once and hands out views, so disposing one attachment must leave every later position readable.
+    /// </summary>
+    /// <remarks>
+    /// This is the one ownership in the tree that is inverted — the walk releases the parse and a walked attachment
+    /// releases nothing — and the deriver disposes each attachment inside its loop before opening the next position.
+    /// A view that released the shared parse would make every position after the first unreadable, which reaches a
+    /// mailbox as a spurious repair request and an abandoned message rather than as a failing test.
+    /// </remarks>
+    [Fact]
+    public async Task OpenWalkAsync_APositionOpenedAfterAnEarlierOneWasDisposed_StillReadsItsOwnOctets()
+    {
+        // Arrange
+        var content = MessageAttaching(
+            ("first.txt", "text/plain", "first"),
+            ("second.txt", "text/plain", "second"));
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(StructuralLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        await using var walk = walkResult.Walk!;
+
+        await using (var first = (await walk.OpenAsync(0, TestContext.Current.CancellationToken)).Attachment!)
+        {
+            Assert.Equal("first.txt", first.Description.FileName?.Value);
+        }
+
+        await using var second = (await walk.OpenAsync(1, TestContext.Current.CancellationToken)).Attachment!;
+        using var written = new MemoryStream();
+        await second.WriteContentToAsync(written, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, walk.Count);
+        Assert.Equal("second.txt", second.Description.FileName?.Value);
+        Assert.Equal("second"u8.ToArray(), written.ToArray());
+    }
+
+    /// <summary>A position the message does not have is the walk disagreeing with whatever asked for it.</summary>
+    [Fact]
+    public async Task OpenWalkAsync_APositionPastTheCountTheWalkReports_AnswersThatThereIsNoSuchAttachment()
+    {
+        // Arrange
+        var content = MessageAttaching(("only.txt", "text/plain", "only"));
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(StructuralLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        await using var walk = walkResult.Walk!;
+        var opened = await walk.OpenAsync(1, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, walk.Count);
+        Assert.Null(opened.Attachment);
+        Assert.False(opened.ContentIsUnreadable);
+    }
+
+    /// <summary>
+    /// A message beyond the structural limits is refused on this door as well, before anything parses it, so the two
+    /// doors into one mailbox cannot disagree about which messages this deployment will parse at all.
+    /// </summary>
+    /// <remarks>
+    /// Every message of the attachment pass goes through the walk rather than through the single-position read, so a
+    /// structural pass lost here would parse stranger-composed MIME past the configured part and nesting limits on
+    /// every message of every account run, with nothing reporting that it had.
+    /// </remarks>
+    [Fact]
+    public async Task OpenWalkAsync_MessageBeyondTheStructuralLimits_ReportsTheCopyAsUnreadableWithoutParsingIt()
+    {
+        // Arrange
+        var content = MessageAttaching(
+            ("first.txt", "text/plain", "first"),
+            ("second.txt", "text/plain", "second"));
+        var narrowLimits = new EmailMimeExtractionOptions
+        {
+            MaxPartCount = 1,
+            MaxNestingDepth = 10,
+            MaxExtractedTextCharacters = 10_000,
+        };
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(narrowLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(walkResult.Walk);
+        Assert.True(walkResult.ContentIsUnreadable);
+    }
+
+    /// <summary>
+    /// Bytes that no longer parse are reported as a damaged local copy, which is the repair request the deriver
+    /// branches on rather than an exception leaving the pass.
+    /// </summary>
+    [Fact]
+    public async Task OpenWalkAsync_StoredBytesThatNoLongerParse_ReportsTheCopyAsUnreadable()
+    {
+        // Arrange — a header line that never terminates leaves nothing a parse can build a message from.
+        var content = MimeFixtures.StoredRawContent(Encoding.UTF8.GetBytes(new string('\0', 64)));
+
+        // Act
+        var walkResult = await new MimeKitEmailAttachmentContentReader(StructuralLimits).OpenWalkAsync(
+            content,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(walkResult.Walk);
+        Assert.True(walkResult.ContentIsUnreadable);
+    }
+
     private static EmailMimeExtractionOptions StructuralLimits => new()
     {
         MaxPartCount = 100,

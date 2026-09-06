@@ -130,7 +130,11 @@ internal sealed class StoredEmailChunkingStore(
                 .Where(StoredEmailTombstone.IsNotTombstoned)
                 .Where(email => email.OwnerId == ownerId
                     && email.MailboxAccountId == mailboxAccountId
-                    && !email.Chunks.Any()
+                    // A body passage rather than any passage. email_chunks also holds what an attachment yielded, and
+                    // the two passes walk different sets from the front of their own queues, so nothing orders them:
+                    // a message whose attachments were read first would read as already cut and never have its body
+                    // cut at all, by this pass or by the sweep behind it.
+                    && !email.Chunks.Any(chunk => chunk.AttachmentPosition == null)
                     && email.SearchDocument != null
                     && email.SearchDocument.BodyText != null)
                 .Where(MailAwaitingRuleEvaluation.IsFinishedWith)

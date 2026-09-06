@@ -32,4 +32,19 @@ public interface IEmailAttachmentContentReader
         StoredEmailContent content,
         int attachmentPosition,
         CancellationToken cancellationToken);
+
+    /// <summary>Parses one stored message once and opens a walk over every attachment in it.</summary>
+    /// <param name="content">The stored raw MIME.</param>
+    /// <param name="cancellationToken">Cancels the parse.</param>
+    /// <returns>The walk, which the caller disposes, or the reason the bytes yielded none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="content" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The same parse, the same structural limits, and the same walk order as the single-position read above — what
+    /// differs is only how many times it is paid for. A caller reading one position asks for one; a pass reading every
+    /// attachment of a message asks for this, because parsing raw MIME is the most expensive local work an account run
+    /// does and doing it once per attachment multiplies that by the attachment count.
+    /// </remarks>
+    Task<OpenedEmailAttachmentWalkResult> OpenWalkAsync(
+        StoredEmailContent content,
+        CancellationToken cancellationToken);
 }

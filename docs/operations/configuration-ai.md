@@ -297,7 +297,7 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message | restart |
+| `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message. Charged twice per message and never more: once against the body, and once against every attachment of that message together, in walk order | restart |
 | `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
 | `Embeddings:MaxInputCharactersPerPeriodPerOwner` | long | `0` | zero or positive; the characters one period may send for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
@@ -359,11 +359,13 @@ model that cannot read the page writes what it can see instead, and a dedicated 
 reads stays worth having.
 
 **What has landed is the mechanism and its bounds**: the port that turns one image attachment into text or into a
-recorded reason, the allow-list, the size and grid ceilings, and this switch. Nothing offers an attachment to it yet, so
-turning it on changes no behaviour today and sends nothing; what a description becomes once it is produced — a passage,
-an embedding, a place in a ranked result —
-is [ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
-and is not delivered.
+recorded reason, the allow-list, the size and grid ceilings, and this switch — and the account run's attachment stage
+now offers pictures to it. **Turning this on sends mail's images to the chat provider**, on every account run, for every
+message the attachment stage reaches, from the moment `Embeddings:AttachmentText:Enabled` is on as well; with that
+second switch off nothing here is reached and this one changes nothing. What a description becomes once it is produced
+— a passage, an embedding, a place in a ranked result — is
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md);
+the passage and the embedding are delivered and the ranking is not, and no tool or client route answers with one yet.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -395,8 +397,9 @@ that does, and a grid this deployment would not have decoded is not one to make 
 megapixels is well past any camera a person attaches a photograph from.
 
 The port's own contract obliges whatever calls it to call it from a background step, after a message is stored, and
-never from a read path — so that a tool call and a client request never wait on a provider describing a picture. Nothing
-calls it yet, so that is an obligation on the caller rather than a scheduling this deployment performs.
+never from a read path — so that a tool call and a client request never wait on a provider describing a picture. The
+account run's attachment stage is what calls it, and it is exactly that: a background pass behind the passage cut, so
+no tool call and no client request ever reaches a provider through it.
 
 ### Reading a document attachment — `Embeddings:AttachmentText`
 
@@ -407,13 +410,18 @@ vulnerabilities, and no character count predicts it. [ADR
 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
 records that split.
 
-Every key below bounds **one** extraction, and each of them is a deliberate ceiling rather than a value nobody chose.
-Crossing one abandons that attachment and records which ceiling stopped it — nothing is truncated into a partial
+The first four keys decide whether attachments are read at all and what a whole message and a whole account run may
+spend on them. The rest bound **one** extraction, and each of them is a deliberate ceiling rather than a value nobody
+chose. Crossing one abandons that attachment and records which ceiling stopped it — nothing is truncated into a partial
 extract, because a document cut off at a limit and stored as its text reads exactly like a document that said only that
 much.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
+| `Embeddings:AttachmentText:Enabled` | bool | `false` | whether this deployment reads its mail's attachments at all. Off unless an operator turns it on, which is what ADR 0029 decides for an upgrade: turning it on narrows the undertaking to parse nothing a stranger composed rather than reversing it — what is read is the format list below and nothing else — and it means the most sensitive part of a mailbox starts travelling to whichever provider embeds it | restart |
+| `Embeddings:AttachmentText:MaxAttachmentsPerEmail` | int | `20` | 1 – 1000; how many of one message's attachments are read at all, counted in walk order. It bounds the walk rather than what the walk decides: a part past it is never opened and no row is stored against it, because the number of parts a message declares is the sender's. What the ceiling left unread is the count stored against the message less the readings beside it | restart |
+| `Embeddings:AttachmentText:MaxInputOctetsPerEmail` | long | `67108864` | 1 KiB – 8 GiB, and at least `MaxInputOctets`; the octets one message's attachments may be read from together. A ten-line covering note with a two-hundred-page report attached is an expensive message, and no length of its text predicts that | restart |
+| `Embeddings:AttachmentText:MaxInputOctetsPerAccountRun` | long | `4294967296` | 1 KiB – 1 TiB, and at least `MaxInputOctetsPerEmail`; the octets one account run may read across every message it reaches. A run that spends it stops where it is and leaves the message it was on untouched, so the next run reaches that message first. The budget is per account rather than shared, so a mailbox full of large attachments delays nobody else's run | restart |
 | `Embeddings:AttachmentText:Formats:<index>` | enum | every format read | `Pdf`, `WordOpenXml`, `SpreadsheetOpenXml`, `PresentationOpenXml`, `OpenDocumentText`, `OpenDocumentSpreadsheet`, `OpenDocumentPresentation`; writing nothing reads all seven and naming any narrows to exactly those. Naming `LegacyWord`, `LegacySpreadsheet`, or `LegacyPresentation` is refused at startup, because MailFathom recognizes those three and reads none of them | restart |
 | `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Every parser here seeks, so an attachment is held in memory for the length of one extraction | restart |
 | `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses. It also bounds how many entries a workbook's shared string table may hold, since an entry costs memory whether or not it carries a character — crossing it there is reported as `ContainerBoundExceeded` rather than as `ExtractedTextTooLarge`, because what was passed is a count of entries rather than characters an owner would get back | restart |
@@ -423,10 +431,40 @@ much.
 | `Embeddings:AttachmentText:MaxElementDepth` | int | `100` | 2 – 10000; the depth an element tree inside an archive part may nest to. Deep nesting is what turns a small part into a walk that consumes stack | restart |
 | `Embeddings:AttachmentText:Timeout` | TimeSpan | `00:00:30` | positive and no longer than `01:00:00`; the time one extraction may take. The upper end is the platform timer's rather than a policy: a longer deadline is refused by `CancellationTokenSource`, which would leave the port raising out of a contract whose whole promise is that it answers instead. It is observed between units of work — a page, a part, an element — because no parser here accepts a cancellation token, which is why the size, ratio, and depth ceilings above are the ones that bound a parser stuck inside one unit | restart |
 
-**No key here turns extraction on, and none is needed to.** Nothing in this release reads an attachment yet: the port
-these keys bound is what the pipeline that will chunk and embed attachment text calls, and the switch deciding whether
-it is called arrives with that pipeline. So an operator writing this block today is deciding what an extraction will be
-allowed to cost, never starting one.
+**The three octet ceilings are nested, and a set written otherwise is refused at startup.** What one attachment may
+cost is at most what its message may, and what a message may is at most what its run may. Written the other way round,
+a deployment looks configured and reads nothing: an attachment larger than its message's ceiling is recorded as past a
+ceiling on every run for ever, and a message larger than its run's ceiling is passed over by every run for ever, since
+a run always starts with a full budget and always meets that message with less than it needs. Refusing the order at
+startup is what stops that from arriving as mail nobody can search.
+
+**What an operator gets by turning `Enabled` on** is attachment words in semantic retrieval: a document attachment's
+text is chunked and embedded beside the message's own passages, so a question whose answer is inside a contract reaches
+it. A document attachment is written to the lexical index as a document of its own as well, but the rows and their GIN
+index exist with no reader yet — `search_emails` still matches a message on its own words alone, so a word occurring
+only inside a PDF returns nothing there — and a message's own snippet quotes only what the message said either way. An
+image attachment's description is embedded and never lexically indexed at all, which [ADR
+0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+decides and the database enforces. Reading happens in the account run, behind the passage cut, and never on a read
+path: no MCP call and no client request ever waits on a parser or a provider.
+
+**Turning it on reads mail that is already stored, once.** A message keeps a stamp saying its attachments were read, so
+each one is opened once and never again unless it changes; turning the switch off leaves what was already read in
+place, since nothing here deletes a stored reading.
+
+**Three readings keep no stamp and are taken again.** A message whose stored copy has gone missing or will not parse is
+recorded as needing fetching again rather than settled; one whose picture the chat provider did not answer for — a
+timeout, an unreachable endpoint, a rate the deployment is over — is left for a later run in the same way; and so is one
+whose document outran `Embeddings:AttachmentText:Timeout`, because a deadline reached under load says nothing about the
+file. All three are read again on the next account run, so a provider outage or a loaded host during a first enablement
+costs the readings it interrupted a second time rather than losing them — which is what the deadline is worth budgeting
+processor time against, since a document that never parses inside it is re-fetched and re-parsed on every run. Every other refusal settles the message, including the ones a configuration
+change lifts — an image larger than `Embeddings:AttachmentText:MaxInputOctets` or larger than
+`Chat:MaxRequestImageOctets`, a grid larger than `Embeddings:ImageDescription:MaxPixels`, and a picture met while image
+description was off. The first of those three is this section's own key: it bounds what any attachment costs to read
+before a picture is offered to a provider at all, so a photograph past it is refused here rather than by the chat
+ceiling. Raising any of the three or turning that switch on therefore changes what arrives next rather than what is
+already stored, and no pass today goes back for the attachments it refused.
 
 **The three legacy binary formats are recognized and not read.** A `.doc`, `.xls`, or `.ppt` attachment is reported as a
 format MailFathom does not extract, which is a different and more useful fact than not recognizing it at all — the

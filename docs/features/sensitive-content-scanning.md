@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Application/Mail/Delivery/Screening/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
+<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Application/Mail/Delivery/Screening/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/AttachmentText/EmailAttachmentTextDeriver.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise
@@ -206,9 +206,12 @@ the plain-text body, and the HTML alternative exactly as it will leave, markup a
 rather than the arguments a caller sent is what makes the routes above one contract — a promotion and a recurring
 occasion carry bytes and no authored fields at all.
 
-**Attachments are not screened.** A scan is over text, and an attachment is a byte stream a caller supplied whose type
-this deployment does not undertake to parse. An operator who needs an attachment examined needs a different control
-than this one, and reporting it as covered here would be worse than saying it is not.
+**Attachments are not screened.** A scan is over text, and an attachment of an outgoing message is a byte stream a
+caller supplied whose type this deployment does not undertake to parse on the way out. An operator who needs an
+attachment examined before it leaves needs a different control than this one, and reporting it as covered here would be
+worse than saying it is not. That a deployment may read the attachments of *arriving* mail does not change it: reading
+one is a background derivation over stored mail under its own ceilings, and holding a send open on a document parser
+would be a different act with a different failure mode.
 
 **Nothing is written down when the screen stops the act.** No outbox row, no draft, no revision, no content row. The
 draft being revised keeps the text it already had, and the message is refused before the transaction the act would have
@@ -300,8 +303,25 @@ answer later returns; nothing downstream scans a second time and nothing downstr
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws where that read sits among the stages around it, and
 why the spam scanner beside it is deliberately shown the message unredacted.
 
-**Only the body goes through it.** A subject, a display name, an address, a folder alias, and a thread identity are
-routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
+**Words read out of an attachment go through it too**, where the deployment turned attachment reading on. A contract's
+extracted text and a model's description of a picture are both derived mail content — an invoice carries an account
+number and a model asked what a photograph shows will read out whatever is printed on it — so each is redacted before it
+is stored and each carries the same stamp. The scan happens in the account run's attachment stage rather than at the
+write, exactly as the body's does. [Message chunks § passages cut from an
+attachment](message-chunks.md#passages-cut-from-an-attachment) records what a redaction costs a citation: a placeholder
+is rarely the length of what it replaced, so each page boundary is carried across by the net shift the placeholders
+before it applied, and only a boundary pointing into text the analyzed ceiling dropped is left out rather than published
+pointing at the wrong place.
+
+**A rebuild does not reach what an attachment yielded.** The startup report and
+`SensitiveContent:RebuildStaleDerivedData` below both read the stamp on a message's derived search document, so an
+attachment reading is neither counted as stale nor re-derived: `stored_emails.AttachmentTextDerivedAt` stays set, and
+text read under an older posture stays as it was written. An owner who switches a scanner on after their attachments
+were read therefore rebuilds the body alone, and re-reading the attachments waits on
+[#1695](https://github.com/Krzysztof318/MailFathom/issues/1695).
+
+**Only derived mail text goes through it** — a body and an attachment's words. A subject, a display name, an address, a
+folder alias, and a thread identity are routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
 leave rather than where they are stored — otherwise a listing would name messages nobody could recognise and a reply
 would have nowhere to go. A subject an operator wants hidden from a model or an MCP client is hidden by the egress
 guard, which already covers it.

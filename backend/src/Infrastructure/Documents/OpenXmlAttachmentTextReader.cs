@@ -139,7 +139,11 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             carriedText |= this.ReadRunsInto(reader, WordprocessingNamespaces, text, cancellationToken);
         }
 
-        return new ExtractedAttachmentText(text.ToText(), PageCount: 1, carriedText ? [] : [1]);
+        return new ExtractedAttachmentText(
+            text.ToText(),
+            PageCount: 1,
+            carriedText ? [] : [1],
+            [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 1, Label: null, StartOffset: 0)]);
     }
 
     /// <summary>Selects the header, footer, and note parts of a word-processing package, in the order they are read.</summary>
@@ -171,9 +175,16 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         var slidesWithoutText = new List<int>();
+        var segments = new List<AttachmentTextSegment>();
 
         foreach (var (slide, index) in slides.Select((slide, index) => (slide, index)))
         {
+            segments.Add(new AttachmentTextSegment(
+                AttachmentTextSegmentKind.Slide,
+                index + 1,
+                Label: null,
+                text.Length));
+
             bool carriedText;
 
             using (var reader = this.parts.OpenPart(slide, budget))
@@ -189,7 +200,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             text.EndLine();
         }
 
-        return new ExtractedAttachmentText(text.ToText(), slides.Count, slidesWithoutText);
+        return new ExtractedAttachmentText(text.ToText(), slides.Count, slidesWithoutText, segments);
     }
 
     /// <summary>Reads a workbook, one page per worksheet in part-name order, resolving the table each cell indexes into.</summary>
@@ -220,9 +231,21 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         var sheetsWithoutText = new List<int>();
+        var segments = new List<AttachmentTextSegment>();
 
         foreach (var (sheet, index) in sheets.Select((sheet, index) => (sheet, index)))
         {
+            // The sheet is as far inside a workbook as a citation reaches here. A cell range would need a boundary per
+            // row, which for a real workbook is tens of thousands of segments hanging off one attachment, and the
+            // sheet is what sends a reader to the right place at a cost proportional to the sheets rather than to the
+            // rows. The name the workbook records for the sheet is absent for the same reason its declared order is:
+            // resolving either means following the package relationships, which is issue #1682.
+            segments.Add(new AttachmentTextSegment(
+                AttachmentTextSegmentKind.Sheet,
+                index + 1,
+                Label: null,
+                text.Length));
+
             bool carriedText;
 
             using (var reader = this.parts.OpenPart(sheet, budget))
@@ -238,7 +261,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             text.EndLine();
         }
 
-        return new ExtractedAttachmentText(text.ToText(), sheets.Count, sheetsWithoutText);
+        return new ExtractedAttachmentText(text.ToText(), sheets.Count, sheetsWithoutText, segments);
     }
 
     /// <summary>Collects the runs of text in one part, ending a line where the format ends a paragraph.</summary>

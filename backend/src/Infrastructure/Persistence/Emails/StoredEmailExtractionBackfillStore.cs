@@ -358,7 +358,10 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var email = sessionContext.StoredEmails
             .AsNoTracking()
             .Where(candidate => candidate.Id == storedEmailId.Value)
-            .Where(candidate => candidate.Chunks.Any()
+            // A body passage rather than any passage: what an attachment yielded lives in the same table, and a message
+            // whose attachments were read before its body was cut would otherwise answer past both orderings on what
+            // is still its first cut.
+            .Where(candidate => candidate.Chunks.Any(chunk => chunk.AttachmentPosition == null)
                 || ((candidate.RulesEvaluatedAt != null || candidate.FiledFromOutgoingEmailId != null)
                     && !candidate.Mutations.Any(mutation =>
                         mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
