@@ -8792,6 +8792,45 @@ the_design_mirror_refuses_a_transcription_that_lost_a_window() {
   rm -rf "$repository_root/artifacts/design"
 }
 
+the_design_mirror_refuses_a_path_that_leaves_the_mirror() {
+  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
+  local escapee="$test_directory/design-mirror-escapee"
+
+  rm -rf "$work" "$repository_root/artifacts/design" "$escapee"
+  mkdir -p "$work"
+  printf 'the file this must not touch' >"$escapee"
+
+  # Every path in a listing is a value the design server chose, and this script expands each of them
+  # into a filesystem path. One carrying `..` walks out of the mirror, which would have a refresh
+  # create or overwrite a file somewhere else on the machine that ran it.
+  cat >"$work/listing.json" <<'LISTING'
+[
+  { "path": "../../../design-mirror-escapee", "size": 6, "etag": "300" },
+  { "path": "Screen.dc.html", "size": 6, "etag": "300" }
+]
+LISTING
+
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing.json") >"$output" 2>&1; then
+    printf 'The mirror planned a read of a path that leaves it\n' >&2
+    return 1
+  fi
+  assert_contains 'leaves the mirror' "$output"
+
+  # And the same value handed to `extract` directly, since a session builds that argument from the
+  # listing rather than from anything this script validated.
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    extract "artifacts/design/files/../../../design-mirror-escapee" "$work/listing.json") \
+    >"$output" 2>&1; then
+    printf 'The mirror extracted onto a path outside itself\n' >&2
+    return 1
+  fi
+  assert_contains 'stays under' "$output"
+  assert_file_content 'the file this must not touch' "$escapee"
+
+  rm -rf "$repository_root/artifacts/design" "$escapee"
+}
+
 the_design_mirror_decodes_a_read_result_without_retyping_it() {
   local work="$test_directory/design-mirror" target
 
@@ -9108,6 +9147,7 @@ run_test the_editor_workspace_opens_the_service_and_the_repository
 run_test every_shell_script_carries_the_license_header
 run_test the_design_mirror_reads_only_what_the_etags_say_moved
 run_test the_design_mirror_refuses_a_transcription_that_lost_a_window
+run_test the_design_mirror_refuses_a_path_that_leaves_the_mirror
 run_test the_design_mirror_decodes_a_read_result_without_retyping_it
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte

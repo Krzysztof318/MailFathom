@@ -94,12 +94,14 @@ script is the half of that step a session should not be doing by eye: it compare
 one full-depth listing — every path, size and opaque `etag`, no content read at
 all — against the manifest under `artifacts/design/`, and names which screen
 sources still have to be read. An unchanged project costs the listing and nothing
-else. Its other three commands are `extract` and `decode`, which put a read
-result on disk without a transcription passing through a model, `record`, which
-writes the manifest and checks every mirrored file against the byte count the
-project states, and `stamp`, which prints the etag set the mirror stands on so
-the state inventory beside it can say whether it still describes the current
-design.
+else. Its other four commands are `extract`, which takes the wrapper off a read
+result the harness saved to a file and copies bytes that never passed through a
+model at all, `decode`, which is for the opposite case — a result small enough to
+come back inline, which the session wrote onto disk by hand — and only undoes the
+entity escaping on what is already there, `record`, which writes the manifest and
+checks every mirrored file against the byte count the project states, and
+`stamp`, which prints the etag set the mirror stands on so the state inventory
+beside it can say whether it still describes the current design.
 
 It reaches no design server itself, and it never writes into the mirror's own
 directory beyond the manifest. Nothing it touches is repository content:

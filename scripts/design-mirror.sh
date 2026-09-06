@@ -47,13 +47,31 @@ fi
 
 design_directory="$repository_root/artifacts/design"
 manifest="$design_directory/manifest.json"
-mirror="$design_directory/files"
+mirror="$(realpath -m -- "$design_directory/files")"
 
 # A screen source is an HTML file, and everything else the project holds is an asset, a generated
 # runtime or a thumbnail. Mirroring is therefore one rule rather than a list nobody updates: the
 # manifest still covers every file, so an asset appearing or disappearing stays visible without
 # several megabytes of it being carried into every worktree.
 is_mirrored='(.path | endswith(".html"))'
+
+# A path in the listing is a value a remote server chose, and every command below expands one into a
+# filesystem path. `..` in it walks out of the mirror, an absolute one ignores it entirely, and either
+# would have this script create or overwrite a file somewhere else on the machine. So the listing is
+# confined once, here, rather than at each of the places that go on to use it.
+confine() {
+  local candidate="$1" resolved
+  if [[ -z "$candidate" ]]; then
+    printf 'Name a mirrored path under %s.\n' "$mirror" >&2
+    exit 1
+  fi
+  resolved="$(realpath -m -- "$candidate")"
+  if [[ "$resolved" != "$mirror" && "$resolved" != "$mirror"/* ]]; then
+    printf 'Refusing %s: a mirrored path stays under %s.\n' "$candidate" "$mirror" >&2
+    exit 1
+  fi
+  printf '%s\n' "$resolved"
+}
 
 read_listing() {
   local source="$1" listing
@@ -70,6 +88,14 @@ read_listing() {
   if ! jq -e 'type == "array" and (length > 0) and all(has("path") and has("size") and has("etag"))' \
     >/dev/null 2>&1 <<<"$listing"; then
     printf 'That is not a full-depth listing: every entry needs a path, a size and an etag.\n' >&2
+    exit 1
+  fi
+
+  if jq -e 'any(.[]; .path | (startswith("/")) or (split("/") | any(. == ".." or . == "")))' \
+    >/dev/null 2>&1 <<<"$listing"; then
+    printf 'That listing carries a path that leaves the mirror; nothing was read or written.\n' >&2
+    jq -r '.[] | select(.path | (startswith("/")) or (split("/") | any(. == ".." or . == ""))) | "  \(.path)"' \
+      >&2 <<<"$listing"
     exit 1
   fi
 
@@ -171,6 +197,7 @@ case "$command" in
       printf 'Name the mirrored path and at least one saved result.\n' >&2
       exit 1
     fi
+    target="$(confine "$target")"
 
     # Every window is checked before the first byte is written, because the target is usually the
     # mirrored file that is already there: a mistyped second path would otherwise truncate a good
@@ -205,7 +232,7 @@ case "$command" in
     # The order is the whole of it: `&lt;` and `&gt;` first, `&amp;` last. A body that itself
     # contains `&amp;lt;` arrives as `&amp;amp;lt;`, and one pass in this order returns it to
     # `&amp;lt;` instead of collapsing it to `<`.
-    target="${2:-}"
+    target="$(confine "${2:-}")"
     if [[ ! -f "$target" ]]; then
       printf 'No file at %s.\n' "$target" >&2
       exit 1
