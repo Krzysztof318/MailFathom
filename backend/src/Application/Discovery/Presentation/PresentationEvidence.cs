@@ -10,12 +10,13 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// <remarks>
 /// <para>
 /// Every block carries one of these, which is what makes citation part of the contract rather than a habit a producer
-/// may keep. The constructor holds the support to the citation count that gives it meaning: a supported claim names at
-/// least one source, a conflicting one names at least two — a disagreement needs two sides — and an unsupported one
-/// names none, because a source that backed it would make it supported.
+/// may keep. The constructor holds the support to what gives it meaning: a supported claim names at least one source, a
+/// stale one names at least one and carries a freshness saying the local copy is behind, a conflicting one names at
+/// least two sources and both sides of the disagreement — a disagreement needs two sides — and an unsupported one names
+/// none, because a source that backed it would make it supported.
 /// </para>
 /// <para>
-/// That rule is the reason the type exists rather than three loose properties on each block. A block asserting support
+/// That rule is the reason the type exists rather than four loose properties on each block. A block asserting support
 /// while citing nothing is exactly the failure a citation contract is written to prevent, and it is far cheaper to
 /// refuse it here than to find it in a rendered answer.
 /// </para>
@@ -29,19 +30,33 @@ public sealed record PresentationEvidence
     /// </remarks>
     public const int MaxCitations = 24;
 
+    /// <summary>The greatest number of sides one disagreement may be presented as.</summary>
+    /// <remarks>
+    /// A disagreement a reader can hold in their head has two or three sides. More than this is a question that was
+    /// asked too broadly rather than a conflict worth drawing, and the run says so with a narrower block instead.
+    /// </remarks>
+    public const int MaxConflictingClaims = 6;
+
     /// <summary>Initializes what the correspondence does for one block.</summary>
     /// <param name="support">What the correspondence does for what the block states.</param>
     /// <param name="citations">The sources the block rests on, in the order they are worth reading.</param>
     /// <param name="freshness">How current the data behind the block was.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="citations" /> or <paramref name="freshness" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the citation count does not match the support, a citation is unspecified, a citation is named twice, or there are more than <see cref="MaxCitations" /> of them.</exception>
+    /// <param name="conflictingClaims">The sides of the disagreement, where the correspondence disagrees with itself.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="citations" />, <paramref name="freshness" />, or <paramref name="conflictingClaims" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the citations, the freshness, or the sides do not match the support, a citation is unspecified, a citation is named twice, there are more than <see cref="MaxCitations" /> of them, or a side names a source the block does not rest on.</exception>
     public PresentationEvidence(
         PresentationSupport support,
         IReadOnlyList<PresentationCitationId> citations,
-        PresentationFreshness freshness)
+        PresentationFreshness freshness,
+        IReadOnlyList<ConflictingClaim>? conflictingClaims = null)
     {
         ArgumentNullException.ThrowIfNull(citations);
         ArgumentNullException.ThrowIfNull(freshness);
+
+        var sides = PresentationRequirement.OptionalItems(
+            conflictingClaims ?? [],
+            MaxConflictingClaims,
+            nameof(conflictingClaims));
 
         if (citations.Count > MaxCitations)
         {
@@ -58,11 +73,13 @@ public sealed record PresentationEvidence
             throw new ArgumentException("A block names each of its citations once.", nameof(citations));
         }
 
-        EnsureCitationCountMatches(support, citations);
+        EnsureCitationsMatchSupport(support, citations, freshness);
+        EnsureSidesMatchSupport(support, citations, sides);
 
         this.Support = support;
         this.Citations = [.. citations];
         this.Freshness = freshness;
+        this.ConflictingClaims = sides;
     }
 
     /// <summary>Gets what the correspondence does for what the block states.</summary>
@@ -74,6 +91,9 @@ public sealed record PresentationEvidence
     /// <summary>Gets how current the data behind the block was.</summary>
     public PresentationFreshness Freshness { get; }
 
+    /// <summary>Gets the sides of the disagreement, which is empty for every support but <see cref="PresentationSupport.Conflicting" />.</summary>
+    public IReadOnlyList<ConflictingClaim> ConflictingClaims { get; }
+
     /// <summary>States that nothing found backs what a block says.</summary>
     /// <param name="freshness">How current the data the run did read was.</param>
     /// <returns>Evidence naming no source, because there is none.</returns>
@@ -81,24 +101,84 @@ public sealed record PresentationEvidence
     public static PresentationEvidence Unsupported(PresentationFreshness freshness) =>
         new(PresentationSupport.Unsupported, [], freshness);
 
-    private static void EnsureCitationCountMatches(
+    /// <summary>States that the cited sources disagree, and what each side of the disagreement says.</summary>
+    /// <param name="citations">The sources the block rests on, at least two.</param>
+    /// <param name="freshness">How current the data behind the block was.</param>
+    /// <param name="conflictingClaims">The sides of the disagreement, at least two, each naming sources the block rests on.</param>
+    /// <returns>Evidence presenting the disagreement rather than a choice between its sides.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown for the reasons the constructor documents.</exception>
+    public static PresentationEvidence Conflicting(
+        IReadOnlyList<PresentationCitationId> citations,
+        PresentationFreshness freshness,
+        IReadOnlyList<ConflictingClaim> conflictingClaims) =>
+        new(PresentationSupport.Conflicting, citations, freshness, conflictingClaims);
+
+    private static void EnsureCitationsMatchSupport(
         PresentationSupport support,
-        IReadOnlyList<PresentationCitationId> citations)
+        IReadOnlyList<PresentationCitationId> citations,
+        PresentationFreshness freshness)
     {
         var refusal = support switch
         {
             PresentationSupport.Supported when citations.Count == 0 =>
                 "A supported block names the source that backs it.",
+            PresentationSupport.Supported when freshness.Staleness is PresentationStaleness.Stale =>
+                "A backed block whose local copy is known to be behind is stale rather than supported.",
             PresentationSupport.Unsupported when citations.Count != 0 =>
                 "A block naming a source is supported by it rather than unsupported.",
             PresentationSupport.Conflicting when citations.Count < 2 =>
                 "A conflict is between sources, so a conflicting block names at least two of them.",
+            PresentationSupport.Stale when citations.Count == 0 =>
+                "A stale block names the source that backs it, because staleness is about that source.",
+            PresentationSupport.Stale when freshness.Staleness is not PresentationStaleness.Stale =>
+                "A stale block carries the freshness that says its local copy is behind.",
             _ => null,
         };
 
         if (refusal is not null)
         {
             throw new ArgumentException(refusal, nameof(citations));
+        }
+    }
+
+    /// <summary>Holds the sides of a disagreement to the support that gives them meaning, and to the sources the block rests on.</summary>
+    /// <remarks>
+    /// A side naming a source the block does not rest on would be a citation the plan never checks, since a plan
+    /// resolves references through <see cref="PresentationBlock.ReferencedCitations" /> and a block's own citations are
+    /// what that reports. Requiring the subset here keeps the two readings of "what this block rests on" one reading.
+    /// </remarks>
+    private static void EnsureSidesMatchSupport(
+        PresentationSupport support,
+        IReadOnlyList<PresentationCitationId> citations,
+        IReadOnlyList<ConflictingClaim> conflictingClaims)
+    {
+        if (support is not PresentationSupport.Conflicting)
+        {
+            if (conflictingClaims.Count != 0)
+            {
+                throw new ArgumentException(
+                    "Only a conflicting block presents sides of a disagreement.",
+                    nameof(conflictingClaims));
+            }
+
+            return;
+        }
+
+        if (conflictingClaims.Count < 2)
+        {
+            throw new ArgumentException(
+                "A conflict is presented as both of its sides, so a conflicting block carries at least two.",
+                nameof(conflictingClaims));
+        }
+
+        var rested = citations.ToHashSet();
+
+        if (conflictingClaims.SelectMany(side => side.Sources).Any(source => !rested.Contains(source)))
+        {
+            throw new ArgumentException(
+                "A side of a disagreement names sources the block rests on.",
+                nameof(conflictingClaims));
         }
     }
 }

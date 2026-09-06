@@ -316,6 +316,10 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
         Assert.Contains(
             services,
+            descriptor => descriptor.ServiceType == typeof(DiscoveryCoverageReader)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
             descriptor => descriptor.ServiceType == typeof(StreamedDiscoveryRun)
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
         Assert.Contains(
@@ -323,6 +327,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             descriptor => descriptor.ServiceType == typeof(DiscoveryRunRegistry)
                 && descriptor.Lifetime == ServiceLifetime.Singleton);
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDiscoveryRunPlanner));
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IDiscoveryResultComposer));
     }
 
     /// <summary>

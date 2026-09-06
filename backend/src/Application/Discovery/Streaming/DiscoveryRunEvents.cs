@@ -76,11 +76,21 @@ public sealed record DiscoveryBlockComposed(PresentationBlock Block) : Discovery
 
 /// <summary>The run finished, and this is what it knows about its own reach.</summary>
 /// <param name="Limitations">What made the answer narrower than the question, and empty where nothing did.</param>
+/// <param name="Coverage">What the run read, one entry per account its scope reached.</param>
 /// <remarks>
+/// <para>
 /// A run that composed no block still completes rather than failing. A mailbox holding nothing on the subject is an
 /// answer, and reporting it as a failure would tell somebody to ask again.
+/// </para>
+/// <para>
+/// Both halves are statements about the whole run rather than about any one block, which is why they arrive here
+/// instead of as events of their own: neither is known until the composition has finished, and a client holding the
+/// ending holds the last two parts of the plan it has been assembling.
+/// </para>
 /// </remarks>
-public sealed record DiscoveryRunCompleted(IReadOnlyList<PresentationLimitation> Limitations) : DiscoveryRunEvent
+public sealed record DiscoveryRunCompleted(
+    IReadOnlyList<PresentationLimitation> Limitations,
+    IReadOnlyList<AccountCoverage> Coverage) : DiscoveryRunEvent
 {
     /// <summary>The value the type discriminator carries on the wire.</summary>
     public const string Kind = "completed";

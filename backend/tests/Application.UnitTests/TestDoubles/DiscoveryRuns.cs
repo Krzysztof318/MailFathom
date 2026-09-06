@@ -5,12 +5,17 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -40,6 +45,8 @@ internal static class DiscoveryRuns
     /// <param name="chatState">What the chat provider's health last read as.</param>
     /// <param name="authorization">Who reached the use case, defaulting to a caller granted the asking permission.</param>
     /// <param name="egressGuard">What this owner's posture withholds, defaulting to a deployment that scans nobody.</param>
+    /// <param name="composer">What the run composes its answer through, defaulting to one returning the contract's own example.</param>
+    /// <param name="folders">How current each folder the run read was, defaulting to a scope reporting none.</param>
     /// <returns>The composed run.</returns>
     public static DiscoveryRun Composing(
         IDiscoveryRunPlanner? planner,
@@ -47,7 +54,9 @@ internal static class DiscoveryRuns
         bool embeddingProfileActive = true,
         AiProviderHealthState chatState = AiProviderHealthState.Serving,
         AccessAuthorization? authorization = null,
-        SensitiveContentEgressGuard? egressGuard = null)
+        SensitiveContentEgressGuard? egressGuard = null,
+        IDiscoveryResultComposer? composer = null,
+        IReadOnlyList<MailboxFolderFreshness>? folders = null)
     {
         // Both roles are read through one reader, as the host composes them, so a test that varies one states the other.
         var healthReader = Substitute.For<IAiProviderHealthReader>();
@@ -61,6 +70,10 @@ internal static class DiscoveryRuns
             .Returns(embeddingProfileActive ? new RegisteredEmbeddingProfile(ProfileId, Identity()) : null);
 
         var timeProvider = new FakeTimeProvider(Now);
+
+        var freshnessReader = Substitute.For<ISynchronizationFreshnessReader>();
+        freshnessReader.ReadAsync(Arg.Any<MailboxScope>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(folders ?? []));
 
         return new DiscoveryRun(
             new MailAnsweringCapability(
@@ -78,7 +91,28 @@ internal static class DiscoveryRuns
             new PlannedMailRetrieval(search),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            planner);
+            new DiscoveryCoverageReader(freshnessReader, new MailSynchronizationRunLedger(timeProvider)),
+            planner,
+            // The two halves of one deployment's chat configuration: an instance that derives a plan composes a result
+            // from it, and an instance that declared no endpoint has neither.
+            planner is null ? null : composer ?? ComposerReturning(PresentationPlanExample.Compose()));
+    }
+
+    /// <summary>Stands in for the composition, answering with the plan a test wants streamed rather than reading anything.</summary>
+    /// <param name="presentation">The plan the composition answers with.</param>
+    /// <returns>The composition.</returns>
+    public static IDiscoveryResultComposer ComposerReturning(PresentationPlan presentation)
+    {
+        var composer = Substitute.For<IDiscoveryResultComposer>();
+        composer.ComposeAsync(
+                Arg.Any<MailQuestion>(),
+                Arg.Any<DiscoveryRunPlan>(),
+                Arg.Any<DiscoveryEvidence>(),
+                Arg.Any<IReadOnlyList<AccountCoverage>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(presentation);
+
+        return composer;
     }
 
     /// <summary>Stands in for the derivation, producing the plan a test wants run rather than reading the question.</summary>

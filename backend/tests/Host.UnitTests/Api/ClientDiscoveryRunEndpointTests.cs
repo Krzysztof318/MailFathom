@@ -189,7 +189,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -216,7 +216,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: null);
@@ -250,6 +250,41 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.Contains("\"failure\":\"TimedOut\"", streamed, StringComparison.Ordinal);
     }
 
+    /// <summary>What the run read of each account reaches the client on the ending, under the names the contract gives it.</summary>
+    /// <remarks>
+    /// Coverage is the part of the plan that never arrives as a block, so a client that ignored the ending would draw an
+    /// answer without saying how current the mail behind it was. The names are asserted against the stream rather than
+    /// read off the type, because the serializer's own decisions are visible nowhere else.
+    /// </remarks>
+    [Fact]
+    public async Task Watch_ARunThatCompleted_WritesWhatItReadOfEachAccountOnTheEnding()
+    {
+        // Arrange
+        var registry = NewRegistry();
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+        journal.Append(new DiscoveryRunStarted());
+        journal.Append(new DiscoveryRunCompleted(
+            [],
+            [
+                new AccountCoverage(
+                    PresentationText.Create("work"),
+                    PresentationFreshness.CurrentAt(Now),
+                    Now.AddDays(-30),
+                    Now),
+            ]));
+
+        // Act
+        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+
+        // Assert
+        Assert.Contains("\"coverage\":[{", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"account\":\"work\"", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"staleness\":\"Current\"", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"earliestReceivedAt\":", streamed, StringComparison.Ordinal);
+        Assert.Contains("\"latestReceivedAt\":", streamed, StringComparison.Ordinal);
+    }
+
     /// <summary>A dropped connection is resumed from the place the protocol's own header states, so nothing is sent twice.</summary>
     [Fact]
     public async Task Watch_AClientStatingWhereItLeftOff_StreamsOnlyWhatItMissed()
@@ -259,7 +294,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated]));
+        journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated], []));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom: "1");
@@ -283,7 +318,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var streamed = await StreamedBody(journal, registry, resumedFrom);

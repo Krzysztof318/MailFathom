@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
-using MailFathom.Application.Discovery.Runs;
 
 namespace MailFathom.Application.Discovery.Streaming;
 
@@ -39,7 +38,7 @@ public static class DiscoveryRunBounds
     /// </remarks>
     public const int MaximumEvents = 1
         + RetrievalPlan.MaximumLookups
-        + DiscoveryPresentationComposition.MaximumCitations
+        + PresentationPlan.MaxCitations
         + PresentationPlan.MaxBlocks
         + 1;
 

@@ -17,6 +17,8 @@ public sealed class PresentationEvidenceTests
 
     private static PresentationCitationId Second => PresentationPlanExample.SecondCitation;
 
+    private static PresentationText Text(string text) => PresentationPlanExample.Text(text);
+
     /// <summary>The failure a citation contract is written to prevent: a claim asserting support and naming nothing.</summary>
     [Fact]
     public void Constructor_SupportedWithNoCitation_IsRefused()
@@ -48,19 +50,6 @@ public sealed class PresentationEvidenceTests
             PresentationSupport.Conflicting,
             [First],
             PresentationFreshness.CurrentAt(ObservedAt)));
-    }
-
-    [Fact]
-    public void Constructor_ConflictingWithTwoCitations_KeepsBoth()
-    {
-        // Act
-        var evidence = new PresentationEvidence(
-            PresentationSupport.Conflicting,
-            [First, Second],
-            PresentationFreshness.CurrentAt(ObservedAt));
-
-        // Assert
-        Assert.Equal([First, Second], evidence.Citations);
     }
 
     [Fact]
@@ -109,6 +98,140 @@ public sealed class PresentationEvidenceTests
         // Assert
         Assert.Equal(PresentationSupport.Unsupported, evidence.Support);
         Assert.Empty(evidence.Citations);
+    }
+
+    /// <summary>Staleness is about a source, so a block that names none has nothing to be stale about.</summary>
+    [Fact]
+    public void Constructor_StaleWithNoCitation_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new PresentationEvidence(
+            PresentationSupport.Stale,
+            [],
+            PresentationFreshness.StaleSince(ObservedAt)));
+    }
+
+    /// <summary>The verdict and the freshness are two readings of one fact, so a plan never carries them disagreeing.</summary>
+    [Fact]
+    public void Constructor_StaleOverACurrentCopy_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new PresentationEvidence(
+            PresentationSupport.Stale,
+            [First],
+            PresentationFreshness.CurrentAt(ObservedAt)));
+    }
+
+    /// <summary>The same disagreement in the other direction: backed mail read from a copy known to be behind is stale.</summary>
+    [Fact]
+    public void Constructor_SupportedOverACopyKnownToBeBehind_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new PresentationEvidence(
+            PresentationSupport.Supported,
+            [First],
+            PresentationFreshness.StaleSince(ObservedAt)));
+    }
+
+    [Fact]
+    public void Constructor_StaleOverACopyKnownToBeBehind_KeepsTheSource()
+    {
+        // Act
+        var evidence = new PresentationEvidence(
+            PresentationSupport.Stale,
+            [First],
+            PresentationFreshness.StaleSince(ObservedAt));
+
+        // Assert
+        Assert.Equal([First], evidence.Citations);
+    }
+
+    /// <summary>Reporting that sources disagree without saying what either says leaves a reader nothing to act on.</summary>
+    [Fact]
+    public void Constructor_ConflictingWithOneSide_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => PresentationEvidence.Conflicting(
+            [First, Second],
+            PresentationFreshness.CurrentAt(ObservedAt),
+            [new ConflictingClaim(Text("£40,000"), [First])]));
+    }
+
+    /// <summary>A side naming a source the block does not rest on is a citation the plan never resolves.</summary>
+    [Fact]
+    public void Constructor_ASideNamingASourceTheBlockDoesNotRestOn_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => PresentationEvidence.Conflicting(
+            [First, Second],
+            PresentationFreshness.CurrentAt(ObservedAt),
+            [
+                new ConflictingClaim(Text("£40,000"), [First]),
+                new ConflictingClaim(Text("£44,000"), [PresentationCitationId.Create("c9")]),
+            ]));
+    }
+
+    /// <summary>A block that agrees with itself has no sides to present.</summary>
+    [Fact]
+    public void Constructor_SidesOnASupportedBlock_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new PresentationEvidence(
+            PresentationSupport.Supported,
+            [First, Second],
+            PresentationFreshness.CurrentAt(ObservedAt),
+            [
+                new ConflictingClaim(Text("£40,000"), [First]),
+                new ConflictingClaim(Text("£44,000"), [Second]),
+            ]));
+    }
+
+    /// <summary>Both figures reach the reader, which is the whole point of not resolving the disagreement.</summary>
+    [Fact]
+    public void Conflicting_TwoSourcesThatDisagree_CarriesBothSides()
+    {
+        // Act
+        var evidence = PresentationEvidence.Conflicting(
+            [First, Second],
+            PresentationFreshness.CurrentAt(ObservedAt),
+            [
+                new ConflictingClaim(Text("£40,000"), [First]),
+                new ConflictingClaim(Text("£44,000"), [Second]),
+            ]);
+
+        // Assert
+        Assert.Equal(PresentationSupport.Conflicting, evidence.Support);
+        Assert.Equal(
+            ["£40,000", "£44,000"],
+            evidence.ConflictingClaims.Select(side => side.Statement.Value));
+    }
+
+    /// <summary>A side nothing backs is a claim the correspondence does not make.</summary>
+    [Fact]
+    public void ConflictingClaim_ASideNamingNoSource_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new ConflictingClaim(Text("£40,000"), []));
+    }
+
+    /// <summary>A question asked so broadly that six answers disagree is a question to narrow, not a conflict to draw.</summary>
+    [Fact]
+    public void Constructor_MoreSidesThanTheBound_IsRefused()
+    {
+        // Arrange
+        var citations = Enumerable
+            .Range(0, PresentationEvidence.MaxConflictingClaims + 1)
+            .Select(index => PresentationCitationId.Create($"c{index}"))
+            .ToArray();
+        var sides = citations
+            .Select(citation => new ConflictingClaim(Text(citation.Value), [citation]))
+            .ToArray();
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => PresentationEvidence.Conflicting(
+            citations,
+            PresentationFreshness.CurrentAt(ObservedAt),
+            sides));
     }
 
     /// <summary>The list is copied, so a caller that keeps mutating theirs cannot change what a plan already said.</summary>

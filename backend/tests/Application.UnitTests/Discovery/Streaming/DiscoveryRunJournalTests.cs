@@ -28,7 +28,7 @@ public sealed class DiscoveryRunJournalTests
         // Act
         journal.Append(new DiscoveryRunStarted());
         journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Assert
         var published = Published(journal);
@@ -42,7 +42,7 @@ public sealed class DiscoveryRunJournalTests
     {
         // Arrange
         var journal = NewJournal();
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var accepted = journal.Append(Progressed(1));
@@ -65,7 +65,7 @@ public sealed class DiscoveryRunJournalTests
 
         // Act
         var refused = journal.Append(Progressed(DiscoveryRunBounds.MaximumEvents));
-        var ending = journal.Append(new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted]));
+        var ending = journal.Append(new DiscoveryRunCompleted([PresentationLimitation.BlocksOmitted], []));
 
         // Assert
         Assert.False(refused);
@@ -81,7 +81,7 @@ public sealed class DiscoveryRunJournalTests
         var journal = NewJournal();
         journal.Append(new DiscoveryRunStarted());
         journal.Append(Progressed(1));
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var resumed = await journal
@@ -99,7 +99,7 @@ public sealed class DiscoveryRunJournalTests
         // Arrange
         var journal = NewJournal();
         journal.Append(new DiscoveryRunStarted());
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
 
         // Act
         var resumed = await journal
@@ -129,7 +129,7 @@ public sealed class DiscoveryRunJournalTests
         Assert.IsType<DiscoveryRunStarted>(reader.Current);
         Assert.False(journal.HasEnded);
 
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
         await reader.DisposeAsync();
     }
 

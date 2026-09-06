@@ -77,7 +77,7 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
         registry.MarkEnded(journal.Id);
 
         // Act
@@ -133,7 +133,7 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
         Assert.NotNull(journal);
-        journal.Append(new DiscoveryRunCompleted([]));
+        journal.Append(new DiscoveryRunCompleted([], []));
         registry.MarkEnded(journal.Id);
 
         // Act

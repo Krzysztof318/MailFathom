@@ -8,6 +8,7 @@ using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
@@ -40,6 +41,7 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
 
         // Assert
+        var published = Published(journal);
         Assert.Equal(
             [
                 DiscoveryRunStarted.Kind,
@@ -48,7 +50,10 @@ public sealed class StreamedDiscoveryRunTests
                 DiscoveryBlockComposed.Kind,
                 DiscoveryRunCompleted.Kind,
             ],
-            Published(journal).Select(@event => @event.EventName));
+            published.Select(@event => @event.EventName).Distinct());
+        var composed = PresentationPlanExample.Compose();
+        Assert.Equal(composed.Citations.Count, published.OfType<DiscoveryCitationDeclared>().Count());
+        Assert.Equal(composed.Blocks.Count, published.OfType<DiscoveryBlockComposed>().Count());
     }
 
     /// <summary>A source is declared before the block naming it, so a client renders a block the moment it arrives.</summary>
@@ -67,12 +72,11 @@ public sealed class StreamedDiscoveryRunTests
         var published = Published(journal);
         var declared = published.OfType<DiscoveryCitationDeclared>().ToArray();
         var composed = published.OfType<DiscoveryBlockComposed>().ToArray();
-        Assert.Equal(
-            declared.Select(@event => @event.Citation.Id.Value),
+        Assert.True(declared.Max(@event => @event.Sequence) < composed.Min(@event => @event.Sequence));
+        Assert.Empty(
             composed.SelectMany(@event => @event.Block.ReferencedCitations)
                 .Select(citation => citation.Value)
-                .Distinct());
-        Assert.True(declared.Max(@event => @event.Sequence) < composed.Min(@event => @event.Sequence));
+                .Except(declared.Select(@event => @event.Citation.Id.Value)));
     }
 
     /// <summary>Retrieval reports as each lookup settles, so a run reading a large mailbox does not look stalled.</summary>
@@ -120,8 +124,13 @@ public sealed class StreamedDiscoveryRunTests
     }
 
     /// <summary>A mailbox holding nothing on the subject is a run that completed, not one that failed.</summary>
+    /// <remarks>
+    /// The composition answers with a plan whatever retrieval found — one saying the sources do not settle the question
+    /// where they do not — so a run over an empty mailbox publishes that plan rather than ending on a failure that would
+    /// tell somebody to ask again.
+    /// </remarks>
     [Fact]
-    public async Task RunAsync_ARunThatRetrievedNothing_CompletesWithNoBlock()
+    public async Task RunAsync_ARunThatRetrievedNothing_StillCompletesWithWhatTheCompositionMadeOfIt()
     {
         // Arrange
         var journal = NewJournal();
@@ -132,7 +141,31 @@ public sealed class StreamedDiscoveryRunTests
 
         // Assert
         Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
-        Assert.Empty(Published(journal).OfType<DiscoveryBlockComposed>());
+        Assert.NotEmpty(Published(journal).OfType<DiscoveryBlockComposed>());
+    }
+
+    /// <summary>What the run read of its own accounts reaches the client too, so nothing of the plan is lost to the stream.</summary>
+    /// <remarks>
+    /// Coverage and the limitations beside it are statements about the whole run rather than about a block, so they
+    /// arrive on the ending. A client assembling the plan out of the events holds every part of it once the run has
+    /// ended, which is what makes the stream a delivery of the plan rather than a summary of one.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ARunThatRetrievedMail_EndsCarryingTheCoverageAndTheLimitationsOfItsPlan()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
+            .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
+        var composed = PresentationPlanExample.Compose();
+        var completed = Assert.IsType<DiscoveryRunCompleted>(Published(journal)[^1]);
+        Assert.Equal(composed.Coverage, completed.Coverage);
+        Assert.Equal(composed.Limitations, completed.Limitations);
     }
 
     /// <summary>A deployment that answers no question at all says so as the run's ending, since nobody is left to throw at.</summary>

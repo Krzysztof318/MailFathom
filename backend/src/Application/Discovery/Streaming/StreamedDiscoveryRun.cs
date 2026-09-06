@@ -5,7 +5,6 @@
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Mailboxes;
-using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 
@@ -90,7 +89,7 @@ public sealed class StreamedDiscoveryRun
                 progress => journal.Append(new DiscoveryRetrievalProgressed(progress)),
                 bounded.Token);
 
-            journal.Append(new DiscoveryRunCompleted(Present(result, journal)));
+            journal.Append(new DiscoveryRunCompleted(Present(result, journal), result.Presentation.Coverage));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -113,17 +112,24 @@ public sealed class StreamedDiscoveryRun
         }
     }
 
-    /// <summary>Publishes what the run found, source by source and then block by block, and says what it could not publish.</summary>
+    /// <summary>Publishes the composed plan a part at a time, source by source and then block by block.</summary>
     /// <remarks>
+    /// <para>
+    /// The plan is the run's own, composed by <see cref="DiscoveryRun" /> out of what it retrieved. Nothing is decided
+    /// here beyond the order it goes out in: what a client assembles is exactly the plan the run produced, and a client
+    /// that read the whole stream holds every part of it.
+    /// </para>
+    /// <para>
     /// A source refused by the stream's own bound takes the blocks resting on it with it, because a block naming a
     /// citation nobody declared is the one way a citation contract fails quietly. So the run stops at the first refusal
-    /// and states that it composed less than it found, rather than publishing a block whose sources went missing.
+    /// and states that it published less than it composed, rather than publishing a block whose sources went missing.
+    /// </para>
     /// </remarks>
-    private static List<PresentationLimitation> Present(DiscoveryRunResult result, DiscoveryRunJournal journal)
+    private static IReadOnlyList<PresentationLimitation> Present(
+        DiscoveryRunResult result,
+        DiscoveryRunJournal journal)
     {
-        var citations = DiscoveryPresentationComposition.CitationsFor(result.Evidence);
-
-        foreach (var citation in citations)
+        foreach (var citation in result.Presentation.Citations)
         {
             if (!journal.Append(new DiscoveryCitationDeclared(citation)))
             {
@@ -131,7 +137,7 @@ public sealed class StreamedDiscoveryRun
             }
         }
 
-        foreach (var block in DiscoveryPresentationComposition.BlocksFor(result.Evidence, citations))
+        foreach (var block in result.Presentation.Blocks)
         {
             if (!journal.Append(new DiscoveryBlockComposed(block)))
             {
@@ -139,31 +145,6 @@ public sealed class StreamedDiscoveryRun
             }
         }
 
-        return ReachOf(result);
-    }
-
-    /// <summary>Says what made the answer narrower than the question.</summary>
-    /// <remarks>
-    /// Two of the catalogue's members follow from what retrieval reported, and the rest do not. A run that stopped
-    /// because it had found the passages its plan called enough left the rest of the matching mail unread, and a run
-    /// whose ranking never reached meaning matched the question's own words alone. What a source's currency or its
-    /// readability makes narrower is a judgement about the correspondence rather than about retrieval, and a run states
-    /// nothing it did not establish.
-    /// </remarks>
-    private static List<PresentationLimitation> ReachOf(DiscoveryRunResult result)
-    {
-        List<PresentationLimitation> stated = [];
-
-        if (result.Evidence.Passages.Count >= result.Plan.Retrieval.SufficientPassages)
-        {
-            stated.Add(PresentationLimitation.RetrievalTruncated);
-        }
-
-        if (result.Evidence.RetrievalMode is EmailSearchRetrievalMode.Lexical)
-        {
-            stated.Add(PresentationLimitation.SemanticRankingUnavailable);
-        }
-
-        return stated;
+        return result.Presentation.Limitations;
     }
 }

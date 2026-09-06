@@ -1,6 +1,37 @@
 {
   "components": {
     "schemas": {
+      "AccountCoverage": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/PresentationText"
+          },
+          "earliestReceivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/PresentationFreshness"
+          },
+          "latestReceivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "freshness",
+          "earliestReceivedAt",
+          "latestReceivedAt"
+        ],
+        "type": "object"
+      },
       "AdminSessionResponse": {
         "properties": {
           "credential": {
@@ -2498,6 +2529,21 @@
         ],
         "type": "object"
       },
+      "ConflictingClaim": {
+        "properties": {
+          "sources": {
+            "type": "array"
+          },
+          "statement": {
+            "$ref": "#/components/schemas/PresentationText"
+          }
+        },
+        "required": [
+          "statement",
+          "sources"
+        ],
+        "type": "object"
+      },
       "ContactErasureResponse": {
         "properties": {
           "addressesErased": {
@@ -3091,6 +3137,12 @@
       },
       "DiscoveryRunEventDiscoveryRunCompleted": {
         "properties": {
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/AccountCoverage"
+            },
+            "type": "array"
+          },
           "event": {
             "enum": [
               "completed"
@@ -3116,7 +3168,8 @@
           }
         },
         "required": [
-          "limitations"
+          "limitations",
+          "coverage"
         ]
       },
       "DiscoveryRunEventDiscoveryRunFailed": {
@@ -6631,14 +6684,21 @@
           "label": {
             "$ref": "#/components/schemas/PresentationText"
           },
+          "medium": {
+            "$ref": "#/components/schemas/PresentationSourceMedium"
+          },
           "target": {
             "$ref": "#/components/schemas/PresentationCitationTarget"
+          },
+          "unreadable": {
+            "$ref": "#/components/schemas/UnreadableSourceReason"
           }
         },
         "required": [
           "id",
           "target",
-          "label"
+          "label",
+          "medium"
         ],
         "type": "object"
       },
@@ -6741,6 +6801,15 @@
           "citations": {
             "type": "array"
           },
+          "conflictingClaims": {
+            "items": {
+              "$ref": "#/components/schemas/ConflictingClaim"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "freshness": {
             "$ref": "#/components/schemas/PresentationFreshness"
           },
@@ -6784,6 +6853,12 @@
           "OutsideRetainedMail"
         ]
       },
+      "PresentationSourceMedium": {
+        "enum": [
+          "Written",
+          "Depicted"
+        ]
+      },
       "PresentationStaleness": {
         "enum": [
           "Current",
@@ -6795,7 +6870,8 @@
         "enum": [
           "Supported",
           "Unsupported",
-          "Conflicting"
+          "Conflicting",
+          "Stale"
         ]
       },
       "PresentationText": {},
@@ -7332,6 +7408,18 @@
           "sources"
         ],
         "type": "object"
+      },
+      "UnreadableSourceReason": {
+        "enum": [
+          "Encrypted",
+          "Corrupt",
+          "FormatNotRead",
+          "TooLarge",
+          "NoTextFound",
+          "NotAttempted",
+          "ReadingFailed",
+          null
+        ]
       }
     },
     "securitySchemes": {

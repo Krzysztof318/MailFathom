@@ -6,13 +6,17 @@ using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Presentation;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.UnitTests.Discovery.Presentation;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
@@ -48,6 +52,55 @@ public sealed class DiscoveryRunTests
         Assert.Equal(DiscoveryIntent.CompareTerms, result.Plan.Intent);
         Assert.Equal(PresentationBlockType.FactTable, result.Plan.Composition[0]);
         Assert.Equal(["the quotation"], result.Evidence.Passages.Select(passage => passage.Text));
+    }
+
+    /// <summary>A run's answer is the composition's, so what the composer produced is what the caller receives.</summary>
+    [Fact]
+    public async Task RunAsync_ADeploymentThatAnswersQuestions_RecordsWhatTheCompositionProduced()
+    {
+        // Arrange
+        var presentation = PresentationPlanExample.Compose();
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            composer: DiscoveryRuns.ComposerReturning(presentation));
+
+        // Act
+        var result = await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(presentation, result.Presentation);
+    }
+
+    /// <summary>How current each account was is read before the answer is composed, so the composition can state it.</summary>
+    [Fact]
+    public async Task RunAsync_AnAccountTheScopeReached_ComposesTheAnswerOverItsCoverage()
+    {
+        // Arrange
+        var composer = DiscoveryRuns.ComposerReturning(PresentationPlanExample.Compose());
+        var run = DiscoveryRuns.Composing(
+            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+            new ScriptedEmailKnowledgeSearch(),
+            composer: composer,
+            folders:
+            [
+                new MailboxFolderFreshness(
+                    MailAccountId.Create("primary"),
+                    MailFolderAlias.Create("INBOX"),
+                    DiscoveryRuns.Now.AddHours(-1)),
+            ]);
+
+        // Act
+        await run.RunAsync(Question, progress: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        await composer.Received(1).ComposeAsync(
+            Arg.Any<MailQuestion>(),
+            Arg.Any<DiscoveryRunPlan>(),
+            Arg.Any<DiscoveryEvidence>(),
+            Arg.Is<IReadOnlyList<AccountCoverage>>(coverage =>
+                coverage != null && coverage.Count == 1 && coverage[0].Account.Value == "primary"),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>The plan the derivation produced is what runs, so the lookups reaching retrieval are its own.</summary>

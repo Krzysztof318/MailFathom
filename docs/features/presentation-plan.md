@@ -43,10 +43,28 @@ takes the number out of the JSON rather than binding it to a catalogue of its ow
 | `schemaVersion` | Which revision of this contract the plan was written against. |
 | `blocks` | The blocks, in the order they are read. At least one, and at most twenty. |
 | `citations` | Every source the blocks rest on, declared once each and named by an identifier local to the plan. |
+| `coverage` | What the run read, one entry per account its scope reached. At most thirty-two. |
 | `limitations` | What the run knows about its own reach, as values from a closed set. Empty where it reached everything. |
 
 A plan whose blocks name a citation it does not declare is refused when it is composed and again when it is read, which
-is the one way a citation contract fails without anybody noticing.
+is the one way a citation contract fails without anybody noticing. A plan whose blocks rest on a source it declares as
+unreadable is refused for the same reason — see [§ A source that could not be read](#a-source-that-could-not-be-read).
+
+## What the run drew on
+
+A client reads a synchronized copy, so which mailboxes an answer was composed from and how current each of them was is
+part of the answer rather than a footnote under it. An account nobody has reconciled since yesterday means the answer
+may be missing what arrived since, and that may be the whole reason it is wrong.
+
+Each coverage entry names one account by MailFathom's own configured identifier — no host, no user name, no address,
+because how a deployment reaches a mailbox is the operator's business rather than a property of an answer — beside how
+current the local copy of it was, and the two ends of the mail the run actually drew on from it.
+
+Two things about it are decided rather than incidental. The accounts are the **scope's** rather than the passages':
+an account that was read and answered nothing is reported with its freshness and with no dates, because an account that
+yielded nothing is not an account that was skipped, and its staleness may be why it yielded nothing. And the dates
+bound **what the run drew on** rather than what the mailbox holds, so a reader can see that an answer about a decade of
+correspondence rested on three weeks of it.
 
 ## The nine block types
 
@@ -83,18 +101,39 @@ confirmed — nothing here can recall a message that has left the deployment.
 
 ## What the correspondence does for a block
 
-Every block carries three things about its own footing, and the combination is checked rather than trusted.
+Every block carries what the correspondence does for it, and the combination is checked rather than trusted.
 
-- **Support** is `Supported`, `Unsupported`, or `Conflicting`. A supported block names at least one citation, a
-  conflicting one names at least two — a disagreement needs two sides — and an unsupported one names none, because a
-  source that backed it would make it supported.
+- **Support** is one of four verdicts, and the constructor holds each to what gives it meaning:
+
+  | Verdict | What it says | What the block must carry |
+  |---|---|---|
+  | `Supported` | the correspondence backs what the block states, from sources known to be current | at least one citation, over a freshness that is not behind |
+  | `Unsupported` | nothing the run found backs it | no citation at all, because a source that backed it would make it supported |
+  | `Conflicting` | the sources disagree with each other | at least two citations, and both sides of the disagreement |
+  | `Stale` | it is backed, and the local copy behind it is known to be behind the mail server | at least one citation, over a freshness that says so |
+
 - **Citations** are the identifiers the plan declares, in the order they are worth reading.
+- **Conflicting claims** are the sides of a disagreement, and only a conflicting block carries any. Each side says what
+  that part of the correspondence says and names the sources saying it — a side nothing backs is not a side of a
+  disagreement — and every source a side names is one the block itself rests on.
 - **Freshness** says whether the local copy behind the block was current, was known to be behind the mail server, or
   was never established, and carries when that was established for the first two.
 
-Those three are what let a plan be honest about the two states a run reaches routinely over years of mail: a fact
-nothing backs, and two sources that disagree. Both are worse as prose inside an answer than as values a client can draw
-differently.
+That is what lets a plan be honest about the states a run reaches routinely over years of mail: a fact nothing backs, a
+fact read from a copy that is behind, and two sources that disagree. Each is worse as prose inside an answer than as a
+value a client draws differently, and the third is worst of all resolved silently into one figure — a supplier who
+quoted twice has two figures, and an answer naming one has answered a question nobody asked.
+
+`Stale` is a verdict rather than a second axis beside the freshness, deliberately. The two invite different acts — a
+reader told a fact is unbacked asks somewhere else, and one told the mailbox is behind reconciles it — and a producer
+free to state `Supported` over a copy it also called behind would be free to state the flattering half alone.
+
+**Confidence, where a block reports one, is defined rather than taken on trust.** An `answer` block carries a band —
+high, moderate, or low — and what a model reported is capped by what its own sources allow: an unsupported answer is
+low whatever the model said, and a conflicting or stale one cannot be high. A band nothing can be read out of is read
+as moderate, so a malformed answer never arrives more confident than a well-formed one. What the bands mean is fixed by
+the composition and not by the model: high is the sources settling the question and the answer restating them, moderate
+is a step of inference somebody may want to check, and low is the best reading of partial sources.
 
 ## What a citation resolves to
 
@@ -107,6 +146,38 @@ A citation resolves to one of exactly three things, and each of them is somewher
 
 Each names the email by its local identity rather than by its remote occurrence, because a citation is followed inside
 this deployment and an occurrence moves when a folder is renamed or a mailbox is rebuilt.
+
+A citation also says two things about the source itself rather than about where it is.
+
+### Written, or depicted
+
+A source is `Written` where somebody wrote it — a message body, a quoted passage, a document's own text — and
+`Depicted` where it is this deployment's description of a picture rather than words anybody typed.
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+makes a depicted source corroborating rather than a headline, and that ranking has to survive the journey to a screen:
+a fact resting on a described photograph of an invoice rests on a machine's account of what an image shows, and
+presenting it like a quotation is how an answer quietly promotes a guess.
+
+It sits on the citation rather than on the fact, so a block resting on depicted sources alone is worked out from the
+citations it names rather than stated as a second value that could come to disagree with them.
+
+### A source that could not be read
+
+A source that exists, is named on a message, and yielded nothing is a different situation from a mailbox that holds
+nothing on the subject, and the difference decides what somebody does next: an encrypted contract is opened with a
+password, a scan is read by a person, and an empty mailbox is a question asked somewhere else. So a citation may carry
+a reason it could not be read — encrypted, corrupt, a format nothing here reads, too large, no text found, not
+attempted, or a reading that failed and may succeed later.
+
+The members are the granularity a reader acts on rather than the granularity extraction records. Reading an
+attachment's text and describing an image each publish a longer set of their own, several of them about a provider or a
+ceiling an operator set, and a client drawing one of those beside a fact would be drawing the deployment's own
+configuration into somebody's answer.
+
+**No block may rest on such a source.** A fact drawn from a source nobody could read is a fact drawn from exactly the
+nothing the state exists to report, so the plan refuses it. What the state is for is the shape beside it: an unsupported
+answer, the source declared with its reason, and the run's limitations saying sources were unavailable — which is a
+plan saying "the contract is there, it is encrypted, and this is why the question is unanswered".
 
 ## How a citation is followed
 

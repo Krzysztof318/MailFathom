@@ -1664,7 +1664,7 @@ data: {"event":"block","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence"
 
 event: completed
 id: 5
-data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[]}
+data: {"event":"completed","runId":"0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90","sequence":5,"limitations":[],"coverage":[{ … }]}
 ```
 
 A run outlives the connection that asked for it, so a client that lost its network reattaches to the second route with

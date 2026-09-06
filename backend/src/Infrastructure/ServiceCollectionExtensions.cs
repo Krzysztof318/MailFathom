@@ -923,15 +923,20 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxQuestionReader>();
         // The Discover run beside the question reader, registered for every deployment for the reason the capability
         // above is: an instance that declared no chat endpoint has to be able to refuse a run distinguishably rather
-        // than fail to resolve one. The planner is the dependency it may not have, so it is asked for rather than
-        // required, and the retrieval beside it is a reading of the same search every other caller reaches.
+        // than fail to resolve one. The planner and the composer are the dependencies it may not have — both come from
+        // the same registration behind a declared chat endpoint — so both are asked for rather than required, and the
+        // retrieval beside them is a reading of the same search every other caller reaches. The coverage reader is
+        // required, because how current the mail a run read was is a fact every deployment holds.
         services.AddScoped<PlannedMailRetrieval>();
+        services.AddScoped<DiscoveryCoverageReader>();
         services.AddScoped(provider => new DiscoveryRun(
             provider.GetRequiredService<MailAnsweringCapability>(),
             provider.GetRequiredService<PlannedMailRetrieval>(),
             provider.GetRequiredService<AccessAuthorization>(),
             provider.GetRequiredService<SensitiveContentEgressGuard>(),
-            provider.GetService<IDiscoveryRunPlanner>()));
+            provider.GetRequiredService<DiscoveryCoverageReader>(),
+            provider.GetService<IDiscoveryRunPlanner>(),
+            provider.GetService<IDiscoveryResultComposer>()));
         services.AddScoped<StreamedDiscoveryRun>();
         // A singleton because a run is held between the request that asks the question and the requests that read the
         // answer, which is exactly what neither a scope nor a request can hold. Nothing about it is a deployment's
