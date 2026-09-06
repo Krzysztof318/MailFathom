@@ -27,6 +27,7 @@ public sealed class SmtpSyntheticMailTransportTests
     [Theory]
     [InlineData(nameof(MailTransportSecurity.StartTls), nameof(SecureSocketOptions.StartTls))]
     [InlineData(nameof(MailTransportSecurity.ImplicitTls), nameof(SecureSocketOptions.SslOnConnect))]
+    [InlineData(nameof(MailTransportSecurity.Unsecured), nameof(SecureSocketOptions.None))]
     public void ResolveSocketOptions_ASecurity_ChoosesTheOptionThatCannotContinueUnencrypted(
         string securityName,
         string expectedOptionName)
@@ -44,27 +45,28 @@ public sealed class SmtpSyntheticMailTransportTests
     }
 
     [Fact]
-    public void ResolveSocketOptions_EverySecurity_RefusesEveryOptionThatWouldSendThePasswordInTheClear()
+    public void ResolveSocketOptions_EverySecurity_RefusesEveryOptionThatWouldSilentlySendThePasswordInTheClear()
     {
         // Arrange
-        SecureSocketOptions[] downgrading =
-        [
-            SecureSocketOptions.None,
-            SecureSocketOptions.Auto,
-            SecureSocketOptions.StartTlsWhenAvailable,
-        ];
+        SecureSocketOptions[] opportunistic = [SecureSocketOptions.Auto, SecureSocketOptions.StartTlsWhenAvailable];
 
         // Act
         var chosen = Enum
             .GetValues<MailTransportSecurity>()
-            .Select(SmtpSyntheticMailTransport.ResolveSocketOptions)
+            .Select(security => (Security: security, Option: SmtpSyntheticMailTransport.ResolveSocketOptions(security)))
             .ToArray();
 
         // Assert
-        // Written over the whole enumeration rather than over the two values it holds today, so a third one added
-        // later fails here instead of quietly reintroducing the downgrade this class exists to refuse.
+        // Written over the whole enumeration rather than over the values it holds today, so a further one added later
+        // fails here instead of quietly reintroducing the downgrade this class exists to refuse. An opportunistic
+        // option is refused for every value, because it turns a request for encryption into a plain session against a
+        // server that offers none; a plain session is only ever reached by naming Unsecured, which the reader has
+        // already refused against a host that is not local.
         Assert.NotEmpty(chosen);
-        Assert.All(chosen, option => Assert.DoesNotContain(option, downgrading));
+        Assert.All(chosen, choice => Assert.DoesNotContain(choice.Option, opportunistic));
+        Assert.All(
+            chosen.Where(choice => choice.Security != MailTransportSecurity.Unsecured),
+            choice => Assert.NotEqual(SecureSocketOptions.None, choice.Option));
     }
 
     [Fact]

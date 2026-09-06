@@ -18,8 +18,9 @@ namespace MailFathom.SyntheticMail.Delivery;
 /// The security option is chosen from the account and is never <c>Auto</c> or the opportunistic
 /// <c>StartTlsWhenAvailable</c>. Both of those fall back to an unencrypted session when the server does not offer the
 /// extension, which is precisely the downgrade this tool must refuse: the very next command it sends is the password.
-/// <see cref="SecureSocketOptions.StartTls" /> fails the connection instead, and <see cref="MailTransportSecurity" />
-/// offers no third value to reach for.
+/// <see cref="SecureSocketOptions.StartTls" /> fails the connection instead. The third value
+/// <see cref="MailTransportSecurity" /> offers is not that fallback: it says in the file that the connection is
+/// unencrypted, and it is refused against anything but a mail server running beside this command.
 /// </para>
 /// <para>
 /// The envelope is stated explicitly on every submission rather than derived from the headers, and that is a privacy
@@ -67,18 +68,24 @@ internal sealed class SmtpSyntheticMailTransport : ISyntheticMailTransport
 
     /// <summary>Chooses the socket option an account's security is opened with.</summary>
     /// <param name="security">How the connection carrying the credential is to be secured.</param>
-    /// <returns>An option that fails the connection rather than continuing unencrypted.</returns>
+    /// <returns>An option that either encrypts the connection or was named explicitly for a local test server.</returns>
     /// <remarks>
     /// Separate from <see cref="OpenAsync" /> so the mapping this tool's whole security claim rests on is asserted
-    /// directly rather than inferred from a connection nobody can open in a unit test. Neither answer may ever become
-    /// <see cref="SecureSocketOptions.None" />, <see cref="SecureSocketOptions.Auto" />, or
-    /// <see cref="SecureSocketOptions.StartTlsWhenAvailable" />: each of those continues in the clear against a server
-    /// that offers no encryption, and the next command this transport sends is the password.
+    /// directly rather than inferred from a connection nobody can open in a unit test. No secured value may ever
+    /// answer <see cref="SecureSocketOptions.None" />, and no value at all may answer
+    /// <see cref="SecureSocketOptions.Auto" /> or <see cref="SecureSocketOptions.StartTlsWhenAvailable" />: both of
+    /// those continue in the clear against a server that offers no encryption, which turns a request for encryption
+    /// into a silent downgrade, and the next command this transport sends is the password.
+    /// <see cref="MailTransportSecurity.Unsecured" /> is not that downgrade — it is the caller having said so in the
+    /// file, against a host <see cref="SendingAccountFile" /> already refused unless it was local.
     /// </remarks>
     internal static SecureSocketOptions ResolveSocketOptions(MailTransportSecurity security) =>
-        security == MailTransportSecurity.ImplicitTls
-            ? SecureSocketOptions.SslOnConnect
-            : SecureSocketOptions.StartTls;
+        security switch
+        {
+            MailTransportSecurity.ImplicitTls => SecureSocketOptions.SslOnConnect,
+            MailTransportSecurity.Unsecured => SecureSocketOptions.None,
+            _ => SecureSocketOptions.StartTls,
+        };
 
     /// <inheritdoc />
     public async Task OpenAsync(CancellationToken cancellationToken)

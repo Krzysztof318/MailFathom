@@ -79,9 +79,11 @@ public sealed class SendingAccountFileTests
         var failure = Assert.Throws<SyntheticMailFailure>(() => Read(contents));
 
         // Assert
-        // There is no unsecured value to name, which is the point: the enumeration offers no way to send the password
-        // in the clear, so the names an operator might reach for from another mail client are simply not there.
-        Assert.Contains("There is no unsecured option", failure.Message, StringComparison.Ordinal);
+        // The names an operator might reach for from another mail client are the opportunistic ones, and none of them
+        // is here: a connection either secures itself or says outright that it does not, which is what the message
+        // points the reader at instead.
+        Assert.Contains("There is no opportunistic option", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(MailTransportSecurity.Unsecured), failure.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -97,6 +99,60 @@ public sealed class SendingAccountFileTests
 
         // Assert
         Assert.Equal(expected, account.Port);
+    }
+
+    [Theory]
+    [InlineData("localhost")]
+    [InlineData("LOCALHOST")]
+    [InlineData("mailserver.localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("::1")]
+    [InlineData("172.17.0.2")]
+    [InlineData("10.88.0.4")]
+    [InlineData("10.89.1.7")]
+    [InlineData("host.docker.internal")]
+    [InlineData("host.containers.internal")]
+    public void ReadFrom_AnUnsecuredConnectionToAHostBesideTheCommand_IsRead(string host)
+    {
+        // Arrange
+        var contents = $$"""{ "host": "{{host}}", "address": "a@example.test", "password": "p", "security": "Unsecured" }""";
+
+        // Act
+        var account = Read(contents);
+
+        // Assert
+        // Reaching a throwaway mail server on the machine is the whole case this value exists for, so a corpus lands
+        // in a mailbox without a real account and without a credential anybody has to hold.
+        Assert.Equal(MailTransportSecurity.Unsecured, account.Security);
+        Assert.Equal(25, account.Port);
+    }
+
+    [Theory]
+    [InlineData("smtp.example.test")]
+    [InlineData("localhost.example.test")]
+    [InlineData("93.184.216.34")]
+    [InlineData("2606:2800:220:1:248:1893:25c8:1946")]
+    [InlineData("192.168.1.50")]
+    [InlineData("10.4.2.9")]
+    [InlineData("172.20.3.4")]
+    [InlineData("169.254.7.7")]
+    [InlineData("fd00::1")]
+    public void ReadFrom_AnUnsecuredConnectionToAnythingElse_IsRefusedNamingBothKeys(string host)
+    {
+        // Arrange
+        var contents = $$"""{ "host": "{{host}}", "address": "a@example.test", "password": "p", "security": "Unsecured" }""";
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Read(contents));
+
+        // Assert
+        // The host is judged as written rather than resolved, so a name nothing here recognizes is refused instead of
+        // being looked up — a reader that made a network call could be pointed at a loopback answer today and
+        // somewhere else tomorrow, with the password on the wire either way. The private addresses here are the point
+        // of the narrow match: a home network, an employer's, a bridge nobody's runtime hands out by default, and a
+        // link-local fallback are all networks a real mail server can sit on, and none of them is beside this command.
+        Assert.Contains($"'security' in '{Origin}' is 'Unsecured'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains($"'host' is '{host}'", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -240,6 +296,7 @@ public sealed class SendingAccountFileTests
     [Theory]
     [InlineData("security", "2")]
     [InlineData("security", "-1")]
+    [InlineData("author", "0")]
     [InlineData("author", "7")]
     [InlineData("author", "0x1")]
     public void ReadFrom_AFileNamingAnEnumerationValueAsANumber_IsRefusedNamingTheOptions(string key, string written)
@@ -249,9 +306,9 @@ public sealed class SendingAccountFileTests
             () => Read($$"""{ "host": "h", "address": "a@example.test", "password": "p", "{{key}}": "{{written}}" }"""));
 
         // Assert
-        // `Enum.TryParse` accepts a string of digits and answers with whatever number it holds, so without a
-        // definedness check a value this enumeration never declared would arrive as one — and every reader
-        // downstream treats an unrecognized security as the upgrading option rather than as a refusal.
+        // `Enum.TryParse` accepts a string of digits and answers with whatever number it holds, and asking only
+        // whether that number is defined is a different question: '2' is the number of a declared member, so a file
+        // could select an unsecured connection without naming one. A file writes a name or is refused.
         Assert.Contains($"'{key}' in '{Origin}' is '{written}'", failure.Message, StringComparison.Ordinal);
         Assert.Contains("which is not one of", failure.Message, StringComparison.Ordinal);
     }

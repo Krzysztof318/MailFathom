@@ -67,12 +67,15 @@ internal sealed class ImapWatchedMailbox : IWatchedMailbox
 
     /// <summary>Chooses the socket option an account's security is opened with.</summary>
     /// <param name="security">How the connection carrying the credential is to be secured.</param>
-    /// <returns>An option that fails the connection rather than continuing unencrypted.</returns>
-    /// <remarks>Separate from <see cref="OpenAsync" /> for the reason the submission transport's own mapping is, and subject to the same rule: neither answer may ever become an option that continues in the clear.</remarks>
+    /// <returns>An option that either encrypts the connection or was named explicitly for a local test server.</returns>
+    /// <remarks>Separate from <see cref="OpenAsync" /> for the reason the submission transport's own mapping is, and subject to the same rule: no secured value may ever answer an option that continues in the clear, and no value at all may answer an opportunistic one.</remarks>
     internal static SecureSocketOptions ResolveSocketOptions(MailTransportSecurity security) =>
-        security == MailTransportSecurity.ImplicitTls
-            ? SecureSocketOptions.SslOnConnect
-            : SecureSocketOptions.StartTls;
+        security switch
+        {
+            MailTransportSecurity.ImplicitTls => SecureSocketOptions.SslOnConnect,
+            MailTransportSecurity.Unsecured => SecureSocketOptions.None,
+            _ => SecureSocketOptions.StartTls,
+        };
 
     /// <inheritdoc />
     public async Task OpenAsync(CancellationToken cancellationToken)
@@ -220,6 +223,16 @@ internal sealed class ImapWatchedMailbox : IWatchedMailbox
             return this.client.GetFolder(SpecialFolder.Sent)
                 ?? throw new SyntheticMailFailure(
                     $"{this.account.Host} advertises no Sent folder for {this.account.Address.Address}. Set 'mailbox.sentFolder' to the folder this mailbox keeps its own mail in.");
+        }
+        catch (NotSupportedException failure)
+        {
+            // A server that publishes neither SPECIAL-USE nor XLIST cannot be asked which folder is the Sent one, and
+            // MailKit reports that by throwing rather than by answering null — so without this the developer gets the
+            // library's sentence about two extensions instead of the one key that resolves it. A local test server is
+            // the ordinary way to meet this: GreenMail advertises neither, and starts with no folder but INBOX.
+            throw new SyntheticMailFailure(
+                $"{this.account.Host} cannot be asked which folder {this.account.Address.Address} keeps its own mail in: {failure.Message} Set 'mailbox.sentFolder' to a folder the server already has.",
+                failure);
         }
         catch (FolderNotFoundException failure)
         {

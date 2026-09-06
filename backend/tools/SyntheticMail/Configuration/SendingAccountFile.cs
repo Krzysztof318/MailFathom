@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using MailFathom.SyntheticMail.Generation;
 using MimeKit;
@@ -41,6 +43,25 @@ internal static class SendingAccountFile
 
     /// <summary>The conventional IMAP port for a connection that handshakes TLS immediately.</summary>
     private const int ImapImplicitTlsPort = 993;
+
+    /// <summary>The plain SMTP port, which is where a test mail server accepts mail when nothing was submitted to it over 587.</summary>
+    private const int SubmissionUnsecuredPort = 25;
+
+    /// <summary>The conventional IMAP port for a connection that is never encrypted, which is the plain port <c>STARTTLS</c> upgrades from.</summary>
+    private const int ImapUnsecuredPort = 143;
+
+    /// <summary>The names that reach a mail server on the machine running this command, or the container host beside it.</summary>
+    /// <remarks>
+    /// The two container names are the aliases Docker and Podman publish for the host from inside a container, so a
+    /// run started in one reaches a mail server the developer started outside it. Anything else has to resolve to an
+    /// address to be judged, which is what <see cref="IsLocalOrContainerHost" /> does instead of trusting a name.
+    /// </remarks>
+    private static readonly string[] LocalHostNames =
+    [
+        "localhost",
+        "host.docker.internal",
+        "host.containers.internal",
+    ];
 
     /// <summary>Reports where the command looks when nothing was named.</summary>
     /// <returns>The absolute path of the credential file.</returns>
@@ -88,9 +109,11 @@ internal static class SendingAccountFile
         var security = ParseSecurity(document.Security, "security", origin, MailTransportSecurity.StartTls);
         var author = ParseAuthorIdentity(document.Author, origin);
 
+        RefuseUnsecuredRemoteHost(host, security, "host", "security", origin);
+
         return new SendingAccount(
             host,
-            ParsePort(document.Port, security, SubmissionStartTlsPort, SubmissionImplicitTlsPort, "port", origin),
+            ParsePort(document.Port, security, SubmissionStartTlsPort, SubmissionImplicitTlsPort, SubmissionUnsecuredPort, "port", origin),
             security,
             address,
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
@@ -137,9 +160,11 @@ internal static class SendingAccountFile
         var password = Required(document.Password, "mailbox.password", origin);
         var security = ParseSecurity(document.Security, "mailbox.security", origin, MailTransportSecurity.ImplicitTls);
 
+        RefuseUnsecuredRemoteHost(host, security, "mailbox.host", "mailbox.security", origin);
+
         return new WatchedMailboxAccount(
             host,
-            ParsePort(document.Port, security, ImapStartTlsPort, ImapImplicitTlsPort, "mailbox.port", origin),
+            ParsePort(document.Port, security, ImapStartTlsPort, ImapImplicitTlsPort, ImapUnsecuredPort, "mailbox.port", origin),
             security,
             address,
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
@@ -170,13 +195,19 @@ internal static class SendingAccountFile
             ? parsed
             : throw new SyntheticMailFailure($"'{key}' in '{path}' is not a mail address.");
 
-    /// <summary>Resolves how the connection carrying the credential is secured.</summary>
+    /// <summary>Resolves an enumeration value written by name, refusing anything that is not one.</summary>
     /// <remarks>
-    /// The definedness check sits beside the parse rather than after it, because <c>Enum.TryParse</c> also accepts a
-    /// string of digits and answers with whatever number it holds — so <c>"security": "2"</c> would arrive as a value
-    /// this enumeration never declared, and everything downstream treats anything that is not <c>ImplicitTls</c> as
-    /// the upgrading option. A file naming something meaningless is refused however it spells it.
+    /// <c>Enum.TryParse</c> also accepts a string of digits and answers with whatever number it holds, so a check that
+    /// the result is defined is not the same question: <c>"security": "2"</c> is a defined value the moment a third
+    /// member is declared, and it would then select an unsecured connection without the file ever saying so. What a
+    /// file is allowed to write is a name, which is what this compares against.
     /// </remarks>
+    private static bool TryParseName<TValue>(string written, out TValue parsed)
+        where TValue : struct, Enum =>
+        Enum.TryParse(written, ignoreCase: true, out parsed)
+            && Enum.GetNames<TValue>().Contains(written.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Resolves how the connection carrying the credential is secured.</summary>
     private static MailTransportSecurity ParseSecurity(
         string? security,
         string key,
@@ -188,11 +219,54 @@ internal static class SendingAccountFile
             return fallback;
         }
 
-        return Enum.TryParse<MailTransportSecurity>(security, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
+        return TryParseName<MailTransportSecurity>(security, out var parsed)
             ? parsed
             : throw new SyntheticMailFailure(
-                $"'{key}' in '{path}' is '{security}', which is not one of {string.Join(" or ", Enum.GetNames<MailTransportSecurity>())}. There is no unsecured option: the run authenticates with a password.");
+                $"'{key}' in '{path}' is '{security}', which is not one of {string.Join(" or ", Enum.GetNames<MailTransportSecurity>())}. There is no opportunistic option: the run authenticates with a password, so a connection either secures itself or is named '{nameof(MailTransportSecurity.Unsecured)}' against a local test server.");
     }
+
+    /// <summary>Refuses an unsecured connection to anything but a mail server on this machine or the container host beside it.</summary>
+    /// <remarks>
+    /// The refusal is here rather than in the transport because this is where a value is judged, and because a host is
+    /// the only thing that decides whether the credential is at risk. It is checked on the host as written rather than
+    /// on what it resolves to: a lookup is a network call this reader must not make, and a name that resolves to a
+    /// loopback address today can resolve elsewhere tomorrow, so an unrecognized name is refused rather than trusted.
+    /// </remarks>
+    private static void RefuseUnsecuredRemoteHost(
+        string host,
+        MailTransportSecurity security,
+        string hostKey,
+        string securityKey,
+        string path)
+    {
+        if (security != MailTransportSecurity.Unsecured || IsLocalOrContainerHost(host))
+        {
+            return;
+        }
+
+        throw new SyntheticMailFailure(
+            $"'{securityKey}' in '{path}' is '{nameof(MailTransportSecurity.Unsecured)}', which sends the password in the clear, and '{hostKey}' is '{host}', which is neither a loopback nor a container bridge address. It exists for a mail server running beside this command, which is 'localhost' or any name ending '.localhost', an address in 127.0.0.0/8 or ::1, a container on 172.17.0.0/16, 10.88.0.0/16, or 10.89.0.0/16, or the host as a container sees it — 'host.docker.internal' under Docker, 'host.containers.internal' under Podman. Name one of those, or secure the connection with {nameof(MailTransportSecurity.StartTls)} or {nameof(MailTransportSecurity.ImplicitTls)}.");
+    }
+
+    /// <summary>Reports whether a host as written reaches this machine or the container host beside it.</summary>
+    private static bool IsLocalOrContainerHost(string host) =>
+        IPAddress.TryParse(host, out var address)
+            ? IPAddress.IsLoopback(address) || IsContainerAddress(address)
+            : LocalHostNames.Contains(host, StringComparer.OrdinalIgnoreCase)
+                || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Reports whether an address is one a container bridge hands out rather than one on a network the machine merely belongs to.</summary>
+    /// <remarks>
+    /// The two subnets are the default bridges themselves — Docker's <c>docker0</c> on 172.17.0.0/16, and Podman's
+    /// netavark bridges on 10.88.0.0/16 and 10.89.0.0/16 — rather than the private blocks those sit inside. Admitting
+    /// a whole block would read a developer's home network on 192.168.0.0/16 or an employer's on 10.0.0.0/8 as though
+    /// it were beside this command, and a real mail server reached at its own private address would then take the
+    /// password in the clear across that network. A container reachable at neither of these is reached the way the
+    /// documentation reaches one anyway: over a published port on loopback, or through the host alias.
+    /// </remarks>
+    private static bool IsContainerAddress(IPAddress address) =>
+        address.AddressFamily == AddressFamily.InterNetwork
+            && address.GetAddressBytes() is [172, 17, ..] or [10, 88 or 89, ..];
 
     private static SyntheticAuthorIdentity ParseAuthorIdentity(string? author, string path)
     {
@@ -201,7 +275,7 @@ internal static class SendingAccountFile
             return SyntheticAuthorIdentity.Fabricated;
         }
 
-        return Enum.TryParse<SyntheticAuthorIdentity>(author, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
+        return TryParseName<SyntheticAuthorIdentity>(author, out var parsed)
             ? parsed
             : throw new SyntheticMailFailure(
                 $"'author' in '{path}' is '{author}', which is not one of {string.Join(" or ", Enum.GetNames<SyntheticAuthorIdentity>())}.");
@@ -209,7 +283,7 @@ internal static class SendingAccountFile
 
     /// <summary>Resolves the port, defaulting to the conventional one for the chosen security.</summary>
     /// <remarks>
-    /// Defaulted rather than required, because the two conventions are fixed and a developer naming the wrong one for
+    /// Defaulted rather than required, because each convention is fixed and a developer naming the wrong one for
     /// their own server gets a connection failure that says so. A written value is checked against the range MailKit
     /// documents for <c>ConnectAsync</c> before MailKit sees it: outside it the library throws
     /// <see cref="ArgumentOutOfRangeException" />, which is neither a transport failure the delivery layer translates
@@ -221,12 +295,18 @@ internal static class SendingAccountFile
         MailTransportSecurity security,
         int startTlsPort,
         int implicitTlsPort,
+        int unsecuredPort,
         string key,
         string path)
     {
         if (port is not { } configured)
         {
-            return security == MailTransportSecurity.ImplicitTls ? implicitTlsPort : startTlsPort;
+            return security switch
+            {
+                MailTransportSecurity.ImplicitTls => implicitTlsPort,
+                MailTransportSecurity.Unsecured => unsecuredPort,
+                _ => startTlsPort,
+            };
         }
 
         return configured is >= 0 and <= 65535
