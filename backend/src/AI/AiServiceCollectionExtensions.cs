@@ -5,6 +5,7 @@
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.Descriptions;
+using MailFathom.AI.Discovery;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
@@ -12,6 +13,7 @@ using MailFathom.AI.Providers;
 using MailFathom.AI.Retrieval;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
+using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
@@ -229,6 +231,26 @@ public static class AiServiceCollectionExtensions
             provider.GetRequiredService<ChatGenerationPlan>(),
             ceiling,
             provider.GetRequiredService<ILogger<ImageAttachmentDescriber>>()));
+
+        return services;
+    }
+
+    /// <summary>Registers the derivation a Discover run reads one question into a plan through.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Registered beside the answering agent and behind the same declaration, because both are the one dependency a
+    /// supported deployment may not have. An instance that declared no chat endpoint registers neither, which is what
+    /// lets the run report that it derives nothing rather than fail to resolve.
+    /// </remarks>
+    public static IServiceCollection AddDiscoveryRunPlanner(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IDiscoveryRunPlanner, DiscoveryPlanningAgent>();
 
         return services;
     }

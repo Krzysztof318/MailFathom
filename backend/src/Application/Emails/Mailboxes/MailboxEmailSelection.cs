@@ -281,7 +281,7 @@ public sealed record MailboxEmailSelection
 
     private string ComputeCanonicalText() => string.Join(
         CanonicalFieldSeparator,
-        LengthPrefixed("f1"),
+        LengthPrefixed("f2"),
         CanonicalList(this.Scope.AccountIds.Select(static accountId => accountId.Value)),
 
         // Both halves of a folder are written, because the pair is what the query narrows by: one role selects a
@@ -293,6 +293,13 @@ public sealed record MailboxEmailSelection
         // deliberately outside this text, for the reason MailboxScope.Hiding gives; whether the caller asked for them is
         // a filter, and a walk resumed under the other answer would skip or repeat rows in the middle of the ordering.
         LengthPrefixed(CanonicalFlag(this.Scope.IncludesJunkMail)),
+
+        // The two narrowings a question carries, written here for the same reason junk mail is: both are the caller's
+        // own choice rather than configuration, and both remove rows from the middle of an ordering that a walk resumed
+        // without them would return. They are why this text opens f2 rather than f1 — a cursor issued before they
+        // existed names a row in a result set this reading no longer produces.
+        CanonicalOptionalText(this.Scope.SelectedThread?.ToString()),
+        CanonicalList(this.Scope.SelectedEmails.Select(static email => email.ToString())),
         CanonicalOptionalText(this.SenderNormalizedAddress),
         CanonicalOptionalText(this.RecipientNormalizedAddress),
         // Upper-cased because the subject filter is case-insensitive: two requests that differ only in the case they

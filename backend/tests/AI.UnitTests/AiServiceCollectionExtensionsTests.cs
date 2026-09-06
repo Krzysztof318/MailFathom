@@ -11,6 +11,7 @@ using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
+using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
@@ -369,6 +370,66 @@ public sealed class AiServiceCollectionExtensionsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddMailAnsweringAgent(null!));
+    }
+
+    /// <summary>
+    /// Scoped for the reason the answering agent is: one scope is one question, and the generation plan it derives with
+    /// is read once per scope so a run stays on the plan it began with.
+    /// </summary>
+    [Fact]
+    public void AddDiscoveryRunPlanner_ResolvesThePlanningPortOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+
+        // Beside the adapter, as the composition root registers them: a derivation sends over the transport that call names.
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddDiscoveryRunPlanner();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IDiscoveryRunPlanner>(),
+            otherScope.ServiceProvider.GetRequiredService<IDiscoveryRunPlanner>());
+    }
+
+    /// <summary>The envelope is a seam a deployment fills, so the planner keeps one that is already registered.</summary>
+    [Fact]
+    public void AddDiscoveryRunPlanner_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var declared = Substitute.For<IAgentInstructionEnvelope>();
+        services.AddSingleton(declared);
+
+        // Act
+        services.AddDiscoveryRunPlanner();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(declared, provider.GetRequiredService<IAgentInstructionEnvelope>());
+    }
+
+    [Fact]
+    public void AddDiscoveryRunPlanner_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunPlanner(null!));
     }
 
     /// <summary>

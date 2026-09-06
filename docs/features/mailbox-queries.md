@@ -104,6 +104,13 @@ and its result would read as an answer about the mailbox.
   after deduplication — that is what lets the limit be enforced while the caller's list is read instead of after it has
   been materialized. Both lists are then deduplicated and ordered, so two spellings of one scope are one query with one
   cursor.
+- **What a question was asked about** narrows a scope further, and only a Discover run supplies it: one conversation,
+  or up to 64 individually selected messages, counted the way the two lists above are. It narrows and never widens —
+  the accounts, the folders a mapping admits, and the junk decision all still apply, so a conversation reaching into a
+  folder this caller may not read returns nothing from that folder, and an identifier naming another owner's mail
+  matches nothing rather than being refused. It is applied by the query itself rather than to the query's result, which
+  is what makes a question about four messages read four messages. Both narrowings take part in a cursor's fingerprint,
+  because both remove rows from the middle of an ordering that a walk resumed without them would return.
 - **An account nobody serves** is refused with `53001 MailAccountNotAccessible` before anything is read. One failure
   covers both "no such account" and "not yours", and an empty page is deliberately not the answer: it would confirm the
   name and turn a listing into a way to enumerate accounts. Text matching neither an identifier nor a display name meets

@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Emails.Mailboxes;
@@ -49,6 +50,14 @@ public sealed record MailboxScope
     /// and one role a request named resolves to a folder on each of them.
     /// </remarks>
     public const int MaximumFolders = 64;
+
+    /// <summary>The greatest number of individual emails a question may be asked about.</summary>
+    /// <remarks>
+    /// Generous against what a person selects in a list before asking about the selection, so meeting it means a caller
+    /// enumerated a mailbox rather than chose messages. It is enforced in <see cref="NarrowedToEmails" /> rather than at
+    /// a transport, because unlike the two bounds above this list reaches the scope as the caller wrote it.
+    /// </remarks>
+    public const int MaximumSelectedEmails = 64;
 
     private MailboxScope(
         MailOwnerId owner,
@@ -151,6 +160,31 @@ public sealed record MailboxScope
     /// </remarks>
     public bool IncludesJunkMail { get; private init; }
 
+    /// <summary>Gets the conversation a query is restricted to, or <see langword="null" /> when it is restricted to no single one.</summary>
+    /// <remarks>
+    /// The narrowing a question asked about one conversation carries. It is the caller's own filter rather than
+    /// configuration, so it takes part in a continuation cursor's fingerprint for the reason
+    /// <see cref="IncludesJunkMail" /> does: it removes rows from the middle of an ordering that a walk resumed without
+    /// it would return.
+    /// </remarks>
+    public EmailThreadId? SelectedThread { get; private init; }
+
+    /// <summary>Gets the individual emails a query is restricted to, deduplicated and ordered, or empty when it is restricted to none.</summary>
+    /// <remarks>
+    /// <para>
+    /// The narrowing a question asked about a selection carries, and the one place a scope names mail rather than the
+    /// containers holding it. Empty means no such narrowing, never that no email is readable — which is the opposite of
+    /// how <see cref="ReadableFolders" /> reads, because that list is configuration and this one is a caller's choice.
+    /// </para>
+    /// <para>
+    /// An identifier naming mail this scope's owner does not own matches nothing rather than being refused. The owner is
+    /// the first term of every mail-returning query whatever else narrows it, so a caller cannot reach another owner's
+    /// mail by naming its identifier, and answering with nothing is what naming an email that no longer exists already
+    /// does.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<StoredEmailId> SelectedEmails { get; private init; } = [];
+
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
     /// <param name="owner">The owner whose mail the query is restricted to, which every narrowing then sits inside.</param>
     /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's owner owns when a request named none.</param>
@@ -209,6 +243,38 @@ public sealed record MailboxScope
                     .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
             ],
         };
+
+    /// <summary>Restricts the scope to one conversation, on top of everything already narrowing it.</summary>
+    /// <param name="thread">The conversation the question was asked about.</param>
+    /// <returns>The same scope restricted to that conversation.</returns>
+    /// <remarks>
+    /// It narrows and never widens: the accounts, the folders, and the readable set still apply, so a conversation
+    /// reaching into a folder this caller may not read returns nothing from that folder.
+    /// </remarks>
+    public MailboxScope NarrowedToThread(EmailThreadId thread) => this with { SelectedThread = thread };
+
+    /// <summary>Restricts the scope to individual emails, on top of everything already narrowing it.</summary>
+    /// <param name="selectedEmails">The emails the question was asked about, at most <see cref="MaximumSelectedEmails" /> of them.</param>
+    /// <returns>The same scope restricted to those emails, deduplicated and ordered.</returns>
+    /// <exception cref="MailboxQueryFilterInvalidException">More emails were named than <see cref="MaximumSelectedEmails" /> admits.</exception>
+    /// <remarks>
+    /// The bound counts what the caller wrote rather than the distinct identifiers left afterwards, so a request cannot
+    /// buy a larger predicate by repeating one. Ordering and deduplication are what make two requests naming the same
+    /// selection in a different order one query with one cursor, exactly as the two lists above are ordered.
+    /// </remarks>
+    public MailboxScope NarrowedToEmails(IReadOnlyList<StoredEmailId> selectedEmails)
+    {
+        ArgumentNullException.ThrowIfNull(selectedEmails);
+        MailboxQueryFilterInvalidException.ThrowIfCountExceeded(
+            selectedEmails.Count,
+            MaximumSelectedEmails,
+            "selected emails");
+
+        return this with
+        {
+            SelectedEmails = [.. selectedEmails.Distinct().OrderBy(static email => email.Value)],
+        };
+    }
 
     /// <summary>Applies the caller's answer about junk mail to the junk folders configuration maps.</summary>
     /// <param name="inclusion">What the caller asked for.</param>

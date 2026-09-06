@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
@@ -109,6 +110,56 @@ public sealed class MailboxScopeTests
 
         // Assert
         Assert.Equal(folders.Length, scope.SelectedFolders.Count);
+    }
+
+    /// <summary>Deduplicated and ordered like the other two lists, so one selection is one query with one cursor.</summary>
+    [Fact]
+    public void NarrowedToEmails_RepeatedAndUnorderedIdentifiers_ProduceOneCanonicalNarrowing()
+    {
+        // Arrange
+        var first = StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+        var second = StoredEmailId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], []);
+
+        // Act
+        var narrowed = scope.NarrowedToEmails([second, first, second]);
+
+        // Assert
+        Assert.Equal([first, second], narrowed.SelectedEmails);
+    }
+
+    /// <summary>The bound counts what the caller wrote, so repeating one identifier cannot buy a larger predicate.</summary>
+    [Fact]
+    public void NarrowedToEmails_MoreIdentifiersThanTheBoundAdmits_IsRefused()
+    {
+        // Arrange
+        var repeated = Enumerable
+            .Repeat(StoredEmailId.Create(new Guid("33333333-3333-3333-3333-333333333333")), MailboxScope.MaximumSelectedEmails + 1)
+            .ToArray();
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], []);
+
+        // Act
+        var refusal = Assert.Throws<MailboxQueryFilterInvalidException>(() => scope.NarrowedToEmails(repeated));
+
+        // Assert
+        Assert.Equal("selected emails", refusal.FilterName);
+    }
+
+    /// <summary>A narrowing narrows: everything the scope already restricted still restricts.</summary>
+    [Fact]
+    public void NarrowedToThread_AScopeThatNamedFolders_KeepsEveryOtherRestriction()
+    {
+        // Arrange
+        var thread = EmailThreadId.Create(new Guid("44444444-4444-4444-4444-444444444444"));
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], [Folder(Primary, "ARCHIVE")]);
+
+        // Act
+        var narrowed = scope.NarrowedToThread(thread);
+
+        // Assert
+        Assert.Equal(thread, narrowed.SelectedThread);
+        Assert.Equal([Primary], narrowed.AccountIds);
+        Assert.Equal([Folder(Primary, "ARCHIVE")], narrowed.SelectedFolders);
     }
 
     private static MailFolderIdentity Folder(MailAccountId accountId, string alias) =>

@@ -3,9 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -18,6 +21,11 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </summary>
 public sealed class StoredEmailSelectionPredicateCommandTests
 {
+    private static MailboxScope WholeMailbox { get; } = MailboxScope.Create(
+        SyntheticMailOwner.Deployment,
+        [MailAccountId.Create("primary")],
+        []);
+
     /// <summary>
     /// The flag is a column of its own, so the filter is a comparison rather than anything the snapshot has to be
     /// unpacked for — and it is a comparison against the value the caller asked for. Reading only the column name would
@@ -67,6 +75,62 @@ public sealed class StoredEmailSelectionPredicateCommandTests
         // Assert
         Assert.DoesNotContain(nameof(StoredEmailEntity.IsRemotelyFlagged), narrowing, StringComparison.Ordinal);
         Assert.DoesNotContain(nameof(StoredEmailEntity.RemoteKeywords), narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A question asked about one conversation reads that conversation in the database rather than in the process. The
+    /// column is the assertion: a narrowing applied to the result instead would return the same rows for a small
+    /// mailbox and read everything the scope admits to get them.
+    /// </summary>
+    [Fact]
+    public void WithinScope_AScopeNarrowedToOneConversation_NarrowsTheCommandByTheThreadColumn()
+    {
+        // Act
+        var narrowing = ScopeNarrowingOf(WholeMailbox.NarrowedToThread(
+            EmailThreadId.Create(new Guid("11111111-1111-1111-1111-111111111111"))));
+
+        // Assert
+        Assert.Contains(nameof(StoredEmailEntity.EmailThreadId), narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Individually selected messages narrow by identity, which is what makes a question about four messages read four
+    /// rows. The containment operator is what serves that from the primary key rather than from a scan.
+    /// </summary>
+    [Fact]
+    public void WithinScope_AScopeNarrowedToSelectedEmails_NarrowsTheCommandByThoseIdentities()
+    {
+        // Act
+        var narrowing = ScopeNarrowingOf(WholeMailbox.NarrowedToEmails(
+        [
+            StoredEmailId.Create(new Guid("22222222-2222-2222-2222-222222222222")),
+            StoredEmailId.Create(new Guid("33333333-3333-3333-3333-333333333333")),
+        ]));
+
+        // Assert
+        Assert.Contains($"\"{nameof(StoredEmailEntity.Id)}\" = ANY", narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>A scope nobody narrowed reads the mailbox, which is what keeps an ordinary listing off both columns.</summary>
+    [Fact]
+    public void WithinScope_AScopeNarrowedToNeither_LeavesBothNarrowingsOutOfTheCommand()
+    {
+        // Act
+        var narrowing = ScopeNarrowingOf(WholeMailbox);
+
+        // Assert
+        Assert.DoesNotContain(nameof(StoredEmailEntity.EmailThreadId), narrowing, StringComparison.Ordinal);
+        Assert.DoesNotContain($"\"{nameof(StoredEmailEntity.Id)}\" = ANY", narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>Generates what a scope alone narrows by, without opening a connection.</summary>
+    private static string ScopeNarrowingOf(MailboxScope scope)
+    {
+        using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
+
+        return NarrowingIn(StoredEmailSelectionPredicate
+            .WithinScope(context.StoredEmails.AsNoTracking(), scope)
+            .ToQueryString());
     }
 
     /// <summary>Generates what the predicate narrows by, without opening a connection.</summary>

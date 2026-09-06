@@ -9,6 +9,8 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Discovery.Citations;
+using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Release;
@@ -918,6 +920,17 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<IMailQuestionAnswerer>()));
         services.AddScoped<MailboxQuestionReader>();
+        // The Discover run beside the question reader, registered for every deployment for the reason the capability
+        // above is: an instance that declared no chat endpoint has to be able to refuse a run distinguishably rather
+        // than fail to resolve one. The planner is the dependency it may not have, so it is asked for rather than
+        // required, and the retrieval beside it is a reading of the same search every other caller reaches.
+        services.AddScoped<PlannedMailRetrieval>();
+        services.AddScoped(provider => new DiscoveryRun(
+            provider.GetRequiredService<MailAnsweringCapability>(),
+            provider.GetRequiredService<PlannedMailRetrieval>(),
+            provider.GetRequiredService<AccessAuthorization>(),
+            provider.GetRequiredService<SensitiveContentEgressGuard>(),
+            provider.GetService<IDiscoveryRunPlanner>()));
         // The two halves of what a run leaves behind, registered for every deployment because both decide for
         // themselves whether they have anything to publish: the span exists only where something is listening, and the
         // record only for an account whose operator turned it on. A singleton for the span because it holds one
