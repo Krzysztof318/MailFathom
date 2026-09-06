@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 
 namespace MailFathom.Application.Retrieval;
@@ -27,6 +28,11 @@ namespace MailFathom.Application.Retrieval;
 /// of a summary and several highlighted fragments, carrying only the identity an answer is traced through. Everything a
 /// listing publishes and an answer does not need — the participants, the size, the flags, the attachment summary — is
 /// dropped here rather than sent to a provider.
+/// </para>
+/// <para>
+/// What a file the message carried contributed is kept, and kept separate. It is what lets an answer draw on a
+/// contract's own words and say which file and which page they came from, and keeping it separate is what stops a model
+/// reporting that somebody typed those words into the message.
 /// </para>
 /// </remarks>
 public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
@@ -93,17 +99,19 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             [
                 .. result.Matches
                     .Select(this.ToPassage)
-                    .Where(static passage => passage.Text.Length is not 0),
+                    .Where(static passage =>
+                        passage.Text.Length is not 0 || passage.AttachmentExtracts.Count is not 0),
             ],
             result.RetrievalMode);
     }
 
     /// <summary>Reads one match into the passage a model receives.</summary>
     /// <remarks>
-    /// A message whose extracts are empty produces a passage with no text, which the caller drops. That is a message
-    /// matched on its subject or its participants while its body yielded none — encrypted mail, or mail whose content
-    /// lives in an attachment — and sending an identifier with nothing beside it would spend context on a message the
-    /// model cannot read a word of.
+    /// A message that yielded neither a body extract nor an attachment one produces a passage the caller drops. That is
+    /// a message matched on its subject or its participants while nothing it carries yielded text — encrypted mail, or
+    /// a file no reader could open — and sending an identifier with nothing beside it would spend context on a message
+    /// the model cannot read a word of. A message whose words live only in a file is the opposite case and is kept: its
+    /// body extract is empty and its attachment extracts are the answer.
     /// </remarks>
     private EmailKnowledgePassage ToPassage(EmailSearchMatch match)
     {
@@ -119,8 +127,23 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             SenderVerification = summary.SenderVerification,
             MachineAuthorship = summary.MachineAuthorship,
             Text = this.Bounded(string.Join(SnippetSeparator, match.Snippets)),
+            AttachmentExtracts = [.. match.AttachmentMatches.Select(this.ToAttachmentExtract)],
         };
     }
+
+    /// <summary>Reads one attachment match into the extract a model receives beside the message's own.</summary>
+    /// <remarks>
+    /// Bounded by the same per-passage ceiling the message extract is, applied per attachment rather than across them:
+    /// the bound exists to keep one retrieved message from filling a run's context, and a file is a second source rather
+    /// than more of the first. A message carrying more files than the search would report is already bounded above by
+    /// the deployment's own snippet count.
+    /// </remarks>
+    private EmailKnowledgeAttachmentExtract ToAttachmentExtract(EmailAttachmentMatch match) => new(
+        match.AttachmentPosition,
+        match.FileName,
+        match.Kind,
+        match.Segment,
+        this.Bounded(string.Join(SnippetSeparator, match.Extracts)));
 
     /// <summary>Cuts an extract to the size one passage may carry.</summary>
     /// <remarks>

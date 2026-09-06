@@ -4,9 +4,12 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
@@ -504,12 +507,101 @@ public sealed class MailboxKnowledgeSearchTests
         Assert.Equal([matched.StoredEmailId], passages.Select(static passage => passage.StoredEmailId));
     }
 
+    /// <summary>A file's words reach the model beside the message's own, carrying the place a citation is drawn from.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_AMessageWhoseAttachmentMatched_CarriesThatExtractBesideTheMessageText()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched, snippets: "the invoice is attached");
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, AttachmentMatch("the total is 42 euro"));
+        var search = SearchOver(index, attachmentMatches: attachmentMatches);
+
+        // Act
+        var passage = Assert.Single((await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages);
+
+        // Assert
+        var extract = Assert.Single(passage.AttachmentExtracts);
+
+        Assert.Equal("the invoice is attached", passage.Text);
+        Assert.Equal("statement.pdf", extract.FileName);
+        Assert.Equal(2, extract.Segment?.Number);
+        Assert.Equal("the total is 42 euro", extract.Text);
+    }
+
+    /// <summary>
+    /// A message whose words live only in a file is the case this feature exists for, so a body that yielded nothing is
+    /// not what decides the passage is empty.
+    /// </summary>
+    [Fact]
+    public async Task FindPassagesAsync_AMessageMatchedOnlyInsideAFile_IsStillRetrieved()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched);
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, AttachmentMatch("the total is 42 euro"));
+        var search = SearchOver(index, attachmentMatches: attachmentMatches);
+
+        // Act
+        var passage = Assert.Single((await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages);
+
+        // Assert
+        Assert.Empty(passage.Text);
+        Assert.Equal("the total is 42 euro", Assert.Single(passage.AttachmentExtracts).Text);
+    }
+
+    /// <summary>
+    /// The per-passage ceiling applies to a file's extract as it does to the message's, so a long document cannot spend
+    /// a run's context by arriving beside a bounded body.
+    /// </summary>
+    [Fact]
+    public async Task FindPassagesAsync_AnAttachmentExtractPastTheBound_CutsItToWhatOnePassageMayCarry()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched, snippets: "the invoice is attached");
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, AttachmentMatch(new string('a', 400)));
+        var search = SearchOver(
+            index,
+            EmailKnowledgeBounds.Create(maximumPassages: 4, maximumCharactersPerPassage: 120),
+            attachmentMatches: attachmentMatches);
+
+        // Act
+        var passage = Assert.Single((await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages);
+
+        // Assert
+        Assert.Equal(120, Assert.Single(passage.AttachmentExtracts).Text.Length);
+    }
+
+    /// <summary>Builds a hit on the second page of a document attachment.</summary>
+    private static EmailAttachmentMatch AttachmentMatch(params string[] extracts) => new(
+        AttachmentPosition: 1,
+        FileName: "statement.pdf",
+        DeclaredMediaType: "application/pdf",
+        Kind: AttachmentTextKind.Document,
+        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 2, Label: null, StartOffset: 0),
+        Extracts: extracts);
+
     private static MailboxKnowledgeSearch SearchOver(
         InMemoryEmailSearchIndex index,
         EmailKnowledgeBounds? bounds = null,
-        SensitiveContentEgressGuard? egressGuard = null) => new(
+        SensitiveContentEgressGuard? egressGuard = null,
+        InMemoryEmailAttachmentMatchIndex? attachmentMatches = null) => new(
         new MailboxSearchReader(
             index,
+            attachmentMatches ?? new InMemoryEmailAttachmentMatchIndex(),
             LexicalOnlySemanticSearch(),
             FreshnessReaderReturningNothing(),
             new MailboxScopeResolver(

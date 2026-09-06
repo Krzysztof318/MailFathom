@@ -6,11 +6,13 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.SearchEmails;
 
@@ -38,9 +40,17 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// empty window in place of one it could not rank semantically.
 /// </para>
 /// <para>
-/// Because the index covers body text only, a word that appears solely inside an attachment payload matches nothing
-/// here. That is a deliberate limit of text extraction rather than something this use case works
-/// around, and the feature documentation states it so the behavior is not surprising.
+/// The index covers the text of the documents attached to a message as well as its body, so a clause a sender put in a
+/// PDF is found by the words it is written in. What an attachment contributed is reported as its own match — naming the
+/// file and the page it was read from — rather than folded into the message's snippets, and neither the ranking nor the
+/// result ever carries a whole attachment.
+/// </para>
+/// <para>
+/// A picture is reached only by what a model said it shows, and a result placed by one of those descriptions sits below
+/// every message a query word or a passage somebody wrote reached. That floor is
+/// <see cref="HybridSearchRanking" />'s rather than this use case's, because
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// requires one step every surface calls instead of a rule each of them remembers.
 /// </para>
 /// <para>
 /// A window is one of the points mail content leaves this deployment, so where a sensitive-content scanner is switched
@@ -69,6 +79,7 @@ public sealed class MailboxSearchReader
     private const int FusionCandidateDepthMultiplier = 4;
 
     private readonly IEmailSearchIndexReader searchIndexReader;
+    private readonly IEmailAttachmentMatchReader attachmentMatchReader;
     private readonly SemanticEmailSearch semanticSearch;
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
@@ -79,6 +90,7 @@ public sealed class MailboxSearchReader
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
+    /// <param name="attachmentMatchReader">Reads which attachment of a result the query reached, and where inside the file.</param>
     /// <param name="semanticSearch">Ranks mail by meaning, or reports that this instance cannot.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the search runs against.</param>
@@ -89,6 +101,7 @@ public sealed class MailboxSearchReader
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxSearchReader(
         IEmailSearchIndexReader searchIndexReader,
+        IEmailAttachmentMatchReader attachmentMatchReader,
         SemanticEmailSearch semanticSearch,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
@@ -98,6 +111,7 @@ public sealed class MailboxSearchReader
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
+        ArgumentNullException.ThrowIfNull(attachmentMatchReader);
         ArgumentNullException.ThrowIfNull(semanticSearch);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -107,6 +121,7 @@ public sealed class MailboxSearchReader
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.searchIndexReader = searchIndexReader;
+        this.attachmentMatchReader = attachmentMatchReader;
         this.semanticSearch = semanticSearch;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
@@ -213,15 +228,17 @@ public sealed class MailboxSearchReader
                 selection.Scope.IncludesJunkMail);
         }
 
-        var (rankedCandidates, retrievalMode, semanticSearchCapability) =
+        var (ranking, retrievalMode, semanticSearchCapability) =
             await this.RankAsync(selection, queryText, resultLimit.Value, cancellationToken);
 
         var matches = await this.searchIndexReader.ReadMatchesAsync(
             selection,
             queryText,
             this.snippetBounds,
-            rankedCandidates,
+            ranking.Candidates,
             cancellationToken);
+
+        matches = await this.WithAttachmentMatchesAsync(selection, queryText, ranking, matches, cancellationToken);
 
         // Read after the window rather than beside it: both reads reach the same scoped EF Core context, which serves
         // one operation at a time, so starting them together would fault instead of overlapping.
@@ -233,6 +250,82 @@ public sealed class MailboxSearchReader
             semanticSearchCapability,
             folderFreshness,
             selection.Scope.IncludesJunkMail);
+    }
+
+    /// <summary>Reads what the window's attachments contributed and hangs it on the matches they belong to.</summary>
+    /// <remarks>
+    /// <para>
+    /// Two reads because the two kinds of contribution are found by different means. A document's own words were reached
+    /// by the query's words, so every result in the window is asked about; a description was never matched lexically at
+    /// all, so only the results a description alone placed are, and what they show is the description itself.
+    /// </para>
+    /// <para>
+    /// Sequential rather than concurrent, and after the window rather than beside it, for the reason the freshness read
+    /// is: all three reach the same scoped EF Core context, which serves one operation at a time.
+    /// </para>
+    /// <para>
+    /// A message the depicted read answered for keeps the extracts that read found and is marked as depicted, which is
+    /// what says a picture is the whole of its claim on the query. A message the fused ranking carried is never marked,
+    /// however many pictures are attached to it: its place was earned by something somebody wrote.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailSearchMatch>> WithAttachmentMatchesAsync(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        RankedSearchSequence ranking,
+        IReadOnlyList<EmailSearchMatch> matches,
+        CancellationToken cancellationToken)
+    {
+        if (matches.Count is 0)
+        {
+            return matches;
+        }
+
+        StoredEmailId[] writtenIds =
+        [
+            .. matches
+                .Select(static match => match.Summary.StoredEmailId)
+                .Where(storedEmailId => !ranking.DepictedOnly.Contains(storedEmailId)),
+        ];
+
+        StoredEmailId[] depictedIds =
+        [
+            .. matches
+                .Select(static match => match.Summary.StoredEmailId)
+                .Where(ranking.DepictedOnly.Contains),
+        ];
+
+        var written = writtenIds.Length is 0
+            ? []
+            : await this.attachmentMatchReader.ReadWrittenMatchesAsync(
+                selection,
+                queryText,
+                this.snippetBounds,
+                writtenIds,
+                cancellationToken);
+
+        var depicted = depictedIds.Length is 0
+            ? []
+            : await this.attachmentMatchReader.ReadDepictedMatchesAsync(
+                selection,
+                this.snippetBounds,
+                depictedIds,
+                cancellationToken);
+
+        var byEmail = written
+            .Concat(depicted)
+            .ToDictionary(
+                static found => found.StoredEmailId,
+                static found => found.Matches);
+
+        return
+        [
+            .. matches.Select(match => match with
+            {
+                AttachmentMatches = byEmail.GetValueOrDefault(match.Summary.StoredEmailId, []),
+                IsDepictedMatch = ranking.DepictedOnly.Contains(match.Summary.StoredEmailId),
+            }),
+        ];
     }
 
     /// <summary>Scans the mail content of a window before the window becomes somebody else's.</summary>
@@ -283,15 +376,53 @@ public sealed class MailboxSearchReader
                 SensitiveContentEgressPoint.McpSnippet,
                 match.Snippets,
                 cancellationToken);
+            var attachmentMatches = await this.GuardedAttachmentsAsync(match.AttachmentMatches, cancellationToken);
 
             guarded.Add(match with
             {
                 Summary = match.Summary with { Subject = subject, SenderDisplayName = senderDisplayName },
                 Snippets = snippets,
+                AttachmentMatches = attachmentMatches,
             });
         }
 
         scan.Completed();
+
+        return guarded;
+    }
+
+    /// <summary>Scans what a result's attachments publish, which is their extracts and the names their senders chose.</summary>
+    /// <remarks>
+    /// The file name is scanned for the reason a sender's display name is: it is free text somebody wrote, and a
+    /// document called after the person it concerns discloses as much as a sentence about them. The walk position and
+    /// the declared media type are not scanned, being a coordinate a caller acts on and a parser's input rather than
+    /// text to read, and a page number is neither.
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailAttachmentMatch>> GuardedAttachmentsAsync(
+        IReadOnlyList<EmailAttachmentMatch> attachmentMatches,
+        CancellationToken cancellationToken)
+    {
+        if (attachmentMatches.Count is 0)
+        {
+            return attachmentMatches;
+        }
+
+        var guarded = new List<EmailAttachmentMatch>(attachmentMatches.Count);
+
+        foreach (var attachmentMatch in attachmentMatches)
+        {
+            guarded.Add(attachmentMatch with
+            {
+                FileName = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    attachmentMatch.FileName,
+                    cancellationToken),
+                Extracts = await this.egressGuard.GuardAllAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    attachmentMatch.Extracts,
+                    cancellationToken),
+            });
+        }
 
         return guarded;
     }
@@ -304,7 +435,7 @@ public sealed class MailboxSearchReader
     /// lexical-only instance or discover the fused window was drawn from a truncated ranking.
     /// </remarks>
     private async Task<(
-        IReadOnlyList<RankedEmailCandidate> Candidates,
+        RankedSearchSequence Ranking,
         EmailSearchRetrievalMode RetrievalMode,
         SemanticSearchCapability SemanticSearch)>
         RankAsync(
@@ -323,7 +454,7 @@ public sealed class MailboxSearchReader
             candidateDepth,
             cancellationToken);
 
-        if (semantic.Candidates is not { } semanticCandidates)
+        if (semantic.Rankings is not { } semanticRankings)
         {
             var lexicalWindow = await this.searchIndexReader.ReadRankedCandidatesAsync(
                 selection,
@@ -333,7 +464,10 @@ public sealed class MailboxSearchReader
 
             ranking.Completed(lexicalWindow.Count);
 
-            return (lexicalWindow, EmailSearchRetrievalMode.Lexical, semantic.Capability);
+            return (
+                RankedSearchSequence.Written(lexicalWindow),
+                EmailSearchRetrievalMode.Lexical,
+                semantic.Capability);
         }
 
         var lexicalCandidates = await this.searchIndexReader.ReadRankedCandidatesAsync(
@@ -342,13 +476,14 @@ public sealed class MailboxSearchReader
             candidateDepth,
             cancellationToken);
 
-        var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, resultLimit);
+        var composed = HybridSearchRanking.Compose(lexicalCandidates, semanticRankings, resultLimit);
 
-        // What the ranking produced rather than what the search returns: the fused window is bounded by the result
+        // What the ranking produced rather than what the search returns: the composed window is bounded by the result
         // limit, so reporting it would publish a number that never differs from the count on the read above.
-        ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
+        ranking.Completed(
+            lexicalCandidates.Count + semanticRankings.Written.Count + semanticRankings.Depicted.Count);
 
-        return (fused, EmailSearchRetrievalMode.Hybrid, semantic.Capability);
+        return (composed, EmailSearchRetrievalMode.Hybrid, semantic.Capability);
     }
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>

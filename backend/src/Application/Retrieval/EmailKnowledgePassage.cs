@@ -23,6 +23,11 @@ namespace MailFathom.Application.Retrieval;
 /// message; the account and the folder alias are the deployment's own names for where it was read from.
 /// </para>
 /// <para>
+/// What a file the message carried contributed travels beside the extract rather than inside it, so a model is never
+/// told that a contract's own words were typed into the covering note, and an answer drawn from a file can name the
+/// file and the page.
+/// </para>
+/// <para>
 /// A passage is mail content and inherits the classification of the message it was cut from. It is never logged, never
 /// attached to a span, and never exported.
 /// </para>
@@ -62,4 +67,13 @@ public sealed record EmailKnowledgePassage
 
     /// <summary>Gets the extract itself, already cut to the size one passage may carry.</summary>
     public required string Text { get; init; }
+
+    /// <summary>Gets what the message's attachments contributed, each naming its file and the place inside it.</summary>
+    /// <remarks>
+    /// Empty where the query reached no attachment of this message, and empty on every deployment that reads none. A
+    /// passage carrying nothing in <see cref="Text" /> and something here is an ordinary case rather than a defect: a
+    /// message whose content lives entirely in a file matched on that file, and dropping it would lose exactly the mail
+    /// this feature exists to find.
+    /// </remarks>
+    public IReadOnlyList<EmailKnowledgeAttachmentExtract> AttachmentExtracts { get; init; } = [];
 }

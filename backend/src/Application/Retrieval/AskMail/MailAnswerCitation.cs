@@ -18,6 +18,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <param name="ReceivedAt">When the last receiving hop recorded it, or <see langword="null" /> when no header carried a usable date.</param>
 /// <param name="SenderVerification">What was established about the author it displays, and what this deployment made of them.</param>
 /// <param name="MachineAuthorship">How much the email's own text read as machine written.</param>
+/// <param name="Attachments">The files inside it the answer drew on, each naming the place inside the file, empty where the answer drew on the message alone.</param>
 /// <remarks>
 /// <para>
 /// A citation is what turns an answer into a starting point rather than something to be believed: the identifier
@@ -27,6 +28,11 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// It deliberately carries no extract. The passage the run retrieved is bounded mail content that has already reached a
 /// provider, and republishing it here would put mail into a second response that nobody asked to read; the subject and
 /// the received time are what let a reader recognize the message before fetching it.
+/// </para>
+/// <para>
+/// Where the answer drew on a file the message carried, the file is named beside the message rather than instead of it.
+/// The message is still what a reader opens, and the attachment coordinate is what tells them which of its files, and
+/// which page of that file, to open once they have.
 /// </para>
 /// <para>
 /// One per email rather than one per passage. A run makes several lookups and one message can answer more than one of
@@ -46,4 +52,5 @@ public sealed record MailAnswerCitation(
     string? Subject,
     DateTimeOffset? ReceivedAt,
     SenderVerification SenderVerification,
-    MachineAuthorshipAssessment MachineAuthorship);
+    MachineAuthorshipAssessment MachineAuthorship,
+    IReadOnlyList<MailAnswerAttachmentCitation> Attachments);

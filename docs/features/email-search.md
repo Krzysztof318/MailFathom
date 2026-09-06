@@ -51,13 +51,18 @@ refuses. The exclusion is in the database rather than in a writer: the generated
 document's text and nothing at all for a description, so a word occurring only in a description returns no lexical
 match whatever a later writer does with the row. A depicted match reaches retrieval through the vector index alone.
 
-The two halves have landed to different depths, and the difference is what an operator is told. **The lexical rows and
-their GIN index exist and nothing reads them yet**: `search_emails` matches a message on its own words alone, so a word
-that occurs only inside a PDF returns nothing there, and the surface that reads the attachment index is separate work.
-**The vector index already answers with an attachment match**: an attachment passage is embedded through the active
-profile exactly as a body passage is, and a semantic search ranks a message on whichever of its passages is nearest — so
-on a deployment with attachment reading on and a profile active, `search_emails` already returns a message whose only
-near passage was cut from an attachment, including one cut from a description of a picture.
+**Both halves are read.** A document's own words take part in the lexical ranking on the same terms the body does — a
+message is eligible when either its own vector or one of its attachments' matches, and its rank is the message's own
+`ts_rank` plus the greatest of its matching attachments' — and they take part in the semantic ranking through the
+passages cut from them. A word that occurs only inside a PDF therefore finds the message it was attached to, and the
+result says which file it was found in and where inside it. A picture's description takes part in the semantic half
+alone, by the exclusion above, and never improves a message's place: [Hybrid retrieval](#hybrid-retrieval) records the
+partition that guarantees it.
+
+The bound on all of this is that an attachment MailFathom could not read is simply **absent** from a result. A file no
+parser opened, one a deployment's reading limits stopped at, and one attached while reading was off each yield no text
+and therefore no rows, so nothing matches them and no result reports them as searched and empty. That is the honest
+reading: the search never says a file held nothing, only that it found nothing in what it holds.
 
 **Where a sensitive-content scanner is switched on, the indexed body text is the redacted text.** Redaction happens as
 the message is extracted, so what `search_vector` is generated from is what a reader of a result would see, and a word
@@ -145,6 +150,15 @@ produced them, and `SearchEmailsResult` adds the retrieval mode the whole window
   retrieval, a fused rank score under hybrid. It is comparable within one result set and means nothing across two, and
   the two scales are unrelated — reading it without reading the mode says nothing.
 - **The snippets** are extracts of the body text around the matched words, each matched run wrapped in `**`.
+- **The attachment matches** are what the message's own files contributed, one entry per passage that matched: the
+  attachment's walk position, the file name the sender gave it, its declared media type, whether the words are the
+  file's own or a model's account of a picture, the page, slide, or sheet the passage was read from, and bounded
+  extracts of it under the same bound the snippets are published under. A message nothing matched inside carries an
+  empty list, which is the same thing as a message with no readable attachment at all — neither says a file was
+  searched and held nothing.
+- **Whether a picture put the message here** is the mark a depicted match carries, and it is set only where nothing
+  written found the message at all. A message with both a matching passage and a near description is unmarked, because
+  the picture contributed nothing to where it sits.
 - **The retrieval mode** is `Lexical` or `Hybrid`, and it describes this one call rather than the deployment.
 - **The semantic capability** is `Inactive`, `Available`, or `Degraded`, and it describes the instance. It is what
   separates a lexical answer that is exactly what the deployment intends from one that is narrower than intended; the
@@ -196,6 +210,26 @@ An instance that has activated an embedding profile ranks twice and combines the
 - **Fusion** combines the two by Reciprocal Rank Fusion: a message scores `1 / (60 + rank)` in each ranking that
   returned it, counting from one, and the fused score is the sum. Each ranking is asked for four times the window being
   returned, so agreement between them can be observed at all rather than only inside the window.
+
+The semantic half is **two** orderings rather than one, and the difference between them is what a passage was cut from.
+A passage of a message's own text or of a document attachment is *written*; a model's account of a picture is
+*depicted*. Both are read from one eligible set under one distance metric, and each passage is placed in one of the two
+by the kind recorded on its attachment row rather than by anything a caller sent.
+
+- **The written ranking enters fusion unchanged**, so nothing above changes for a message a person wrote words in.
+- **The depicted ranking is reduced to what fusion did not carry, and appended whole after it.** A message the fused
+  result already holds is dropped from it rather than re-scored, which is what makes the guarantee the stronger one: a
+  picture never improves a message's place, and only ever adds a message that would not have been in the result at all.
+- **Both sections share the depth the window already had.** The caller's limit applies to the concatenation, so the
+  depicted tail occupies what the written results leave of it and nothing more.
+- **The appended scores are representation rather than weighting.** They are scaled into the interval between zero and
+  the least fused score, so the published list stays finite, positive, and descending for the cursor that pages it. No
+  distance survives into them, which is why no change of embedding model can invalidate the arrangement — the partition
+  has already placed the whole section below, without reference to any score.
+
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+records why a floor rather than a penalty, and `HybridSearchRanking` is the one step every surface composes through, so
+the guarantee holds in one place rather than being remembered in three.
 
 The method reads **where** each ranking placed a message and never **what** it scored it. That is the point: a full-text
 rank and a vector distance are not on one scale and never will be, so any weighted combination of the two numbers would
@@ -306,8 +340,16 @@ the body they were cut from, and no result ever carries raw MIME or attachment b
   snippets, because the summary already publishes the subject and the sender whole. A fragment `ts_headline` returned
   without a highlight marker is discarded for the same reason — it would be the opening words of a message body
   presented as though they were what matched.
-- **A message with no indexed body text carries no snippets at all**, which is the encrypted and attachment-only case
-  above.
+- **A message with no indexed body text carries no snippets at all**, which is the encrypted case above and a message
+  whose words live only in a file. The second of those carries attachment extracts instead, and it is the reason the
+  two lists are separate rather than merged: a caller reading a snippet is reading the covering note, and a caller
+  reading an attachment extract is reading the file the note attached.
+
+An attachment extract is bounded the same way and by the same settings, applied per attachment match rather than across
+them, because a file is a second source rather than more of the first. It is cut by the same `ts_headline` call over the
+passage the match was found in, so an attachment's text never leaves the database either, and **no result carries a
+whole attachment, its bytes, or the whole text a reading produced** — only the bounded extracts around what matched. A
+picture's description is published whole because it already is one bounded passage; nothing longer exists to cut.
 - `**` is the only markup MailFathom adds. A snippet is text cut from untrusted mail, so it is handed back as text rather
   than wrapped in HTML.
 
@@ -406,10 +448,14 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   `SearchMatchOrigin`, which is the result and the word for why it is in the list.
 - `MailFathom.Application.Emails.Search` — `EmailSearchQueryText`, `EmailSearchResultLimit`, and
   `EmailSearchSnippetBounds`; `EmailSearchMatch`, `RankedEmailCandidate`, and `EmailSearchRetrievalMode`;
-  `ReciprocalRankFusion`, which combines two rankings and reaches nothing at all; `SemanticEmailSearch`, which decides
+  `ReciprocalRankFusion`, which combines two rankings and reaches nothing at all; `HybridSearchRanking`, the one step
+  every surface composes a published ordering through, with `SemanticEmailRankings` and `RankedSearchSequence`, the two
+  orderings meaning produces and the concatenation it publishes; `SemanticEmailSearch`, which decides
   whether a search can be ranked semantically and embeds the query when it can, together with the
   `SemanticSearchCapability` it reports and the `SemanticEmailSearchOutcome` the two travel in; and
   `IEmailSearchIndexReader` and `IEmailVectorSearchIndexReader`, the two ports the adapters implement.
+- `MailFathom.Application.Emails.Search.Attachments` — `IEmailAttachmentMatchReader`, the port that reads what a
+  window's own files contributed, with `EmailAttachmentMatch` and `StoredEmailAttachmentMatches`, what it answers with.
 - `MailFathom.Application.AiProviders` — `IAiProviderHealthReader` and `AiProviderHealthState`, the recorded outcome of
   the last provider call that the capability is read from. `MailFathom.Infrastructure.Observability` holds
   `AiProviderHealthTracker`, which is what records it, publishes the gauge, and logs a transition.
@@ -420,13 +466,17 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   query and the extract query, and `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read
   model, and `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a
   summary.
+- `MailFathom.Infrastructure.Persistence.Emails` also holds `EmailAttachmentMatchReader`, which narrows by the
+  file-level index before matching the passages of the files it kept, and `SearchHeadlineText`, the one place the
+  `ts_headline` option list and the reading of its markers are agreed between the two readers that cut extracts.
 - `MailFathom.Infrastructure.Persistence.Embeddings` — `EmailVectorSearchIndexReader`, which composes the vector ranking
-  query over the same filter predicate.
+  query over the same filter predicate, once per ranking, partitioned by the kind recorded on each passage's attachment.
 - `MailFathom.Host.Configuration.Mail.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
 - `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, and `MailboxScopeArguments`, the conversion of
   caller-supplied text into account identifiers and folder references that it shares with the listing tool.
-- `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, `EmailRetrievalMode`, and
-  `SemanticSearchAvailability`, the published contract.
+- `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, `MatchedEmailAttachment`,
+  `AttachmentMatchSource`, `AttachmentSegmentKind`, `EmailRetrievalMode`, and `SemanticSearchAvailability`, the
+  published contract.
 - `MailFathom.Host.Api.ClientMailSearchEndpoint` — the client route, its refusals, and the response it publishes.
 
 ## How the guarantees are verified
@@ -451,3 +501,8 @@ Each claim this feature rests on is checked where it is observable.
 - **The fusion itself** is asserted against known rank inputs, with no provider and no database anywhere near it: what
   it promises is a function of where two rankings placed a message and of nothing else, so a test that needed vectors to
   state it would be testing something other than the method.
+- **The depicted partition** is asserted the same way and for the same reason, since no distance survives into it: that
+  a description never improves a message's place, that the appended section sits after every written result, that both
+  sections share one depth, and that every published score stays finite, positive, and descending. That a description is
+  reached by the kind recorded on its attachment row and never by matching a caller's words against it is asserted
+  against the generated SQL, because that is where the claim is observable and it is what the floor rests on.

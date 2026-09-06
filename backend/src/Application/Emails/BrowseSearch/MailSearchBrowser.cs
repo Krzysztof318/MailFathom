@@ -258,7 +258,7 @@ public sealed class MailSearchBrowser
             depth,
             cancellationToken);
 
-        if (semantic.Candidates is not { } semanticCandidates)
+        if (semantic.Rankings is not { } semanticRankings)
         {
             ranking.Completed(lexicalCandidates.Count);
 
@@ -269,6 +269,12 @@ public sealed class MailSearchBrowser
                 EmailSearchRetrievalMode.Lexical,
                 semantic.Capability);
         }
+
+        // The written ranking alone, which is the whole of what this route published before descriptions existed. The
+        // depicted ranking is deliberately left out until the client's result shape can say a picture placed a row:
+        // appending a tail of messages no word and no written passage reached, with nothing on the row to explain them,
+        // would publish an unexplained result. Issue #1559 is where this route takes the shared partition step whole.
+        var semanticCandidates = semanticRankings.Written;
 
         ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
 

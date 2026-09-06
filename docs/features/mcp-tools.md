@@ -937,7 +937,21 @@ reading with nothing new.
   message content.
 - **A match can carry no snippets at all.** An email that matched on its subject or a participant address carries none,
   because the summary publishes both whole, and an email with no indexed body text — encrypted mail, or mail whose
-  content lives inside an attachment — carries none either.
+  content lives inside an attachment — carries none either. The second of those carries `attachmentMatches` instead.
+- **`attachmentMatches` says which file a hit came out of, and where inside it.** One entry per matching passage,
+  carrying the attachment's `attachmentPosition`, its `fileName` and `mediaType`, a `source` of `document` or
+  `imageDescription`, a `segmentKind` of `page`, `slide`, or `sheet` with its `segmentNumber`, and bounded `extracts`
+  marked exactly as `snippets` are. It is a separate list rather than more snippets because the words are the file's
+  rather than the covering note's, and reporting a contract's total as something the sender wrote in the message would
+  be wrong about who said it. An empty list is a message nothing matched inside; it never means a file was searched and
+  held nothing.
+- **`isDepictedMatch` marks a message a picture put in the result.** It is set only where nothing written found the
+  message at all, so the claim rests on a model's account of an image rather than on words anybody wrote, and such a
+  match always sits below every textual result. A message found on its own words that also carries a near picture is
+  unmarked, because the picture contributed nothing to where it sits.
+- **Neither tool returns a whole attachment.** No entry carries attachment bytes, and none carries the whole text a
+  reading produced — only bounded extracts around what matched, under the same limits `snippets` are published under.
+  `get_email_content` is where a caller reads a file itself.
 
 ### The retrieval mode is read per response, not per server
 
@@ -955,8 +969,10 @@ while it has activated no profile. Reading a server's configuration instead woul
 thing about why a message it expected is missing.
 
 Neither mode reaches a chat model, rewrites the query, or expands it; under `hybrid` the query is embedded and compared,
-never interpreted. Words that appear only inside an attachment payload are not searchable under either mode, which is a
-limit of what is indexed rather than of this tool.
+never interpreted. A document attachment's own words are searchable under both, on the same terms the body is, where the
+deployment turned attachment reading on; a picture's description is reachable under `hybrid` alone, because no word a
+caller writes is ever matched against a sentence a model composed. An attachment MailFathom could not read is absent
+under either mode rather than reported as searched and empty.
 
 ### `semanticSearch` says why a lexical answer was lexical
 
@@ -1794,10 +1810,19 @@ same refusals; the section above records that rule once.
 | `retrievalTruncated` | Whether the run hit this deployment's ceiling on how much mail one question may read |
 
 Each citation carries the `storedEmailId` a content read is performed by, the account identifier and the display name it
-is published under, the folder alias, the subject, the received time, `senderVerification`, and `machineAuthorship`. It deliberately carries
+is published under, the folder alias, the subject, the received time, `senderVerification`, `machineAuthorship`, and
+`attachments`. It deliberately carries
 no extract: the passage the run retrieved has already reached a model, and returning it here would put mail content into
 a response whose purpose is an answer. The subject and the received time
 are what let a reader recognize a message before fetching it.
+
+`attachments` names the files of that message the answer drew on, and is empty where it drew on the message itself. Each
+entry carries the `attachmentPosition` the attachment-reading tools are addressed by, the `fileName` the sender gave it,
+a `source` of `document` or `imageDescription`, and a `segmentKind` of `page`, `slide`, or `sheet` with its
+`segmentNumber` where the reading recorded boundaries. It carries no extract either, on the same rule: what it adds is
+the place, so a claim can be checked against the words rather than against the message that carried them. An entry whose
+`source` is `imageDescription` is a claim resting on a model's account of a picture rather than on words anybody wrote,
+which is worth saying when reporting it.
 
 `senderVerification` is the same pair a listing publishes, in the same shape and without the evidence, so an answer says
 what was established about the author of each message it was drawn from. It is what a reader weighs a claim by: an
