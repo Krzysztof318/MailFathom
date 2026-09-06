@@ -8099,6 +8099,7 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/verify-full.sh" ]]
   [[ -x "$source_repository_root/scripts/test-agent-workflow.sh" ]]
   [[ -x "$source_repository_root/scripts/review-obligations.sh" ]]
+  [[ -x "$source_repository_root/scripts/design-mirror.sh" ]]
   [[ ! -e "$source_repository_root/eng/agent-workflow" ]]
 
   # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
@@ -8699,6 +8700,127 @@ no_two_tracked_paths_differ_only_by_case() {
   (( failures == 0 ))
 }
 
+# The design mirror is what makes a client screen's state space legible before the screen is built,
+# and the property that earns it is the one below: a session opening onto an unchanged project reads
+# nothing at all. Everything the script decides is decided from one listing and the recorded
+# manifest, so all three contracts run with no design server anywhere near them.
+#
+# The listing is written rather than fetched here for the same reason: what is under test is the
+# comparison, and a fixture listing states the etags a server would have.
+write_design_listing() {
+  local target="$1" prototype_etag="$2"
+
+  cat >"$target" <<LISTING
+[
+  { "path": "Screen.dc.html", "size": 6, "etag": "$prototype_etag" },
+  { "path": "avatars/somebody.png", "size": 4, "etag": "100" },
+  { "path": "support.js", "size": 3, "etag": "200" }
+]
+LISTING
+}
+
+the_design_mirror_reads_only_what_the_etags_say_moved() {
+  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
+
+  rm -rf "$work" "$repository_root/artifacts/design"
+  mkdir -p "$work"
+  write_design_listing "$work/listing.json" "300"
+
+  # With no manifest yet every screen source has to be read, and only a screen source: the avatar and
+  # the generated runtime are covered by the manifest and copied by nothing.
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing.json") >"$output"
+  assert_contains 'Screen.dc.html' "$output"
+  assert_excludes 'avatars/somebody.png' "$output"
+  assert_excludes 'support.js' "$output"
+
+  mkdir -p "$repository_root/artifacts/design/files"
+  printf 'screen' >"$repository_root/artifacts/design/files/Screen.dc.html"
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    record "$work/listing.json") >"$output"
+  assert_contains 'stamp' "$output"
+
+  # An unchanged project is the case this exists for, and it costs the listing and nothing else.
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing.json") >"$output"
+  assert_contains 'Nothing moved' "$output"
+
+  # A moved etag names the one path that moved, and the assets around it stay quiet.
+  write_design_listing "$work/listing.json" "301"
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing.json") >"$output"
+  assert_contains 'changed   Screen.dc.html' "$output"
+  assert_excludes 'avatars/somebody.png' "$output"
+
+  rm -rf "$repository_root/artifacts/design"
+}
+
+the_design_mirror_refuses_a_transcription_that_lost_a_window() {
+  local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
+
+  rm -rf "$work" "$repository_root/artifacts/design"
+  mkdir -p "$work" "$repository_root/artifacts/design/files"
+  write_design_listing "$work/listing.json" "300"
+
+  # A windowed read that dropped or doubled a window arrives as a file of the wrong length, and the
+  # size the project itself states is the only check available that costs no second read of it.
+  printf 'scree' >"$repository_root/artifacts/design/files/Screen.dc.html"
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    record "$work/listing.json") >"$output" 2>&1; then
+    printf 'The mirror recorded a screen source of the wrong length\n' >&2
+    return 1
+  fi
+  assert_contains '5 bytes where the project states 6' "$output"
+
+  # And no manifest, which is the half that matters after the refusal has scrolled past: a manifest
+  # recorded over a mirror that does not match it makes the next session's `plan` report that
+  # nothing moved, and a screen is then built from a file nobody has reason to doubt.
+  if [[ -e "$repository_root/artifacts/design/manifest.json" ]]; then
+    printf 'A refused record left a manifest describing a mirror it rejected\n' >&2
+    return 1
+  fi
+
+  # A mirrored file that never arrived is the same failure said differently.
+  rm -f "$repository_root/artifacts/design/files/Screen.dc.html"
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    record "$work/listing.json") >"$output" 2>&1; then
+    printf 'The mirror recorded a screen source that is not there\n' >&2
+    return 1
+  fi
+  assert_contains 'Missing from the mirror' "$output"
+
+  rm -rf "$repository_root/artifacts/design"
+}
+
+the_design_mirror_decodes_a_read_result_without_retyping_it() {
+  local work="$test_directory/design-mirror" target
+
+  rm -rf "$work" "$repository_root/artifacts/design"
+  mkdir -p "$work"
+  target="$repository_root/artifacts/design/files/Screen.dc.html"
+
+  # What the harness saves when a read result is too large to return inline: one wrapper line, the
+  # entity-escaped body, a blank line the wrapper adds, the closing tag, and a note after it.
+  cat >"$work/saved.txt" <<'SAVED'
+<untrusted-project-content path="Screen.dc.html" etag="300">
+&lt;p&gt;Yes &amp; no&lt;/p&gt;
+&lt;span&gt;&amp;amp;lt;&lt;/span&gt;
+
+</untrusted-project-content>
+(The body above is HTML-entity-escaped.)
+SAVED
+
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    extract "artifacts/design/files/Screen.dc.html" "$work/saved.txt") >/dev/null
+
+  # `&lt;` and `&gt;` before `&amp;`, exactly once: a body that itself carries `&amp;lt;` comes back
+  # as `&amp;lt;` rather than collapsing into a tag that was never in the design.
+  assert_file_content '<p>Yes & no</p>
+<span>&amp;lt;</span>' "$target"
+
+  rm -rf "$repository_root/artifacts/design"
+}
+
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_fast_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
@@ -8984,6 +9106,9 @@ run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test the_editor_workspace_opens_the_service_and_the_repository
 run_test every_shell_script_carries_the_license_header
+run_test the_design_mirror_reads_only_what_the_etags_say_moved
+run_test the_design_mirror_refuses_a_transcription_that_lost_a_window
+run_test the_design_mirror_decodes_a_read_result_without_retyping_it
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
 run_test no_two_tracked_paths_differ_only_by_case
