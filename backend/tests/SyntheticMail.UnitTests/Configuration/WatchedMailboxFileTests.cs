@@ -129,7 +129,39 @@ public sealed class WatchedMailboxFileTests
 
         // Assert
         Assert.Contains($"'mailbox.security' in '{Origin}'", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("no unsecured option", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("no opportunistic option", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadWatchedMailboxFrom_AnUnsecuredBlockOnTheMachine_DefaultsToThePlainImapPort()
+    {
+        // Arrange
+        var contents = """{ "mailbox": { "host": "localhost", "security": "Unsecured", "address": "a@example.test", "password": "p" } }""";
+
+        // Act
+        var mailbox = Read(contents);
+
+        // Assert
+        // 143 is both the plain port and the one STARTTLS upgrades from, so the two share a default here while the
+        // submission side does not: an unsecured submission is 25 rather than 587.
+        Assert.Equal(MailTransportSecurity.Unsecured, mailbox.Security);
+        Assert.Equal(143, mailbox.Port);
+    }
+
+    [Fact]
+    public void ReadWatchedMailboxFrom_AnUnsecuredBlockNamingSomethingElse_IsRefusedNamingTheNestedKeys()
+    {
+        // Arrange
+        var contents = """{ "mailbox": { "host": "imap.example.test", "security": "Unsecured", "address": "a@example.test", "password": "p" } }""";
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Read(contents));
+
+        // Assert
+        // The mailbox block is refused on the same rule as the sending account and names its own keys, so a developer
+        // who set the block alone is not sent to look at the submission host.
+        Assert.Contains($"'mailbox.security' in '{Origin}' is 'Unsecured'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("'mailbox.host' is 'imap.example.test'", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

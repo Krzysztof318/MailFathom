@@ -26,6 +26,7 @@ public sealed class ImapWatchedMailboxTests
     [Theory]
     [InlineData(nameof(MailTransportSecurity.StartTls), nameof(SecureSocketOptions.StartTls))]
     [InlineData(nameof(MailTransportSecurity.ImplicitTls), nameof(SecureSocketOptions.SslOnConnect))]
+    [InlineData(nameof(MailTransportSecurity.Unsecured), nameof(SecureSocketOptions.None))]
     public void ResolveSocketOptions_ASecurity_ChoosesTheOptionThatCannotContinueUnencrypted(
         string securityName,
         string expectedOptionName)
@@ -41,27 +42,25 @@ public sealed class ImapWatchedMailboxTests
     }
 
     [Fact]
-    public void ResolveSocketOptions_EverySecurity_RefusesEveryOptionThatWouldSendThePasswordInTheClear()
+    public void ResolveSocketOptions_EverySecurity_RefusesEveryOptionThatWouldSilentlySendThePasswordInTheClear()
     {
         // Arrange
-        SecureSocketOptions[] downgrading =
-        [
-            SecureSocketOptions.None,
-            SecureSocketOptions.Auto,
-            SecureSocketOptions.StartTlsWhenAvailable,
-        ];
+        SecureSocketOptions[] opportunistic = [SecureSocketOptions.Auto, SecureSocketOptions.StartTlsWhenAvailable];
 
         // Act
         var chosen = Enum
             .GetValues<MailTransportSecurity>()
-            .Select(ImapWatchedMailbox.ResolveSocketOptions)
+            .Select(security => (Security: security, Option: ImapWatchedMailbox.ResolveSocketOptions(security)))
             .ToArray();
 
         // Assert
-        // Written over the whole enumeration for the reason the submission transport's own version of this is: a third
-        // value added later fails here instead of quietly reintroducing the downgrade.
+        // Written over the whole enumeration for the reason the submission transport's own version of this is: a
+        // further value added later fails here instead of quietly reintroducing the downgrade.
         Assert.NotEmpty(chosen);
-        Assert.All(chosen, option => Assert.DoesNotContain(option, downgrading));
+        Assert.All(chosen, choice => Assert.DoesNotContain(choice.Option, opportunistic));
+        Assert.All(
+            chosen.Where(choice => choice.Security != MailTransportSecurity.Unsecured),
+            choice => Assert.NotEqual(SecureSocketOptions.None, choice.Option));
     }
 
     [Fact]
@@ -140,6 +139,29 @@ public sealed class ImapWatchedMailboxTests
         // Assert
         // Refused before anything is submitted, because an exchange whose outgoing half had nowhere to go would leave
         // the mailbox holding half a thread.
+        Assert.Contains("mailbox.sentFolder", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpenAsync_AServerThatCannotBeAskedWhichFolderIsSent_IsRefusedNamingTheSettingThatAnswersIt()
+    {
+        // Arrange
+        var client = Client(Substitute.For<IMailFolder>());
+
+        client
+            .GetFolder(SpecialFolder.Sent)
+            .Returns(_ => throw new NotSupportedException("The IMAP server does not support the SPECIAL-USE nor XLIST extensions."));
+
+        await using var mailbox = new ImapWatchedMailbox(Account(), client);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<SyntheticMailFailure>(
+            () => mailbox.OpenAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        // MailKit reports "no such extension" by throwing rather than by answering nothing, so without its own catch
+        // this arrives as a sentence about two IMAP extensions and no key to set. A local test server is the ordinary
+        // way to meet it, which is exactly the run this value was added for.
         Assert.Contains("mailbox.sentFolder", failure.Message, StringComparison.Ordinal);
     }
 

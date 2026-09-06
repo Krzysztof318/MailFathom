@@ -1,18 +1,18 @@
 {
-  "host": "smtp.example.test",
-  "port": 587,
-  "security": "StartTls",
-  "address": "throwaway@example.test",
-  "userName": "throwaway@example.test",
-  "password": "the throwaway account's password",
+  "host": "localhost",
+  "port": 3025,
+  "security": "Unsecured",
+  "address": "mailfathom@mailfathom.test",
+  "userName": "mailfathom",
+  "password": "the local test server's password",
   "author": "Fabricated",
   "mailbox": {
-    "host": "imap.example.test",
-    "port": 993,
-    "security": "ImplicitTls",
-    "address": "developer@example.test",
-    "userName": "developer@example.test",
-    "password": "the watched mailbox's password",
-    "sentFolder": "Sent"
+    "host": "localhost",
+    "port": 3143,
+    "security": "Unsecured",
+    "address": "mailfathom@mailfathom.test",
+    "userName": "mailfathom",
+    "password": "the local test server's password",
+    "sentFolder": "INBOX"
   }
 }

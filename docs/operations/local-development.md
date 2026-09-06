@@ -517,7 +517,9 @@ dotnet run --project backend/tools/SyntheticMail -- <recipient> --count 200
 **Configure the sending account first.** The address and its password are read from
 `backend/tools/SyntheticMail/synthetic-mail.local.json`, never from an argument — a password on a command line lands in the
 shell history and in the process list of a shared machine. `.gitignore` covers the file as `*.local.json`, and
-`synthetic-mail.example.json` beside it shows the shape:
+`synthetic-mail.example.json` beside it shows the shape of a run against [a test mail server on this
+machine](#reaching-a-test-mail-server-on-the-machine), which is the configuration to copy unless you have a reason to
+reach somewhere else. A throwaway account at a real provider is the same file with the connection secured:
 
 ```json
 {
@@ -548,9 +550,52 @@ overlay on it. Every value the store holds is a string, including `port`, which 
 under it; nothing about that belongs to an account that reaches anything else. Startup refuses a missing or incomplete
 configuration with a message naming the key to set.
 
-`security` is `StartTls` or `ImplicitTls`, and there is no third value: the run authenticates with a password, so an
-endpoint that cannot secure the connection is refused rather than downgraded to. `port` defaults to 587 or 465 to match,
-and a written one is refused outside 0 to 65535 rather than carried as far as the connection.
+`security` is `StartTls`, `ImplicitTls`, or `Unsecured`, written by name — a number is refused even when it spells a
+value, so nothing selects an unsecured connection without saying the word. There is no opportunistic value: the run
+authenticates with a password, so an endpoint that was asked to secure the connection and cannot is refused rather than
+downgraded to. `port` defaults to the convention for whichever was chosen: on submission 587, 465, or 25, and on IMAP
+143, 993, or 143 again, the plain port and the one `STARTTLS` upgrades from being the same. A written one is refused
+outside 0 to 65535 rather than carried as far as the connection.
+
+`Unsecured` puts the password on the wire and therefore also permits clear-text authentication; there is no second
+setting, because a plain connection whose credential could not be presented in the clear would reach nothing. It is
+refused against any host that is not loopback, `localhost`, a private range a container bridge hands out, or
+`host.docker.internal`, and the host is judged as written rather than resolved — a name nothing recognizes is refused
+instead of looked up, because a lookup is a network call and today's loopback answer is not tomorrow's.
+
+### Reaching a test mail server on the machine
+
+A throwaway mailbox at a real provider needs a credential somebody holds and produces a different corpus every run. A
+container produces the same corpus twice and belongs to nobody, so it is the better default for anything automated.
+GreenMail is the server this repository already runs for its integration suite, on the same image and pin:
+
+```bash
+docker run --rm -p 3025:3025 -p 3143:3143 \
+  -e GREENMAIL_OPTS="-Dgreenmail.smtp.hostname=0.0.0.0 -Dgreenmail.smtp.port=3025 -Dgreenmail.imap.hostname=0.0.0.0 -Dgreenmail.imap.port=3143 -Dgreenmail.users=mailfathom:local-test-only@mailfathom.test" \
+  greenmail/standalone:2.1.11
+```
+
+That is one mailbox, and `synthetic-mail.example.json` is written against it: copy it to `synthetic-mail.local.json`,
+put `local-test-only` in both `password` fields, and deliver to `mailfathom@mailfathom.test`. The mailbox MailFathom
+synchronizes is the same one, which is what makes a `--conversation` run assemble a thread there.
+
+Three things cost a first run, and each of them reads as something other than what it is:
+
+- **`userName` is the login, not the address.** `-Dgreenmail.users=mailfathom:local-test-only@mailfathom.test` declares
+  a user whose login is `mailfathom`, whose password is `local-test-only`, and whose delivery address is the whole
+  string. Leaving `userName` out makes the run authenticate as `mailfathom@mailfathom.test`, which is a different login.
+- **What that mistake looks like depends on the server's own switch.** GreenMail as started above answers
+  `535 5.7.8 Authentication credentials invalid` and the run reports a refused credential, which points straight at the
+  key. A server started with `-Dgreenmail.auth.disabled` creates a user for whatever login is presented instead, so it
+  reads the address as a *new* login, refuses to create it because a user with that email already exists, and drops the
+  connection inside `AUTH`. The run then reports the server disconnecting unexpectedly rather than a bad password,
+  which sends most people to look at the network.
+- **Name `sentFolder`.** GreenMail advertises neither `SPECIAL-USE` nor `XLIST`, so nothing can be asked which folder
+  holds the mailbox's own mail, and it starts with no folder but `INBOX`. A `--conversation` run therefore needs
+  `"sentFolder": "INBOX"`; without it the run stops before submitting anything, naming that key.
+
+The ports above are the container's own, published unchanged, so `localhost:3025` and `localhost:3143` reach it. Publish
+a different pair when something else on the machine already holds them, and write whichever you published into `port`.
 
 A development mail server whose TLS parameters the platform refuses stops this command exactly as it stops the host,
 and for the same reason: the handshake goes through the system OpenSSL rather than through .NET, so the policy on the
