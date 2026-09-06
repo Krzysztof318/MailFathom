@@ -7,11 +7,14 @@ namespace MailFathom.Application.Emails.Search;
 /// <summary>Composes one published ordering out of a lexical ranking and the two rankings meaning produces.</summary>
 /// <remarks>
 /// <para>
-/// The one step every surface calls, rather than a rule each of them remembers.
+/// The one step a surface calls, rather than a rule each of them remembers.
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// requires exactly that: a guarantee that has to be remembered in two places is one that holds in one of them after the
-/// next change to the other, and <c>search_emails</c>, an answering run's retrieval, and the client's search route all
-/// publish the same ordering.
+/// next change to the other. <c>search_emails</c> and an answering run's retrieval publish through it today, both
+/// reaching it through <c>MailboxSearchReader</c>. The client's search route does not yet: <c>MailSearchBrowser</c>
+/// fuses the written ranking alone and withholds the depicted tail, because a client row a description put there needs
+/// a way to say so and <see href="https://github.com/Krzysztof318/MailFathom/issues/1559">#1559</see> owns that shape.
+/// It joins this step when it gains one.
 /// </para>
 /// <para>
 /// What it guarantees is stronger than "a picture never outranks words" and simpler to test: <b>a picture never improves
@@ -78,7 +81,7 @@ public static class HybridSearchRanking
     /// A candidate the depicted ranking repeats is taken at its first place, on the same rule fusion accumulates by: a
     /// duplicate would otherwise occupy two of the places the shared depth leaves for messages nothing else found.
     /// </remarks>
-    private static IReadOnlyList<RankedEmailCandidate> Appended(
+    private static List<RankedEmailCandidate> Appended(
         IReadOnlyList<RankedEmailCandidate> fused,
         IReadOnlyList<RankedEmailCandidate> depicted,
         int limit)
@@ -90,19 +93,24 @@ public static class HybridSearchRanking
         }
 
         var alreadyPlaced = fused.Select(static candidate => candidate.StoredEmailId).ToHashSet();
+        var admitted = new List<RankedEmailCandidate>(remaining);
 
-        var admitted = depicted
-            .Where(candidate => alreadyPlaced.Add(candidate.StoredEmailId))
-            .Take(remaining)
-            .ToArray();
-
-        return
-        [
-            .. admitted.Select((candidate, index) => candidate with
+        // A loop rather than a filtered projection: admitting a candidate is what records that it has been admitted, so
+        // the decision mutates the set it reads and a LINQ predicate would be the place that side effect happens.
+        foreach (var candidate in depicted)
+        {
+            if (admitted.Count == remaining)
             {
-                Score = DepictedScore(fused, index),
-            }),
-        ];
+                break;
+            }
+
+            if (alreadyPlaced.Add(candidate.StoredEmailId))
+            {
+                admitted.Add(candidate with { Score = DepictedScore(fused, admitted.Count) });
+            }
+        }
+
+        return admitted;
     }
 
     /// <summary>Scores one depicted result by its own place, mapped strictly between zero and the least fused score.</summary>
