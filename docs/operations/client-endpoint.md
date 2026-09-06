@@ -398,16 +398,16 @@ being the message it was answering. It is `null` for mail this deployment has st
 not the same as a message whose text is empty. The bound is fixed: no request may raise it and no deployment may
 change it.
 
-**`enrichment` is what a derivation concluded about the message**, and it is present only on a deployment that turned
-[message enrichment](../features/message-enrichment.md) on. It carries at most
+**`enrichment` is what a derivation concluded about the message**, and it is on every row of every response, whether or
+not the deployment turned [message enrichment](../features/message-enrichment.md) on. It carries at most
 three marks, one of each `aspect` — `Sense`, `Significance`, `Commitment` — each with the sentence itself, the `reason`
 behind it, the `source` and `origin` that produced it, and the `evidence` it rests on. `dueAt` is set only on a
 commitment whose message named a date.
 
-Three states reach a client and they mean different things. The field is **absent or `null`** for a message no
-derivation has reached — including every message on a deployment with the switch off. It is an **object with an empty
-`marks` array** for one a derivation settled with nothing to say. And it carries marks for one it read. A client may
-draw the first two identically, but it can tell them apart, which is what the shape exists for.
+Two states reach a client and they mean different things. The field is **`null`** for a message no derivation has
+reached — which is every message on a deployment with the switch off. It is an **object with an empty `marks` array**
+for one a derivation settled with nothing to say. A client may draw the two identically, but it can tell them apart,
+which is what the shape exists for.
 
 **`evidence` names passages rather than carrying them.** Each entry is a passage identifier, resolvable through the
 same citation route an answer's citations use, so a client that wants the words behind a mark asks for them. A row
