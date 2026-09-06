@@ -78,6 +78,29 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.Equal(0, registry.HeldCount);
     }
 
+    /// <summary>A role no account maps a folder with is a question to correct, not a fault in the deployment.</summary>
+    /// <remarks>
+    /// A folder may be named by role, which is what a screen offering "the junk folder" sends, and a deployment mapping
+    /// no such folder resolves it to nothing. That is the caller's request to change — so it is refused here by name,
+    /// rather than left to escape into the generic handler and come back as an opaque fault this endpoint's own contract
+    /// promises it will not answer with.
+    /// </remarks>
+    [Fact]
+    public void Start_ARoleNoAccountMapsAFolderWith_RefusesTheQuestion()
+    {
+        // Arrange
+        var registry = NewRegistry();
+
+        // Act
+        var answered = Start(
+            new ClientDiscoveryRunRequest("which supplier quoted least", null, ["role:Junk"], null, null),
+            registry);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(answered.Result).StatusCode);
+        Assert.Equal(0, registry.HeldCount);
+    }
+
     /// <summary>An account this owner does not own is refused as a request to change rather than narrowed away in silence.</summary>
     [Fact]
     public void Start_AnAccountThisOwnerDoesNotOwn_RefusesTheQuestion()

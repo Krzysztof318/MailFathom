@@ -9,6 +9,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Discovery.Streaming;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -145,6 +146,10 @@ internal static class ClientDiscoveryRunEndpoints
             return Refuse("The account is not one this owner owns.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
+        {
+            return Refuse(refusal.Message);
+        }
+        catch (MailFolderRoleUnmappedException refusal)
         {
             return Refuse(refusal.Message);
         }

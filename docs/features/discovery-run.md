@@ -202,14 +202,22 @@ metered budget is separate work.
 | Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
 | How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
 
-Nothing is held past the first two of those together, ended or not: a run older than that is one whose execution never
-reported at all, and holding it would spend one of the eight slots until the process was restarted.
+Nothing is held past the first and the last of those together — ten minutes — whether it ended or not. A run that old
+is one whose execution never reported at all: a task that never ran, or a fault between the run being opened and being
+started. Without that ceiling such a run would spend one of the eight slots until the process was restarted, and eight
+of them would leave a deployment answering `429` to every question.
 
 The buffer is bounded and **never evicts**, which is what makes resumption exact rather than best-effort: there is no
 state in which a client asks for what it missed and is told the run has moved on. The last slot is reserved for the
-ending, so a run that filled its buffer still says so instead of leaving a reader waiting. And a run that is still
-executing is never forgotten however long it has been held — only a run that has ended starts its retention window, so
-a client reconnecting to a slow run is never told it never existed.
+ending, so a run that filled its buffer still says so instead of leaving a reader waiting.
+
+The two windows are not the same window, and which one a run is held on is decided by whether it has ended. **A run
+that has ended is held for the retention window**, measured from the last time anything read or wrote it, so a client
+that is reading is never cut off mid-stream and one that never came back is dropped rather than kept for the life of
+the process. **A run that is still executing is held on the wider ceiling above instead**, so a slow run is never
+forgotten out from under a client reconnecting to it while its provider call is still outstanding. A healthy run never
+meets that ceiling: it is stopped at the five-minute mark and ends there, which starts its own retention window well
+before the wider one could elapse.
 
 ### What a run composes today
 
