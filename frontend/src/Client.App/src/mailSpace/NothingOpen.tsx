@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
+import { ComposingContext } from '../composer/useComposing';
 import { BrandMark } from '../controls/BrandMark';
 import { useLocalization } from '../localization/useLocalization';
+import { goToSpace } from '../routing/useSpace';
 
 // What the content pane holds when a person working in tabs has closed all of them: what the space is for, and the one
 // way back into it there is. The design project offers three ways out of here; two of them — writing a message and
@@ -28,6 +30,10 @@ export function NothingOpen({
     const { translate } = useLocalization();
     const region = useRef<HTMLDivElement>(null);
 
+    // Read rather than required: the three things the design offers from here are the three ways something opens,
+    // and writing a message is offered only where the frame composes at all.
+    const composing = useContext(ComposingContext);
+
     useEffect(() => {
         if (arriving) {
             region.current?.focus();
@@ -38,7 +44,7 @@ export function NothingOpen({
         <div
             ref={region}
             tabIndex={-1}
-            className="flex min-h-full flex-col items-center justify-center gap-4 bg-sunken px-8 py-8 text-center"
+            className="flex min-h-full flex-1 flex-col items-center justify-center gap-4 bg-sunken px-8 py-8 text-center"
         >
             <BrandMark className="size-11.5" />
 
@@ -47,15 +53,39 @@ export function NothingOpen({
                 <p className="text-md text-pretty text-muted">{translate('tabs.nothingOpenExplanation')}</p>
             </div>
 
-            {onReopenLastRead === null ? null : (
+            <div className="flex flex-wrap justify-center gap-2.25">
+                {composing?.offered !== true ? null : (
+                    <button
+                        type="button"
+                        className="rounded-lg bg-accent px-4 py-2.25 text-base font-semibold text-on-accent transition hover:opacity-90"
+                        onClick={() => {
+                            composing.compose({ kind: 'new' });
+                        }}
+                    >
+                        {translate('mail.compose')}
+                    </button>
+                )}
+
+                {onReopenLastRead === null ? null : (
+                    <button
+                        type="button"
+                        className="rounded-lg border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
+                        onClick={onReopenLastRead}
+                    >
+                        {translate('tabs.reopenLastRead')}
+                    </button>
+                )}
+
                 <button
                     type="button"
                     className="rounded-lg border border-line bg-panel px-4 py-2.25 text-base text-text-soft transition hover:bg-hover"
-                    onClick={onReopenLastRead}
+                    onClick={() => {
+                        goToSpace('discover');
+                    }}
                 >
-                    {translate('tabs.reopenLastRead')}
+                    {translate('tabs.askHistory')}
                 </button>
-            )}
+            </div>
         </div>
     );
 }

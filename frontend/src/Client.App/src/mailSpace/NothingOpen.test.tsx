@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { ComposingContext } from '../composer/useComposing';
 import { NothingOpen } from './NothingOpen';
 
 function renderEmpty(arriving: boolean, onReopenLastRead: (() => void) | null): void {
@@ -20,13 +21,35 @@ describe('NothingOpen', () => {
         renderEmpty(false, null);
 
         expect(screen.getByText('Nothing is open')).toBeDefined();
-        expect(screen.getByText('Pick a message from the list and it opens as a tab of its own.')).toBeDefined();
+        expect(screen.getByText(/^Pick a message from the list, write a new one, or ask/u)).toBeDefined();
     });
 
     it('offers no way back where nothing has been read yet', () => {
         renderEmpty(false, null);
 
-        expect(screen.queryByRole('button', { name: 'Open the last message read' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Open the last message' })).toBeNull();
+    });
+
+    it('offers no way to write where the frame composes nothing, and asking about the history either way', () => {
+        renderEmpty(false, null);
+
+        expect(screen.queryByRole('button', { name: 'New message' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Ask about the history' })).toBeDefined();
+    });
+
+    it('offers to write a message where the frame composes, as the design draws it first', () => {
+        const composed = vi.fn();
+
+        render(
+            <LocalizationProvider>
+                <ComposingContext value={{ offered: true, opening: null, compose: composed, close: () => undefined }}>
+                    <NothingOpen arriving={false} onReopenLastRead={null} />
+                </ComposingContext>
+            </LocalizationProvider>,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'New message' }));
+
+        expect(composed).toHaveBeenCalledWith({ kind: 'new' });
     });
 
     it('opens the last message read again from a control that names it', () => {
@@ -34,7 +57,7 @@ describe('NothingOpen', () => {
 
         renderEmpty(false, reopen);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Open the last message read' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Open the last message' }));
 
         expect(reopen).toHaveBeenCalledTimes(1);
     });

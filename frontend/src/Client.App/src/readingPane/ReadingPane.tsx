@@ -14,13 +14,19 @@ import {
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { ReceivedAt } from '../controls/ReceivedAt';
 import { SenderAvatar } from '../controls/SenderAvatar';
+import { ShowFullHtml } from '../fullHtml/ShowFullHtml';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useEmbeddedHtmlMessages } from '../preferences/messageView';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
+import { BackToList } from '../mailSpace/BackToList';
+import { NothingOpen } from '../mailSpace/NothingOpen';
+import { useTwoPanes } from '../shell/useWideWorkspace';
 import { Attachments } from './Attachments';
 import { MessageHeaders } from './MessageHeaders';
 import { sizeOf } from '../localization/octets';
@@ -105,14 +111,10 @@ export function ReadingPane({
      */
     readonly arriving?: boolean;
 }) {
-    const { translate } = useLocalization();
-
     return (
         <section className="flex min-h-full flex-col">
             {storedEmailId === null ? (
-                <p className="flex flex-1 items-center justify-center px-6 py-10 text-base text-muted">
-                    {translate('message.nothingOpen')}
-                </p>
+                <NothingOpen arriving={false} onReopenLastRead={null} />
             ) : (
                 <OpenMessage
                     session={session}
@@ -146,6 +148,8 @@ function OpenMessage({
     readonly arriving: boolean;
 }) {
     const { locale, translate } = useLocalization();
+    const twoPanes = useTwoPanes();
+    const embeddedHtml = useEmbeddedHtmlMessages();
     const { revise } = useWorkspace();
     const { markRead } = useReadMarking();
     const signalledChanges = useSignalledChanges();
@@ -263,25 +267,41 @@ function OpenMessage({
     // Offline is its own sentence rather than a failure worded politely, and it is said only where there is nothing to
     // draw instead: a message already on the screen is the truest thing anybody has, and the frame above already says
     // the machine has no network.
+    // Before there is a head to carry the way back to the list, the states below carry it themselves in the
+    // composition that draws one pane at a time — a reader waiting on a message, or told it could not be read, is
+    // otherwise standing in a column with no way out of it.
+    const wayBack = twoPanes ? null : (
+        <div className="flex items-center px-2 pt-2">
+            <BackToList />
+        </div>
+    );
+
     if (!online && held?.result.outcome !== 'read') {
         return (
-            <p className="px-5.5 py-4 text-sm text-muted" role="status">
-                {translate('message.offline')}
-            </p>
+            <>
+                {wayBack}
+                <p className="px-5.5 py-4 text-sm text-muted" role="status">
+                    {translate('message.offline')}
+                </p>
+            </>
         );
     }
 
     if (held === null) {
         return (
-            <p className="px-5.5 py-4 text-sm text-muted" role="status">
-                {translate('message.reading')}
-            </p>
+            <>
+                {wayBack}
+                <p className="px-5.5 py-4 text-sm text-muted" role="status">
+                    {translate('message.reading')}
+                </p>
+            </>
         );
     }
 
     if (held.result.outcome === 'failed') {
         return (
             <div className="flex flex-col items-start gap-2 px-5.5 py-4">
+                {wayBack}
                 <p className="text-sm text-warning" role="alert">
                     {translate('message.failed', { reason: translate(failureLabels[held.result.failure.reason]) })}
                 </p>
@@ -315,12 +335,7 @@ function OpenMessage({
             aria-label={message.headers.subject ?? translate('message.noSubject')}
             className="flex flex-col"
         >
-            <MessageHeaders
-                headers={message.headers}
-                onShowFullHtml={() => {
-                    onShowFullHtml(storedEmailId, message.headers.subject);
-                }}
-            />
+            <MessageHeaders headers={message.headers} />
 
             <div className="flex flex-col gap-3 px-5.5 py-4.5">
                 <SenderVerdict verdict={message.sender} />
@@ -345,8 +360,11 @@ function OpenMessage({
                     </div>
                 )}
 
-                {/* The card the design project draws a message as: who wrote it, what it carries, and what it says. */}
-                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-panel px-4.5 py-4 shadow-raised">
+                {/* The message as the design project draws one in the reading column: flat on the column, at the
+                    measure a conversation's messages take, with who wrote it and what the copy holds on its first
+                    line — how many attachments, the sender's own markup where there is one, and when this deployment
+                    recorded it — and what it says under that. */}
+                <div className="mx-auto flex w-full max-w-conversation flex-col gap-3">
                     <div className="flex items-center gap-2.75">
                         <SenderAvatar
                             displayName={author?.displayName ?? null}
@@ -358,12 +376,27 @@ function OpenMessage({
                             {author === null ? translate('message.noAuthor') : (author.displayName ?? author.address)}
                         </span>
 
+                        <span className="flex-1" />
+
                         {message.attachments.length === 0 ? null : (
                             <span className="flex shrink-0 items-center gap-0.75 text-xs text-faint">
                                 <Icon name="attach_file" className="size-3.5" />
                                 {numbers.format(message.attachments.length)}
                             </span>
                         )}
+
+                        {/* Drawn in the reduced view and in no other. With the embedded HTML view chosen the markup
+                            is already on the screen under this line, so a control offering to open it would open a
+                            second copy of what is being read — which is why it goes rather than being disabled. */}
+                        {embeddedHtml ? null : (
+                            <ShowFullHtml
+                                onShow={() => {
+                                    onShowFullHtml(storedEmailId, message.headers.subject);
+                                }}
+                            />
+                        )}
+
+                        <ReceivedAt at={message.headers.receivedAt} />
                     </div>
 
                     {/* The gestures a selection ends on rather than a document-wide subscription: a selection made

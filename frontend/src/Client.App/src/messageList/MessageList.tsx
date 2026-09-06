@@ -50,7 +50,7 @@ import {
 } from './heldTimeline';
 import { ListSettings } from './ListSettings';
 import { narrowed, queryFor, type MailListing } from './listing';
-import { extendedTo, inReadingOrder, onlySelected, withToggled } from './messageSelection';
+import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -441,11 +441,12 @@ export function MessageList({
             return;
         }
 
+        // Moving picks nothing out on its own, for the reason a plain press below opens without picking out: a
+        // selection is a deliberate act — shift extends one from the anchor, and space toggles the row focus is on.
         if (extending && anchor !== null) {
             select(extendedTo(workspace.selected, rows.map(identityOf), anchor, email.id));
         } else {
             setAnchor(email.id);
-            select(onlySelected(email.id));
         }
     }
 
@@ -483,9 +484,20 @@ export function MessageList({
             return;
         }
 
+        // While messages are picked out, a plain press picks this one out too rather than opening it, which is the
+        // design project's rule: a selection is left by its own bar, not by a press that would have replaced it with
+        // whatever was pressed.
+        if (workspace.selected.length > 0) {
+            setAnchor(email.id);
+            select(withToggled(workspace.selected, email.id));
+
+            return;
+        }
+
+        // A plain press opens and picks nothing out, so the bar over the list stays the toolbar: what is open is drawn
+        // as open, and a selection is the modifier's, the drag's, the menu's, or the keyboard's to make.
         dragging.current = true;
         setAnchor(email.id);
-        select(onlySelected(email.id));
         onOpen(email.id, email.subject);
     }
 

@@ -134,14 +134,13 @@ describe('FullHtmlSurface', () => {
         );
     });
 
-    it('says who holds each guarantee, rather than crediting the frame with both', async () => {
+    it('says the preview is isolated, in the one line the design project gives its foot', async () => {
         const { transport } = deploymentServing();
 
         await drawing(transport);
         await screen.findByTitle("The sender's own markup, drawn in isolation");
 
-        expect(screen.getByText(/the frame it is drawn in permits no script at all/)).toBeDefined();
-        expect(screen.getByText(/removed before this message was sent to the client/)).toBeDefined();
+        expect(screen.getByText('Isolated preview — scripts and remote content are blocked')).toBeDefined();
     });
 
     it('says so in words where the deployment served no markup for this message', async () => {

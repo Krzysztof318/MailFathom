@@ -877,7 +877,7 @@ describe('App', () => {
         await goTo('Mail');
         await screen.findByRole('listbox', { name: 'Messages' });
 
-        expect(screen.getByText('Open a message to read it here.')).toBeDefined();
+        expect(screen.getByText('Nothing is open')).toBeDefined();
         expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
@@ -1023,7 +1023,9 @@ describe('App session', () => {
         );
         await framed();
 
-        const asks = screen.getByRole('button', { name: 'New message' });
+        // The toolbar's, rather than the one the empty pane offers under the same name: both are on the screen.
+        const toolbar = screen.getByRole('toolbar', { name: 'Mail actions' });
+        const asks = within(toolbar).getByRole('button', { name: 'New message' });
 
         asks.focus();
         fireEvent.click(asks);
@@ -1033,7 +1035,7 @@ describe('App session', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
 
         await waitFor(() => {
-            expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New message' }));
+            expect(document.activeElement).toBe(within(toolbar).getByRole('button', { name: 'New message' }));
         });
     });
 

@@ -233,16 +233,23 @@
     --spacing-message-row: 5.6875rem;
     --spacing-message-row-narrow: 6.875rem;
 
-    /* How wide the rail is, how wide the column beside it that holds the mailbox tree is when it is open and when it
-       is folded to a strip, and how wide the drawer the narrow shape holds the mailboxes in is. All four are the
-       project's, and they are here rather than on the components because the first three have to add up to a
-       composition. The message list's width is not among them: it is the one width a person sets rather than the
-       design, so it is drawn from a value and its bounds live in `mailSpace/listWidth.ts`, where the arithmetic that
-       reads them is. */
+    /* How wide the rail is in the desktop composition and in the tablet one, where the project draws it narrower with
+       the label under the symbol at a smaller size; how wide the column beside it that holds the mailbox tree is when
+       it is open and when it is folded to a strip; and how wide the drawer the narrow shape holds the mailboxes in is.
+       All five are the project's, and they are here rather than on the components because the first four have to add
+       up to a composition. The message list's desktop width is not among them: it is the one width a person sets
+       rather than the design, so it is drawn from a value and its bounds live in `mailSpace/listWidth.ts`, where the
+       arithmetic that reads them is. */
     --spacing-rail: 6rem;
+    --spacing-rail-narrow: 4.125rem;
     --spacing-mailboxes: 13.125rem;
     --spacing-mailboxes-folded: 4.8125rem;
-    --spacing-drawer: 16.375rem;
+    --spacing-drawer: 18.125rem;
+
+    /* The message list at the tablet and the fold, where the project draws it at one width and offers no boundary to
+       move: the list's width is somebody's to set only in the desktop composition, which is the one wide enough for
+       the choice to change anything but the message beside it. */
+    --spacing-list-tablet: 17.75rem;
 
     /* The notification centre, in the two shapes the design project draws it: how wide the panel is beside the rail,
        and how tall the bottom navigation is — which the panel reads as well as the navigation itself, because the
@@ -282,6 +289,13 @@
        takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off
        the side. It is the width the design project draws a tab at. */
     --container-tab: 14.375rem;
+
+    /* What a dialog asking a question is drawn at, and what it is held inside on a screen narrower than that: the
+       project draws every such dialog at one width on the desktop and, on the phone, as a card with the same margin
+       on either side rather than one filling the screen edge to edge. The margin is stated as the ceiling the card
+       stops at, so a dialog composes against one name and never learns the window's width. */
+    --container-dialog: 27.5rem;
+    --container-dialog-narrow: calc(100vw - 3rem);
 
     /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,
        which is every head this repository builds today; declaring it as a token is what keeps a screen from reaching

@@ -246,11 +246,12 @@ export function Composer({
                 wide ? 'h-full min-h-0' : 'fixed inset-0 z-50 pt-safe-top pb-safe-bottom'
             }`}
         >
-            <div className="flex shrink-0 items-center gap-3 border-b border-line px-4.25 py-3">
+            <div className="flex shrink-0 items-center gap-3 border-b border-line bg-sunken px-4.25 py-3">
                 <h2 className="text-md font-semibold">{title}</h2>
 
                 <div className="ms-auto flex items-center">
                     <DiscardConfirmation
+                        edged={!wide}
                         written={authored || draft.staged.length > 0}
                         onDiscard={() => {
                             // The same rule the keep path holds to: a deployment that refused is one the composer
@@ -282,7 +283,7 @@ export function Composer({
                 <>
                     {accounts.length > 1 && composition.answering === null ? (
                         <div className="flex items-center gap-2.5 border-b border-line-soft px-4.25 py-2.25">
-                            <label htmlFor={`${subjectId}-from`} className="w-11 shrink-0 text-sm text-muted">
+                            <label htmlFor={`${subjectId}-from`} className="w-22 shrink-0 text-sm text-muted">
                                 {translate('compose.from')}
                             </label>
 
@@ -355,7 +356,7 @@ export function Composer({
                             word beside it. */}
                         {composition.answering === null ? (
                             <>
-                                <label htmlFor={subjectId} className="w-11 shrink-0 text-sm text-muted">
+                                <label htmlFor={subjectId} className="w-22 shrink-0 text-sm text-muted">
                                     {translate('compose.subject')}
                                 </label>
 
@@ -371,7 +372,7 @@ export function Composer({
                             </>
                         ) : (
                             <>
-                                <span id={subjectId} className="w-11 shrink-0 text-sm text-muted">
+                                <span id={subjectId} className="w-22 shrink-0 text-sm text-muted">
                                     {translate('compose.subject')}
                                 </span>
 

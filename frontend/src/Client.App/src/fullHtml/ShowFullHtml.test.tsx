@@ -46,7 +46,7 @@ describe('ShowFullHtml', () => {
         press('Show the full HTML version');
 
         expect(screen.getByText(/tracking pixels/)).toBeDefined();
-        expect(screen.getByText(/Nothing in it can run/)).toBeDefined();
+        expect(screen.getByText(/Scripts and remote resources are blocked/)).toBeDefined();
     });
 
     it('leaves the message exactly as it was when the reader stays with the reduced version', () => {
@@ -54,7 +54,7 @@ describe('ShowFullHtml', () => {
 
         drawing(shown);
         press('Show the full HTML version');
-        press('Stay with the reduced version');
+        press('Keep the reduced version');
 
         expect(shown).not.toHaveBeenCalled();
         expect(screen.queryByRole('heading', { name: 'Show the full HTML?' })).toBeNull();
@@ -75,7 +75,7 @@ describe('ShowFullHtml', () => {
 
         drawing(shown);
         press('Show the full HTML version');
-        press('Stay with the reduced version');
+        press('Keep the reduced version');
         press('Show the full HTML version');
 
         expect(screen.getByRole('heading', { name: 'Show the full HTML?' })).toBeDefined();

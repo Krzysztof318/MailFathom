@@ -18,11 +18,12 @@ import type { ArrivalMark } from './threadOpening';
 // One message of a conversation, as a head and what it says. It is its own component for the reason a list row is: it
 // is what carries the read and the way out to the message on its own.
 //
-// A message the pane draws is open, which is what the design project draws and what leaves the pane with one decision
-// rather than one per message. The economy that used to sit here sits on the conversation instead: the history is
-// hidden until somebody asks for it, so a conversation of thirty messages mounts one body rather than thirty. Nothing
-// here collapses, so there is no disclosure, no contribution line, and no card — the border and the panel fill belong
-// to a collapsed message, which this pane no longer has.
+// It is drawn in the two states the design project draws a message of a conversation in. Open, it is flat on the
+// column: the head, the words, and the way to the message on its own. Collapsed, it is the head alone on a bordered
+// card, which is what every earlier message is until somebody presses it — so showing the history of a conversation of
+// thirty messages puts thirty heads on the screen and reads no body, and nothing already drawn moves while a body
+// arrives under it. The head is the control that opens and closes the message, in both states, which is what the
+// design draws it as.
 //
 // It is a region of its own so that arriving at a conversation can place the reader on the message they came for, for
 // the reason `readingPane/ReadingPane.tsx` names its opened message: focus has to land on something a screen reader
@@ -53,6 +54,8 @@ export function ThreadMessage({
     transport,
     message,
     mark,
+    collapsed,
+    onToggle,
     onOpenOnItsOwn,
     onRegion,
 }: {
@@ -62,6 +65,12 @@ export function ThreadMessage({
 
     /** What marks this message out as the one the conversation arrived at, or `null` where nothing does. */
     readonly mark: ArrivalMark | null;
+
+    /** Whether the head stands alone, with the words behind a press on it. */
+    readonly collapsed: boolean;
+
+    /** What the head does when pressed: opens a collapsed message, and collapses an open one. */
+    readonly onToggle: () => void;
 
     readonly onOpenOnItsOwn: () => void;
     readonly onRegion: (element: HTMLElement | null) => void;
@@ -82,9 +91,16 @@ export function ThreadMessage({
                 ref={onRegion}
                 tabIndex={-1}
                 aria-label={translate('thread.messageBy', { sender })}
-                className={`mx-auto flex w-full max-w-conversation flex-col gap-2.75 transition ${mark === null ? '' : arrivalStyles[mark]}`}
+                className={`mx-auto flex w-full max-w-conversation flex-col gap-2.75 transition ${
+                    collapsed ? 'rounded-xl border border-line bg-sunken px-3 py-2' : ''
+                } ${mark === null ? '' : arrivalStyles[mark]}`}
             >
-                <div className="flex items-center gap-2.75">
+                <button
+                    type="button"
+                    aria-expanded={!collapsed}
+                    className="flex w-full items-center gap-2.75 rounded-md text-start transition hover:bg-hover"
+                    onClick={onToggle}
+                >
                     <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="card" />
 
                     {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
@@ -110,35 +126,39 @@ export function ThreadMessage({
                     <MessageMarkers email={email} />
 
                     <ReceivedAt at={email.receivedAt} />
-                </div>
+                </button>
 
-                <p className="text-sm text-muted">
-                    {translate('thread.storedIn', { account: email.account, folder: email.folder })}
-                </p>
+                {collapsed ? null : (
+                    <>
+                        <p className="text-sm text-muted">
+                            {translate('thread.storedIn', { account: email.account, folder: email.folder })}
+                        </p>
 
-                {/* Every body the conversation drew is marked read, which is one rule rather than two: the reading
-                    pane and a message here put the same words in front of the same person, and what marks a message
-                    read is that its body was drawn wherever it was drawn. Nothing the screen decides for itself draws
-                    more than the latest message — the rest are behind *show earlier messages*, which is a gesture the
-                    reader makes knowing the count it names. */}
-                <Message
-                    session={session}
-                    transport={transport}
-                    storedEmailId={email.id}
-                    quotedHistoryOnRequest
-                    onBodyDrawn={() => {
-                        marking.markRead({
-                            storedEmailId: email.id,
-                            account: email.account,
-                            folder: email.folder,
-                            unread: email.unread,
-                        });
-                    }}
-                />
+                        {/* Every body the conversation drew is marked read, which is one rule rather than two: the
+                            reading pane and a message here put the same words in front of the same person, and what
+                            marks a message read is that its body was drawn wherever it was drawn. Nothing the screen
+                            decides for itself draws more than the latest message — the rest are collapsed until
+                            pressed, which is a gesture the reader makes knowing whose message it opens. */}
+                        <Message
+                            session={session}
+                            transport={transport}
+                            storedEmailId={email.id}
+                            quotedHistoryOnRequest
+                            onBodyDrawn={() => {
+                                marking.markRead({
+                                    storedEmailId: email.id,
+                                    account: email.account,
+                                    folder: email.folder,
+                                    unread: email.unread,
+                                });
+                            }}
+                        />
 
-                <div>
-                    <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />
-                </div>
+                        <div>
+                            <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />
+                        </div>
+                    </>
+                )}
             </article>
         </li>
     );

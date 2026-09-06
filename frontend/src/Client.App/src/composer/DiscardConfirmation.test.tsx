@@ -24,7 +24,7 @@ function drawConfirmation(written: boolean): {
     render(
         <LocalizationProvider>
             <ScreenLayersContext value={result.current}>
-                <DiscardConfirmation written={written} onDiscard={discarded} onKeep={kept} />
+                <DiscardConfirmation written={written} edged={false} onDiscard={discarded} onKeep={kept} />
             </ScreenLayersContext>
         </LocalizationProvider>,
     );

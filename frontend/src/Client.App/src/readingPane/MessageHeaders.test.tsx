@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
+import { WorkspaceProvider } from '../workspace/Workspace';
 import { MessageHeaders } from './MessageHeaders';
 
 const headers: MailMessageHeaders = {
@@ -35,10 +35,12 @@ function disclosure(): HTMLDetailsElement {
     return opened;
 }
 
-function drawing(written: Partial<MailMessageHeaders> = {}, onShowFullHtml: () => void = () => undefined): void {
+function drawing(written: Partial<MailMessageHeaders> = {}): void {
     render(
         <LocalizationProvider>
-            <MessageHeaders headers={{ ...headers, ...written }} onShowFullHtml={onShowFullHtml} />
+            <WorkspaceProvider>
+                <MessageHeaders headers={{ ...headers, ...written }} />
+            </WorkspaceProvider>
         </LocalizationProvider>,
     );
 }
@@ -104,32 +106,38 @@ describe('MessageHeaders', () => {
         expect(screen.getByText('This message names nobody as its author.')).toBeDefined();
     });
 
-    it('places both instants against the reader own clock, so a message that arrived overnight says so', () => {
+    it('places the instant the author wrote against the reader own clock, on the line naming the author', () => {
         process.env['TZ'] = 'Europe/Warsaw';
 
-        drawing({ receivedAt: '2026-08-31T23:12:00+00:00' });
+        drawing({ sentAt: '2026-08-31T23:12:00+00:00' });
 
         // Written out rather than compared against a formatter built here, because that comparison passes just as
         // happily for a screen that pinned a zone of its own — which is the defect this is about. Warsaw is two hours
-        // ahead in August, which is what carries the arrival into the next day.
-        expect(screen.getByText('Sent August 31, 2026 at 11:41 AM')).toBeDefined();
-        expect(screen.getByText('Received September 1, 2026 at 1:12 AM')).toBeDefined();
+        // ahead in August, which is what carries the instant into the next day.
+        expect(screen.getByText('9/1/26, 1:12 AM')).toBeDefined();
+        expect(screen.getByText('Billing <billing@example.invalid>')).toBeDefined();
     });
 
-    it('reads the same instants a day earlier for a reader west of the sender', () => {
+    it('reads the same instant a day earlier for a reader west of the sender', () => {
         process.env['TZ'] = 'America/Los_Angeles';
 
-        drawing({ receivedAt: '2026-08-31T23:12:00+00:00' });
+        drawing({ sentAt: '2026-08-31T23:12:00+00:00' });
 
-        expect(screen.getByText('Sent August 31, 2026 at 2:41 AM')).toBeDefined();
-        expect(screen.getByText('Received August 31, 2026 at 4:12 PM')).toBeDefined();
+        expect(screen.getByText('8/31/26, 4:12 PM')).toBeDefined();
     });
 
     it('keeps the instant the service sent beside the words, so what a machine reads is not the wording', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
         drawing();
 
-        expect(screen.getByText(/^Sent /u).getAttribute('datetime')).toBe('2026-08-31T09:41:00+00:00');
-        expect(screen.getByText(/^Received /u).getAttribute('datetime')).toBe('2026-08-31T09:41:10+00:00');
+        expect(screen.getByText('8/31/26, 11:41 AM').getAttribute('datetime')).toBe('2026-08-31T09:41:00+00:00');
+    });
+
+    it('draws when this deployment recorded the message nowhere in the head, which is the copy rather than the message', () => {
+        drawing();
+
+        expect(screen.queryByText(/^Received /u)).toBeNull();
     });
 
     it('says the sender wrote no readable date rather than drawing a broken one', () => {
@@ -166,42 +174,10 @@ describe('MessageHeaders', () => {
     });
 });
 
-// The one control on this head that does something today, and what it does is ask before anything is shown.
-describe('MessageHeaders and the sender own markup', () => {
-    it('offers the way to the sender own version of this message', () => {
-        drawing();
-
-        expect(screen.getByRole('button', { name: 'Show the full HTML version' })).toBeDefined();
-    });
-
-    it('asks the reader before it opens anything, so pressing it opens nothing on its own', () => {
-        const shown = vi.fn();
-
-        drawing({}, shown);
-        fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
-
-        expect(shown).not.toHaveBeenCalled();
-    });
-
-    // The control goes rather than being drawn disabled: a reader whose messages already *are* the sender's own markup
-    // has nowhere for it to take them, and a control that would do nothing is one they have to work out is pointless.
-    it('draws no way to a second copy of the markup a reader is already reading', () => {
-        render(
-            <LocalizationProvider>
-                <EmbeddedHtmlMessagesContext value>
-                    <MessageHeaders headers={headers} onShowFullHtml={() => undefined} />
-                </EmbeddedHtmlMessagesContext>
-            </LocalizationProvider>,
-        );
-
-        expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
-    });
-});
-
 describe('MessageHeaders at the width its column has', () => {
     // The head is the one place in the reading column a composition changes what is drawn rather than how it is laid
     // out, so it is asked at both widths: the words go and the control stays, named by what it does either way.
-    it('draws the three acts as words beside their symbols wherever the column is not the whole screen', () => {
+    it('draws the three acts as words alone wherever the column is not the whole screen', () => {
         atWorkspaceWidth(true);
         drawing();
 
@@ -217,6 +193,20 @@ describe('MessageHeaders at the width its column has', () => {
         expect(screen.queryByText('Reply')).toBeNull();
         expect(screen.queryByText('Forward')).toBeNull();
         expect(screen.queryByText('Flag')).toBeNull();
+    });
+
+    it('carries the way back to the list at the width the column is the whole screen, and nowhere else', () => {
+        atWorkspaceWidth(false);
+        drawing();
+
+        expect(screen.getByRole('button', { name: 'Back to the list' })).toBeDefined();
+    });
+
+    it('carries no way back where the list stands beside the message', () => {
+        atWorkspaceWidth(true);
+        drawing();
+
+        expect(screen.queryByRole('button', { name: 'Back to the list' })).toBeNull();
     });
 
     it('names each act the same way at either width, so nothing is reachable at one and nameless at the other', () => {

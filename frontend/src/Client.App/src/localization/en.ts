@@ -242,6 +242,9 @@ export const en = {
     'mail.markUnread': 'Mark unread',
     'mail.move': 'Move',
     'mail.selectMessages': 'Select messages',
+    'menu.flag': 'Flag',
+    'menu.markUnread': 'Mark as unread',
+    'menu.move': 'Move…',
     'mail.backToList': 'Back to the list',
     'mail.listColumn': 'Message list',
     'mail.readingColumn': 'What is open',
@@ -386,8 +389,10 @@ export const en = {
     'tabs.closeAllConfirm': 'Close them all',
     'tabs.closeAllCancel': 'Cancel',
     'tabs.nothingOpen': 'Nothing is open',
-    'tabs.nothingOpenExplanation': 'Pick a message from the list and it opens as a tab of its own.',
-    'tabs.reopenLastRead': 'Open the last message read',
+    'tabs.nothingOpenExplanation':
+        'Pick a message from the list, write a new one, or ask about the whole history of your correspondence — each of them opens as a tab of its own.',
+    'tabs.reopenLastRead': 'Open the last message',
+    'tabs.askHistory': 'Ask about the history',
 
     'folder.inbox': 'Inbox',
     'folder.drafts': 'Drafts',
@@ -577,11 +582,9 @@ export const en = {
 
     'fullHtml.show': 'Show the full HTML version',
     'fullHtml.question': 'Show the full HTML?',
-    'fullHtml.whatItCanCarry':
-        'The sender wrote this markup themselves. It can carry tracking pixels, a layout imitating a brand you know, and links that go somewhere other than they say.',
-    'fullHtml.whatIsBlocked':
-        'Nothing in it can run, and nothing in it reaches the sender until you ask for their pictures.',
-    'fullHtml.stayReduced': 'Stay with the reduced version',
+    'fullHtml.whatItRisks':
+        "The sender's own markup can carry tracking pixels, layouts imitating brands you know, and phishing links. Scripts and remote resources are blocked, but the sender may still be able to tell the message was opened.",
+    'fullHtml.stayReduced': 'Keep the reduced version',
     'fullHtml.confirm': 'Show the HTML',
     'fullHtml.surface': "The sender's own version of this message",
     'fullHtml.mark': 'HTML',
@@ -594,9 +597,7 @@ export const en = {
     'fullHtml.truncated': 'This message is longer than one read returns, so it stops here.',
     'fullHtml.picturesTruncated':
         'This message carried more pictures of its own than one view holds, so some of them are missing.',
-    'fullHtml.cannotRun': 'This message cannot run anything: the frame it is drawn in permits no script at all.',
-    'fullHtml.reachesNobody':
-        'It carries no address that would reach the sender — every one of them was removed before this message was sent to the client.',
+    'fullHtml.isolated': 'Isolated preview — scripts and remote content are blocked',
     'fullHtml.picturesAsked':
         'Pictures are being loaded from the sender for this message, so their servers can tell it was opened. Nothing about that is kept: leaving this message and coming back asks again.',
 
@@ -625,7 +626,6 @@ export const en = {
     'thread.openedFromList': 'Opened from the list',
     'thread.landedFromResult': 'Brought here from a search result',
 
-    'message.nothingOpen': 'Open a message to read it here.',
     'message.reading': 'Reading this message…',
     'message.offline':
         'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
@@ -633,6 +633,7 @@ export const en = {
     'message.noSubject': 'No subject',
     'message.noAuthor': 'This message names nobody as its author.',
     'message.sentAt': 'Sent {when}',
+    'message.authorThenWhen': ' · ',
     'message.sentAtUnknown': 'The sender wrote no date this client can read.',
     'message.receivedAt': 'Received {when}',
     'message.otherParticipants': 'Everybody else this message names ({count})',
@@ -738,6 +739,7 @@ export const en = {
     'pendingChange.followAgain': 'Check again',
 
     'notifications.title': 'Notifications',
+    'notifications.place': 'Notifications',
     'notifications.unread.one': '{count} unread notification',
     'notifications.unread.few': '{count} unread notifications',
     'notifications.unread.many': '{count} unread notifications',

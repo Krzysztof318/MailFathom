@@ -65,6 +65,8 @@ function message(overrides: Partial<MailThreadMessage['email']> = {}): MailThrea
 function drawing(
     held: MailThreadMessage = message(),
     handlers: {
+        readonly collapsed?: boolean;
+        readonly onToggle?: () => void;
         readonly onOpenOnItsOwn?: () => void;
         readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
@@ -81,6 +83,8 @@ function drawing(
                             transport={answersNothing}
                             message={held}
                             mark={mark}
+                            collapsed={handlers.collapsed ?? false}
+                            onToggle={handlers.onToggle ?? (() => undefined)}
                             onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
                             onRegion={handlers.onRegion ?? (() => undefined)}
                         />
@@ -114,13 +118,33 @@ describe('ThreadMessage', () => {
         expect(screen.queryByText('The figures you asked for are attached.')).toBeNull();
     });
 
-    it('carries no card, which the design project draws on a collapsed message alone', () => {
+    it('carries no card while open, which the design project draws on a collapsed message alone', () => {
         drawing();
 
         const region = screen.getByRole('article');
 
         expect(region.className).not.toContain('border');
-        expect(region.className).not.toContain('bg-panel');
+        expect(region.className).not.toContain('bg-sunken');
+    });
+
+    it('draws a collapsed message as its head on a card, with nothing read and nothing said under it', () => {
+        drawing(message(), { collapsed: true });
+
+        const region = screen.getByRole('article');
+
+        expect(region.className).toContain('border');
+        expect(screen.getByRole('button', { expanded: false })).toBeDefined();
+        expect(screen.queryByText('In work, Sent')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Open this message on its own' })).toBeNull();
+    });
+
+    it('opens and closes from its head, which is the control the design draws it as', () => {
+        const toggled = vi.fn();
+
+        drawing(message(), { collapsed: true, onToggle: toggled });
+        fireEvent.click(screen.getByRole('button', { expanded: false }));
+
+        expect(toggled).toHaveBeenCalledTimes(1);
     });
 
     it('names the region it puts a reader in, so arriving at a message announces more than a tag', () => {

@@ -4,7 +4,7 @@
 
 import { Icon } from './Icon';
 import type { IconName } from './icons';
-import { controlShapes, labelledShape, type ControlShape } from './controlShapes';
+import { controlShapes, labelledShape, symbolShown, type ControlShape } from './controlShapes';
 import { useLocalization } from '../localization/useLocalization';
 
 // A control the design project draws that cannot act here. It is present because leaving it out would make the client
@@ -47,7 +47,9 @@ export function PlannedControl({
             title={named}
             className={`flex shrink-0 cursor-not-allowed items-center whitespace-nowrap opacity-60 transition ${controlShapes[shape]} ${className ?? ''}`}
         >
-            {icon === undefined ? null : <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />}
+            {icon === undefined || !symbolShown(shape) ? null : (
+                <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />
+            )}
             {labelled ? <span>{label}</span> : null}
         </button>
     );

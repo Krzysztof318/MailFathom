@@ -353,9 +353,12 @@ The frame is one tree laid out by the width it is given, and nothing in it reads
 running on. Three `@theme` breakpoints decide it, and between them they give the four compositions the design project
 frames: below `workspace` the destinations are a bottom bar under a single pane, and every side panel is a drawer;
 from `workspace` up they are the rail beside the workspace again; from `panes` up the list and the message stand side
-by side; and from `desktop` up the mailboxes gain a column of their own beside them and the toolbar gives every
-control its name in words. The fold is a composition of its own out of that arithmetic rather than a case anything
-branches on — two panes, drawers, and a mailbox column still behind a control.
+by side; and from `desktop` up the mailboxes gain a column of their own beside them. The fold is a composition of its
+own out of that arithmetic rather than a case anything branches on — two panes, drawers, and a mailbox column still
+behind a control. How the toolbar draws its controls is measured rather than composed, in `src/mailSpace/useStripFit.ts`:
+every control keeps its name in words for as long as the names fit the strip, composing leaves the strip for the
+floating control over the list when they stop fitting, and the symbols stand alone only when the names still do not
+fit without it.
 
 The **back gesture** is answered by the same frame, and on all three heads by one mechanism: `src/shell/screenLayers.ts`
 records what stands over the screen as each surface opens, `src/shellOperations/backNavigation.ts` keeps one history
@@ -523,8 +526,8 @@ where what is being read stands and the mailboxes and the list stay beside it, a
 because a column that has to hold a header, four fields, and a footer has nothing left over to show a message
 underneath. Which of the two is drawn is the width the client has, not the head it runs on.
 
-It is asked for from three unrelated places — the toolbar over the space, the control a narrow window puts at the
-corner a thumb reaches, and the answering controls beside a message — none of which is its parent, so `useComposing`
+It is asked for from three unrelated places — the toolbar over the space, the control standing at the corner a thumb
+reaches wherever composing does not fit that toolbar, and the answering controls beside a message — none of which is its parent, so `useComposing`
 is the context that carries the ask and `App.tsx` is the one place the screen is mounted, because what is being written
 outlives moving between the spaces. What is being written is deliberately not in that context: the composition belongs
 to the composer, so nothing above it can read half a message off the frame.

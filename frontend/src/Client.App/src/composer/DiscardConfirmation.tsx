@@ -4,7 +4,7 @@
 
 import { useRef, useState } from 'react';
 import { Confirmation } from '../confirmation/Confirmation';
-import { Icon } from '../controls/Icon';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 import { useScreenLayer } from '../shell/screenLayers';
 
@@ -21,11 +21,15 @@ import { useScreenLayer } from '../shell/screenLayers';
 
 export function DiscardConfirmation({
     written,
+    edged,
     onDiscard,
     onKeep,
 }: {
     /** Whether anything has been written that closing would throw away. */
     readonly written: boolean;
+
+    /** Whether the close is drawn with an edge, which it is where the composer is a sheet rather than a column. */
+    readonly edged: boolean;
 
     /** Closes the composer, giving up what was written and any draft the deployment already holds for it. */
     readonly onDiscard: () => void;
@@ -60,15 +64,7 @@ export function DiscardConfirmation({
 
     return (
         <>
-            <button
-                type="button"
-                aria-label={translate('compose.close')}
-                title={translate('compose.close')}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                onClick={leave}
-            >
-                <Icon name="close" className="size-4.5" />
-            </button>
+            <SurfaceControl label={translate('compose.close')} icon="close" edged={edged} onActivate={leave} />
 
             <Confirmation
                 asked={asked}

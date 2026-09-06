@@ -188,6 +188,17 @@ function bodiesAsked(): string[] {
     return asked.filter((request) => request.path.includes('/body')).map((request) => request.path);
 }
 
+// The head of the first earlier message drawn collapsed, which is the control that opens it.
+function firstCollapsedHead(): HTMLElement {
+    const [head] = screen.getAllByRole('button', { expanded: false });
+
+    if (head === undefined) {
+        throw new Error('No message of the conversation is drawn collapsed.');
+    }
+
+    return head;
+}
+
 describe('Thread', () => {
     it('draws the latest message and hides every earlier one behind the control that names how many there are', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
@@ -202,7 +213,13 @@ describe('Thread', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (2)' }));
 
+        // Every earlier message arrives as its head alone, so nothing already drawn moves while a body arrives.
         expect(screen.getAllByRole('listitem')).toHaveLength(3);
+        expect(screen.getAllByRole('button', { expanded: false })).toHaveLength(2);
+        expect(screen.queryByText('The whole of what one says.')).toBeNull();
+
+        fireEvent.click(firstCollapsedHead());
+
         expect(await screen.findByText('The whole of what one says.')).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Hide earlier messages' }));
@@ -306,7 +323,7 @@ describe('Thread', () => {
         });
     });
 
-    it('marks read each message the reader shows the history for', async () => {
+    it('marks read each earlier message the reader opens, and none they only showed the head of', async () => {
         const { marking, opened } = recordingMarkings();
 
         drawing(
@@ -317,6 +334,12 @@ describe('Thread', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (1)' }));
+
+        await waitFor(() => {
+            expect(opened.map((message) => message.storedEmailId)).toStrictEqual(['two']);
+        });
+
+        fireEvent.click(screen.getByRole('button', { expanded: false }));
         await screen.findByText('The whole of what one says.');
 
         await waitFor(() => {
@@ -336,13 +359,18 @@ describe('Thread', () => {
         });
     });
 
-    it('reads a message the reader shows the history for, and not before', async () => {
+    it('reads a message the reader opens, and not before: showing the history reads nothing', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two'])));
         const control = await screen.findByRole('button', { name: 'Show earlier messages (1)' });
 
         expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(false);
 
         fireEvent.click(control);
+
+        expect(screen.getByRole('button', { expanded: false })).toBeDefined();
+        expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(false);
+
+        fireEvent.click(screen.getByRole('button', { expanded: false }));
 
         await waitFor(() => {
             expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(true);
@@ -418,6 +446,7 @@ describe('Thread', () => {
         expect(screen.queryByText('Opened from the list')).toBeNull();
 
         fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
+        fireEvent.click(firstCollapsedHead());
 
         expect(await screen.findByText('The whole of what one says.')).toBeDefined();
         expect(screen.queryByText('Opened from the list')).toBeNull();
@@ -451,7 +480,7 @@ describe('Thread', () => {
         control.focus();
         fireEvent.click(control);
 
-        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(3);
         expect(document.activeElement).toBe(control);
         expect(document.activeElement).not.toBe(arrivedAt);
     });

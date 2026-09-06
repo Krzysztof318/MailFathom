@@ -9,9 +9,12 @@ import {
     type MailAccount,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
-import { chip } from '../controls/chrome';
+import { controlShapes } from '../controls/controlShapes';
+import { Icon } from '../controls/Icon';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
+import { useMailboxesDrawer } from '../mailSpace/mailboxesDrawer';
 import { useLocalization } from '../localization/useLocalization';
 import type { MailScope } from '../workspace/mailScope';
 import { mostRecentSearches } from '../workspace/rememberedWorkspace';
@@ -62,6 +65,7 @@ export function MailSearch({
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const openMailboxes = useMailboxesDrawer();
 
     const [typed, setTyped] = useState('');
 
@@ -97,12 +101,18 @@ export function MailSearch({
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-2">
             <form
-                className="flex flex-wrap items-center gap-2 px-3 pt-2.5"
+                className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5"
                 onSubmit={(event) => {
                     event.preventDefault();
                     search(typed);
                 }}
             >
+                {/* The way to the mailboxes stands first in this row wherever they are behind a drawer, which is the
+                    design's own head row: the drawer, the field, and what searches it, on one line. */}
+                {openMailboxes === null ? null : (
+                    <SurfaceControl label={translate('mailboxes.open')} icon="menu" edged onActivate={openMailboxes} />
+                )}
+
                 {/* One pill across the column, which is where the design puts finding a message and what it draws it
                     as. Its name is carried rather than drawn: a placeholder is not an accessible name — it leaves as
                     soon as somebody types — and the design's shape has no room for a visible one. */}
@@ -120,8 +130,14 @@ export function MailSearch({
                     />
                 </label>
 
-                <button className={`px-2.75 py-1.25 text-sm ${chip}`} type="submit">
-                    {translate('search.submit')}
+                {/* Its symbol alone, as the design draws it; the name is on the control for whoever is not looking. */}
+                <button
+                    type="submit"
+                    aria-label={translate('search.submit')}
+                    title={translate('search.submit')}
+                    className={`flex shrink-0 items-center whitespace-nowrap transition ${controlShapes.symbol}`}
+                >
+                    <Icon name="search" className="size-4.5" />
                 </button>
 
                 {ask === null ? null : <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />}

@@ -58,9 +58,8 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 
                 <button
                     type="submit"
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
+                    className="shrink-0 rounded-lg bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
                 >
-                    <Icon name="auto_awesome" className="size-4.5" />
                     {translate('intent.ask')}
                 </button>
             </div>

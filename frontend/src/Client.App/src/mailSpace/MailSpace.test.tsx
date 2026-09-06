@@ -8,15 +8,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from '../shell/screenLayers';
+import { useTwoPanes } from '../shell/useWideWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { BackToList } from './BackToList';
 import { listWidthStep, readListWidth, startingListWidth, storeListWidth } from './listWidth';
+import { useMailboxesDrawer } from './mailboxesDrawer';
 import { MailSpace } from './MailSpace';
 
 // Not catalogue entries: each stands for whatever the frame composes for the region, which is the point of the props.
 const handedTheFolders = 'The folder tree this space was handed.';
 const handedTheTabs = 'The tab strip this space was handed.';
 const handedTheList = 'The message list this space was handed.';
+const handedTheDrawer = 'Folders and filters';
 const handedToMail = 'The mail this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
@@ -141,6 +145,36 @@ const nothingBeingWritten = {
     close: () => undefined,
 };
 
+// What the list column hands the space: a list whose head draws the way into the mailboxes drawer wherever the space
+// publishes one, which is what the real list's search row does.
+function HandedList() {
+    const openMailboxes = useMailboxesDrawer();
+
+    return (
+        <>
+            {openMailboxes === null ? null : (
+                <button type="button" onClick={openMailboxes}>
+                    {handedTheDrawer}
+                </button>
+            )}
+            <p>{handedTheList}</p>
+        </>
+    );
+}
+
+// What the reading column hands the space: a message whose head carries the way back to the list where the column is
+// the whole screen, which is what the real column does and what the space itself no longer draws.
+function HandedMessage() {
+    const twoPanes = useTwoPanes();
+
+    return (
+        <>
+            {twoPanes ? null : <BackToList />}
+            <p>{handedToMail}</p>
+        </>
+    );
+}
+
 function renderSpace(
     pixels: number,
     opening: Partial<Workspace> = {},
@@ -168,8 +202,8 @@ function renderSpace(
                                     <ChooseInbox />
                                 </>
                             }
-                            list={<p>{handedTheList}</p>}
-                            mail={<p>{handedToMail}</p>}
+                            list={<HandedList />}
+                            mail={<HandedMessage />}
                             tabs={<p>{handedTheTabs}</p>}
                             intent={<p>{handedTheIntent}</p>}
                             status={<p>{handedTheStatus}</p>}
