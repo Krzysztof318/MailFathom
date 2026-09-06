@@ -97,6 +97,55 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
         Assert.Empty(await ReadAttachmentPositionsAsync(services, storedEmailId, cancellationToken));
     }
 
+    /// <summary>
+    /// Discarding a message's readings takes the stamp that says it was read with them, so a message the gate later
+    /// re-admits is read again rather than left permanently without attachment text.
+    /// </summary>
+    /// <remarks>
+    /// The junk verdict is what calls this, and a reversed verdict re-admits the message with nothing having recorded
+    /// the move — so the stamp is the only thing that would keep it out of the walk, and a stamp standing over rows
+    /// that are gone keeps it out for good. Only a real statement shows it: both halves are set-based writes over two
+    /// tables in one transaction.
+    /// </remarks>
+    [Fact]
+    public async Task DiscardAttachmentTextAsync_AMessageAlreadyRead_TakesTheDerivationStampWithTheRows()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9103);
+        var storedEmailId = await StoreAsync(services, occurrenceId, cancellationToken);
+
+        await SaveAsync(services, storedEmailId, [Document(0, "invoice")], cancellationToken);
+        var stampAfterReading = await ReadDerivationStampAsync(services, storedEmailId, cancellationToken);
+
+        // Act
+        var discarded = await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IStoredEmailAttachmentTextStore>()
+                .DiscardAttachmentTextAsync(session, storedEmailId, token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, discarded);
+        Assert.NotNull(stampAfterReading);
+        Assert.Null(await ReadDerivationStampAsync(services, storedEmailId, cancellationToken));
+        Assert.Empty(await ReadAttachmentPositionsAsync(services, storedEmailId, cancellationToken));
+    }
+
+    /// <summary>Reads the stamp that decides whether the attachment walk still owes this message a reading.</summary>
+    private static Task<DateTimeOffset?> ReadDerivationStampAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            async (scope, token) => await scope.GetRequiredService<MailFathomDbContext>()
+                .StoredEmails
+                .AsNoTracking()
+                .Where(email => email.Id == storedEmailId.Value)
+                .Select(email => email.AttachmentTextDerivedAt)
+                .SingleAsync(token),
+            cancellationToken);
+
     /// <summary>Builds one document reading long enough to be cut into a passage of its own.</summary>
     private static DerivedAttachmentText Document(int position, string term) => DerivedAttachmentText.FromExtraction(
         position,

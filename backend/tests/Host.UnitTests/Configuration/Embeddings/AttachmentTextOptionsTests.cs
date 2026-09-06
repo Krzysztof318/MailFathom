@@ -317,11 +317,18 @@ public sealed class AttachmentTextOptionsTests
                 settings.MaxAttachmentsPerEmail = (int)value;
                 break;
 
+            // The two per-scope octet ceilings are written with everything beneath them, so the value under test is the
+            // only thing the ordering check could complain about — and it cannot, because writing them down satisfies
+            // it. Without that, a value below the floor also inverts the order, the order error names the same member
+            // the range error would, and deleting the floor from the validator leaves the assertion green.
             case nameof(AttachmentTextOptions.MaxInputOctetsPerEmail):
+                settings.MaxInputOctets = Math.Min(settings.MaxInputOctets, value);
                 settings.MaxInputOctetsPerEmail = value;
                 break;
 
             case nameof(AttachmentTextOptions.MaxInputOctetsPerAccountRun):
+                settings.MaxInputOctets = Math.Min(settings.MaxInputOctets, value);
+                settings.MaxInputOctetsPerEmail = Math.Min(settings.MaxInputOctetsPerEmail, value);
                 settings.MaxInputOctetsPerAccountRun = value;
                 break;
 

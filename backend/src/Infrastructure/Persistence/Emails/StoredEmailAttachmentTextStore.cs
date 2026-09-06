@@ -189,9 +189,20 @@ internal sealed class StoredEmailAttachmentTextStore(
 
         // One statement rather than tracked entities, for the reason the passage removal is: a row holds a whole
         // document's text, and loading it to throw it away is the one cost this removal exists to avoid paying twice.
-        return await context.EmailAttachmentTexts
+        var discarded = await context.EmailAttachmentTexts
             .Where(text => text.StoredEmailId == emailId.Value)
             .ExecuteDeleteAsync(cancellationToken);
+
+        // The stamp is the whole of what Selecting reads, so leaving it standing over rows that are gone would take the
+        // message out of the walk for good — including after the gate re-admits it, which a reversed junk verdict does
+        // with nothing having recorded the move. Junk mail stays unread on the gate rather than on the stamp.
+        await context.StoredEmails
+            .Where(email => email.Id == emailId.Value)
+            .ExecuteUpdateAsync(
+                email => email.SetProperty(row => row.AttachmentTextDerivedAt, (DateTimeOffset?)null),
+                cancellationToken);
+
+        return discarded;
     }
 
     /// <summary>Writes one attachment's page boundaries as the document the row stores, or nothing where it has none.</summary>

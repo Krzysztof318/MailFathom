@@ -56,6 +56,28 @@ public sealed class RedactedTextTests
         Assert.Equal(placeholderLength + 1, redacted.MapOffset(replaced + 1));
     }
 
+    /// <summary>
+    /// Placements compound, so an offset past two substitutions of different lengths moves by both together rather
+    /// than by the nearest one.
+    /// </summary>
+    [Fact]
+    public void MapOffset_AnOffsetPastSeveralSubstitutions_MovesByEveryNetLengthTogether()
+    {
+        // Arrange
+        var redacted = RedactedText.Create(
+            "ab[redacted:CloudKey]ghij[redacted:PersonName]qrstuvwxyz",
+            [],
+            omittedCharacterCount: 0,
+            [new RedactedPlacement(2, 4, 19), new RedactedPlacement(10, 6, 21)]);
+
+        // Act
+        var mapped = redacted.MapOffset(16);
+
+        // Assert
+        Assert.Equal(46, mapped);
+        Assert.Equal('q', redacted.Text[mapped!.Value]);
+    }
+
     /// <summary>The characters an offset pointed at are gone, so it answers with the placeholder standing in for them.</summary>
     [Fact]
     public void MapOffset_AnOffsetInsideAReplacedRegion_AnswersWithThePlaceholderThatStandsThere()

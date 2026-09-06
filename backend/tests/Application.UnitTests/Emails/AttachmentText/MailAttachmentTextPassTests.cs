@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -32,6 +33,8 @@ public sealed class MailAttachmentTextPassTests
 {
     /// <summary>The decoded size every substituted attachment reports, and therefore what one message costs a run.</summary>
     private const long AttachmentOctets = 2048;
+
+    private static readonly byte[] RawMime = [1, 2, 3];
 
     private static readonly MailAccountIdentity Account =
         MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
@@ -371,16 +374,14 @@ public sealed class MailAttachmentTextPassTests
         var contentStore = Substitute.For<IEmailContentStore>();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-            .Returns(new StoredEmailContent(
-                new byte[] { 1, 2, 3 },
-                RecordedByteLength: 3,
-                RecordedSha256Hash: ReadOnlyMemory<byte>.Empty));
+            .Returns(new StoredEmailContent(RawMime, RawMime.Length, SHA256.HashData(RawMime)));
 
         var opened = Substitute.For<IOpenedEmailAttachment>();
         AttachmentFileName.TryNormalize("lease.pdf", out var fileName);
         opened.Description.Returns(new ExtractedEmailAttachment(fileName, "application/pdf", AttachmentOctets));
 
         var walk = Substitute.For<IOpenedEmailAttachmentWalk>();
+        walk.Count.Returns(1);
         walk.OpenAsync(0, Arg.Any<CancellationToken>()).Returns(OpenedEmailAttachmentResult.Opened(opened));
 
         var attachmentReader = Substitute.For<IEmailAttachmentContentReader>();

@@ -113,6 +113,45 @@ public sealed class SensitiveContentRedactorTests : IDisposable
         Assert.Equal(2, redacted.Findings.Count);
     }
 
+    /// <summary>
+    /// The placements are what every attachment coordinate is now carried across a redaction by, and this walk is
+    /// their only producer: one per region after the overlaps are merged, each naming where the replaced characters
+    /// began, how many there were, and how long the placeholder standing in for them is.
+    /// </summary>
+    /// <remarks>
+    /// Two findings that do not touch and a pair that does, in one text, because the two failures this catches are a
+    /// placement recording a finding's own span instead of the merged region's, and a shift that does not accumulate
+    /// across placements. Either would move every later boundary and cite the wrong page with the suite green, so the
+    /// mapped offset is asserted here as the character it lands on rather than only as a number.
+    /// </remarks>
+    [Fact]
+    public async Task RedactAsync_SeveralRegionsIncludingAnOverlappingPair_RecordsWhereEachPlaceholderWent()
+    {
+        // Arrange
+        var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets)
+        {
+            Findings =
+            [
+                this.Finding(CloudKey, 2, 4),
+                this.Finding(PersonName, 10, 3),
+                this.Finding(PersonName, 12, 4),
+            ],
+        };
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+
+        // Act
+        var redacted = await redactor.RedactAsync(
+            "abcdefghijklmnopqrstuvwxyz",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("ab[redacted:CloudKey]ghij[redacted:PersonName]qrstuvwxyz", redacted.Text);
+        Assert.Equal(
+            [new RedactedPlacement(2, 4, 19), new RedactedPlacement(10, 6, 21)],
+            redacted.Placements);
+        Assert.Equal('q', redacted.Text[redacted.MapOffset(16)!.Value]);
+    }
+
     /// <summary>Text nothing analyzed is exactly the text that must not leave, so the ceiling truncates rather than admitting a remainder.</summary>
     [Fact]
     public async Task RedactAsync_TextBeyondTheAnalyzedCeiling_IsDroppedAndReported()

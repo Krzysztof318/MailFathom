@@ -106,8 +106,9 @@ internal sealed class EmailAttachmentTextEntity
     /// <remarks>
     /// Its own stamp rather than the message's, because an attachment is read on a later pass than the body and a
     /// posture republished between the two would otherwise leave one row's stamp standing for text the other never went
-    /// through. It is read the same way every other stamp is: a value that is not the configuration the deployment
-    /// currently runs marks this row stale, and the way back is a re-derivation.
+    /// through. What it records is the configuration these words were derived under; nothing reads it back yet, so no
+    /// count and no sweep reaches a row whose stamp is not the one the deployment currently runs — the extraction
+    /// backfill compares the search document's stamp and never this one. Issue #1695 is where that gap is tracked.
     /// </remarks>
     public string? SensitiveContentStamp { get; set; }
 

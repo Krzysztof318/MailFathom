@@ -149,6 +149,15 @@ public sealed class EmailAttachmentTextDeriver
             return await this.RequestRepairAsync(email.Id, EmailContentDefect.Missing, redactedUnder, cancellationToken);
         }
 
+        // The store hands a payload over unchecked, so whoever reads it checks it — and this reader has more reason to
+        // than the three that serve one message: what it does with the octets is settle the message for good. A
+        // truncated copy that still parses as MIME would otherwise be extracted, described, embedded, indexed, and
+        // stamped, while the download route refuses the same bytes to the owner.
+        if (content.FindIntegrityDefect() is { } integrityDefect)
+        {
+            return await this.RequestRepairAsync(email.Id, integrityDefect, redactedUnder, cancellationToken);
+        }
+
         // Parsed once for the whole message rather than once per position. Parsing raw MIME is the most expensive local
         // work this run does, and the download route's shape — one parse per request — would multiply it by the
         // attachment count on a pass that walks a whole mailbox.
@@ -168,11 +177,15 @@ public sealed class EmailAttachmentTextDeriver
         var derived = new List<DerivedAttachmentText>();
         var readOctets = 0L;
 
+        // The walk's own count rather than the one the stored row carries: the two disagree whenever the row was
+        // written by an older reading, and reading the row's number would leave the trailing attachments of an
+        // under-counted message unopened while the message was stamped as derived, so nothing would offer them again.
+        //
         // The count ceiling bounds the walk itself rather than what the walk decides, because the number of parts a
         // message declares is the sender's. Opening each of them to write a refusal down would let a stranger choose
         // how many MIME parts this pass reads and how many rows it stores; what the ceiling stopped stays answerable
-        // from the count on the message beside the readings actually stored.
-        var walkLimit = Math.Min(email.AttachmentCount, this.bounds.MaxAttachmentsPerEmail);
+        // from the count the walk reports beside the readings actually stored.
+        var walkLimit = Math.Min(attachments.Count, this.bounds.MaxAttachmentsPerEmail);
 
         for (var position = 0; position < walkLimit; position++)
         {
@@ -294,13 +307,19 @@ public sealed class EmailAttachmentTextDeriver
             return ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ImageTooLarge);
         }
 
-        using var buffer = new MemoryStream();
+        using var buffer = new BoundedImageAttachmentBuffer(this.extractionOptions.MaxInputOctets);
 
         await attachment.WriteContentToAsync(buffer, cancellationToken);
 
-        buffer.Position = 0;
+        // The measurement above is what the MIME walk read out of the part; this is what the decode actually produced.
+        // A part whose decode yields more than it declared is the same refusal, reached from the copy rather than from
+        // the header, which is the reading the document path takes as well.
+        if (buffer.GrewPastCeiling)
+        {
+            return ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ImageTooLarge);
+        }
 
-        return await this.describer.DescribeAsync(mediaType, buffer, cancellationToken);
+        return await this.describer.DescribeAsync(mediaType, buffer.ToReadableStream(), cancellationToken);
     }
 
     /// <summary>Replaces what the owner's switched-on scanner finds before the words leave this method.</summary>

@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Derivation;
 
@@ -23,11 +24,12 @@ public sealed record EmailAttachmentTextDerivation(
     SensitiveContentDerivationStamp? RedactedUnder,
     bool AwaitsRepair = false)
 {
-    /// <summary>The refusals that say the provider may answer a later request, which is what keeps a message outstanding.</summary>
+    /// <summary>The outcomes that say a later reading may succeed, which is what keeps a message outstanding.</summary>
     private static readonly string[] AnswerableLater =
     [
         nameof(ImageDescriptionRefusal.ProviderTimedOut),
         nameof(ImageDescriptionRefusal.ProviderUnavailable),
+        nameof(AttachmentTextExtractionOutcome.TimedOut),
     ];
 
     /// <summary>Gets whether any attachment contributed words to cut passages from.</summary>
@@ -45,9 +47,17 @@ public sealed record EmailAttachmentTextDerivation(
     /// <summary>Gets whether a reading was refused only because a provider did not answer this time.</summary>
     /// <remarks>
     /// <para>
-    /// <see cref="ImageDescriptionRefusal" /> states that these two "say it may answer later", so a message carrying
-    /// one is not finished being read: it is left unstamped and the next account run reads it again, which is the whole
-    /// of the retry — nothing here waits, and the run's octet budget bounds how much repeating costs.
+    /// <see cref="ImageDescriptionRefusal" /> states that its two "say it may answer later", so a message carrying one
+    /// is not finished being read: it is left unstamped and the next account run reads it again, which is the whole of
+    /// the retry — nothing here waits, and the run's octet budget bounds how much repeating costs.
+    /// </para>
+    /// <para>
+    /// <see cref="AttachmentTextExtractionOutcome.TimedOut" /> joins them for the same reason, although it comes from
+    /// the local parser rather than from a provider: it is what a deadline reached under load says, so the octets are
+    /// not known to be unreadable and the next run would very likely parse them. That is the distinction the extractor's
+    /// other refusals are on the other side of — <see cref="AttachmentTextExtractionOutcome.Malformed" /> and
+    /// <see cref="AttachmentTextExtractionOutcome.Encrypted" /> are properties of the file, which repeating cannot
+    /// change. Repeating is bounded by the extraction deadline and by the run's own octet budget.
     /// </para>
     /// <para>
     /// The three configuration refusals beside them — the switch itself and the two ceilings — are deliberately not

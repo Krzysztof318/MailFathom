@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -32,6 +33,12 @@ public sealed class EmailAttachmentTextDeriverTests
     private readonly IAttachmentTextExtractor extractor = Substitute.For<IAttachmentTextExtractor>();
     private readonly IEmailAttachmentImageDescriber describer = Substitute.For<IEmailAttachmentImageDescriber>();
     private readonly IEmailContentRepairRequestStore repairRequestStore = Substitute.For<IEmailContentRepairRequestStore>();
+
+    /// <summary>How many attachments the walk reports, which every position stubbed here adds itself to.</summary>
+    private int walkedAttachmentCount;
+
+    /// <summary>Gets the attachment the last stubbed position hands out, for a test scripting what it writes.</summary>
+    private IOpenedEmailAttachment OpenedAttachment { get; set; } = Substitute.For<IOpenedEmailAttachment>();
 
     /// <summary>A document is read by the extractor, and its words and pagination reach the record whole.</summary>
     [Fact]
@@ -225,6 +232,122 @@ public sealed class EmailAttachmentTextDeriverTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A local copy that no longer matches what was recorded for it is repaired rather than read, because this reader
+    /// is the one that would settle the message for good on the strength of it.
+    /// </summary>
+    /// <remarks>
+    /// The three readers that serve one message refuse the same bytes to a caller, so a walk that read them anyway
+    /// would extract, describe, embed, index and stamp a truncated copy that the download route will not hand over.
+    /// </remarks>
+    [Fact]
+    public async Task DeriveAsync_StoredContentThatNoLongerMatchesWhatWasRecorded_RequestsARepairWithoutOpeningIt()
+    {
+        // Arrange
+        var truncated = new byte[] { 1, 2 };
+        this.contentStore
+            .FindStoredContentAsync(Message, Arg.Any<CancellationToken>())
+            .Returns(new StoredEmailContent(truncated, RecordedByteLength: 3, SHA256.HashData(truncated)));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(derived);
+        Assert.Empty(derived.Attachments);
+        Assert.False(derived.IsSettled);
+        await this.repairRequestStore.Received(1).RecordAsync(
+            Arg.Is<EmailContentRepairRequest>(request => request!.Defect == EmailContentDefect.ByteLengthMismatch),
+            Arg.Any<CancellationToken>());
+        await this.attachmentReader.DidNotReceive()
+            .OpenWalkAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The walk says how many attachments a message has; the stored count is what an older reading of it thought.
+    /// </summary>
+    /// <remarks>
+    /// A row written before the walk's own classification changed under-counts, and reading the row's number would
+    /// leave the trailing files unopened while the message was stamped as derived — so nothing would ever offer them
+    /// to a parser again.
+    /// </remarks>
+    [Fact]
+    public async Task DeriveAsync_AMessageWhoseStoredCountIsBelowWhatTheWalkHolds_ReadsTheAttachmentsTheWalkReports()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "one.pdf", octets: 16);
+        this.Opens(1, "application/pdf", "two.pdf", octets: 16);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(derived);
+        Assert.Equal([0, 1], derived.Attachments.Select(attachment => attachment.Position));
+    }
+
+    /// <summary>
+    /// A parser that ran out of its deadline says nothing about the file, so the message is left for the next run
+    /// rather than recorded as read.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_AnExtractionThatOutranItsDeadline_LeavesTheMessageUnsettled()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "lease.pdf", octets: 2048);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.TimedOut());
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(derived);
+        Assert.False(derived.IsSettled);
+        Assert.Equal(
+            nameof(AttachmentTextExtractionOutcome.TimedOut),
+            Assert.Single(derived.Attachments).Outcome);
+    }
+
+    /// <summary>
+    /// The ceiling is checked again while the picture is copied, because the size the MIME walk measured is a second
+    /// reading of the same bytes rather than a guarantee about them.
+    /// </summary>
+    /// <remarks>
+    /// A part whose decode yields more than it declared would otherwise expand in memory with nothing stopping it, on
+    /// a ceiling an operator may set as high as half a gibibyte, and the provider would then be handed the whole of it.
+    /// </remarks>
+    [Fact]
+    public async Task DeriveAsync_APictureWhoseDecodeYieldsMoreThanItDeclared_IsRefusedWithoutReachingTheProvider()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "image/png", "roof.png", octets: 8);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.FormatNotRecognized());
+        this.OpenedAttachment.WriteContentToAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Stream>(0)!.WriteAsync(new byte[64], call.ArgAt<CancellationToken>(1)).AsTask());
+
+        // Act
+        var derived = await this.Deriver(extractionOptions: new AttachmentTextExtractionOptions { MaxInputOctets = 16 })
+            .DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            nameof(ImageDescriptionRefusal.ImageTooLarge),
+            Assert.Single(derived!.Attachments).Outcome);
+        await this.describer.DidNotReceive()
+            .DescribeAsync(Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Stored octets the walk can no longer open are a damaged local copy, which ends the message not the run.</summary>
     [Fact]
     public async Task DeriveAsync_StoredContentTheWalkCannotOpen_RequestsARepairAndKeepsWhatItAlreadyRead()
@@ -232,9 +355,7 @@ public sealed class EmailAttachmentTextDeriverTests
         // Arrange
         this.StoreHolds();
         this.Opens(0, "application/pdf", "one.pdf", octets: 16);
-        this.attachmentWalk
-            .OpenAsync(1, Arg.Any<CancellationToken>())
-            .Returns(OpenedEmailAttachmentResult.Unreadable());
+        this.RefusesToOpen(1);
         this.extractor
             .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
             .Returns(AttachmentTextExtractionResult.Extracted(
@@ -428,6 +549,14 @@ public sealed class EmailAttachmentTextDeriverTests
             null!));
     }
 
+    /// <summary>Stored octets that match the length and the digest recorded beside them, which is the ordinary case.</summary>
+    private static StoredEmailContent StoredContent()
+    {
+        var rawMime = new byte[] { 1, 2, 3 };
+
+        return new StoredEmailContent(rawMime, rawMime.Length, SHA256.HashData(rawMime));
+    }
+
     private static EmailAttachmentTextBounds Bounds() => EmailAttachmentTextBounds.Disabled with { IsEnabled = true };
 
     private static EmailAttachmentTextRunBudget Budget() => new(1024L * 1024);
@@ -456,15 +585,13 @@ public sealed class EmailAttachmentTextDeriverTests
 
     private void StoreHolds()
     {
-        var content = new StoredEmailContent(
-            new byte[] { 1, 2, 3 },
-            RecordedByteLength: 3,
-            RecordedSha256Hash: ReadOnlyMemory<byte>.Empty);
+        var content = StoredContent();
 
         this.contentStore.FindStoredContentAsync(Message, Arg.Any<CancellationToken>()).Returns(content);
         this.attachmentReader
             .OpenWalkAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentWalkResult.Opened(this.attachmentWalk));
+        this.attachmentWalk.Count.Returns(_ => this.walkedAttachmentCount);
         this.attachmentWalk
             .OpenAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.NoSuchAttachment());
@@ -482,12 +609,24 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns(ImageAttachmentDescription.Refused(refusal));
     }
 
+    /// <summary>Puts a position in the walk whose octets no longer decode, which is a damaged local copy.</summary>
+    private void RefusesToOpen(int position)
+    {
+        this.walkedAttachmentCount = Math.Max(this.walkedAttachmentCount, position + 1);
+        this.attachmentWalk
+            .OpenAsync(position, Arg.Any<CancellationToken>())
+            .Returns(OpenedEmailAttachmentResult.Unreadable());
+    }
+
     private void Opens(int position, string mediaType, string fileName, long octets)
     {
         var attachment = Substitute.For<IOpenedEmailAttachment>();
+
+        this.OpenedAttachment = attachment;
         AttachmentFileName.TryNormalize(fileName, out var normalized);
         attachment.Description.Returns(new ExtractedEmailAttachment(normalized, mediaType, octets));
 
+        this.walkedAttachmentCount = Math.Max(this.walkedAttachmentCount, position + 1);
         this.attachmentWalk
             .OpenAsync(position, Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.Opened(attachment));

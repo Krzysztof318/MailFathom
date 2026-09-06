@@ -138,11 +138,17 @@ nine refusals where none did. The stored row names whichever word applies beside
 next account run. Every other refusal here settles it, including the ones a configuration change lifts — raising a
 ceiling or turning the switch on therefore changes what arrives next rather than what is already stored.
 
-**A message's own ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written for an
-attachment nothing was offered at all. `Embeddings:AttachmentText:MaxAttachmentsPerEmail` and
-`MaxInputOctetsPerEmail` bound what one message may cost, and an attachment past either is recorded as having yielded
-nothing rather than left absent — so an owner asking why their contract was not searched is given the ceiling as the
-answer. The row carries no text and no pages, and neither index holds anything for it.
+**A message's own octet ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written
+for an attachment nothing was offered at all. `Embeddings:AttachmentText:MaxInputOctetsPerEmail` bounds what one
+message may cost to read, and an attachment past it is recorded as having yielded nothing rather than left absent —
+so an owner asking why their contract was not searched is given the ceiling as the answer. The row carries no text
+and no pages, and neither index holds anything for it.
+
+`MaxAttachmentsPerEmail` is the ceiling that writes nothing at all, because it bounds the walk rather than what the
+walk decides: a message declaring more parts than the deployment reads has the rest neither opened nor recorded, and
+what says how many that was is the attachment count on the message beside the rows actually stored. Opening each of
+them only to write a refusal down would let a sender choose how many MIME parts this stage reads and how many rows
+it stores.
 
 ## The posture every read is performed under
 
