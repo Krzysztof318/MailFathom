@@ -85,7 +85,7 @@ Every outcome is one of a closed set, and each is distinguishable from every oth
 | `ContainerBoundExceeded` | An archive passed its decompression total, its inflation ratio, its part count, its element depth, or — for a workbook — the number of entries its string table may hold, and for an OpenDocument file the number of pages one content part may declare | Treat it as an attachment worth looking at rather than a ceiling to raise, unless the document really is that large: a workbook of more than `MaxExtractedTextCharacters` distinct strings, or a spreadsheet of more than `MaxContainerParts` sheets, is stopped here rather than by the ceiling those keys name for their own outcome |
 | `Encrypted` | The document is password-protected and this system holds no password for it | Nothing automatic; no password is stored anywhere here |
 | `Malformed` | The bytes do not parse as the format they declare | Nothing; badly formed documents are expected of real mail |
-| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at |
+| `TimedOut` | The read passed `Timeout` | Raise the ceiling, or treat a document that needs more than thirty seconds as one worth looking at — the message keeps no stamp and is read again on a later run |
 
 **`Encrypted` currently also answers for one document that is not locked.** A password-protected Open XML package is
 not an archive at all — the package is encrypted whole and wrapped in an OLE compound file — and that wrapper is what
@@ -134,9 +134,12 @@ nine refusals where none did. The stored row names whichever word applies beside
 | `ProviderUnavailable` | The provider did not answer, and asking again later may produce one | Nothing; the message is read again on a later run |
 | `ProviderRefused` | The provider answered by refusing, and repeating cannot change that | Read the log line: a rejected credential is an operator's to fix, a refused request is not |
 
-`ProviderTimedOut` and `ProviderUnavailable` are the two that leave the message unsettled, so it is offered again on the
-next account run. Every other refusal here settles it, including the ones a configuration change lifts — raising a
-ceiling or turning the switch on therefore changes what arrives next rather than what is already stored.
+`ProviderTimedOut` and `ProviderUnavailable` are the two refusals here that leave the message unsettled, so it is
+offered again on the next account run. The extractor's own `TimedOut` is the third outcome that does, for the same
+reason: a deadline reached under load says nothing about the file, while `Malformed` and `Encrypted` are properties of
+the octets that repeating cannot change. Every other refusal settles the message, including the ones a configuration
+change lifts — raising a ceiling or turning the switch on therefore changes what arrives next rather than what is
+already stored.
 
 **A message's own octet ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written
 for an attachment nothing was offered at all. `Embeddings:AttachmentText:MaxInputOctetsPerEmail` bounds what one

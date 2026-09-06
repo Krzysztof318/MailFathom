@@ -105,7 +105,9 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
     /// The junk verdict is what calls this, and a reversed verdict re-admits the message with nothing having recorded
     /// the move — so the stamp is the only thing that would keep it out of the walk, and a stamp standing over rows
     /// that are gone keeps it out for good. Only a real statement shows it: both halves are set-based writes over two
-    /// tables in one transaction.
+    /// tables in one transaction. The passages cut from those readings are the other half of the junk path and are
+    /// removed by <c>IEmailChunkStore.DiscardChunksAsync</c>, which the classifier calls beside this one and which is
+    /// deliberately not called here, so what this asserts is exactly what this statement reaches.
     /// </remarks>
     [Fact]
     public async Task DiscardAttachmentTextAsync_AMessageAlreadyRead_TakesTheDerivationStampWithTheRows()
@@ -119,6 +121,7 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
 
         await SaveAsync(services, storedEmailId, [Document(0, "invoice")], cancellationToken);
         var stampAfterReading = await ReadDerivationStampAsync(services, storedEmailId, cancellationToken);
+        var readingsAfterReading = await ReadStoredReadingsAsync(services, storedEmailId, cancellationToken);
 
         // Act
         var discarded = await services.CommitAsync(
@@ -129,9 +132,24 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
         // Assert
         Assert.Equal(PersistenceCommitResult.Committed, discarded);
         Assert.NotNull(stampAfterReading);
+        Assert.NotEmpty(readingsAfterReading);
         Assert.Null(await ReadDerivationStampAsync(services, storedEmailId, cancellationToken));
-        Assert.Empty(await ReadAttachmentPositionsAsync(services, storedEmailId, cancellationToken));
+        Assert.Empty(await ReadStoredReadingsAsync(services, storedEmailId, cancellationToken));
     }
+
+    /// <summary>Reads the walk position of every attachment reading stored for the message, one entry per reading.</summary>
+    private static Task<IReadOnlyList<int>> ReadStoredReadingsAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            async (scope, token) => (IReadOnlyList<int>)await scope.GetRequiredService<MailFathomDbContext>()
+                .EmailAttachmentTexts
+                .AsNoTracking()
+                .Where(text => text.StoredEmailId == storedEmailId.Value)
+                .OrderBy(text => text.AttachmentPosition)
+                .Select(text => text.AttachmentPosition)
+                .ToArrayAsync(token),
+            cancellationToken);
 
     /// <summary>Reads the stamp that decides whether the attachment walk still owes this message a reading.</summary>
     private static Task<DateTimeOffset?> ReadDerivationStampAsync(

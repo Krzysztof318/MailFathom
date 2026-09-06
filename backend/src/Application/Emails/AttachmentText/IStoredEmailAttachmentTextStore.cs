@@ -72,8 +72,10 @@ public interface IStoredEmailAttachmentTextStore
     /// <remarks>
     /// The junk verdict's other half. A reading is a second durable copy of derived mail content — a document's whole
     /// text, a model's description of a picture, and the file name a sender chose — so removing the passages cut from
-    /// it while leaving it stored would keep exactly what the verdict called for the removal of. The stamp on the
-    /// message is deliberately left where it is: nothing should read a junk message's attachments a second time.
+    /// it while leaving it stored would keep exactly what the verdict called for the removal of. The message's
+    /// derivation stamp is cleared with the rows, so a message the classification gate later re-admits is read again
+    /// rather than left permanently without attachment text: junk stays out of the walk on the gate, which is what a
+    /// reversed verdict moves, rather than on a stamp nothing would ever clear.
     /// Idempotent and staged, on the same terms the passage removal is.
     /// </remarks>
     Task<int> DiscardAttachmentTextAsync(

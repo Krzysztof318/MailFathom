@@ -452,11 +452,13 @@ path: no MCP call and no client request ever waits on a parser or a provider.
 each one is opened once and never again unless it changes; turning the switch off leaves what was already read in
 place, since nothing here deletes a stored reading.
 
-**Two readings keep no stamp and are taken again.** A message whose stored copy has gone missing or will not parse is
-recorded as needing fetching again rather than settled, and one whose picture the chat provider did not answer for —
-a timeout, an unreachable endpoint, a rate the deployment is over — is left for a later run in the same way. Both are
-read again on the next account run, so a provider outage during a first enablement costs the readings it interrupted
-a second time rather than losing them. Every other refusal settles the message, including the ones a configuration
+**Three readings keep no stamp and are taken again.** A message whose stored copy has gone missing or will not parse is
+recorded as needing fetching again rather than settled; one whose picture the chat provider did not answer for — a
+timeout, an unreachable endpoint, a rate the deployment is over — is left for a later run in the same way; and so is one
+whose document outran `Embeddings:AttachmentText:Timeout`, because a deadline reached under load says nothing about the
+file. All three are read again on the next account run, so a provider outage or a loaded host during a first enablement
+costs the readings it interrupted a second time rather than losing them — which is what the deadline is worth budgeting
+processor time against, since a document that never parses inside it is re-fetched and re-parsed on every run. Every other refusal settles the message, including the ones a configuration
 change lifts — an image larger than `Chat:MaxRequestImageOctets`, a grid larger than
 `Embeddings:ImageDescription:MaxPixels`, and a picture met while image description was off. Raising either ceiling or
 turning that switch on therefore changes what arrives next rather than what is already stored, and no pass today goes

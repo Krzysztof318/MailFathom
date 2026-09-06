@@ -53,7 +53,7 @@ public sealed class EmailAttachmentTextDeriverTests
                 new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -83,7 +83,7 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns(ImageAttachmentDescription.Described("A tiled roof with a tarpaulin over one corner."));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         var attachment = Assert.Single(derived!.Attachments);
@@ -106,7 +106,7 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns(AttachmentTextExtractionResult.Encrypted());
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         var attachment = Assert.Single(derived!.Attachments);
@@ -138,7 +138,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(bounds)
-            .DeriveAsync(Awaiting(2), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(derived!.Attachments);
@@ -165,7 +165,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(bounds)
-            .DeriveAsync(Awaiting(2), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(Contract, derived!.Attachments[0].Text);
@@ -186,7 +186,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver()
-            .DeriveAsync(Awaiting(1), new EmailAttachmentTextRunBudget(64), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), new EmailAttachmentTextRunBudget(64), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(derived);
@@ -200,7 +200,7 @@ public sealed class EmailAttachmentTextDeriverTests
     {
         // Act
         var derived = await this.Deriver()
-            .DeriveAsync(Awaiting(1), new EmailAttachmentTextRunBudget(0), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), new EmailAttachmentTextRunBudget(0), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(derived);
@@ -221,7 +221,7 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns((StoredEmailContent?)null);
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -250,7 +250,7 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns(new StoredEmailContent(truncated, RecordedByteLength: 3, SHA256.HashData(truncated)));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -284,7 +284,7 @@ public sealed class EmailAttachmentTextDeriverTests
                 new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -306,7 +306,7 @@ public sealed class EmailAttachmentTextDeriverTests
             .Returns(AttachmentTextExtractionResult.TimedOut());
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -338,7 +338,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(extractionOptions: new AttachmentTextExtractionOptions { MaxInputOctets = 16 })
-            .DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -362,7 +362,7 @@ public sealed class EmailAttachmentTextDeriverTests
                 new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(2), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(derived);
@@ -377,18 +377,29 @@ public sealed class EmailAttachmentTextDeriverTests
     /// A walk position the message turns out not to have is the count disagreeing with the structure, which no repair
     /// mends and no later run resolves — so it settles the message instead of holding it back for ever.
     /// </summary>
+    /// <remarks>
+    /// The walk has to report a position it cannot then open, or the loop simply never runs and the branch this is
+    /// named for is never reached: what is asserted then is an empty walk rather than a disagreeing one.
+    /// </remarks>
     [Fact]
     public async Task DeriveAsync_AWalkPositionTheMessageDoesNotHave_SettlesItWithoutRequestingARepair()
     {
         // Arrange
         this.StoreHolds();
+        this.Opens(0, "application/pdf", "one.pdf", octets: 16);
+        this.Counts(2);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derived!.IsSettled);
-        Assert.Empty(derived.Attachments);
+        Assert.Equal([0], derived.Attachments.Select(attachment => attachment.Position));
+        await this.attachmentWalk.Received(1).OpenAsync(1, Arg.Any<CancellationToken>());
         await this.repairRequestStore.DidNotReceive()
             .RecordAsync(Arg.Any<EmailContentRepairRequest>(), Arg.Any<CancellationToken>());
     }
@@ -414,7 +425,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(guard: scanning.Guard)
-            .DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain("1234", derived!.Attachments[0].Text, StringComparison.Ordinal);
@@ -441,7 +452,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(guard: scanning.Guard)
-            .DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.DoesNotContain("1234", derived!.Attachments[0].Text, StringComparison.Ordinal);
@@ -462,7 +473,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
         // Act
         var derived = await this.Deriver(extractionOptions: extractionOptions)
-            .DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+            .DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ImageDescriptionRefusal.ImageTooLarge.ToString(), derived!.Attachments[0].Outcome);
@@ -485,7 +496,7 @@ public sealed class EmailAttachmentTextDeriverTests
         this.RefusesToDescribe(refusal);
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(derived!.IsSettled);
@@ -507,7 +518,7 @@ public sealed class EmailAttachmentTextDeriverTests
         this.RefusesToDescribe(refusal);
 
         // Act
-        var derived = await this.Deriver().DeriveAsync(Awaiting(1), Budget(), TestContext.Current.CancellationToken);
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(derived!.IsSettled);
@@ -521,7 +532,7 @@ public sealed class EmailAttachmentTextDeriverTests
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
             this.Deriver().DeriveAsync(null!, Budget(), TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            this.Deriver().DeriveAsync(Awaiting(1), null!, TestContext.Current.CancellationToken));
+            this.Deriver().DeriveAsync(Awaiting(), null!, TestContext.Current.CancellationToken));
     }
 
     /// <summary>Nothing can be composed from collaborators that are not there.</summary>
@@ -564,10 +575,9 @@ public sealed class EmailAttachmentTextDeriverTests
     private static AttachmentTextSegment Page(int number, int startOffset) =>
         new(AttachmentTextSegmentKind.Page, number, Label: null, startOffset);
 
-    private static EmailAwaitingAttachmentText Awaiting(int attachmentCount) => new(
+    private static EmailAwaitingAttachmentText Awaiting() => new(
         Message,
         ScanningSensitiveContentDerivation.Owner,
-        attachmentCount,
         DerivedWorkAdmission.Admitted);
 
     private EmailAttachmentTextDeriver Deriver(
@@ -608,6 +618,10 @@ public sealed class EmailAttachmentTextDeriverTests
             .DescribeAsync("image/png", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ImageAttachmentDescription.Refused(refusal));
     }
+
+    /// <summary>Makes the walk report more positions than any test stubbed, which is a count it cannot honour.</summary>
+    private void Counts(int attachmentCount) =>
+        this.walkedAttachmentCount = Math.Max(this.walkedAttachmentCount, attachmentCount);
 
     /// <summary>Puts a position in the walk whose octets no longer decode, which is a damaged local copy.</summary>
     private void RefusesToOpen(int position)

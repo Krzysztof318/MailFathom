@@ -322,7 +322,6 @@ public sealed class MailAttachmentTextPassTests
         DerivedWorkAdmission admission = DerivedWorkAdmission.Admitted) => new(
         storedEmailId,
         SyntheticMailOwner.Deployment,
-        AttachmentCount: 1,
         admission);
 
     private static IStoredEmailAttachmentTextStore StoreReturning(IReadOnlyList<EmailAwaitingAttachmentText> batch)

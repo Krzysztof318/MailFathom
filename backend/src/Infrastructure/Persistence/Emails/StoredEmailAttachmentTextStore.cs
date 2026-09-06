@@ -70,7 +70,6 @@ internal sealed class StoredEmailAttachmentTextStore(
             .Select(email => new OutstandingAttachmentRow(
                 email.Id,
                 email.OwnerId,
-                email.AttachmentCount,
                 new StoredDerivedWorkCandidateRow(
                     email.MailFolder.MailboxAccountId,
                     email.MailFolder.Alias,
@@ -84,7 +83,6 @@ internal sealed class StoredEmailAttachmentTextStore(
             .. candidates.Select(row => new EmailAwaitingAttachmentText(
                 StoredEmailId.Create(row.Id),
                 MailOwnerId.Create(row.OwnerId),
-                row.AttachmentCount,
                 row.Candidate.AdmittedUnder(terms))),
         ];
     }
@@ -221,6 +219,5 @@ internal sealed class StoredEmailAttachmentTextStore(
     private sealed record OutstandingAttachmentRow(
         Guid Id,
         Guid OwnerId,
-        int AttachmentCount,
         StoredDerivedWorkCandidateRow Candidate);
 }
