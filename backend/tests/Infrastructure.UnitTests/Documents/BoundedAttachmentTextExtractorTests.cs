@@ -98,6 +98,30 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(1, result.Text?.PageCount);
     }
 
+    /// <summary>
+    /// The same document saved under ISO 29500 Strict declares another namespace and is otherwise identical, so it
+    /// reads back the same words. Matching Transitional alone would have answered with empty text and named the body as
+    /// a page carrying none, which is how this reader reports a scan — a specific wrong thing rather than nothing.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStrictWordDocument_ReadsItAsItsTransitionalEquivalent()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "terms.docx",
+            DocumentFixtures.StrictWordDocument("Clause one", "Clause two"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Clause one\nClause two", result.Text?.Text);
+        Assert.Equal(1, result.Text?.PageCount);
+        Assert.Empty(result.Text?.PagesWithoutText ?? [0]);
+    }
+
     /// <summary>A presentation is read one page per slide, and an empty slide is named like an empty page.</summary>
     [Fact]
     public async Task ExtractTextAsync_APresentation_ReadsOnePagePerSlideAndNamesTheEmptyOne()
@@ -107,6 +131,26 @@ public sealed class BoundedAttachmentTextExtractorTests
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "deck.pptx",
             DocumentFixtures.Presentation("Opening", string.Empty, "Closing"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Opening\nClosing", result.Text?.Text);
+        Assert.Equal(3, result.Text?.PageCount);
+        Assert.Equal([2], result.Text?.PagesWithoutText);
+    }
+
+    /// <summary>A deck saved under ISO 29500 Strict reads back the same slides, and still names the empty one.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStrictPresentation_ReadsItAsItsTransitionalEquivalent()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "deck.pptx",
+            DocumentFixtures.StrictPresentation("Opening", string.Empty, "Closing"));
 
         // Act
         var result = await ExtractAsync(attachment);
@@ -130,6 +174,29 @@ public sealed class BoundedAttachmentTextExtractorTests
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "ledger.xlsx",
             DocumentFixtures.Workbook(["Invoice", "Roof repair"], []));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Invoice\nRoof repair", result.Text?.Text);
+        Assert.Equal(2, result.Text?.PageCount);
+        Assert.Equal([2], result.Text?.PagesWithoutText);
+    }
+
+    /// <summary>
+    /// A workbook saved under ISO 29500 Strict resolves the same table: the string table, the sheets, and the cells
+    /// each declare the Strict namespace, so admitting it at one comparison site and not the others would read nothing.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStrictWorkbook_ReadsItAsItsTransitionalEquivalent()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "ledger.xlsx",
+            DocumentFixtures.StrictWorkbook(["Invoice", "Roof repair"], []));
 
         // Act
         var result = await ExtractAsync(attachment);
@@ -699,6 +766,32 @@ public sealed class BoundedAttachmentTextExtractorTests
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "nested.docx",
             DocumentFixtures.DeeplyNestedWordDocument(depth: 40));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
+    /// <summary>
+    /// A Strict package is the same archive of the same parts, so every bound around the walk holds over it unchanged.
+    /// The depth ceiling stands for all of them: it fires inside the walk rather than before it, so it is the one an
+    /// admitted second namespace could conceivably have widened.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStrictPartNestedPastTheDepthCeiling_ReportsTheContainerBound()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions
+        {
+            MaxElementDepth = 8,
+        };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "nested.docx",
+            DocumentFixtures.StrictDeeplyNestedWordDocument(depth: 40));
 
         // Act
         var result = await ExtractAsync(attachment, bounds);

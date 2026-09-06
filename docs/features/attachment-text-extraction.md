@@ -91,13 +91,12 @@ page with no text layer is the exact target an optical-character-recognition pas
 are reported as a list rather than as a flag on the document — a scanned page bound into an otherwise textual report is
 the ordinary case. No optical character recognition happens here; that is a decision of its own and this is not it.
 
-**One kind of document answers that way without being a scan, and there is currently no telling the two apart.** Only
-the ISO 29500 **Transitional** namespaces are read, which is what an office suite writes unless somebody explicitly
-chooses otherwise. A **Strict** `.docx`, `.xlsx`, or `.pptx` uses different namespaces, so it walks to completion with
-no run recognized and comes back as `Extracted` with empty text and every page listed as carrying none — the answer this
-page has just called a scan. It is rare and it is a defect rather than a design: #1681 is where it is tracked, and until
-it closes, a document reported as carrying no text may be one whose words were never looked for. The three OpenDocument
-formats have no such split and are unaffected.
+**Both ISO 29500 conformance classes are read, so that answer means a scan and nothing else.** The standard defines a
+**Transitional** class, which is what an office suite writes unless somebody explicitly chooses otherwise, and a
+**Strict** class, whose parts declare a namespace of their own. Each of the three formats admits both, so a Strict
+`.docx`, `.xlsx`, or `.pptx` yields the text its Transitional equivalent does rather than walking to completion with no
+run recognized. A conformance class is the only thing that differs between the two: same archive, same part names, same
+elements, and therefore the same bounds. The three OpenDocument formats have no such split and never did.
 
 The order pages are reported in has its own limit. A presentation's slides and a workbook's sheets are read in the order
 their parts are *named*, and neither format records order there — a deck or a workbook somebody reordered before sending

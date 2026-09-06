@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -28,9 +29,31 @@ namespace MailFathom.Infrastructure.Documents;
 /// </remarks>
 internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtractionOptions options)
 {
-    private const string WordprocessingNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    private const string SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-    private const string DrawingNamespace = "http://schemas.openxmlformats.org/drawingml/2006/main";
+    /// <summary>The namespaces a word-processing part writes its text in, one per conformance class.</summary>
+    /// <remarks>
+    /// ISO 29500 defines two conformance classes, and a package written under the Strict one declares every part in a
+    /// namespace of its own. Matching only the Transitional namespace would walk a Strict document correctly, recognize
+    /// nothing in it, and report the empty result as a page carrying no text layer — which is how this reader reports a
+    /// scan, so a caller acting on <c>PagesWithoutText</c> would be told a specific wrong thing rather than nothing.
+    /// The admission is a set per format so that a further conformance class is one entry rather than an edit at each
+    /// comparison site.
+    /// </remarks>
+    private static readonly FrozenSet<string> WordprocessingNamespaces = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+        "http://purl.oclc.org/ooxml/wordprocessingml/main");
+
+    /// <summary>The namespaces a workbook's parts are written in, one per conformance class.</summary>
+    private static readonly FrozenSet<string> SpreadsheetNamespaces = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        "http://purl.oclc.org/ooxml/spreadsheetml/main");
+
+    /// <summary>The namespaces a slide writes its text in, one per conformance class.</summary>
+    private static readonly FrozenSet<string> DrawingNamespaces = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "http://purl.oclc.org/ooxml/drawingml/main");
 
     private const string WordDocumentPart = "word/document.xml";
     private const string SharedStringsPart = "xl/sharedStrings.xml";
@@ -104,7 +127,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
         using (var reader = this.parts.OpenPart(document, budget))
         {
-            carriedText = this.ReadRunsInto(reader, WordprocessingNamespace, text, cancellationToken);
+            carriedText = this.ReadRunsInto(reader, WordprocessingNamespaces, text, cancellationToken);
         }
 
         foreach (var part in SurroundingWordParts(archive))
@@ -113,7 +136,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
             using var reader = this.parts.OpenPart(part, budget);
 
-            carriedText |= this.ReadRunsInto(reader, WordprocessingNamespace, text, cancellationToken);
+            carriedText |= this.ReadRunsInto(reader, WordprocessingNamespaces, text, cancellationToken);
         }
 
         return new ExtractedAttachmentText(text.ToText(), PageCount: 1, carriedText ? [] : [1]);
@@ -155,7 +178,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
             using (var reader = this.parts.OpenPart(slide, budget))
             {
-                carriedText = this.ReadRunsInto(reader, DrawingNamespace, text, cancellationToken);
+                carriedText = this.ReadRunsInto(reader, DrawingNamespaces, text, cancellationToken);
             }
 
             if (!carriedText)
@@ -240,7 +263,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     /// </remarks>
     private bool ReadRunsInto(
         XmlReader reader,
-        string textNamespace,
+        FrozenSet<string> textNamespaces,
         BoundedTextAccumulator text,
         CancellationToken cancellationToken)
     {
@@ -262,7 +285,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
             switch (reader.NodeType)
             {
-                case XmlNodeType.Element when reader.NamespaceURI == textNamespace:
+                case XmlNodeType.Element when textNamespaces.Contains(reader.NamespaceURI):
                     ReadRunElement(reader, text, ref insideRun, ref propertiesDepth);
                     break;
 
@@ -275,7 +298,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
                     break;
 
-                case XmlNodeType.EndElement when reader.NamespaceURI == textNamespace:
+                case XmlNodeType.EndElement when textNamespaces.Contains(reader.NamespaceURI):
                     if (reader.LocalName == "t")
                     {
                         insideRun = false;
@@ -358,7 +381,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         {
             switch (reader.NodeType)
             {
-                case XmlNodeType.Element when reader.NamespaceURI == SpreadsheetNamespace:
+                case XmlNodeType.Element when SpreadsheetNamespaces.Contains(reader.NamespaceURI):
                     if (reader.LocalName == "si")
                     {
                         item.Clear();
@@ -383,7 +406,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
                     break;
 
-                case XmlNodeType.EndElement when reader.NamespaceURI == SpreadsheetNamespace:
+                case XmlNodeType.EndElement when SpreadsheetNamespaces.Contains(reader.NamespaceURI):
                     if (reader.LocalName == "t")
                     {
                         insideRun = false;
@@ -416,7 +439,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         while (this.parts.ReadNode(reader, cancellationToken))
         {
             if (reader.NodeType != XmlNodeType.Element
-                || reader.NamespaceURI != SpreadsheetNamespace
+                || !SpreadsheetNamespaces.Contains(reader.NamespaceURI)
                 || reader.LocalName != "c"
                 || reader.IsEmptyElement)
             {
@@ -468,7 +491,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         {
             switch (cell.NodeType)
             {
-                case XmlNodeType.Element when cell.NamespaceURI == SpreadsheetNamespace:
+                case XmlNodeType.Element when SpreadsheetNamespaces.Contains(cell.NamespaceURI):
                     insideValue = cell.LocalName == "v" && !cell.IsEmptyElement;
                     insideInlineRun = cell.LocalName == "t" && !cell.IsEmptyElement;
                     break;
@@ -485,7 +508,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
                     break;
 
-                case XmlNodeType.EndElement when cell.NamespaceURI == SpreadsheetNamespace:
+                case XmlNodeType.EndElement when SpreadsheetNamespaces.Contains(cell.NamespaceURI):
                     insideValue &= cell.LocalName != "v";
                     insideInlineRun &= cell.LocalName != "t";
                     break;

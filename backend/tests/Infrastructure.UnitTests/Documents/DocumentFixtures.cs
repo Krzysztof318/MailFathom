@@ -25,6 +25,10 @@ internal static class DocumentFixtures
     private const string SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private const string DrawingNamespace = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
+    private const string StrictWordprocessingNamespace = "http://purl.oclc.org/ooxml/wordprocessingml/main";
+    private const string StrictSpreadsheetNamespace = "http://purl.oclc.org/ooxml/spreadsheetml/main";
+    private const string StrictDrawingNamespace = "http://purl.oclc.org/ooxml/drawingml/main";
+
     private const string OfficeNamespace = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
     private const string OpenDocumentTextNamespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
     private const string OpenDocumentTableNamespace = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
@@ -55,16 +59,18 @@ internal static class DocumentFixtures
     /// <summary>Builds a word-processing package whose body carries the paragraphs given.</summary>
     /// <param name="paragraphs">The paragraphs, in order.</param>
     /// <returns>The package's octets.</returns>
-    public static byte[] WordDocument(params string[] paragraphs)
-    {
-        var body = string.Concat(paragraphs.Select(paragraph =>
-            $"<w:p><w:r><w:t>{Escaped(paragraph)}</w:t></w:r></w:p>"));
+    public static byte[] WordDocument(params string[] paragraphs) =>
+        WordDocumentIn(WordprocessingNamespace, paragraphs);
 
-        return Package(("word/document.xml", $"""
-            <?xml version="1.0" encoding="UTF-8"?>
-            <w:document xmlns:w="{WordprocessingNamespace}"><w:body>{body}</w:body></w:document>
-            """));
-    }
+    /// <summary>Builds the ISO 29500 Strict equivalent of <see cref="WordDocument(string[])" />.</summary>
+    /// <param name="paragraphs">The paragraphs, in order.</param>
+    /// <returns>The package's octets.</returns>
+    /// <remarks>
+    /// Strict differs from Transitional here in nothing but the namespace its parts declare — same archive, same part
+    /// names, same element names — which is what makes the pair a fair test of the admission rather than of the walk.
+    /// </remarks>
+    public static byte[] StrictWordDocument(params string[] paragraphs) =>
+        WordDocumentIn(StrictWordprocessingNamespace, paragraphs);
 
     /// <summary>Builds a word-processing package holding one part whose markup is given verbatim.</summary>
     /// <param name="documentXml">The markup <c>word/document.xml</c> carries.</param>
@@ -74,38 +80,26 @@ internal static class DocumentFixtures
     /// <summary>Builds a presentation package whose slides carry the lines given for each of them.</summary>
     /// <param name="slides">One entry per slide, each the line that slide carries, or empty for a slide with no text.</param>
     /// <returns>The package's octets.</returns>
-    public static byte[] Presentation(params string[] slides) => Package(
-        [
-            .. slides.Select((line, index) => (
-                $"ppt/slides/slide{(index + 1).ToString(CultureInfo.InvariantCulture)}.xml",
-                $"""
-                 <?xml version="1.0" encoding="UTF-8"?>
-                 <sld xmlns:a="{DrawingNamespace}"><a:p>{(line.Length == 0 ? string.Empty : $"<a:r><a:t>{Escaped(line)}</a:t></a:r>")}</a:p></sld>
-                 """)),
-        ]);
+    public static byte[] Presentation(params string[] slides) =>
+        PresentationIn(DrawingNamespace, slides);
+
+    /// <summary>Builds the ISO 29500 Strict equivalent of <see cref="Presentation(string[])" />.</summary>
+    /// <param name="slides">One entry per slide, each the line that slide carries, or empty for a slide with no text.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] StrictPresentation(params string[] slides) =>
+        PresentationIn(StrictDrawingNamespace, slides);
 
     /// <summary>Builds a workbook whose sheets hold the cells given for each of them, through the shared string table.</summary>
     /// <param name="sheets">One entry per sheet, each the cell values that sheet holds in order.</param>
     /// <returns>The package's octets.</returns>
-    public static byte[] Workbook(params string[][] sheets)
-    {
-        var sharedStrings = sheets.SelectMany(sheet => sheet).Distinct(StringComparer.Ordinal).ToList();
+    public static byte[] Workbook(params string[][] sheets) =>
+        WorkbookIn(SpreadsheetNamespace, sheets);
 
-        var table = $"""
-            <?xml version="1.0" encoding="UTF-8"?>
-            <sst xmlns="{SpreadsheetNamespace}">{string.Concat(sharedStrings.Select(value => $"<si><t>{Escaped(value)}</t></si>"))}</sst>
-            """;
-
-        var parts = sheets.Select((sheet, index) => (
-            $"xl/worksheets/sheet{(index + 1).ToString(CultureInfo.InvariantCulture)}.xml",
-            $"""
-             <?xml version="1.0" encoding="UTF-8"?>
-             <worksheet xmlns="{SpreadsheetNamespace}"><sheetData><row>{string.Concat(sheet.Select(value =>
-                 $"""<c t="s"><v>{sharedStrings.IndexOf(value).ToString(CultureInfo.InvariantCulture)}</v></c>"""))}</row></sheetData></worksheet>
-             """));
-
-        return Package([("xl/sharedStrings.xml", table), .. parts]);
-    }
+    /// <summary>Builds the ISO 29500 Strict equivalent of <see cref="Workbook(string[][])" />.</summary>
+    /// <param name="sheets">One entry per sheet, each the cell values that sheet holds in order.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] StrictWorkbook(params string[][] sheets) =>
+        WorkbookIn(StrictSpreadsheetNamespace, sheets);
 
     /// <summary>Builds an OpenDocument text package whose body carries the paragraphs given.</summary>
     /// <param name="paragraphs">The paragraphs, in order.</param>
@@ -163,16 +157,19 @@ internal static class DocumentFixtures
     /// <summary>Nests an element tree the given number of levels deep inside a word-processing document.</summary>
     /// <param name="depth">How many levels to nest.</param>
     /// <returns>The package's octets.</returns>
-    public static byte[] DeeplyNestedWordDocument(int depth)
-    {
-        var opened = string.Concat(Enumerable.Repeat("<w:tbl><w:tr><w:tc>", depth));
-        var closed = string.Concat(Enumerable.Repeat("</w:tc></w:tr></w:tbl>", depth));
+    public static byte[] DeeplyNestedWordDocument(int depth) =>
+        DeeplyNestedWordDocumentIn(WordprocessingNamespace, depth);
 
-        return WordDocumentPart($"""
-            <?xml version="1.0" encoding="UTF-8"?>
-            <w:document xmlns:w="{WordprocessingNamespace}"><w:body>{opened}<w:p><w:r><w:t>deep</w:t></w:r></w:p>{closed}</w:body></w:document>
-            """);
-    }
+    /// <summary>Builds the ISO 29500 Strict equivalent of <see cref="DeeplyNestedWordDocument(int)" />.</summary>
+    /// <param name="depth">How many levels to nest.</param>
+    /// <returns>The package's octets.</returns>
+    /// <remarks>
+    /// A Strict package is the same zip archive of the same parts, so every bound around the walk is reached the same
+    /// way — which is what this fixture is for: admitting a second namespace must widen what is read, not what is
+    /// refused.
+    /// </remarks>
+    public static byte[] StrictDeeplyNestedWordDocument(int depth) =>
+        DeeplyNestedWordDocumentIn(StrictWordprocessingNamespace, depth);
 
     /// <summary>Builds a word-processing package whose one part inflates to the given number of characters.</summary>
     /// <param name="characters">How many characters the part's single run holds.</param>
@@ -307,6 +304,62 @@ internal static class DocumentFixtures
         }
 
         return offsets;
+    }
+
+    /// <summary>Builds a word-processing package whose parts declare the namespace given.</summary>
+    private static byte[] WordDocumentIn(string namespaceUri, string[] paragraphs)
+    {
+        var body = string.Concat(paragraphs.Select(paragraph =>
+            $"<w:p><w:r><w:t>{Escaped(paragraph)}</w:t></w:r></w:p>"));
+
+        return WordDocumentPart($"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <w:document xmlns:w="{namespaceUri}"><w:body>{body}</w:body></w:document>
+            """);
+    }
+
+    /// <summary>Builds a presentation package whose slides declare the namespace given.</summary>
+    private static byte[] PresentationIn(string namespaceUri, string[] slides) => Package(
+        [
+            .. slides.Select((line, index) => (
+                $"ppt/slides/slide{(index + 1).ToString(CultureInfo.InvariantCulture)}.xml",
+                $"""
+                 <?xml version="1.0" encoding="UTF-8"?>
+                 <sld xmlns:a="{namespaceUri}"><a:p>{(line.Length == 0 ? string.Empty : $"<a:r><a:t>{Escaped(line)}</a:t></a:r>")}</a:p></sld>
+                 """)),
+        ]);
+
+    /// <summary>Builds a workbook whose string table and sheets declare the namespace given.</summary>
+    private static byte[] WorkbookIn(string namespaceUri, string[][] sheets)
+    {
+        var sharedStrings = sheets.SelectMany(sheet => sheet).Distinct(StringComparer.Ordinal).ToList();
+
+        var table = $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <sst xmlns="{namespaceUri}">{string.Concat(sharedStrings.Select(value => $"<si><t>{Escaped(value)}</t></si>"))}</sst>
+            """;
+
+        var parts = sheets.Select((sheet, index) => (
+            $"xl/worksheets/sheet{(index + 1).ToString(CultureInfo.InvariantCulture)}.xml",
+            $"""
+             <?xml version="1.0" encoding="UTF-8"?>
+             <worksheet xmlns="{namespaceUri}"><sheetData><row>{string.Concat(sheet.Select(value =>
+                 $"""<c t="s"><v>{sharedStrings.IndexOf(value).ToString(CultureInfo.InvariantCulture)}</v></c>"""))}</row></sheetData></worksheet>
+             """));
+
+        return Package([("xl/sharedStrings.xml", table), .. parts]);
+    }
+
+    /// <summary>Nests an element tree inside a word-processing document declaring the namespace given.</summary>
+    private static byte[] DeeplyNestedWordDocumentIn(string namespaceUri, int depth)
+    {
+        var opened = string.Concat(Enumerable.Repeat("<w:tbl><w:tr><w:tc>", depth));
+        var closed = string.Concat(Enumerable.Repeat("</w:tc></w:tr></w:tbl>", depth));
+
+        return WordDocumentPart($"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <w:document xmlns:w="{namespaceUri}"><w:body>{opened}<w:p><w:r><w:t>deep</w:t></w:r></w:p>{closed}</w:body></w:document>
+            """);
     }
 
     /// <summary>Wraps a body in the one content part an OpenDocument package holds everything in.</summary>
