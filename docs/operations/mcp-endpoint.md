@@ -89,8 +89,10 @@ What bounds it instead:
   one, and one whose mail is gone are all `404` with the same body.
 - On a deployment that screens what leaves it, the file's own text is read and scanned before a byte is streamed, and a
   file a scanner names — or one nothing could read at all — answers `409` with error code `59004` rather than the
-  octets. That is the one refusal of this route that is not the shared `404`, because the holder is already admitted to
-  that attachment and learns only that this deployment screens what it serves;
+  octets. That is the one refusal of this route *about the mail* that is not the shared `404`, because the holder is
+  already admitted to that attachment and learns only that this deployment screens what it serves. The route answers one
+  other `409`, which is about the deployment rather than the message: one serving several owners resolves none for a
+  capability that names no owner, and answers with its own code;
   [sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
   holds the rule. It is paid inside the permit and the request ceiling above, under
   [attachment text extraction](../features/attachment-text-extraction.md)'s own bounds, so a hostile document lengthens

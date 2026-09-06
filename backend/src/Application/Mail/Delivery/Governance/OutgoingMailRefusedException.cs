@@ -183,7 +183,7 @@ public sealed class OutgoingMailRefusedException : MailFathomException
                 "This message is more than one sensitive-content screen covers, so nothing established what all of it carries and nothing was queued. Send a shorter message or fewer attached documents, or ask the operator to raise the ceiling that stopped it."),
             SensitiveContentEgressRefusalReason.AttachmentNotRead => new OutgoingMailRefusedException(
                 MailFathomErrorCode.OutgoingMailAttachmentNotRead,
-                "This deployment screens the mail it sends, and one file attached to this message could not be read, so nothing established what it carries and nothing was queued. Send the message without that file, or attach it in a form that can be read."),
+                "This deployment screens the mail it sends, and one file attached to this message could not be read, so nothing established what it carries and nothing was queued. Ask again, in case the read ran out of time; if it is refused a second time, send the message without that file or attach it in a form that can be read."),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(refusal),
                 refusal.Reason,

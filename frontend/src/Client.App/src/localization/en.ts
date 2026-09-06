@@ -366,7 +366,7 @@ export const en = {
     'compose.refusedNotScanned':
         'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
     'compose.refusedAttachmentNotRead':
-        'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Sending without that file, or attaching it in a form that can be read, is what would change that.',
+        'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
     'compose.refusedScreeningUnavailable':
         'Screening is not answering, so nothing goes out until it does. The message is still here.',
     'compose.refusedForAnotherReason':

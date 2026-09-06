@@ -30,10 +30,17 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// the composition, so nothing about them was produced here — which is why they are offered to
 /// <see cref="IAttachmentTextExtractor" /> rather than to a parser of this reader's own. What bounds one attachment is
 /// what that port declares; what bounds the message is <see cref="EmailAttachmentTextBounds" />, the same two numbers
-/// the account run's own attachment stage is held to — how many of a message's attachments are opened at all, and the
+/// the account run's own attachment stage is held to — how many of a message's <i>documents</i> are read, and the
 /// octets they may be read from together. Reusing them rather than declaring a pair here is what keeps one message from
 /// costing a different amount depending on which path met it, and it is why two ordinary large documents are read
 /// rather than refused.
+/// </para>
+/// <para>
+/// Both are counted over what the extractor recognized rather than over what the message declares, which is the one
+/// place the two paths answer differently and deliberately so. The account run reads the documents that fit and leaves
+/// the rest unindexed; a screen has no such option, so passing the count refuses the act. Counting parts instead would
+/// refuse a message carrying six photographs on a deployment whose ceiling is five, and tell its author to send fewer
+/// attached documents than a message holding none.
 /// </para>
 /// <para>
 /// <b>One ceiling is this reader's own, and it exists because of who waits.</b> The extraction timeout bounds one
@@ -125,13 +132,9 @@ internal sealed class MimeKitOutgoingMailTextReader(
             return new ReadAttachments([], Refusal: null);
         }
 
-        if (parts.Count > perMessage.MaxAttachmentsPerEmail)
-        {
-            return new ReadAttachments([], OutgoingAttachmentRefusal.MessageCeilingReached);
-        }
-
         var startedAt = timeProvider.GetTimestamp();
         var octets = 0L;
+        var documents = 0;
         var texts = new List<string>(parts.Count);
 
         foreach (var part in parts)
@@ -158,12 +161,16 @@ internal sealed class MimeKitOutgoingMailTextReader(
                 continue;
             }
 
-            // Counted after the read rather than before it, because the read is already bounded on its own: the
-            // extractor refuses an attachment declaring more than its own ceiling before it buffers a byte of it. So
-            // what this total bounds is how many more documents are opened, and the message costs this ceiling plus the
-            // one attachment already read within it — never the sum of what a caller attached.
+            // Both totals are counted after the read rather than before it, because the read is already bounded on
+            // its own: the extractor refuses an attachment declaring more than its own ceiling before it buffers a
+            // byte of it, and it answers an unrecognized format from the declaration alone. So each bounds how many
+            // more documents are opened, and the message costs the ceiling plus the one attachment already read
+            // within it — never the sum of what a caller attached. Counting here rather than over the part list is
+            // what keeps the two ceilings honest about the same thing: six photographs are six parts and no
+            // documents, so a message carrying them is screened rather than refused for a count it never spent.
+            documents++;
             octets += description.DecodedSizeOctets;
-            if (octets > perMessage.MaxInputOctetsPerEmail)
+            if (documents > perMessage.MaxAttachmentsPerEmail || octets > perMessage.MaxInputOctetsPerEmail)
             {
                 return new ReadAttachments([], OutgoingAttachmentRefusal.MessageCeilingReached);
             }

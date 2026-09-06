@@ -892,12 +892,14 @@ public readonly record struct MailFathomErrorCode
     /// <remarks>
     /// <para>
     /// A third code beside the two above because the author's remedy is a third one again. The first asks them to take
-    /// something out of the message and the second to send less of it; this one says a file they attached is one this
-    /// deployment cannot read at all — it is encrypted, it is a format nothing here parses, it is malformed, or reading
-    /// that one file ran past a ceiling of its own — so the only way the message goes is without that file, or with it
-    /// in a form the screen can read. A message whose attachments were read and merely came to more than a whole
-    /// message may spend is the code above rather than this one, because converting a document that was read
-    /// successfully would change nothing.
+    /// something out of the message and the second to send less of it; this one says the deployment got no text out of
+    /// a file they attached — it is encrypted, it is a format nothing here parses, it is malformed, or reading that one
+    /// file ran past a ceiling of its own — so the message goes without that file, or with it in a form the screen can
+    /// read. The last of those four is the reason the answer offers asking again first: a read that ran out of time
+    /// says nothing about the file and may well succeed on a quieter host, while the other three answer the same way
+    /// forever. Which of the four it was is never published, so the one remedy is written to fit all four. A message
+    /// whose attachments were read and merely came to more than a whole message may spend is the code above rather
+    /// than this one, because converting a document that was read successfully would change nothing.
     /// </para>
     /// <para>
     /// It names none of that. Which of the reasons stopped the read, which file it was, what the file is called, and

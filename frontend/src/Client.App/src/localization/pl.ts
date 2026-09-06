@@ -370,7 +370,7 @@ export const pl: Catalogue = {
     'compose.refusedNotScanned':
         'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
     'compose.refusedAttachmentNotRead':
-        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało z nim wyjść, i wiadomość nie została wysłana. Wysłanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
+        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało z nim wyjść, i wiadomość nie została wysłana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, wysłanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
     'compose.refusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie wychodzi, dopóki nie odpowie. Wiadomość nadal tu jest.',
     'compose.refusedForAnotherReason':

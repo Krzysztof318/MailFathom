@@ -460,7 +460,10 @@ deployment that screens for sensitive content has already undertaken to look, an
 attachment because retrieval was off would pass a file out unread while reporting the message as screened.
 `MaxInputOctetsPerAccountRun` reaches neither of them, there being no run to charge. `Timeout` is what bounds how long
 a sender or a downloading client waits, so a deployment raising it towards the hour the range permits is lengthening a
-request rather than only a background pass.
+request rather than only a background pass — and on a send it is read twice rather than once. It bounds the walk across
+the message, checked before each attachment, and it bounds each attachment inside the extractor, so a send waits up to
+this value plus the one attachment already under way: **up to twice `Timeout`**, a minute at the default and close to
+two hours at the top of the range. A download reads one attachment and waits the single value.
 
 **On those two paths crossing a ceiling refuses the act rather than skipping the indexing**, which is the part worth
 reading before either value is lowered. An attachment above `MaxInputOctets` is never opened, and an attachment

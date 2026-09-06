@@ -319,12 +319,12 @@ public sealed class MimeKitOutgoingMailTextReaderTests
     }
 
     /// <summary>
-    /// How many of a message's attachments are opened at all is the same ceiling, and it is read before the walk starts
-    /// rather than during it: the count a message declares is the sender's, and opening the first of a thousand parts to
-    /// discover there are a thousand is work spent on a send that is not happening.
+    /// How many of a message's <i>documents</i> are read is the same ceiling, counted over what the extractor
+    /// recognized: passing it refuses the act, because a screen has no option of reading what fits and leaving the
+    /// rest, which is what the account run does with the same number.
     /// </summary>
     [Fact]
-    public async Task ReadForScreeningAsync_MoreAttachmentsThanTheMessageCeiling_RefusesBeforeAnythingIsOpened()
+    public async Task ReadForScreeningAsync_MoreDocumentsThanTheMessageCeiling_RefusesForTheCount()
     {
         // Arrange
         var reader = new MimeKitOutgoingMailTextReader(
@@ -345,7 +345,37 @@ public sealed class MimeKitOutgoingMailTextReaderTests
 
         // Assert
         Assert.Equal(OutgoingAttachmentRefusal.MessageCeilingReached, text.AttachmentRefusal);
-        Assert.Empty(this.extractor.ReadFileNames);
+    }
+
+    /// <summary>
+    /// The count is spent by the documents the extractor recognized and by nothing else, which is the same rule the
+    /// octets follow. Counting the parts a message declares instead would refuse a message carrying six photographs on
+    /// a deployment whose ceiling is five — and tell its author to send fewer attached documents than it holds none of,
+    /// which is exactly what an operator lowering this number to cut indexing cost would produce.
+    /// </summary>
+    [Fact]
+    public async Task ReadForScreeningAsync_MorePartsThanTheCeilingButFewerDocuments_ScreensTheMessage()
+    {
+        // Arrange
+        var reader = new MimeKitOutgoingMailTextReader(
+            this.extractor,
+            new AttachmentTextExtractionOptions(),
+            MessageBoundedTo(maxAttachmentsPerEmail: 1),
+            this.timeProvider);
+
+        this.extractor.Reads("invoice.pdf", "an ordinary invoice");
+
+        var raw = MessageAttaching(
+            Attachment("holiday.jpg", "image/jpeg", "not a document"),
+            Attachment("beach.jpg", "image/jpeg", "not a document either"),
+            Attachment("invoice.pdf", "application/pdf", "%PDF-1.7 one"));
+
+        // Act
+        var text = await reader.ReadForScreeningAsync(raw, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(text.AttachmentRefusal);
+        Assert.Equal(["an ordinary invoice"], text.AttachmentTexts);
     }
 
     /// <summary>

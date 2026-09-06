@@ -104,6 +104,29 @@ public sealed class OutgoingMailScreeningsTests
         Assert.Equal(["an ordinary message"], egress.Scanner.ScannedTexts);
     }
 
+    /// <summary>
+    /// The screening read is the one that opens attachments, so it is the only one that can say why they left nothing
+    /// to judge. A fake answering the same refusal from both would hand a words-only caller a value the real adapter
+    /// never produces, and this is the directory whose faults reach every suite that borrows from it.
+    /// </summary>
+    [Fact]
+    public async Task Reader_AMessageWhoseAttachmentsWereNotRead_ReportsThatFromTheScreeningReadAlone()
+    {
+        // Arrange
+        var reader = OutgoingMailScreenings.Reader(OutgoingAttachmentRefusal.NotRead);
+
+        // Act
+        var words = await reader.ReadWordsAsync(MimeOf("an ordinary message"), TestContext.Current.CancellationToken);
+        var screened = await reader.ReadForScreeningAsync(
+            MimeOf("an ordinary message"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(words.AttachmentRefusal);
+        Assert.Equal(OutgoingAttachmentRefusal.NotRead, screened.AttachmentRefusal);
+        Assert.Equal("an ordinary message", words.PlainTextBody);
+    }
+
     [Fact]
     public void Through_NoScreen_IsRefusedAsAnArgument() =>
 

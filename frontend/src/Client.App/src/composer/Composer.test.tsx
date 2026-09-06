@@ -357,6 +357,10 @@ describe('Composer, a message of its own', () => {
             59_002,
             'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
         ],
+        [
+            59_003,
+            'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
+        ],
         [81_001, 'Screening is not answering, so nothing goes out until it does. The message is still here.'],
         [12, 'Your deployment refused to send it. Whoever runs it can say why from its own log.'],
     ])('says what refused the send and what would change it: %i', async (code, said) => {

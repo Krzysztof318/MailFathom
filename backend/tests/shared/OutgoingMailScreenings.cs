@@ -56,18 +56,37 @@ internal static class OutgoingMailScreenings
             screen);
     }
 
+    /// <summary>Builds the reader the two shapes above are composed over, for a suite that drives it directly.</summary>
+    /// <param name="attachmentRefusal">
+    /// Why the message's attachments left nothing to judge them by, or <see langword="null" /> for a message whose
+    /// attachments were all read. Only the screening read reports it, which is what a caller of this member is here to
+    /// assert.
+    /// </param>
+    /// <returns>The reader, so a test can ask each of the port's two reads what it answers.</returns>
+    internal static IOutgoingMailTextReader Reader(OutgoingAttachmentRefusal? attachmentRefusal = null) =>
+        new PlainTextOutgoingMailTextReader(attachmentRefusal);
+
     /// <summary>Reads a test's bytes back as the one body representation the message carries.</summary>
+    /// <remarks>
+    /// The two reads answer differently, as the port says they must: only the screening read opens an attachment, so
+    /// only it can report why the attachments left nothing to judge. Delegating one to the other would hand a
+    /// words-only caller a refusal the real adapter can never produce, in the one directory whose faults reach every
+    /// suite that borrows from it.
+    /// </remarks>
     private sealed class PlainTextOutgoingMailTextReader(OutgoingAttachmentRefusal? attachmentRefusal)
         : IOutgoingMailTextReader
     {
         public Task<OutgoingMailText> ReadWordsAsync(
             ReadOnlyMemory<byte> rawMime,
             CancellationToken cancellationToken) =>
-            this.ReadForScreeningAsync(rawMime, cancellationToken);
+            Task.FromResult(Read(rawMime, cancellationToken));
 
         public Task<OutgoingMailText> ReadForScreeningAsync(
             ReadOnlyMemory<byte> rawMime,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Read(rawMime, cancellationToken) with { AttachmentRefusal = attachmentRefusal });
+
+        private static OutgoingMailText Read(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
         {
             if (rawMime.IsEmpty)
             {
@@ -76,14 +95,10 @@ internal static class OutgoingMailScreenings
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            return Task.FromResult(
-                new OutgoingMailText(
-                    Subject: string.Empty,
-                    Encoding.UTF8.GetString(rawMime.Span),
-                    HtmlBody: null)
-                {
-                    AttachmentRefusal = attachmentRefusal,
-                });
+            return new OutgoingMailText(
+                Subject: string.Empty,
+                Encoding.UTF8.GetString(rawMime.Span),
+                HtmlBody: null);
         }
     }
 }
