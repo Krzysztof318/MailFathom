@@ -293,6 +293,7 @@ internal sealed record ClientMailTimelineResponse(
 /// <param name="AttachmentCount">How many of those there are.</param>
 /// <param name="SizeOctets">The size the mail server reported for the message.</param>
 /// <param name="Preview">The opening of the message's own text, bounded, or <see langword="null" /> where nothing has extracted the message yet.</param>
+/// <param name="Enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
 /// <remarks>
 /// <para>
 /// The three flags are published as the states a row draws rather than as the snapshot they came from, because a screen
@@ -303,6 +304,12 @@ internal sealed record ClientMailTimelineResponse(
 /// <para>
 /// <c>preview</c> is the message's own text and nothing else: no quoted history, no signature block, and never a body.
 /// It is absent rather than empty for a message this deployment has stored but not yet extracted.
+/// </para>
+/// <para>
+/// <c>enrichment</c> is absent for a message no derivation has reached — which is every message on a deployment that
+/// has not turned enrichment on — and present with an empty <c>marks</c> array for one a derivation answered nothing
+/// about. The two are different states and a screen draws them differently: the first may change on a later run and
+/// the second will not.
 /// </para>
 /// </remarks>
 internal sealed record ClientMailTimelineEntryResponse(
@@ -322,12 +329,14 @@ internal sealed record ClientMailTimelineEntryResponse(
     bool HasAttachments,
     int AttachmentCount,
     long SizeOctets,
-    string? Preview)
+    string? Preview,
+    ClientMailEnrichmentResponse? Enrichment)
 {
     /// <summary>Describes one row for the wire.</summary>
     /// <param name="row">The row the use case read.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) => For(row.Email, row.Preview);
+    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) =>
+        For(row.Email, row.Preview) with { Enrichment = ClientMailEnrichmentResponse.For(row.Enrichment) };
 
     /// <summary>Describes one message for the wire, wherever on this surface a message is drawn.</summary>
     /// <param name="email">The message the use case read.</param>
@@ -355,5 +364,6 @@ internal sealed record ClientMailTimelineEntryResponse(
         email.Attachments.HasAttachments,
         email.Attachments.AttachmentCount,
         email.SizeOctets,
-        preview);
+        preview,
+        Enrichment: null);
 }

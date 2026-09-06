@@ -7,6 +7,7 @@ using MailFathom.AI.Chunking;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Discovery;
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -17,6 +18,7 @@ using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -233,6 +235,46 @@ public static class AiServiceCollectionExtensions
             provider.GetRequiredService<ChatGenerationPlan>(),
             ceiling,
             provider.GetRequiredService<ILogger<ImageAttachmentDescriber>>()));
+
+        return services;
+    }
+
+    /// <summary>Registers the one way a message becomes the marks a list row draws, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="isActivated">Whether the deployment declared a chat endpoint and asked for its mail to be enriched.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called unconditionally and always registering something, which it shares with image description and for the same
+    /// reason: the port answers with a reason rather than with an absence, so the arrival pass records why a message
+    /// carries no marks without knowing what a deployment declared.
+    /// </para>
+    /// <para>
+    /// Which of the two is registered is decided once, at composition. An instance that has not activated enrichment
+    /// never resolves a chat client, never opens a transport, and never composes a turn: the activation is a
+    /// registration rather than a branch inside a call, so there is no path by which a message leaves an instance whose
+    /// operator did not ask for it.
+    /// </para>
+    /// <para>
+    /// Scoped when it is active, because the account run makes one scope per pass and the agent's ledger, credential,
+    /// and transport belong to that pass. The inactive one is a singleton holding nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddEmailEnrichmentAgent(this IServiceCollection services, bool isActivated)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (!isActivated)
+        {
+            services.AddSingleton<IEmailEnricher>(InactiveEmailEnricher.Instance);
+
+            return services;
+        }
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IEmailEnricher, EmailEnrichmentAgent>();
 
         return services;
     }

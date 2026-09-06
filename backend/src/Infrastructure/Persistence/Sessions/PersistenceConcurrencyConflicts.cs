@@ -178,6 +178,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.EmailChunkAttachmentOrdinalUniqueIndexName
                 or PersistenceConstraintNames.EmailAttachmentTextPrimaryKeyName
                 or PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailEnrichmentPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailEnrichmentMarkAspectUniqueIndexName
                 or PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.ContactAddressUniqueIndexName

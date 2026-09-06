@@ -435,6 +435,17 @@ internal sealed class StoredEmailEntity
     public EmailSpamClassificationEntity? SpamClassification { get; set; }
 
     /// <summary>
+    /// Gets or sets what a derivation concluded about this email, which is absent until one has run for it and stays
+    /// absent on a deployment that never switches enrichment on.
+    /// </summary>
+    /// <remarks>
+    /// Derived data hanging off the occurrence for the reason the classification is, and the record that takes the
+    /// message out of the arrival pass's selection: a message with no derivation is one still owed one, and a message
+    /// whose derivation found nothing to say carries a record with no marks.
+    /// </remarks>
+    public EmailEnrichmentEntity? Enrichment { get; set; }
+
+    /// <summary>
     /// Gets or sets the length this email's extracted text had when the per-message embedding ceiling stopped the cut
     /// short of its end, or <see langword="null" /> when no ceiling reached it.
     /// </summary>

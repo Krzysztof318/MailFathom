@@ -1005,6 +1005,25 @@
         ],
         "type": "object"
       },
+      "ClientMailEnrichmentResponse": {
+        "properties": {
+          "derivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "marks": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailMarkResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "derivedAt",
+          "marks"
+        ],
+        "type": "object"
+      },
       "ClientMailFlagChangeRequest": {
         "properties": {
           "flags": {
@@ -1217,6 +1236,49 @@
         "required": [
           "synchronizationEnabled",
           "accounts"
+        ],
+        "type": "object"
+      },
+      "ClientMailMarkResponse": {
+        "properties": {
+          "aspect": {
+            "$ref": "#/components/schemas/EmailEnrichmentAspect"
+          },
+          "dueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidence": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EmailEnrichmentSource"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "aspect",
+          "text",
+          "reason",
+          "dueAt",
+          "source",
+          "origin",
+          "evidence"
         ],
         "type": "object"
       },
@@ -1845,6 +1907,16 @@
               "string"
             ]
           },
+          "enrichment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailEnrichmentResponse"
+              }
+            ]
+          },
           "flagged": {
             "type": "boolean"
           },
@@ -1938,7 +2010,8 @@
           "hasAttachments",
           "attachmentCount",
           "sizeOctets",
-          "preview"
+          "preview",
+          "enrichment"
         ],
         "type": "object"
       },
@@ -3346,6 +3419,19 @@
           }
         },
         "type": "object"
+      },
+      "EmailEnrichmentAspect": {
+        "enum": [
+          "Sense",
+          "Significance",
+          "Commitment"
+        ]
+      },
+      "EmailEnrichmentSource": {
+        "enum": [
+          "DeterministicRule",
+          "Model"
+        ]
       },
       "EmbeddingActivationAssessmentResponse": {
         "properties": {

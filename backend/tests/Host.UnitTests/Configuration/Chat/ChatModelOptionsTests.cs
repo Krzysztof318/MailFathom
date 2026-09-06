@@ -48,6 +48,7 @@ public sealed class ChatModelOptionsTests
     [InlineData("unauthenticated")]
     [InlineData("reasoning-effort")]
     [InlineData("api")]
+    [InlineData("enrichment")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
@@ -347,6 +348,7 @@ public sealed class ChatModelOptionsTests
         "unauthenticated" => new ChatModelOptions { Unauthenticated = true },
         "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
         "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
+        "enrichment" => new ChatModelOptions { Enrichment = new EmailEnrichmentOptions { Enabled = true } },
         _ => new ChatModelOptions
         {
             EntraCredential = new ProviderEntraCredentialOptions

@@ -879,6 +879,12 @@ internal static class HostComposition
                 ? declaredEmbeddings.ImageDescription.MaxPixels
                 : null);
 
+        // The same arrangement, for the same reason: the arrival pass reads a withholding rather than resolving
+        // nothing. Enriching needs both decisions to have been taken — an endpoint that can be asked, and an operator
+        // who said mail may be read into marks — so an instance missing either derives nothing and says which.
+        builder.Services.AddEmailEnrichmentAgent(
+            declaredChat?.IsConfigured is true && declaredChat.Enrichment.Enabled);
+
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
                 .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

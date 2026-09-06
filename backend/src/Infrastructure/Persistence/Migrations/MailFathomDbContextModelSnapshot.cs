@@ -368,6 +368,78 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentEntity", b =>
+                {
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("DerivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("StoredEmailId")
+                        .HasName("pk_email_enrichments");
+
+                    b.ToTable("email_enrichments", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentMarkEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Aspect")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<Guid[]>("Evidence")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoredEmailId", "Aspect")
+                        .IsUnique()
+                        .HasDatabaseName("ix_email_enrichment_marks_enrichment_aspect");
+
+                    b.ToTable("email_enrichment_marks", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
                     b.Property<Guid>("StoredEmailId")
@@ -2818,6 +2890,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("EmbeddingProfile");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
+                        .WithOne("Enrichment")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentEntity", "StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoredEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentMarkEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentEntity", "Enrichment")
+                        .WithMany("Marks")
+                        .HasForeignKey("StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_email_enrichment_marks_enrichments");
+
+                    b.Navigation("Enrichment");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailMessageContentEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
@@ -3185,6 +3280,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Embeddings");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailEnrichmentEntity", b =>
+                {
+                    b.Navigation("Marks");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", b =>
                 {
                     b.Navigation("Signals");
@@ -3258,6 +3358,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Content");
 
                     b.Navigation("ContentRepairRequest");
+
+                    b.Navigation("Enrichment");
 
                     b.Navigation("Mutations");
 

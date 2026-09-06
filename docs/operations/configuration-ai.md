@@ -578,8 +578,9 @@ a refusal — costs an edit rather than a restart of a process that is synchroni
 connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
 next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
 fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the pair
-that decides which services this deployment registered at all: whether `Chat:Alias` names an endpoint, and whether
-`Chat:RelevanceFilter:Enabled` turns the second pass on. Renaming a declared alias reloads, because the credential and
+that decides which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
+`Chat:RelevanceFilter:Enabled` turns the second pass on, and whether `Chat:Enrichment:Enabled` turns the arrival
+derivation on. Renaming a declared alias reloads, because the credential and
 the resilience circuit are both looked up by whatever the declaration in force calls it; going from no chat section to
 one, or the reverse, does not, and is refused with that message rather than silently ignored.
 
@@ -610,6 +611,32 @@ describes what it drops, what it keeps, and what it does when the provider canno
 | `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
 | `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying a number of its own after the retrieval it follows was narrowed or widened. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | reload |
 | `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | reload |
+
+### Message enrichment — `Chat:Enrichment`
+
+Deriving what an arriving message is about, why it may matter, and any commitment it contains, once, and storing the
+result so a mail list draws it without a model call. A block inside `Chat` for the same reason the relevance filter is
+one: it derives with that endpoint and has nowhere to send a message without one, so removing the chat section removes
+this with it.
+
+Off by default, and off is a supported deployment: every list row is drawn exactly as it was before, because a message
+with no derivation carries no enrichment rather than an error. Turning it on is a spend decision — one provider call
+per message that arrives, and per message already stored, until the mailbox is drained.
+
+**It competes with questions for one allowance.** Every derivation is admitted against and charged to the same
+`MailAnswering` period ceilings a question is, which is what makes it bounded rather than a second, unmetered way of
+spending. A period a mailbox's arrivals exhausted is a period in which a question is refused, so a deployment turning
+this on over a large mailbox raises those ceilings or accepts that the backfill and the questions share them. A refused
+admission withholds the derivation and leaves the message outstanding for the next period rather than failing it.
+
+What one pass covers is not configurable: eight messages, six leading passages each, per account run. Those bound the
+pass's latency inside a run that other accounts are queued behind rather than describing a deployment, and what a pass
+leaves behind the next run takes. [Message enrichment](../features/message-enrichment.md) describes what a mark carries,
+what withholds a derivation, and what reaches the provider.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:Enrichment:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
 
 ## `MailAnswering`
 

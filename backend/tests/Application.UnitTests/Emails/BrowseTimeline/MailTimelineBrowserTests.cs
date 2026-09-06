@@ -5,6 +5,8 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseTimeline;
+using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
@@ -402,6 +404,90 @@ public sealed class MailTimelineBrowserTests
         Assert.DoesNotContain(Marker, row.Preview, StringComparison.Ordinal);
     }
 
+    /// <summary>A row draws its marks from the page rather than from a model call, which is the point of storing them.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_AMessageADerivationReached_CarriesItsMarksWithoutAskingAModel()
+    {
+        // Arrange
+        var email = SyntheticEmailSummaries.Create(FirstJuly);
+        var enrichments = new InMemoryStoredEmailEnrichments().With(email.StoredEmailId, Sense("a racking quotation"));
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().With(email),
+            enrichmentReader: enrichments);
+
+        // Act
+        var page = await browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var enrichment = Assert.Single(page.Emails).Enrichment;
+
+        Assert.NotNull(enrichment);
+        Assert.Equal("a racking quotation", Assert.Single(enrichment.Marks).Text);
+    }
+
+    /// <summary>
+    /// Mail no derivation has reached carries no enrichment at all, which is what lets a client tell that state from a
+    /// derivation that ran and found nothing to say.
+    /// </summary>
+    [Fact]
+    public async Task BrowsePageAsync_AMessageNoDerivationHasReached_CarriesNoEnrichment()
+    {
+        // Arrange
+        var browser = BrowserOver(new InMemoryStoredEmailTimeline().With(SyntheticEmailSummaries.Create(FirstJuly)));
+
+        // Act
+        var page = await browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(page.Emails).Enrichment);
+    }
+
+    /// <summary>The probe row is never a message the caller sees, so no derivation is read for it either.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_MoreMailThanThePage_ReadsEnrichmentForThePageAloneAndNotForTheProbe()
+    {
+        // Arrange
+        var enrichments = new InMemoryStoredEmailEnrichments();
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(10, FirstJuly)),
+            enrichmentReader: enrichments);
+
+        // Act
+        var page = await browser.BrowsePageAsync(
+            new BrowseTimelineRequest { PageSize = 3 },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            page.Emails.Select(row => row.Email.StoredEmailId),
+            Assert.Single(enrichments.Calls));
+    }
+
+    /// <summary>A mark is a sentence derived from the message, so it leaves under the same posture the preview does.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_ADeploymentThatScans_RedactsTheMarkAndItsReason()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var email = SyntheticEmailSummaries.Create(FirstJuly, subject: "a subject");
+        var enrichments = new InMemoryStoredEmailEnrichments().With(
+            email.StoredEmailId,
+            Sense($"a key {Marker} was pasted", $"the passage carries {Marker}"));
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().With(email),
+            enrichmentReader: enrichments,
+            egressGuard: egress.Guard);
+
+        // Act
+        var page = await browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var mark = Assert.Single(Assert.Single(page.Emails).Enrichment!.Marks);
+
+        Assert.DoesNotContain(Marker, mark.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Marker, mark.Reason, StringComparison.Ordinal);
+    }
+
     /// <summary>Serving a page a scanner could not read would be the leak the switch was turned on to prevent.</summary>
     [Fact]
     public async Task BrowsePageAsync_ADetectorThatCannotAnswer_RefusesThePageRatherThanServingItUnscanned()
@@ -491,12 +577,14 @@ public sealed class MailTimelineBrowserTests
     private static MailTimelineBrowser BrowserOver(
         InMemoryStoredEmailTimeline timeline,
         IStoredEmailPreviewReader? previewReader = null,
+        IStoredEmailEnrichmentReader? enrichmentReader = null,
         ICallerMailAccountCatalog? accountCatalog = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
         AccessAuthorization? authorization = null) => new(
         timeline,
         previewReader ?? new InMemoryStoredEmailPreviews(),
+        enrichmentReader ?? new InMemoryStoredEmailEnrichments(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
             StubMailFolderParticipation.Nothing,
@@ -505,6 +593,14 @@ public sealed class MailTimelineBrowserTests
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readTelemetry ?? new RecordingMailboxReadTelemetry(),
         authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+    private static EmailEnrichmentMark Sense(string text, string reason = "the passage says so") =>
+        EmailEnrichmentMark.Create(
+            EmailEnrichmentAspect.Sense,
+            text,
+            reason,
+            [EmailChunkId.Create(Guid.CreateVersion7())],
+            EmailEnrichmentProvenance.FromAgent("mailfathom-email-enrichment"));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
