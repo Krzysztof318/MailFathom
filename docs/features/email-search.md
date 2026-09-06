@@ -17,12 +17,21 @@ cannot reach the query without them; the `search_emails` MCP tool maps protocol 
 returns, and [MCP tools](mcp-tools.md#search_emails) documents that surface.
 
 **A screen searches the same mail through a second use case.** `MailSearchBrowser` composes the same scope, the same
-filters, both rankings, the same fusion and the same extracts, and differs in the two things a screen needs and a tool
-does not: the results continue past the first window, and each one says which ranking found it.
+filters, both rankings, the same fusion and the same body extracts, and differs in the two things a screen needs and a
+tool does not: the results continue past the first window, and each one says which ranking found it.
 [Paging a ranking](#paging-a-ranking) is where the first of those is described and
 [What a result carries](#what-a-result-carries) the second; the route is
 [the client endpoint's](../operations/client-endpoint.md#the-mail-search-route). Everything else on this page holds for
 both.
+
+One part does not. **A client result carries no attachment match and is never marked depicted**: `MailSearchBrowser`
+never reads the attachment index for what it quotes, so its `attachmentMatches` is always empty and it publishes the
+written ranking alone. What both routes do share is which messages are eligible, so a message whose only claim on the
+query is a word inside a document is returned to a screen as well — with an empty snippet, because the extract cut from
+its body has no highlight to keep. A result nothing visible explains is exactly what the tool's attachment section
+exists to prevent, and closing that gap on the client is
+[#1559](https://github.com/Krzysztof318/MailFathom/issues/1559), which owns how a client row says a file or a
+description put it there. Until then the route reports the message and not the reason.
 
 ## What is searchable, and what is not
 
