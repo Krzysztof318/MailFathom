@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Emails;
+
 namespace MailFathom.Application.Emails.Search;
 
 /// <summary>Composes one published ordering out of a lexical ranking and the two rankings meaning produces.</summary>
@@ -65,7 +67,12 @@ public static class HybridSearchRanking
 
         var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticRankings.Written, limit);
 
-        var appended = Appended(fused, semanticRankings.Depicted, limit);
+        var written = lexicalCandidates
+            .Concat(semanticRankings.Written)
+            .Select(static candidate => candidate.StoredEmailId)
+            .ToHashSet();
+
+        var appended = Appended(fused, semanticRankings.Depicted, written, limit);
         if (appended.Count is 0)
         {
             return RankedSearchSequence.Written(fused);
@@ -76,14 +83,26 @@ public static class HybridSearchRanking
             appended.Select(static candidate => candidate.StoredEmailId).ToHashSet());
     }
 
-    /// <summary>Reduces the depicted ranking to what the fused result does not carry and scores it beneath that result.</summary>
+    /// <summary>Reduces the depicted ranking to what no written ranking reached and scores it beneath the fused result.</summary>
     /// <remarks>
+    /// <para>
+    /// The exclusion is read from the two written rankings themselves rather than from the fused list they produced,
+    /// which is already cut to the caller's limit while its inputs were read to several times that depth. Reading it
+    /// from the cut list would give the same answer today, but only by arithmetic: a written candidate is dropped from
+    /// the fusion exactly when the union filled the limit, and the section below is then empty anyway. That leaves what
+    /// <see cref="EmailSearchMatch.IsDepictedMatch" /> promises — never true of a message a written passage reached —
+    /// resting on the two uses of <c>limit</c> in <see cref="Compose" /> being the same number, which is a coincidence
+    /// a later change to either could end without any of this reading as wrong.
+    /// </para>
+    /// <para>
     /// A candidate the depicted ranking repeats is taken at its first place, on the same rule fusion accumulates by: a
     /// duplicate would otherwise occupy two of the places the shared depth leaves for messages nothing else found.
+    /// </para>
     /// </remarks>
     private static List<RankedEmailCandidate> Appended(
         IReadOnlyList<RankedEmailCandidate> fused,
         IReadOnlyList<RankedEmailCandidate> depicted,
+        HashSet<StoredEmailId> alreadyPlaced,
         int limit)
     {
         var remaining = limit - fused.Count;
@@ -92,7 +111,6 @@ public static class HybridSearchRanking
             return [];
         }
 
-        var alreadyPlaced = fused.Select(static candidate => candidate.StoredEmailId).ToHashSet();
         var admitted = new List<RankedEmailCandidate>(remaining);
 
         // A loop rather than a filtered projection: admitting a candidate is what records that it has been admitted, so

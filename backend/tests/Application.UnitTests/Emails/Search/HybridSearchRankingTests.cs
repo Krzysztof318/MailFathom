@@ -167,6 +167,26 @@ public sealed class HybridSearchRankingTests
         Assert.Empty(composed.DepictedOnly);
     }
 
+    /// <summary>
+    /// The written rankings are read several times deeper than the window they are published into, so a message a
+    /// written passage reached can be cut from the fused section. It is still a message somebody's words reached, and
+    /// the depicted section may not readmit it under a mark that says a picture alone found it.
+    /// </summary>
+    [Fact]
+    public void Compose_MessageWrittenAndCutFromTheFusedSection_IsNeverReadmittedAsADepictedResult()
+    {
+        // Arrange
+        RankedEmailCandidate[] lexical = [.. Enumerable.Range(1, 3).Select(day => CandidateAt(day, 0.9f - (day * 0.1f)))];
+        var cut = lexical[^1];
+
+        // Act
+        var composed = HybridSearchRanking.Compose(lexical, new SemanticEmailRankings([], [cut]), limit: 2);
+
+        // Assert
+        Assert.DoesNotContain(cut.StoredEmailId, composed.Candidates.Select(candidate => candidate.StoredEmailId));
+        Assert.Empty(composed.DepictedOnly);
+    }
+
     [Fact]
     public void Compose_LimitBelowOne_IsRejected()
     {
