@@ -155,6 +155,8 @@ internal sealed class EmailChunkWriter(
             return;
         }
 
+        await RemovePassagesOfDroppedAttachmentsAsync(dbContext, storedEmail, attachmentTexts, cancellationToken);
+
         foreach (var attachment in attachmentTexts)
         {
             var chunks = attachment.Text is { } text
@@ -167,6 +169,41 @@ internal sealed class EmailChunkWriter(
 
             await this.ReplaceAsync(dbContext, storedEmail, attachment.Position, chunks, cancellationToken);
         }
+    }
+
+    /// <summary>Removes the passages of the attachment positions this reading no longer carries.</summary>
+    /// <remarks>
+    /// The loop above reconciles the positions a reading returned, so a reading that returns <em>fewer</em> of them
+    /// than the last one would leave the rest behind. That is reachable rather than theoretical: a message left
+    /// unstamped because a provider did not answer is read again, and the second reading is shorter whenever the stored
+    /// copy has gone missing or an operator has lowered the per-message ceiling since. The attachment rows are replaced
+    /// whole by the caller in the same statement, so a passage of a dropped position would be text with nothing
+    /// recording which file it came from — still selected for embedding, and dropped unexplained by anything reading it
+    /// back, which is the state <see cref="IEmailChunkStore" /> exists to prevent.
+    /// </remarks>
+    private static async Task RemovePassagesOfDroppedAttachmentsAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        IReadOnlyList<DerivedAttachmentText> attachmentTexts,
+        CancellationToken cancellationToken)
+    {
+        int[] kept = [.. attachmentTexts.Select(attachment => attachment.Position)];
+
+        // Staged first for the reason ReplaceAsync takes them first: a passage added earlier in this same uncommitted
+        // session is invisible to a set-based delete, and one of a position now dropped would commit as an orphan.
+        var staged = dbContext.EmailChunks.Local
+            .Where(candidate => candidate.StoredEmailId == storedEmail.Id
+                && candidate.AttachmentPosition != null
+                && !kept.Contains(candidate.AttachmentPosition.Value))
+            .ToArray();
+
+        dbContext.EmailChunks.RemoveRange(staged);
+
+        await dbContext.EmailChunks
+            .Where(candidate => candidate.StoredEmailId == storedEmail.Id
+                && candidate.AttachmentPosition != null
+                && !kept.Contains(candidate.AttachmentPosition.Value))
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     /// <summary>Replaces the passages of one of a message's texts, writing nothing where they are already what they should be.</summary>

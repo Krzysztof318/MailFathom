@@ -994,6 +994,7 @@ public sealed class AccountSynchronizationSupervisorTests
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
                 Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -1028,6 +1029,7 @@ public sealed class AccountSynchronizationSupervisorTests
         attachmentTextStore
             .GetEmailsAwaitingAttachmentTextAsync(
                 Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<EmailAwaitingAttachmentText>>>(_ =>

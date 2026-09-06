@@ -56,6 +56,7 @@ public sealed class MailAttachmentTextPassTests
         Assert.False(report.RunBudgetExhausted);
         await store.DidNotReceiveWithAnyArgs().GetEmailsAwaitingAttachmentTextAsync(
             Arg.Any<MailAccountIdentity>(),
+            Arg.Any<StoredEmailId?>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
@@ -106,6 +107,11 @@ public sealed class MailAttachmentTextPassTests
 
         // Assert
         Assert.Equal([storedEmailId], backlog.Accepted);
+        await store.Received(1).SaveAttachmentTextAsync(
+            Arg.Any<IPersistenceSession>(),
+            storedEmailId,
+            Arg.Any<EmailAttachmentTextDerivation>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -201,10 +207,14 @@ public sealed class MailAttachmentTextPassTests
         // Arrange
         var store = Substitute.For<IStoredEmailAttachmentTextStore>();
         store
-            .GetEmailsAwaitingAttachmentTextAsync(Account, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Account,
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult<IReadOnlyList<EmailAwaitingAttachmentText>>(
                 [.. Enumerable
-                    .Range(0, call.ArgAt<int>(1))
+                    .Range(0, call.ArgAt<int>(2))
                     .Select(_ => Awaiting(StoredEmailId.Create(Guid.CreateVersion7())))]));
 
         // Act
@@ -216,6 +226,44 @@ public sealed class MailAttachmentTextPassTests
         Assert.True(report.ReadEmailCount > 0);
         await store.Received(20).GetEmailsAwaitingAttachmentTextAsync(
             Account,
+            Arg.Any<StoredEmailId?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The walk carries a resume position, so a message it has already read is never selected again.</summary>
+    /// <remarks>
+    /// A reading a provider did not answer for, or one whose stored copy needs fetching again, keeps no stamp on
+    /// purpose, so nothing takes such a message out of the selection. Without the cursor the next batch would return
+    /// the identical rows, derive them again, call the provider again, and never reach anything behind them.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ASecondBatch_ResumesPastTheMessageTheFirstOneEndedOn()
+    {
+        // Arrange
+        var store = Substitute.For<IStoredEmailAttachmentTextStore>();
+        var firstBatch = FullBatch();
+        store
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Account,
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(firstBatch, Drained);
+
+        // Act
+        await CreatePass(store, new RecordingEmailEmbeddingBacklog())
+            .RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        await store.Received(1).GetEmailsAwaitingAttachmentTextAsync(
+            Account,
+            null,
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+        await store.Received(1).GetEmailsAwaitingAttachmentTextAsync(
+            Account,
+            firstBatch[^1].Id,
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
@@ -232,6 +280,15 @@ public sealed class MailAttachmentTextPassTests
 
     private static EmailAttachmentTextBounds Bounds() => EmailAttachmentTextBounds.Disabled with { IsEnabled = true };
 
+    /// <summary>The answer a drained walk gives, typed so it configures a second answer rather than no further one.</summary>
+    private static readonly IReadOnlyList<EmailAwaitingAttachmentText> Drained = [];
+
+    /// <summary>A batch as full as one read may be, which is what makes the pass go back to the store for another.</summary>
+    private static IReadOnlyList<EmailAwaitingAttachmentText> FullBatch() =>
+    [
+        .. Enumerable.Range(0, 25).Select(_ => Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))),
+    ];
+
     private static EmailAwaitingAttachmentText Awaiting(StoredEmailId storedEmailId) => new(
         storedEmailId,
         SyntheticMailOwner.Deployment,
@@ -243,10 +300,16 @@ public sealed class MailAttachmentTextPassTests
         var store = Substitute.For<IStoredEmailAttachmentTextStore>();
 
         // The second answer is empty because storing a reading is what takes a message out of the query the pass
-        // re-issues, so a store that kept returning the same batch would describe a defect rather than the walk.
+        // re-issues, so a store that kept returning the same batch would describe a defect rather than the walk. It is
+        // a named value rather than a collection expression: `[]` there binds as an empty params array, which
+        // configures one answer for every call instead of two answers in order.
         store
-            .GetEmailsAwaitingAttachmentTextAsync(Account, Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(batch, []);
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Account,
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(batch, Drained);
 
         return store;
     }

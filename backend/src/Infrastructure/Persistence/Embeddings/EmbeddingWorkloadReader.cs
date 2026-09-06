@@ -57,6 +57,10 @@ internal sealed class EmbeddingWorkloadReader(MailFathomDbContext dbContext) : I
             .Where(email => (email.SearchDocument != null
                     && email.SearchDocument.BodyText != null
                     && !email.Chunks.Any(chunk => chunk.AttachmentPosition == null))
+                // The same reasoning for the other text a message carries: attachments nothing has read yet are
+                // passages this deployment will pay a provider for, and a message whose body is already cut and
+                // embedded matches neither of the clauses either side of this one.
+                || (email.AttachmentCount > 0 && email.AttachmentTextDerivedAt == null)
                 || email.Chunks.Any(chunk => profileId == null
                     || !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId)))
             .CountAsync(cancellationToken);
@@ -75,16 +79,19 @@ internal sealed class EmbeddingWorkloadReader(MailFathomDbContext dbContext) : I
 
     /// <summary>Selects the messages a search may reach at all, which is what every count here is taken over.</summary>
     /// <remarks>
-    /// The same two conditions the embedding sweep selects on, composed from the same tombstone expression so the
-    /// progress an operator reads is measured against exactly the mail the sweep will work through. A message an
-    /// expunge has been observed for is outside it, because vectors nothing may retrieve are a provider bill with no
-    /// reader; so is one whose extraction produced no text and whose attachments yielded none either, because nothing
-    /// about it could ever become a passage. A passage cut from an attachment counts here exactly as a body's does,
-    /// since the vector index reaches a message through either.
+    /// The same conditions the embedding sweep selects on, composed from the same tombstone expression so the progress
+    /// an operator reads is measured against exactly the mail the sweep will work through. A message an expunge has
+    /// been observed for is outside it, because vectors nothing may retrieve are a provider bill with no reader; so is
+    /// one whose extraction produced no text, whose attachments yielded none, and which has none left to read, because
+    /// nothing about it could ever become a passage. A passage cut from an attachment counts here exactly as a body's
+    /// does, since the vector index reaches a message through either — and so does an attachment nothing has read yet,
+    /// because a message counted as outstanding by a filter composed over this one has to be counted as searchable by
+    /// it too, or the two aggregates describe different mail.
     /// </remarks>
     private IQueryable<StoredEmailEntity> SearchableEmails() => dbContext.StoredEmails
         .AsNoTracking()
         .Where(StoredEmailTombstone.IsNotTombstoned)
         .Where(email => email.Chunks.Any()
-            || (email.SearchDocument != null && email.SearchDocument.BodyText != null));
+            || (email.SearchDocument != null && email.SearchDocument.BodyText != null)
+            || (email.AttachmentCount > 0 && email.AttachmentTextDerivedAt == null));
 }

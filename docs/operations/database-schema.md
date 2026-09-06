@@ -212,12 +212,16 @@ already serving:
 - **Index creation on a large table takes time proportional to the table.** Stop MailFathom, or accept that its writes
   wait, for the duration.
 
-- **`AddAttachmentTextAndAttachmentChunks` rebuilds one index over the passage table.** It drops
-  `ix_email_chunks_email_ordinal` and creates two filtered indexes in its place, so `email_chunks` is read once to build
-  each — proportional to the passages a deployment has cut, and under a lock that blocks writes to that table for the
-  duration. Nothing else in it is proportional to anything already stored: the two added columns are nullable with no
-  default, which is a catalog change rather than a rewrite, and the table and GIN index it creates are both empty until
-  an attachment is read.
+- **`AddAttachmentTextAndAttachmentChunks` rebuilds one index over the passage table and builds one over the largest
+  table in the schema.** It drops `ix_email_chunks_email_ordinal` and creates two filtered indexes in its place, so
+  `email_chunks` is read once to build each — proportional to the passages a deployment has cut, and under a lock that
+  blocks writes to that table for the duration. It then creates `ix_stored_emails_awaiting_attachment_text`, which
+  scans `stored_emails` in full under a lock that blocks writes to it; unlike the other partial indexes above, that one
+  is not built empty, because `AttachmentTextDerivedAt` is null on every row an upgrading deployment already holds, so
+  it is written holding every message that carries an attachment. Budget a window against the message table rather than
+  against the passage table alone. Nothing else in the migration is proportional to anything already stored: the two
+  added columns are nullable with no default, which is a catalog change rather than a rewrite, and the table and GIN
+  index it creates are both empty until an attachment is read.
 
 - **A `CHECK` constraint added to a table that already holds rows is validated by scanning it.**
   `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, and

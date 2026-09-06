@@ -438,10 +438,12 @@ ceiling on every run for ever, and a message larger than its run's ceiling is pa
 a run always starts with a full budget and always meets that message with less than it needs. Refusing the order at
 startup is what stops that from arriving as mail nobody can search.
 
-**What an operator gets by turning `Enabled` on** is attachment words in both retrieval paths: a document attachment's
-text is chunked and embedded beside the message's own passages, and it joins the lexical index as a document of its
-own — so a word occurring only in a contract is findable, while a message's own snippet still quotes only what the
-message said. An image attachment's description is embedded and never lexically indexed, which [ADR
+**What an operator gets by turning `Enabled` on** is attachment words in semantic retrieval: a document attachment's
+text is chunked and embedded beside the message's own passages, so a question whose answer is inside a contract reaches
+it. A document attachment is written to the lexical index as a document of its own as well, but the rows and their GIN
+index exist with no reader yet — `search_emails` still matches a message on its own words alone, so a word occurring
+only inside a PDF returns nothing there — and a message's own snippet quotes only what the message said either way. An
+image attachment's description is embedded and never lexically indexed at all, which [ADR
 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
 decides and the database enforces. Reading happens in the account run, behind the passage cut, and never on a read
 path: no MCP call and no client request ever waits on a parser or a provider.
@@ -449,6 +451,16 @@ path: no MCP call and no client request ever waits on a parser or a provider.
 **Turning it on reads mail that is already stored, once.** A message keeps a stamp saying its attachments were read, so
 each one is opened once and never again unless it changes; turning the switch off leaves what was already read in
 place, since nothing here deletes a stored reading.
+
+**Two readings keep no stamp and are taken again.** A message whose stored copy has gone missing or will not parse is
+recorded as needing fetching again rather than settled, and one whose picture the chat provider did not answer for —
+a timeout, an unreachable endpoint, a rate the deployment is over — is left for a later run in the same way. Both are
+read again on the next account run, so a provider outage during a first enablement costs the readings it interrupted
+a second time rather than losing them. Every other refusal settles the message, including the ones a configuration
+change lifts — an image larger than `Chat:MaxRequestImageOctets`, a grid larger than
+`Embeddings:ImageDescription:MaxPixels`, and a picture met while image description was off. Raising either ceiling or
+turning that switch on therefore changes what arrives next rather than what is already stored, and no pass today goes
+back for the attachments it refused.
 
 **The three legacy binary formats are recognized and not read.** A `.doc`, `.xls`, or `.ppt` attachment is reported as a
 format MailFathom does not extract, which is a different and more useful fact than not recognizing it at all — the

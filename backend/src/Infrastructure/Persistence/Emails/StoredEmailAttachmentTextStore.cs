@@ -38,11 +38,12 @@ internal sealed class StoredEmailAttachmentTextStore(
 {
     /// <inheritdoc />
     /// <remarks>
-    /// Ordering is by the primary key, which is total, stable, and already indexed. No resume position travels with the
-    /// batch, because reading a message's attachments is what takes it out of this query.
+    /// Ordering is by the primary key, which is total, stable, and already indexed, so the resume position is one
+    /// column and no tie-breaker is needed.
     /// </remarks>
     public async Task<IReadOnlyList<EmailAwaitingAttachmentText>> GetEmailsAwaitingAttachmentTextAsync(
         MailAccountIdentity account,
+        StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken)
     {
@@ -50,6 +51,7 @@ internal sealed class StoredEmailAttachmentTextStore(
 
         var ownerId = account.Owner.Value;
         var mailboxAccountId = account.Id.Value;
+        var after = resumeAfter?.Value;
 
         // One snapshot for both halves, exactly as the cut reads it: the predicate narrows the batch and the answer
         // below names which of the gate's decisions admitted each row, so a second reading taken microseconds later
@@ -62,6 +64,7 @@ internal sealed class StoredEmailAttachmentTextStore(
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 terms)
+            .Where(email => after == null || email.Id > after)
             .OrderBy(email => email.Id)
             .Take(batchSize)
             .Select(email => new OutstandingAttachmentRow(

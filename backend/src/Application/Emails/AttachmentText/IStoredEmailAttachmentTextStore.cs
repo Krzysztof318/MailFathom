@@ -26,17 +26,22 @@ public interface IStoredEmailAttachmentTextStore
 {
     /// <summary>Reads a bounded batch of the account's mail whose attachments nothing has read yet.</summary>
     /// <param name="account">The account whose mail is walked.</param>
+    /// <param name="resumeAfter">The identity the previous batch of this walk reached, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">The greatest number of messages to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The messages in a stable order, or an empty list when the account owes none.</returns>
+    /// <returns>The messages in identity order, or an empty list when the account owes none past the resume position.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize" /> is not positive.</exception>
     /// <remarks>
-    /// A message leaves this selection by being derived from, so the pass needs no cursor: an interrupted run repeats
-    /// nothing and skips nothing. Mail carrying no attachment is never selected at all rather than being selected and
+    /// The resume position exists for the messages a reading leaves unsettled rather than for the ones it settles, in
+    /// the same way the rule queue's does. Most messages leave this selection by being read, but one whose stored copy
+    /// needs fetching again, or whose picture a provider did not answer for, deliberately keeps no stamp — and without
+    /// a cursor the next batch of the same pass would select exactly those messages again, derive them again, and never
+    /// reach anything behind them. Mail carrying no attachment is never selected at all rather than being selected and
     /// stepped over, which is what keeps the walk proportional to the mail this feature is about.
     /// </remarks>
     Task<IReadOnlyList<EmailAwaitingAttachmentText>> GetEmailsAwaitingAttachmentTextAsync(
         MailAccountIdentity account,
+        StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);
 

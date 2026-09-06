@@ -307,10 +307,11 @@ internal static class SynchronizationTestHost
         services.AddScoped<MailChunkingPass>();
 
         // The reading of what the attachments of already-cut mail say is the run's last local step, behind the cut for
-        // the ordering the arrival pipeline is built on. Every account these tests configure leaves it off, which is
-        // what the default bounds say: the pass then answers in one comparison and reaches neither the store below nor
-        // any parser. Each collaborator is still composed, because a pass that could not resolve one would fail the
-        // account run rather than the assertion the test is about.
+        // the ordering the arrival pipeline is built on. A test that hands over no store gets the default bounds, which
+        // leave the reading off: the pass then answers in one comparison and reaches neither the store below nor any
+        // parser. Supplying one turns the reading on, which is the branch the two supervisor tests about this stage
+        // observe. Each collaborator is composed either way, because a pass that could not resolve one would fail the
+        // account run inside the supervisor's own catch rather than the assertion the test is about.
         services.AddSingleton(attachmentTextStore is null ? EmailAttachmentTextBounds.Disabled : EnabledAttachmentTextBounds);
         services.AddSingleton(attachmentTextStore ?? CreateAttachmentTextStoreWithNothingToRead());
         services.AddSingleton(Substitute.For<IEmailAttachmentContentReader>());
@@ -377,6 +378,7 @@ internal static class SynchronizationTestHost
 
         store.GetEmailsAwaitingAttachmentTextAsync(
                 Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<EmailAwaitingAttachmentText>>([]));

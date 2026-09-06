@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.AttachmentText;
 
@@ -26,8 +27,12 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// exactly as it was, and the next run repeats the reading rather than half of it.
 /// </para>
 /// <para>
-/// It needs no cursor for the reason the cut needs none: a message leaves the selection by being read. What one pass's
-/// budget leaves behind is the next run's.
+/// It carries a resume position across its batches, which the cut does not need. Most messages leave the selection by
+/// being read, but one whose stored copy needs fetching again, or whose picture a provider did not answer for, keeps no
+/// stamp on purpose — so without a cursor the next batch would select exactly those messages again, re-read them, and
+/// never reach anything behind them, calling the provider once per batch on the way. The position is dropped at the end
+/// of the pass rather than persisted: what one pass's budget leaves behind is the next run's, and that run starts at
+/// the head of a selection those messages are still in.
 /// </para>
 /// </remarks>
 public sealed class MailAttachmentTextPass
@@ -107,11 +112,13 @@ public sealed class MailAttachmentTextPass
         var readCount = 0;
         var refusedCount = 0;
         var emailsRemain = false;
+        StoredEmailId? resumeAfter = null;
 
         for (var batchNumber = 1; batchNumber <= MaxBatchesPerPass && !runBudget.IsExhausted; batchNumber++)
         {
             var batch = await this.attachmentTextStore.GetEmailsAwaitingAttachmentTextAsync(
                 account,
+                resumeAfter,
                 BatchSize,
                 cancellationToken);
 
@@ -158,6 +165,10 @@ public sealed class MailAttachmentTextPass
                 {
                     refusedCount++;
                 }
+
+                // Advanced per message rather than per batch, so an interruption inside a batch resumes behind the
+                // message it committed rather than in front of the batch it was part of.
+                resumeAfter = email.Id;
             }
 
             emailsRemain = batch.Count == BatchSize;
