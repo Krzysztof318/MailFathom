@@ -445,21 +445,32 @@ describe('MessageList', () => {
         expect(screen.queryByLabelText('Include junk')).toBeNull();
     });
 
-    it('selects one message and opens it when it is pointed at', async () => {
+    it('opens a message when it is pointed at, and picks nothing out, so the toolbar stays over the list', async () => {
         renderList(answering(wholeFolder));
 
         await rows();
         fireEvent.pointerDown(row(2));
 
-        expect(carried().selected).toStrictEqual(['message-2']);
+        expect(carried().selected).toStrictEqual([]);
         expect(carried().selection).toBe('message-2');
+    });
+
+    it('picks a message out rather than opening it while others are already picked out', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1), { ctrlKey: true });
+        fireEvent.pointerDown(row(3));
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
+        expect(carried().selection).toBeNull();
     });
 
     it('adds a message to the selection when the pointer holds the modifier key', async () => {
         renderList(answering(wholeFolder));
 
         await rows();
-        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(1), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
@@ -469,7 +480,7 @@ describe('MessageList', () => {
         renderList(answering(wholeFolder));
 
         await rows();
-        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(1), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
         fireEvent.pointerDown(row(3), { ctrlKey: true });
 
@@ -504,7 +515,7 @@ describe('MessageList', () => {
         fireEvent.pointerUp(window);
         fireEvent.pointerEnter(row(3));
 
-        expect(carried().selected).toStrictEqual(['message-1']);
+        expect(carried().selected).toStrictEqual([]);
     });
 
     it('answers a right-click on a row with its menu, headed by what the row is about', async () => {
@@ -612,14 +623,15 @@ describe('MessageList', () => {
         expect(document.activeElement).toBe(drawn[0]);
     });
 
-    it('moves through the list from the keyboard and selects what it moves onto', async () => {
+    it('moves through the list from the keyboard without picking out what it moves onto', async () => {
         renderList(answering(wholeFolder));
 
         const drawn = await rows();
 
         fireEvent.keyDown(screen.getByRole('listbox', { name: 'Messages' }), { key: 'ArrowDown' });
 
-        expect(carried().selected).toStrictEqual(['message-1']);
+        expect(carried().selected).toStrictEqual([]);
+        expect(carried().selection).toBeNull();
         expect(drawn[1]?.getAttribute('tabindex')).toBe('0');
     });
 

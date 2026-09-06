@@ -88,8 +88,8 @@ describe('MessageRowMenu', () => {
             'Forward',
             'Archive',
             'Flag',
-            'Mark unread',
-            'Move',
+            'Mark as unread',
+            'Move…',
             'Delete',
         ]);
     });
@@ -146,7 +146,7 @@ describe('MessageRowMenu', () => {
         const asked = vi.fn();
 
         menuUnder({ onAsk: asked });
-        fireEvent.click(screen.getByRole('menuitem', { name: 'Move' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Move…' }));
 
         expect(asked).toHaveBeenCalledWith('move', messages);
     });

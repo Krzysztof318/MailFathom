@@ -5,34 +5,27 @@
 import type { MailMessageHeaders, MailParticipant, MailParticipantRole } from '@mailfathom/client-backend';
 import type { ControlShape } from '../controls/controlShapes';
 import { PlannedControl } from '../controls/PlannedControl';
-import { ShowFullHtml } from '../fullHtml/ShowFullHtml';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
-import { useEmbeddedHtmlMessages } from '../preferences/messageView';
-import { useWideWorkspace } from '../shell/useWideWorkspace';
+import { BackToList } from '../mailSpace/BackToList';
+import { useTwoPanes } from '../shell/useWideWorkspace';
 
-// What a message displays above its body: what it is called, who wrote it, when, and everybody else it names. The
-// author stands on its own line because it is what a reader checks first, and the rest is a disclosure the platform
-// already has an element for — a message addressed to two hundred people would otherwise be a screen of addresses in
-// front of the words somebody opened it to read.
+// What a message displays above its body: what it is called, who wrote it and when on one line under it, and everybody
+// else it names behind a disclosure the platform already has an element for — a message addressed to two hundred
+// people would otherwise be a screen of addresses in front of the words somebody opened it to read.
 //
-// Beside the subject stand the three things the design project offers to do with a message from its head. None of them
-// exists in the client yet, so each is drawn as what it is: a control the product will have, inert until it does. The
-// fourth beside them does exist: the control that opens the sender's own markup on a surface of its own, which is the
-// message head's because that is where the design project draws it and because it is a fact about this message rather
-// than about the body underneath it.
+// One instant rather than two. The head says when the author wrote the message, which is what a reader checks beside
+// who wrote it; when this deployment recorded it is a fact about the copy rather than the message, and the message's
+// own card carries it beside what else the copy holds. The two disagree whenever a message sat somewhere, and each
+// keeps the machine-readable form the service sent beside its wording.
 //
-// That fourth control is drawn in the reduced view and in no other. With the embedded HTML view chosen the markup is
-// already on the screen under this head, so a control offering to open it would open a second copy of what is being
-// read — which is why it goes rather than being disabled: there is nothing left for it to do rather than something it
-// may not do here.
-//
-// The three narrow to symbols alone at the phone, where the design project draws this head as one compact bar over the
-// message rather than as a title with a row of words beside it. It is the same narrowing the toolbar takes and it is
-// asked here for the same reason it is asked there — the width the head has, not the pointer driving it — but at a
-// different width: a strip sharing its room with two panes runs out of it at the desktop breakpoint, while this head
-// has the whole column and only runs out when the column is the screen.
+// Beside the subject stand the three things the design project offers to do with a message from its head, as words
+// alone: the design draws them without symbols wherever the head has a column to itself, and as symbols alone where
+// the column is the whole screen and the head is one compact bar over the message — the way back to the list at its
+// start, the subject on one line, the acts at its end. None of the three exists in the client yet, so each is drawn as
+// what it is: a control the product will have, inert until it does. Opening the sender's own markup is not among them;
+// it is a fact about the copy too, and the card carries it beside the instant it was recorded.
 //
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
@@ -52,69 +45,67 @@ const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
     Bcc: 'participant.bcc',
 };
 
-export function MessageHeaders({
-    headers,
-    onShowFullHtml,
-}: {
-    readonly headers: MailMessageHeaders;
-
-    /** Opens this message's own markup on the surface that draws it, the reader having confirmed it first. */
-    readonly onShowFullHtml: () => void;
-}) {
+export function MessageHeaders({ headers }: { readonly headers: MailMessageHeaders }) {
     const { locale, translate } = useLocalization();
-    const embeddedHtml = useEmbeddedHtmlMessages();
-    const wide = useWideWorkspace();
-    const actShape: ControlShape = wide ? 'labelled' : 'symbol';
+    const twoPanes = useTwoPanes();
+    const actShape: ControlShape = twoPanes ? 'named' : 'symbol';
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
-    const sentAt = wordInstant(headers.sentAt, locale, 'full');
-    const receivedAt = wordInstant(headers.receivedAt, locale, 'full');
+    const author = authors.length === 0 ? translate('message.noAuthor') : authors.map((one) => named(one)).join(', ');
+    const sentAt = wordInstant(headers.sentAt, locale, 'stamp');
+    const subject = headers.subject ?? translate('message.noSubject');
 
     return (
-        <header className="flex flex-col gap-1.5 border-b border-line px-5.5 py-4">
-            <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
-                <h2 className="min-w-0 flex-1 basis-64 text-2xl font-semibold text-balance workspace:text-3xl">
-                    {headers.subject ?? translate('message.noSubject')}
+        <header
+            className={`flex flex-col border-b border-line ${twoPanes ? 'gap-1.75 px-5.5 py-4' : 'gap-1 px-2 py-2'}`}
+        >
+            <div className="flex items-center gap-1">
+                {twoPanes ? null : <BackToList />}
+
+                <h2
+                    className={
+                        twoPanes
+                            ? 'min-w-0 flex-1 text-3xl font-semibold text-balance'
+                            : 'min-w-0 flex-1 truncate text-xl font-semibold'
+                    }
+                >
+                    {subject}
                 </h2>
 
                 <div className="flex shrink-0 items-center gap-0.5">
                     <PlannedControl label={translate('mail.reply')} icon="reply" shape={actShape} />
                     <PlannedControl label={translate('mail.forward')} icon="forward" shape={actShape} />
                     <PlannedControl label={translate('mail.flag')} icon="flag" shape={actShape} />
-                    {embeddedHtml ? null : <ShowFullHtml onShow={onShowFullHtml} />}
                 </div>
             </div>
 
-            <p className="text-md font-semibold text-text">
-                {authors.length === 0 ? translate('message.noAuthor') : authors.map((one) => named(one)).join(', ')}
-            </p>
+            <p className={`text-base text-muted ${twoPanes ? '' : 'truncate ps-2'}`}>
+                <span>{author}</span>
 
-            {/* Two instants rather than one, because they answer different questions and disagree whenever a message
-                sat somewhere: when the author says they wrote it, and when this deployment's last receiving hop
-                actually recorded it. Each is placed against the reader's own clock, and each keeps the
-                machine-readable form the service sent beside it. */}
-            <p className="flex flex-wrap gap-x-3 text-base text-muted">
-                {sentAt === null ? (
-                    translate('message.sentAtUnknown')
-                ) : (
-                    <time dateTime={headers.sentAt ?? undefined}>{translate('message.sentAt', { when: sentAt })}</time>
-                )}
-
-                {receivedAt === null ? null : (
-                    <time dateTime={headers.receivedAt ?? undefined}>
-                        {translate('message.receivedAt', { when: receivedAt })}
-                    </time>
+                {sentAt === null ? null : (
+                    <>
+                        <span aria-hidden="true">{translate('message.authorThenWhen')}</span>
+                        <time dateTime={headers.sentAt ?? undefined}>{sentAt}</time>
+                    </>
                 )}
             </p>
 
-            {others.length === 0 ? null : <OtherParticipants participants={others} />}
+            {sentAt === null ? (
+                <p className={`text-sm text-muted ${twoPanes ? '' : 'truncate ps-2'}`}>
+                    {translate('message.sentAtUnknown')}
+                </p>
+            ) : null}
+
+            {others.length === 0 ? null : (
+                <div className={twoPanes ? '' : 'ps-2'}>
+                    <OtherParticipants participants={others} />
+                </div>
+            )}
         </header>
     );
 }
 
-// A disclosure rather than a list that is always open, and the browser's own rather than one built out of a button and
-// a piece of state: it is operable from the keyboard, it announces whether it is open, and it costs no code to be so.
 function OtherParticipants({ participants }: { readonly participants: readonly MailParticipant[] }) {
     const { locale, translate } = useLocalization();
 
@@ -144,8 +135,6 @@ function OtherParticipants({ participants }: { readonly participants: readonly M
     );
 }
 
-// One address as a person reads it: the name the sender wrote beside the address, and the address itself, because a
-// display name is chosen by whoever sent the message and reading only that is how the wrong sender goes unnoticed.
 function named(participant: MailParticipant): string {
     return participant.displayName === null
         ? participant.address

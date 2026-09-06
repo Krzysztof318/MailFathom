@@ -24,6 +24,18 @@ export const actsDrawn: Readonly<Record<MailboxAct, { readonly icon: IconName; r
     move: { icon: 'drive_file_move', label: 'mail.move' },
 };
 
+/**
+ * What a row's menu calls each act, where that differs from the strip: a menu item is read as a sentence about the
+ * message under the pointer, and the design words three of them that way.
+ */
+export const actsSaidInAMenu: Readonly<Record<MailboxAct, MessageKey>> = {
+    archive: 'mail.archive',
+    delete: 'mail.delete',
+    flag: 'menu.flag',
+    markUnread: 'menu.markUnread',
+    move: 'menu.move',
+};
+
 /** The order a strip of controls draws them in: the toolbar, and the bar that stands over a selection. */
 export const actsOnAStrip: readonly MailboxAct[] = ['archive', 'delete', 'flag', 'markUnread', 'move'];
 

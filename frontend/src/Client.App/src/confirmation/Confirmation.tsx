@@ -120,6 +120,10 @@ export function Confirmation({
     const explains = useId();
     const [standing, setStanding] = useState(false);
 
+    // The mark takes the error hue where one of the ways out takes something away, which is how the design project
+    // colours the symbol on a question whose answer cannot be taken back.
+    const destroys = ways.some((way) => way.manner === 'destroy');
+
     // The question stands over whatever asked it, so the back gesture answers this before it reaches anything behind
     // it: back on a confirmation is the same as Escape on one, which is leaving without choosing a way out. It is
     // registered from the platform's own toggle rather than from a value the callers set, for the reason the ref is
@@ -141,7 +145,7 @@ export function Confirmation({
             ref={asked}
             aria-labelledby={asks}
             aria-describedby={explains}
-            className="m-auto w-110 max-w-full rounded-2xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
+            className="m-auto w-dialog max-w-dialog-narrow rounded-2xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
             onToggle={(event) => {
                 setStanding(event.newState === 'open');
             }}
@@ -157,8 +161,8 @@ export function Confirmation({
             }}
         >
             <div className="flex flex-col gap-3.5">
-                <h2 id={asks} className="flex items-center gap-2.5 text-xl font-semibold">
-                    <Icon name={mark} className="size-5 shrink-0 text-accent-strong" />
+                <h2 id={asks} className="flex items-center gap-2.5 text-lg font-semibold">
+                    <Icon name={mark} className={`size-5 shrink-0 ${destroys ? 'text-error' : 'text-accent-strong'}`} />
                     {question}
                 </h2>
 

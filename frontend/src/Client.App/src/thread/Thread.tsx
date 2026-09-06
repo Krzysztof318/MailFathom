@@ -91,6 +91,12 @@ export function Thread({
     // also why the control below still hides a history the preference showed.
     const [historyShown, setHistoryShown] = useState(expandWholeThread);
 
+    // Which messages a reader has pressed open or closed, against what each opens as on its own: the latest message
+    // and the one the conversation arrived at open, and every earlier one collapsed to its head — or every one open,
+    // where the reader asked conversations to open expanded. Held as the presses rather than as the states, so a page
+    // arriving with a newer latest message collapses nothing the reader opened and opens nothing they closed.
+    const [pressed, setPressed] = useState<readonly string[]>([]);
+
     const regions = useRef(new Map<string, HTMLElement>());
 
     // Whether arriving in this conversation has already put the reader somewhere. A ref rather than a flag in state
@@ -114,6 +120,18 @@ export function Thread({
     const drawn = historyShown ? held : held.slice(-1);
     const mark = arrivalMark(conversation, arrival, settled);
     const latest = pages.at(-1) ?? null;
+
+    function opensOnItsOwn(storedEmailId: string): boolean {
+        return expandWholeThread || storedEmailId === held.at(-1)?.email.id || storedEmailId === arrival?.storedEmailId;
+    }
+
+    function toggle(storedEmailId: string): void {
+        setPressed((current) =>
+            current.includes(storedEmailId)
+                ? current.filter((one) => one !== storedEmailId)
+                : [...current, storedEmailId],
+        );
+    }
 
     // A conversation opened at a message is read forward until that message is in hand, because the route pages from
     // the beginning and the surrounding history is what somebody arriving from a search result came for. The count the
@@ -374,6 +392,10 @@ export function Thread({
                                 transport={transport}
                                 message={message}
                                 mark={message.email.id === arrival?.storedEmailId ? mark : null}
+                                collapsed={opensOnItsOwn(message.email.id) === pressed.includes(message.email.id)}
+                                onToggle={() => {
+                                    toggle(message.email.id);
+                                }}
                                 onOpenOnItsOwn={() => {
                                     openOnItsOwn(message.email.id);
                                 }}

@@ -7,8 +7,8 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MailboxActControls } from '../mailboxActs/MailboxActControls';
 import { actedMessages, useListedMail } from '../messageList/useListedMail';
-import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { useStripFit } from './useStripFit';
 
 // What stands where the toolbar stands while messages are picked out, which is the design project's own bar: how many
 // are selected, the five acts over the whole of them, a way to take the listing in at once, and the way out.
@@ -18,10 +18,13 @@ import { useWorkspace } from '../workspace/useWorkspace';
 // drawn at every width for that same reason: the narrow composition has no toolbar to replace, and a selection with no
 // way to act on it or leave it would be a state a person cannot get out of.
 //
+// It is drawn on the accent tint rather than the accent fill, which is what tells it from the toolbar without shouting:
+// the design draws it as the same strip in a different colour, with the same controls in the same places.
+//
 // **Leaving is the close control and nothing else.** It clears the selection rather than acting on it, which is what
 // makes picking messages out safe to do by accident.
 //
-// The acts themselves are `mailboxActs/MailboxActControls.tsx`, drawn here at the weight the accent fill needs: the
+// The acts themselves are `mailboxActs/MailboxActControls.tsx`, drawn here at the weight the accent tint needs: the
 // same five controls the toolbar draws, over everything selected instead of over what is open.
 
 // How many messages are picked out, in the forms a language has for the noun. Selected rather than spelled, for the
@@ -39,12 +42,17 @@ export function SelectionBar() {
     const { locale, translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const listed = useListedMail();
-    const wide = useWideWorkspace();
 
     // The messages themselves rather than the identities the workspace holds, because an act has to name the account
     // each message is in and the folder it is leaving — and because a count of messages this client could not name is
     // a count of what pressing an act would not touch.
     const messages = actedMessages(listed, workspace.selected);
+
+    // Words beside the symbols for as long as they fit the bar, and the symbols alone once they do not — measured
+    // rather than decided at a width, which is the rule `useStripFit.ts` states. The name is on the control either
+    // way, so nothing is lost to a reader who is not looking at it.
+    const { strip, fit } = useStripFit(false, locale);
+    const actShape = fit === 'symbols' ? 'selectedSymbol' : 'selected';
 
     // Clearing the selection takes this bar off the screen, and with it the control that was just pressed — so focus
     // goes back to the list before the selection goes, rather than being left on an element about to be removed. The
@@ -56,32 +64,28 @@ export function SelectionBar() {
 
     return (
         <div
+            ref={strip}
             role="toolbar"
             aria-label={translate('select.bar')}
-            className="flex shrink-0 items-center gap-0.5 overflow-x-auto bg-accent px-3.5 py-2 shadow-raised"
+            className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-accent-line bg-accent-soft px-3 py-2"
         >
-            <Control label={translate('select.clear')} icon="close" shape="onAccentSymbol" onPress={clear} />
+            <Control label={translate('select.clear')} icon="close" shape="selectedSymbol" onPress={clear} />
 
             {/* Said rather than only drawn: a reader who picked out four messages with the keyboard hears how many
-                they are holding, and hears it change as they pick out a fifth.
-
-                It wraps rather than holding one line, which is the design project's own bar at phone width: the count
-                and the acts together are wider than the screen, and a count that refused to wrap would push the way to
-                take the listing in at once off the end of a row nothing says can be scrolled. */}
-            <p role="status" className="me-2 ps-0.5 text-base font-semibold text-balance text-on-accent">
+                they are holding, and hears it change as they pick out a fifth. */}
+            <p role="status" className="me-1.5 ps-0.5 text-base font-semibold whitespace-nowrap text-accent-deep">
                 {translate(selectionCounted[new Intl.PluralRules(locale).select(messages.length)], {
                     count: new Intl.NumberFormat(locale).format(messages.length),
                 })}
             </p>
 
-            {/* Words beside the symbols where there is room for them, and the symbols alone where there is not — which
-                is the design project's own bar at each width. The name is on the control either way, so nothing is
-                lost to a reader who is not looking at it. */}
-            <MailboxActControls messages={messages} shape={wide ? 'onAccent' : 'onAccentSymbol'} onActed={clear} />
+            <span aria-hidden="true" className="mx-0.5 w-px self-stretch bg-accent-line" />
 
-            <span className="min-w-1 flex-1" />
+            <MailboxActControls messages={messages} shape={actShape} onActed={clear} />
 
-            <Control label={translate('select.all')} shape="onAccent" onPress={listed.selectAll} />
+            {/* Against the far edge, which is a margin the measurement above knows to leave out of what the bar
+                needs. */}
+            <Control label={translate('select.all')} shape={actShape} className="ms-auto" onPress={listed.selectAll} />
         </div>
     );
 }

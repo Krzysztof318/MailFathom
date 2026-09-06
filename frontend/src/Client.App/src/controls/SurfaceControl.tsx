@@ -23,10 +23,18 @@ import type { IconName } from './icons';
 export function SurfaceControl({
     label,
     icon,
+    edged = false,
     onActivate,
 }: {
     readonly label: string;
     readonly icon: IconName;
+
+    /**
+     * Whether the control carries an edge, which is how the design draws the one that closes a drawer, a sheet, or a
+     * message being written: a bordered square rather than a bare symbol, so what closes the surface is drawn as a
+     * control on it rather than as a mark in its corner.
+     */
+    readonly edged?: boolean;
     readonly onActivate: () => void;
 }) {
     return (
@@ -34,7 +42,9 @@ export function SurfaceControl({
             type="button"
             aria-label={label}
             title={label}
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
+            className={`flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text ${
+                edged ? 'border border-line' : ''
+            }`}
             onClick={onActivate}
         >
             <Icon name={icon} className="size-5" />

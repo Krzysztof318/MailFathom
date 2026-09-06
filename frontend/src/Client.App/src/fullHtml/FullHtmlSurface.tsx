@@ -350,8 +350,7 @@ function Isolation({
             <Icon name="lock" className="size-4 shrink-0" />
 
             <p className="min-w-0 flex-1 basis-64">
-                {translate('fullHtml.cannotRun')}{' '}
-                {translate(remotePictures ? 'fullHtml.picturesAsked' : 'fullHtml.reachesNobody')}
+                {translate(remotePictures ? 'fullHtml.picturesAsked' : 'fullHtml.isolated')}
             </p>
 
             {remotePictures ? null : (

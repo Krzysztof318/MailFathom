@@ -46,7 +46,7 @@ export const pl: Catalogue = {
     'space.agent': 'Agent',
     'space.tasks': 'Zadania',
     'space.calendar': 'Kalendarz',
-    'space.people': 'Osoby',
+    'space.people': 'Kontakty',
     'space.notBuiltYet': '{space} — jeszcze niezbudowane',
     'space.pending':
         'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres, nawigacja i zakres, w którym zadawane jest każde pytanie.',
@@ -244,6 +244,9 @@ export const pl: Catalogue = {
     'mail.markUnread': 'Nieprzeczytana',
     'mail.move': 'Przenieś',
     'mail.selectMessages': 'Zaznacz wiadomości',
+    'menu.flag': 'Oflaguj',
+    'menu.markUnread': 'Oznacz jako nieprzeczytaną',
+    'menu.move': 'Przenieś…',
     'mail.backToList': 'Wróć do listy',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
@@ -392,8 +395,10 @@ export const pl: Catalogue = {
     'tabs.closeAllConfirm': 'Zamknij wszystkie',
     'tabs.closeAllCancel': 'Anuluj',
     'tabs.nothingOpen': 'Nic nie jest otwarte',
-    'tabs.nothingOpenExplanation': 'Wybierz wiadomość z listy — otworzy się jako własna zakładka.',
-    'tabs.reopenLastRead': 'Otwórz ostatnio czytaną wiadomość',
+    'tabs.nothingOpenExplanation':
+        'Wybierz wiadomość z listy, napisz nową albo zapytaj o całą historię korespondencji — każda z tych rzeczy otworzy się jako zakładka.',
+    'tabs.reopenLastRead': 'Otwórz ostatnią wiadomość',
+    'tabs.askHistory': 'Zapytaj o historię',
 
     'folder.inbox': 'Odebrane',
     'folder.drafts': 'Kopie robocze',
@@ -584,11 +589,9 @@ export const pl: Catalogue = {
 
     'fullHtml.show': 'Pokaż pełną wersję HTML',
     'fullHtml.question': 'Pokazać pełny HTML?',
-    'fullHtml.whatItCanCarry':
-        'Ten kod napisał sam nadawca. Może zawierać piksele śledzące, układ podszywający się pod znaną markę i odnośniki prowadzące gdzie indziej, niż zapowiadają.',
-    'fullHtml.whatIsBlocked':
-        'Nic w nim nie może się wykonać i nic nie sięga do nadawcy, dopóki nie poprosisz o jego obrazy.',
-    'fullHtml.stayReduced': 'Zostań przy wersji uproszczonej',
+    'fullHtml.whatItRisks':
+        'Oryginalny HTML może zawierać piksele śledzące, układy podszywające się pod znane marki i odnośniki phishingowe. Skrypty i zdalne zasoby blokujemy, ale nadawca może rozpoznać, że wiadomość została otwarta.',
+    'fullHtml.stayReduced': 'Zostań w uproszczonym',
     'fullHtml.confirm': 'Pokaż HTML',
     'fullHtml.surface': 'Własna wersja tej wiadomości od nadawcy',
     'fullHtml.mark': 'HTML',
@@ -601,9 +604,7 @@ export const pl: Catalogue = {
     'fullHtml.truncated': 'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc urywa się w tym miejscu.',
     'fullHtml.picturesTruncated':
         'Ta wiadomość niosła więcej własnych obrazów, niż mieści jeden widok, więc części z nich tu nie ma.',
-    'fullHtml.cannotRun': 'Ta wiadomość nie może niczego wykonać: ramka, w której ją rysujemy, nie dopuszcza skryptów.',
-    'fullHtml.reachesNobody':
-        'Nie niesie żadnego adresu, który sięgałby do nadawcy — wszystkie usunięto, zanim ta wiadomość trafiła do klienta.',
+    'fullHtml.isolated': 'Podgląd izolowany — skrypty i zdalne treści są zablokowane',
     'fullHtml.picturesAsked':
         'Obrazy tej wiadomości są pobierane od nadawcy, więc jego serwery mogą rozpoznać, że ją otwarto. Nic z tego nie jest zapamiętywane: po wyjściu z wiadomości i powrocie pytamy ponownie.',
 
@@ -631,7 +632,6 @@ export const pl: Catalogue = {
     'thread.openedFromList': 'Otwarta z listy',
     'thread.landedFromResult': 'Otwarta z wyniku wyszukiwania',
 
-    'message.nothingOpen': 'Otwórz wiadomość, aby ją tutaj przeczytać.',
     'message.reading': 'Trwa otwieranie tej wiadomości…',
     'message.offline':
         'Ta maszyna jest bez sieci, więc nie można otworzyć tej wiadomości. Otworzy się sama, gdy sieć wróci.',
@@ -639,6 +639,7 @@ export const pl: Catalogue = {
     'message.noSubject': 'Bez tematu',
     'message.noAuthor': 'Ta wiadomość nie wskazuje nikogo jako autora.',
     'message.sentAt': 'Wysłano {when}',
+    'message.authorThenWhen': ' · ',
     'message.sentAtUnknown': 'Nadawca nie zapisał daty, którą ten klient potrafi odczytać.',
     'message.receivedAt': 'Odebrano {when}',
     'message.otherParticipants': 'Pozostałe osoby wskazane w tej wiadomości ({count})',
@@ -747,6 +748,7 @@ export const pl: Catalogue = {
     'pendingChange.followAgain': 'Sprawdź ponownie',
 
     'notifications.title': 'Powiadomienia',
+    'notifications.place': 'Alerty',
     'notifications.unread.one': '{count} nieprzeczytane powiadomienie',
     'notifications.unread.few': '{count} nieprzeczytane powiadomienia',
     'notifications.unread.many': '{count} nieprzeczytanych powiadomień',

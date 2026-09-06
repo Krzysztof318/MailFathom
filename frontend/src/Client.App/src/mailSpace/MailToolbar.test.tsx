@@ -4,7 +4,7 @@
 
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Composing } from '../composer/useComposing';
 import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
@@ -13,36 +13,9 @@ import { ListedMailContext, nothingListed } from '../messageList/useListedMail';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { MailToolbar } from './MailToolbar';
+import type { StripFit } from './useStripFit';
 
 const messageId = '00000000-0000-4000-8000-000000000000';
-
-// jsdom has no width, so the composition the strip is drawn in is answered here. A runtime that cannot answer at all
-// reads as the widest, which is what every test below that says nothing about a width is asking about.
-const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
-
-function atWidth(pixels: number): void {
-    Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: (query: string) => {
-            const named = /([\d.]+)rem/.exec(query)?.[1];
-
-            return {
-                matches: named !== undefined && pixels >= Number(named) * 16,
-                media: query,
-                addEventListener: () => undefined,
-                removeEventListener: () => undefined,
-            };
-        },
-    });
-}
-
-afterEach(() => {
-    if (declaredMatchMedia === undefined) {
-        Reflect.deleteProperty(window, 'matchMedia');
-    } else {
-        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
-    }
-});
 
 const place = { storedEmailId: messageId, account: 'work', folder: 'work-inbox' };
 
@@ -60,6 +33,7 @@ function drawToolbar(
     offered: boolean,
     selection: string | null = null,
     acts: MailboxActs = nothingActed,
+    fit: StripFit = 'labelled',
 ): { composed: ReturnType<typeof vi.fn> } {
     const composed = vi.fn();
     const composing: Composing = { offered, opening: null, compose: composed, close: () => undefined };
@@ -71,7 +45,7 @@ function drawToolbar(
                     <MailboxActsContext value={acts}>
                         <ComposingContext value={composing}>
                             <Opens selection={selection} />
-                            <MailToolbar />
+                            <MailToolbar strip={() => undefined} fit={fit} />
                         </ComposingContext>
                     </MailboxActsContext>
                 </ListedMailContext>
@@ -160,24 +134,27 @@ describe('MailToolbar', () => {
         expect(screen.getByRole('heading', { name: 'Delete 1 message?' })).toBeDefined();
     });
 
-    it('draws each control as its symbol alone where there is no room for a mailbox column beside it', () => {
-        atWidth(1024);
+    it('draws each control as its symbol alone once the names no longer fit the strip', () => {
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'symbols');
 
-        drawToolbar(true, messageId, actsOffering(vi.fn()));
-
-        for (const name of ['New message', 'Reply', 'Archive']) {
+        for (const name of ['Reply', 'Archive']) {
             expect(screen.getByRole('button', { name }).textContent).toBe('');
         }
     });
 
-    it('gives every control its name in words in the composition wide enough to read them', () => {
-        atWidth(1440);
-
-        drawToolbar(true, messageId, actsOffering(vi.fn()));
+    it('gives every control its name in words while the names fit the strip', () => {
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
 
         for (const name of ['New message', 'Reply', 'Archive']) {
             expect(screen.getByRole('button', { name }).textContent).toBe(name);
         }
+    });
+
+    it('gives composing up to the floating control first, keeping the other names in words', () => {
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'floating');
+
+        expect(screen.queryByRole('button', { name: 'New message' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Reply' }).textContent).toBe('Reply');
     });
 
     it('asks about no message at all while nothing is open, rather than about the last one that was', () => {

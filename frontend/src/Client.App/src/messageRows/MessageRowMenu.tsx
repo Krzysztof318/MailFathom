@@ -6,7 +6,7 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { useComposing, type Composing } from '../composer/useComposing';
 import { ContextMenu, type ContextMenuItem } from '../contextMenu/ContextMenu';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
-import { actsDrawn, actsInARowMenu, underway } from '../mailboxActs/drawnActs';
+import { actsDrawn, actsInARowMenu, actsSaidInAMenu, underway } from '../mailboxActs/drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import type { Translate } from '../localization/useLocalization';
 import { useLocalization } from '../localization/useLocalization';
@@ -110,7 +110,7 @@ function rowItems({
         .filter((act) => acts.refusalOf(act, messages) === null && !underway(acts, act, messages))
         .map((act) => ({
             icon: actsDrawn[act].icon,
-            label: translate(actsDrawn[act].label),
+            label: translate(actsSaidInAMenu[act]),
             destroys: act === 'delete',
             choose: () => {
                 if (act === 'delete' || act === 'move') {

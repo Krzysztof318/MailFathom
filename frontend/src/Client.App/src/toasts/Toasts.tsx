@@ -170,7 +170,7 @@ export function ToastsProvider({ children }: { readonly children: ReactNode }) {
             <ol
                 aria-label={translate('toast.surface')}
                 aria-live="polite"
-                className="pointer-events-none fixed inset-x-3 top-3 z-60 mt-safe-top flex flex-col gap-2.5 workspace:inset-x-auto workspace:top-4.5 workspace:right-4.5 workspace:w-100"
+                className="pointer-events-none fixed inset-x-3 top-3 z-60 mt-safe-top flex flex-col gap-2.5 workspace:inset-x-auto workspace:top-4.5 workspace:right-4.5 workspace:w-87.5"
             >
                 {standing.map((toast) => (
                     <li key={toast.id}>

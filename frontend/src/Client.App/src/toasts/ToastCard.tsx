@@ -174,12 +174,14 @@ export function ToastCard({
             onPointerUp={endSwipe}
             onPointerCancel={endSwipe}
         >
-            <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-xl ${mark.tint}`}>
+            <span
+                className={`flex size-8 shrink-0 items-center justify-center rounded-lg border border-line ${mark.tint}`}
+            >
                 <Icon name={mark.icon} className={`size-5.25 ${running ? 'animate-spin' : ''}`} />
             </span>
 
             <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
-                <p className="text-md font-semibold text-text text-pretty">
+                <p className="text-lg font-semibold text-text text-pretty">
                     {/* What the symbol and its colour say to everybody else. Said before the title rather than after
                         it, so somebody hearing the card knows what kind of news it is before they hear the news. */}
                     <span className="sr-only">{translate(mark.said)}</span> {toast.title}

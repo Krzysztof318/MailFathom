@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
     ClientResponse,
@@ -14,6 +14,7 @@ import type {
 import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { OpenAttachmentContext } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
+import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import {
     ReadMarkingContext,
     nothingMarkedRead,
@@ -174,7 +175,7 @@ describe('ReadingPane', () => {
         asked.length = 0;
         drawing(deploymentDescribing(), null);
 
-        expect(screen.getByText('Open a message to read it here.')).toBeDefined();
+        expect(screen.getByText('Nothing is open')).toBeDefined();
         expect(asked).toEqual([]);
     });
 
@@ -366,6 +367,64 @@ function paneFor(storedEmailId: string) {
 
 // A selection is a gesture over a real range, and what it is worth is what the intent field then says about it — so the
 // field is mounted beside the pane, in the one workspace both read, and the assertion is the sentence a person sees.
+// The pane with the way to the sender's own markup under test: what it offers, and what pressing it does.
+function drawingOfferingMarkup(
+    shown: (storedEmailId: string, subject: string | null) => void,
+    embedded: boolean,
+): void {
+    render(
+        <LocalizationProvider>
+            <WorkspaceProvider>
+                <EmbeddedHtmlMessagesContext value={embedded}>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <ReadMarkingContext value={nothingMarkedRead}>
+                                    <ReadingPane
+                                        session={session}
+                                        transport={deploymentDescribing()}
+                                        storedEmailId={messageId}
+                                        online
+                                        onShowFullHtml={shown}
+                                    />
+                                </ReadMarkingContext>
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                </EmbeddedHtmlMessagesContext>
+            </WorkspaceProvider>
+        </LocalizationProvider>,
+    );
+}
+
+describe('ReadingPane and the sender own markup', () => {
+    it('offers the sender own markup on the message card rather than in the head', async () => {
+        drawingOfferingMarkup(vi.fn(), false);
+
+        const offered = await screen.findByRole('button', { name: 'Show the full HTML version' });
+
+        expect(offered.closest('header')).toBeNull();
+    });
+
+    it('asks before it shows anything, so pressing the control opens no markup on its own', async () => {
+        const shown = vi.fn();
+
+        drawingOfferingMarkup(shown, false);
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
+
+        expect(shown).not.toHaveBeenCalled();
+        expect(screen.getByRole('heading', { name: 'Show the full HTML?' })).toBeDefined();
+    });
+
+    it('offers no such control where the reader chose to embed every message as its sender wrote it', async () => {
+        drawingOfferingMarkup(vi.fn(), true);
+
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
+    });
+});
+
 describe('ReadingPane against a deployment that says what changed', () => {
     it('reads the message again when the deployment says that message changed', async () => {
         // Arrange

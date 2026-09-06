@@ -5,19 +5,21 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useComposing } from '../composer/useComposing';
 import { Control } from '../controls/Control';
-import { Icon } from '../controls/Icon';
 import { PlannedControl } from '../controls/PlannedControl';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 import { useScreenLayer } from '../shell/screenLayers';
 import { useDesktopComposition, useTwoPanes, useWideWorkspace } from '../shell/useWideWorkspace';
 import { scopeKey } from '../workspace/mailScope';
-import { useWorkspace } from '../workspace/useWorkspace';
+import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { AiFilters } from './AiFilters';
+import { BackToList } from './BackToList';
+import { MailboxesDrawerContext } from './mailboxesDrawer';
 import { ListWidthGrip } from './ListWidthGrip';
 import { listWidthWithin, readListWidth, storeListWidth } from './listWidth';
 import { MailToolbar } from './MailToolbar';
 import { SelectionBar } from './SelectionBar';
+import { useStripFit } from './useStripFit';
 
 // The Mail space as the design project composes it, out of the three regions a mail client is: the mailboxes, the list
 // of what is in the one that is scoped, and what is open from it. What this component owns is the composition alone —
@@ -95,15 +97,26 @@ export function MailSpace({
      */
     readonly person: string | null;
 }) {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const composing = useComposing();
     const wide = useWideWorkspace();
     const twoPanes = useTwoPanes();
     const desktop = useDesktopComposition();
     const [listWidth, setListWidth] = useState(() => readListWidth(person));
+
+    // How the toolbar fits its width is measured here rather than in the toolbar, because what it decides is drawn in
+    // two places: the names in the strip, and — once composing no longer fits beside them — the floating control over
+    // the list, which is this space's to draw. The selection bar measures itself; nothing outside it moves.
+    const { strip: toolbarStrip, fit: toolbarFit } = useStripFit(true, locale);
+    const selecting = workspace.selected.length > 0;
     const [drawerOpen, setDrawerOpen] = useState(false);
     const drawer = useRef<HTMLDialogElement>(null);
+
+    function openDrawer(): void {
+        drawer.current?.showModal();
+        setDrawerOpen(true);
+    }
     const listColumn = useRef<HTMLElement>(null);
     const readingColumn = useRef<HTMLElement>(null);
 
@@ -193,10 +206,6 @@ export function MailSpace({
         drawer.current?.close();
     });
 
-    function goBackToList(): void {
-        revise({ selection: null, conversation: null });
-    }
-
     // Every width a move produces is held inside the same bounds, so a drag and a key cannot disagree about where the
     // boundary may stand. A room of nothing is a layout that has not happened yet — an environment that computes no
     // sizes, or the frame before the first one — and is read as an unmeasured window rather than as no room at all.
@@ -213,7 +222,7 @@ export function MailSpace({
             {/* The bar replaces the toolbar while messages are picked out, which is the design project's composition:
                 one strip saying what the next press is about. It stands at every width because the narrow shape has no
                 toolbar to replace and a selection still needs both a way to act on it and a way out of it. */}
-            {workspace.selected.length > 0 ? <SelectionBar /> : wide ? <MailToolbar /> : null}
+            {selecting ? <SelectionBar /> : wide ? <MailToolbar strip={toolbarStrip} fit={toolbarFit} /> : null}
 
             <div className="flex min-h-0 flex-1">
                 {desktop ? (
@@ -256,6 +265,7 @@ export function MailSpace({
                                     <SurfaceControl
                                         label={translate('mailboxes.close')}
                                         icon="close"
+                                        edged
                                         onActivate={() => {
                                             drawer.current?.close();
                                         }}
@@ -271,39 +281,36 @@ export function MailSpace({
                         ref={listColumn}
                         tabIndex={-1}
                         aria-label={translate('mail.listColumn')}
-                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${twoPanes ? '' : 'flex-1'}`}
+                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${
+                            twoPanes ? (desktop ? '' : 'w-list-tablet shrink-0') : 'flex-1'
+                        }`}
                         /* The one width in the client a person sets rather than the design, which is why it is drawn
-                           from a value instead of a utility. The narrow shape has no boundary to move, so it takes the
-                           whole column and this says nothing about it.
+                           from a value instead of a utility — and only in the desktop composition, which is the one
+                           with a boundary to move: the tablet's list is the width the design draws it at, and the
+                           narrow shape takes the whole column, so neither reads this.
                            Left able to shrink on purpose: a width chosen on a wider screen is read back before
                            anything has measured this one, and a column that refuses to give way in that frame would
                            push the message off the side. Flexbox holds it inside the window until the measurement
                            below brings it back to a width that fits. */
-                        style={twoPanes ? { width: `${String(listWidth)}px` } : undefined}
+                        style={twoPanes && desktop ? { width: `${String(listWidth)}px` } : undefined}
                     >
-                        {desktop ? null : (
-                            <div className="flex items-center px-2 pt-2">
-                                <SurfaceControl
-                                    label={translate('mailboxes.open')}
-                                    icon="menu"
-                                    onActivate={() => {
-                                        drawer.current?.showModal();
-                                        setDrawerOpen(true);
-                                    }}
-                                />
-                            </div>
-                        )}
-
-                        {/* The list and, in the narrow shape, the control that writes a message standing over its
-                            bottom corner. Over the *list* rather than over the window, because the window's own
-                            bottom corner is where the question field and the navigation are: a control placed against
-                            the viewport would sit on top of both, and it would move whenever either changed height.
-                            Positioned against this box instead, it keeps the corner a thumb reaches whatever stands
-                            under it. */}
+                        {/* The list and, wherever composing has no place in the toolbar, the control that writes a
+                            message standing over its bottom corner: the narrow shape has no toolbar, and a wider one
+                            gives composing up first when the names stop fitting — `useStripFit.ts` holds that order.
+                            It goes while messages are picked out, because the bar standing then is about what is
+                            picked out and writing is not.
+                            Over the *list* rather than over the window, because the window's own bottom corner is
+                            where the question field and the navigation are: a control placed against the viewport
+                            would sit on top of both, and it would move whenever either changed height. Positioned
+                            against this box instead, it keeps the corner a thumb reaches whatever stands under it. */}
                         <div className="relative flex min-h-0 flex-1 flex-col">
-                            {list}
+                            {/* The list's own head row draws the way into the drawer, at its start, wherever there is
+                                a drawer to open; the column has none, and offers nothing. */}
+                            <MailboxesDrawerContext value={desktop ? null : openDrawer}>{list}</MailboxesDrawerContext>
 
-                            {twoPanes || readingInFront ? null : composing.offered ? (
+                            {(wide && toolbarFit === 'labelled') ||
+                            readingInFront ||
+                            selecting ? null : composing.offered ? (
                                 <Control
                                     label={translate('mail.compose')}
                                     icon="edit_square"
@@ -322,14 +329,13 @@ export function MailSpace({
                                 />
                             )}
                         </div>
-
-                        {twoPanes ? null : intent}
                     </section>
                 ) : null}
 
-                {/* The boundary is only there where both columns are: one column at a time has nothing between them,
-                    and the line the grip draws is the border the list would otherwise carry. */}
-                {twoPanes ? (
+                {/* The boundary is only there where both columns are and the list's width is somebody's to set: one
+                    column at a time has nothing between them, and the tablet's list is the width the design draws it
+                    at. The line the grip draws is the border the list would otherwise carry. */}
+                {twoPanes && desktop ? (
                     <ListWidthGrip
                         width={listWidth}
                         onWidth={(moved) => {
@@ -349,18 +355,13 @@ export function MailSpace({
                         ref={readingColumn}
                         tabIndex={-1}
                         aria-label={translate('mail.readingColumn')}
-                        className="flex min-h-0 min-w-0 flex-1 flex-col bg-panel"
+                        className="flex min-h-0 min-w-0 flex-1 flex-col bg-page"
                     >
-                        {twoPanes ? null : (
+                        {/* The way back to the list, above whatever the column draws — except a message, whose head
+                            carries it beside the subject, which is where the design puts it. */}
+                        {twoPanes || headCarriesTheWayBack(workspace, composing.opening !== null) ? null : (
                             <div className="flex items-center px-2 pt-2">
-                                <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-base text-text-soft transition hover:bg-hover"
-                                    onClick={goBackToList}
-                                >
-                                    <Icon name="arrow_back" className="size-5" />
-                                    {translate('mail.backToList')}
-                                </button>
+                                <BackToList />
                             </div>
                         )}
 
@@ -417,5 +418,19 @@ function Mailboxes({
 
             {folded ? null : <div className="border-t border-line px-3.5 py-2.5">{status}</div>}
         </>
+    );
+}
+
+// Whether what the reading column draws is a message, whose head carries the way back to the list itself. Everything
+// else the column can hold — a conversation, the sender's own markup, an attachment, a message being written — takes
+// the way back above it, drawn by the column. Read from the workspace with the same four questions the frame asks to
+// decide what the column draws, so the two cannot disagree about which surface is in front.
+function headCarriesTheWayBack(workspace: Workspace, composing: boolean): boolean {
+    return (
+        workspace.selection !== null &&
+        workspace.conversation === null &&
+        workspace.fullHtml === null &&
+        workspace.attachment === null &&
+        !composing
     );
 }

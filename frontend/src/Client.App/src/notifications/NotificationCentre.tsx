@@ -181,7 +181,13 @@ export function NotificationCentre({
                     </span>
                 ) : null}
 
-                <Control label={translate('notifications.close')} icon="close" shape="symbol" onPress={leave} />
+                <Control
+                    label={translate('notifications.close')}
+                    icon="close"
+                    shape="symbol"
+                    className="border border-line workspace:border-transparent"
+                    onPress={leave}
+                />
             </div>
 
             <fieldset className="flex shrink-0 items-center gap-1.75 border-b border-line-soft bg-sunken px-4 py-2.75">
@@ -230,11 +236,14 @@ export function NotificationCentre({
                 <div
                     role="toolbar"
                     aria-label={translate('notifications.selectionBar')}
-                    className="flex shrink-0 items-center gap-0.5 overflow-x-auto bg-accent px-3.5 py-2 shadow-raised"
+                    className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-accent-line bg-accent-soft px-3 py-2"
                 >
-                    <Control label={translate('select.clear')} icon="close" shape="onAccentSymbol" onPress={clear} />
+                    <Control label={translate('select.clear')} icon="close" shape="selectedSymbol" onPress={clear} />
 
-                    <p role="status" className="me-2 ps-0.5 text-base font-semibold text-balance text-on-accent">
+                    <p
+                        role="status"
+                        className="me-1.5 ps-0.5 text-base font-semibold whitespace-nowrap text-accent-deep"
+                    >
                         {translate(selectionCounted[new Intl.PluralRules(locale).select(picked.length)], {
                             count: new Intl.NumberFormat(locale).format(picked.length),
                         })}
@@ -243,7 +252,7 @@ export function NotificationCentre({
                     <Control
                         label={translate('notifications.markRead')}
                         icon="mark_email_read"
-                        shape="onAccentSymbol"
+                        shape="selectedSymbol"
                         onPress={() => {
                             centre.markRead(picked, true);
                             clear();
@@ -253,7 +262,7 @@ export function NotificationCentre({
                     <Control
                         label={translate('notifications.markUnread')}
                         icon="mark_email_unread"
-                        shape="onAccentSymbol"
+                        shape="selectedSymbol"
                         onPress={() => {
                             centre.markRead(picked, false);
                             clear();

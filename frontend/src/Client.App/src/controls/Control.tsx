@@ -4,7 +4,7 @@
 
 import { Icon } from './Icon';
 import type { IconName } from './icons';
-import { controlShapes, labelledShape, type ControlShape } from './controlShapes';
+import { controlShapes, labelledShape, symbolShown, type ControlShape } from './controlShapes';
 
 // A control that does something, in the shapes the design project draws one. It is `PlannedControl`'s counterpart and
 // the two share the shape table rather than a resemblance: what a reader sees when something becomes real is the same
@@ -36,7 +36,9 @@ export function Control({
             className={`flex shrink-0 items-center whitespace-nowrap transition ${controlShapes[shape]} ${className ?? ''}`}
             onClick={onPress}
         >
-            {icon === undefined ? null : <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />}
+            {icon === undefined || !symbolShown(shape) ? null : (
+                <Icon name={icon} className={shape === 'floating' ? 'size-6' : 'size-4.5'} />
+            )}
             {labelled ? <span>{label}</span> : null}
         </button>
     );
