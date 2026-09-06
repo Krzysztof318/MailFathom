@@ -107,6 +107,25 @@ public sealed class EmailAttachmentTextMappingTests
             attachment.Properties.Select(property => property.Name));
     }
 
+    /// <summary>
+    /// A passage is identified by the message and the attachment together, and the name that key carries is what a
+    /// losing write is recognised by: <c>PersistenceConcurrencyConflicts</c> matches on the constraint name,
+    /// so a key left to convention would leave a converging retry reading its own conflict as a provider failure.
+    /// </summary>
+    [Fact]
+    public void EmailAttachmentTexts_TheKeyOverTheMessageAndTheAttachment_CarriesTheNameAConflictIsRecognisedBy()
+    {
+        // Act
+        var key = EntityType(typeof(EmailAttachmentTextEntity)).FindPrimaryKey();
+
+        // Assert
+        Assert.NotNull(key);
+        Assert.Equal(
+            [nameof(EmailAttachmentTextEntity.StoredEmailId), nameof(EmailAttachmentTextEntity.AttachmentPosition)],
+            key.Properties.Select(property => property.Name));
+        Assert.Equal(PersistenceConstraintNames.EmailAttachmentTextPrimaryKeyName, key.GetName());
+    }
+
     private static IProperty Property(string name) =>
         EntityType(typeof(EmailAttachmentTextEntity)).FindProperty(name)
         ?? throw new InvalidOperationException($"The model holds no {name} property.");

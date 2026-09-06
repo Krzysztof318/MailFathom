@@ -20,6 +20,6 @@ public enum AttachmentTextSegmentKind
     /// <summary>A slide of a presentation, numbered from one.</summary>
     Slide = 1,
 
-    /// <summary>A worksheet of a workbook, numbered from one and named where the format records a name.</summary>
+    /// <summary>A worksheet of a workbook, numbered from one; no reader resolves its name yet, which is #1682.</summary>
     Sheet = 2,
 }

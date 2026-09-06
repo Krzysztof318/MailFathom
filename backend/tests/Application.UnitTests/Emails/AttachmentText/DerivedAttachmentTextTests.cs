@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.SensitiveContent.Redaction;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.AttachmentText;
@@ -157,9 +158,9 @@ public sealed class DerivedAttachmentTextTests
         Assert.False(derived.BelongsInLexicalIndex);
     }
 
-    /// <summary>A placeholder substitutes rather than deletes, so the ordinary redaction leaves every coordinate valid.</summary>
+    /// <summary>A placeholder the length of what it replaced moves nothing, so every coordinate reads as it did.</summary>
     [Fact]
-    public void WithRedactedText_ARedactionOfTheSameLength_KeepsThePlacesItWasReadFrom()
+    public void WithRedactedText_APlaceholderTheLengthOfWhatItReplaced_KeepsThePlacesItWasReadFrom()
     {
         // Arrange
         var derived = DerivedAttachmentText.FromExtraction(
@@ -170,19 +171,20 @@ public sealed class DerivedAttachmentTextTests
                 new ExtractedAttachmentText("account 1234", PageCount: 1, [], [Page(1, 0)])));
 
         // Act
-        var redacted = derived.WithRedactedText("account ####");
+        var redacted = derived.WithRedactedText(
+            RedactedText.Create("account ####", [], omittedCharacterCount: 0, [new RedactedPlacement(8, 4, 4)]));
 
         // Assert
         Assert.Equal("account ####", redacted.Text);
-        Assert.Single(redacted.Segments);
+        Assert.Equal([0], redacted.Segments.Select(segment => segment.StartOffset));
     }
 
     /// <summary>
-    /// A redaction that changed the length moved every boundary with it, so a passage would resolve to the page before
-    /// or after the one it was read from. A citation that says nothing beats one that sends a reader to the wrong page.
+    /// A placeholder is rarely the length of what it replaced, so every boundary after it has moved. Carrying each one
+    /// across is what keeps a two-hundred-page contract citable after a signature block held one email address.
     /// </summary>
     [Fact]
-    public void WithRedactedText_ARedactionOfADifferentLength_DropsThePlacesRatherThanPublishingThemStale()
+    public void WithRedactedText_APlaceholderLongerThanWhatItReplaced_MovesEveryLaterBoundaryWithIt()
     {
         // Arrange
         var derived = DerivedAttachmentText.FromExtraction(
@@ -190,14 +192,43 @@ public sealed class DerivedAttachmentTextTests
             "application/pdf",
             "lease.pdf",
             AttachmentTextExtractionResult.Extracted(
-                new ExtractedAttachmentText("account 1234", PageCount: 2, [], [Page(1, 0), Page(2, 8)])));
+                new ExtractedAttachmentText("a@b.co page one page two", PageCount: 2, [], [Page(1, 0), Page(2, 16)])));
 
         // Act
-        var redacted = derived.WithRedactedText("account [redacted]");
+        var redacted = derived.WithRedactedText(RedactedText.Create(
+            "[redacted:email] page one page two",
+            [],
+            omittedCharacterCount: 0,
+            [new RedactedPlacement(0, 6, 16)]));
 
         // Assert
-        Assert.Equal("account [redacted]", redacted.Text);
-        Assert.Empty(redacted.Segments);
+        Assert.Equal("[redacted:email] page one page two", redacted.Text);
+        Assert.Equal([0, 26], redacted.Segments.Select(segment => segment.StartOffset));
+        Assert.Equal(2, redacted.PageCount);
+    }
+
+    /// <summary>
+    /// The analyzed ceiling drops the tail rather than passing it on unscanned, so a boundary pointing into that tail
+    /// points at text the result does not carry. A citation that says nothing beats one that sends a reader elsewhere.
+    /// </summary>
+    [Fact]
+    public void WithRedactedText_ABoundaryPastWhatTheCeilingAdmitted_IsLeftOutRatherThanPublishedStale()
+    {
+        // Arrange
+        var derived = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "lease.pdf",
+            AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText("page one page two", PageCount: 2, [], [Page(1, 0), Page(2, 9)])));
+
+        // Act
+        var redacted = derived.WithRedactedText(
+            RedactedText.Create("page one", [], omittedCharacterCount: 9));
+
+        // Assert
+        Assert.Equal("page one", redacted.Text);
+        Assert.Equal([0], redacted.Segments.Select(segment => segment.StartOffset));
         Assert.Equal(2, redacted.PageCount);
     }
 
@@ -209,7 +240,8 @@ public sealed class DerivedAttachmentTextTests
         var derived = DerivedAttachmentText.PastMessageBudget(0, "application/pdf", "appendix.pdf");
 
         // Act
-        var redacted = derived.WithRedactedText("anything");
+        var redacted = derived.WithRedactedText(
+            RedactedText.Create("anything", [], omittedCharacterCount: 0));
 
         // Assert
         Assert.Same(derived, redacted);

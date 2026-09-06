@@ -14,9 +14,11 @@ namespace MailFathom.Application.EmailContent.Attachments;
 /// body. A single call returning bytes would have forced the whole file into memory to learn its size.
 /// </para>
 /// <para>
-/// The instance owns the parse behind it and is disposed by whoever opened it. Nothing here is buffered: the octets are
-/// decoded straight into the destination the caller supplies, so a large attachment costs the copy buffer rather than
-/// its own size.
+/// Whoever opened it disposes it, and what that releases depends on where it came from: one opened on its own owns the
+/// parse behind it, and one taken from an <see cref="IOpenedEmailAttachmentWalk" /> is a view over a parse the walk
+/// owns, so disposing it releases nothing and disposing the walk releases everything. Nothing here is buffered either
+/// way: the octets are decoded straight into the destination the caller supplies, so a large attachment costs the copy
+/// buffer rather than its own size.
 /// </para>
 /// </remarks>
 public interface IOpenedEmailAttachment : IAsyncDisposable

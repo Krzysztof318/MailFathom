@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.SensitiveContent.Redaction;
 
 namespace MailFathom.Application.Emails.AttachmentText;
 
@@ -110,21 +111,22 @@ public sealed record DerivedAttachmentText
     public bool BelongsInLexicalIndex => this.HasText && this.Kind == AttachmentTextKind.Document;
 
     /// <summary>Reports the same derivation with its words replaced by their redacted form.</summary>
-    /// <param name="redactedText">The words after the owner's switched-on scanner replaced what it found.</param>
+    /// <param name="redacted">The redaction the owner's switched-on scanner produced from these words.</param>
     /// <returns>The redacted derivation, or this one unchanged when it carries no words.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="redactedText" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="redacted" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The segment boundaries are offsets into the words, so a redaction that changed their length would move every one
-    /// of them and a passage would resolve to the page before or after the one it was read from. A placeholder is a
-    /// substitution rather than a deletion, so the ordinary case leaves the length exactly as it was; where it does not,
-    /// the boundaries are dropped rather than published as approximate — a citation that says nothing is better than
-    /// one that sends a reader to the wrong page.
+    /// The segment boundaries are offsets into the words, and a placeholder is rarely the length of what it replaced,
+    /// so every boundary past the first finding has moved. Each is therefore carried across rather than compared:
+    /// <see cref="RedactedText.MapOffset" /> is the one thing that knows where a character went, and without it a
+    /// two-hundred-page contract would lose every page boundary because a signature block held an email address. A
+    /// boundary the analyzed ceiling dropped is left out, since the text it pointed into is not in the result — a
+    /// citation that says nothing is better than one that sends a reader to the wrong page.
     /// </remarks>
-    public DerivedAttachmentText WithRedactedText(string redactedText)
+    public DerivedAttachmentText WithRedactedText(RedactedText redacted)
     {
-        ArgumentNullException.ThrowIfNull(redactedText);
+        ArgumentNullException.ThrowIfNull(redacted);
 
-        if (this.Text is not { } text)
+        if (this.Text is null)
         {
             return this;
         }
@@ -135,9 +137,14 @@ public sealed record DerivedAttachmentText
             this.DeclaredMediaType,
             this.FileName,
             this.Outcome,
-            redactedText,
+            redacted.Text,
             this.PageCount,
-            redactedText.Length == text.Length ? this.Segments : []);
+            [
+                .. this.Segments
+                    .Select(segment => (segment, mapped: redacted.MapOffset(segment.StartOffset)))
+                    .Where(carried => carried.mapped is not null)
+                    .Select(carried => carried.segment with { StartOffset = carried.mapped!.Value }),
+            ]);
     }
 
     /// <summary>Records an attachment the message's own ceiling stopped before anything was offered a parser.</summary>

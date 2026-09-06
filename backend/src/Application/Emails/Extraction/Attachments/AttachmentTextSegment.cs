@@ -20,13 +20,16 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// separated from the embedding budget precisely because it is the expensive one.
 /// </para>
 /// <para>
-/// A segment carries no characters. <see cref="Label" /> is the one member read out of the document, and it is a sheet
-/// name a sender chose — so it is mail content and is treated as such wherever it is stored or shown.
+/// A segment carries no characters. <see cref="Label" /> is the one member that would be read out of the document, and
+/// it is a sheet name a sender chose — so it is mail content and would be treated as such wherever it is stored or
+/// shown. No reader records one yet: every reading writes <see langword="null" />, and resolving a workbook's sheet
+/// name is <see href="https://github.com/Krzysztof318/MailFathom/issues/1682">#1682</see>. The member is serialized
+/// into the stored boundaries regardless, so a reading written before that lands stays readable after it.
 /// </para>
 /// </remarks>
 /// <param name="Kind">What the segment is, in the word its own format uses.</param>
 /// <param name="Number">The segment's one-based place among the segments of its own kind, in reading order.</param>
-/// <param name="Label">The name the format records for it, or <see langword="null" /> where the format records none.</param>
+/// <param name="Label">The name the format records for it, which is <see langword="null" /> from every reader today.</param>
 /// <param name="StartOffset">Where the segment's text begins in the document's extracted text.</param>
 public sealed record AttachmentTextSegment(
     AttachmentTextSegmentKind Kind,
@@ -43,8 +46,7 @@ public sealed record AttachmentTextSegment(
     /// The last boundary at or before the offset rather than the first at or after it: a passage opening halfway down
     /// page four was read from page four, and citing page five would send a reader past the words they were looking
     /// for. An attachment carrying no boundaries answers with nothing, which is a citation naming the file and not a
-    /// place inside it — what an honest reading of a row written before boundaries existed, or one whose redaction
-    /// changed the length of its text, supports.
+    /// place inside it — what an honest reading of a row written before boundaries existed supports.
     /// </remarks>
     public static AttachmentTextSegment? At(IReadOnlyList<AttachmentTextSegment> segments, int startOffset)
     {

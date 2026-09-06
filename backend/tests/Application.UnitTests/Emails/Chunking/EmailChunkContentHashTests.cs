@@ -174,6 +174,26 @@ public sealed class EmailChunkContentHashTests
         Assert.Equal("5efac46dd244627f07beb6c0f4934686ba4325a9dc42ef54a720b395dd57400b", hash.Value);
     }
 
+    /// <summary>
+    /// What the body pin above is to a delivered mailbox, this is to every attachment passage after the first
+    /// deployment sets <c>Embeddings:AttachmentText:Enabled</c>. Reordering the fields this encoding appends, or
+    /// adding one to it, re-cuts and re-embeds every attachment passage at a provider's rate — and every other test
+    /// here compares the encoding against itself, so each of them would stay green through exactly that change. The
+    /// value was computed from the encoding rather than read off a run.
+    /// </summary>
+    [Fact]
+    public void ComputeForAttachment_ThePassageThisRecordPins_ProducesTheDigestAStoredAttachmentHangsOn()
+    {
+        // Act
+        var hash = EmailChunkContentHash.ComputeForAttachment(
+            EmailChunkingRules.Current,
+            PdfAtPositionZero,
+            Passage);
+
+        // Assert
+        Assert.Equal("ff2bb1c617b7d23b0ad47d13447113c0dd9fce7a2a90b541229b2e0257ae85b9", hash.Value);
+    }
+
     /// <summary>An unchanged attachment cut to unchanged rules must cost nothing either.</summary>
     [Fact]
     public void ComputeForAttachment_SameTextRulesAndSource_ProducesTheSameDigest()

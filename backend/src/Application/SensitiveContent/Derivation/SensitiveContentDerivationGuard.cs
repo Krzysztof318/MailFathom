@@ -108,13 +108,30 @@ public sealed class SensitiveContentDerivationGuard
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> is <see langword="null" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derived write.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
-    public Task<string> GuardAsync(MailOwnerId owner, string text, CancellationToken cancellationToken)
+    public async Task<string> GuardAsync(MailOwnerId owner, string text, CancellationToken cancellationToken) =>
+        (await this.GuardTextAsync(owner, text, cancellationToken)).Text;
+
+    /// <summary>Redacts one text and reports where every placeholder ended up.</summary>
+    /// <param name="owner">The owner whose mail the text was extracted from.</param>
+    /// <param name="text">The text to redact, which must be a value rather than a document composed around one.</param>
+    /// <param name="cancellationToken">Cancels the scan.</param>
+    /// <returns>The redaction, which is the text itself with no placement where nothing scans this owner's mail.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> is <see langword="null" />.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derived write.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
+    /// <remarks>
+    /// The same redaction <see cref="GuardAsync" /> performs, handed back whole rather than as its text alone. A caller
+    /// needs this where it holds offsets into the text it passed in — an attachment's page boundaries are the case it
+    /// exists for — because a placeholder is shorter or longer than what it replaced, so every such offset past the
+    /// first finding has moved.
+    /// </remarks>
+    public Task<RedactedText> GuardTextAsync(MailOwnerId owner, string text, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(text);
 
         return this.postures.ForOwner(owner).Redactor is { } active
             ? this.RedactAsync(active, text, cancellationToken)
-            : Task.FromResult(text);
+            : Task.FromResult(RedactedText.Create(text, [], omittedCharacterCount: 0));
     }
 
     /// <summary>Runs the owner's redaction and reports what it found, or reports the refusal and re-raises it.</summary>
@@ -124,7 +141,7 @@ public sealed class SensitiveContentDerivationGuard
     /// work: nothing derived from that text is written, whatever was already stored is left as it was, and the next run
     /// derives the message once the detector answers again.
     /// </remarks>
-    private async Task<string> RedactAsync(
+    private async Task<RedactedText> RedactAsync(
         SensitiveContentRedactor active,
         string text,
         CancellationToken cancellationToken)
@@ -137,7 +154,7 @@ public sealed class SensitiveContentDerivationGuard
 
             this.telemetry.RecordDerived(redacted, this.timeProvider.GetElapsedTime(startedAt));
 
-            return redacted.Text;
+            return redacted;
         }
         catch (SensitiveContentScannerUnavailableException refusal)
         {

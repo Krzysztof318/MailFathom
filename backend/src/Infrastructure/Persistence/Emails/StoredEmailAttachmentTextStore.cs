@@ -177,6 +177,23 @@ internal sealed class StoredEmailAttachmentTextStore(
             embeddedFolders),
         terms);
 
+    /// <inheritdoc />
+    public async Task<int> DiscardAttachmentTextAsync(
+        IPersistenceSession session,
+        StoredEmailId emailId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        // One statement rather than tracked entities, for the reason the passage removal is: a row holds a whole
+        // document's text, and loading it to throw it away is the one cost this removal exists to avoid paying twice.
+        return await context.EmailAttachmentTexts
+            .Where(text => text.StoredEmailId == emailId.Value)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
     /// <summary>Writes one attachment's page boundaries as the document the row stores, or nothing where it has none.</summary>
     /// <remarks>
     /// Absent rather than an empty array for an attachment that yielded no words, so a row carrying no text carries no

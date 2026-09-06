@@ -28,6 +28,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
     private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
     private readonly IEmailAttachmentContentReader attachmentReader = Substitute.For<IEmailAttachmentContentReader>();
+    private readonly IOpenedEmailAttachmentWalk attachmentWalk = Substitute.For<IOpenedEmailAttachmentWalk>();
     private readonly IAttachmentTextExtractor extractor = Substitute.For<IAttachmentTextExtractor>();
     private readonly IEmailAttachmentImageDescriber describer = Substitute.For<IEmailAttachmentImageDescriber>();
     private readonly IEmailContentRepairRequestStore repairRequestStore = Substitute.For<IEmailContentRepairRequestStore>();
@@ -135,9 +136,9 @@ public sealed class EmailAttachmentTextDeriverTests
         // Assert
         Assert.Single(derived!.Attachments);
         Assert.Equal(Contract, derived.Attachments[0].Text);
-        await this.attachmentReader
+        await this.attachmentWalk
             .DidNotReceive()
-            .OpenAsync(Arg.Any<StoredEmailContent>(), 1, Arg.Any<CancellationToken>());
+            .OpenAsync(1, Arg.Any<CancellationToken>());
     }
 
     /// <summary>The octet ceiling is the message's, so a file that would take it past is refused and the walk goes on.</summary>
@@ -231,8 +232,8 @@ public sealed class EmailAttachmentTextDeriverTests
         // Arrange
         this.StoreHolds();
         this.Opens(0, "application/pdf", "one.pdf", octets: 16);
-        this.attachmentReader
-            .OpenAsync(Arg.Any<StoredEmailContent>(), 1, Arg.Any<CancellationToken>())
+        this.attachmentWalk
+            .OpenAsync(1, Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.Unreadable());
         this.extractor
             .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
@@ -462,7 +463,10 @@ public sealed class EmailAttachmentTextDeriverTests
 
         this.contentStore.FindStoredContentAsync(Message, Arg.Any<CancellationToken>()).Returns(content);
         this.attachmentReader
-            .OpenAsync(Arg.Any<StoredEmailContent>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .OpenWalkAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(OpenedEmailAttachmentWalkResult.Opened(this.attachmentWalk));
+        this.attachmentWalk
+            .OpenAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.NoSuchAttachment());
     }
 
@@ -484,8 +488,8 @@ public sealed class EmailAttachmentTextDeriverTests
         AttachmentFileName.TryNormalize(fileName, out var normalized);
         attachment.Description.Returns(new ExtractedEmailAttachment(normalized, mediaType, octets));
 
-        this.attachmentReader
-            .OpenAsync(Arg.Any<StoredEmailContent>(), position, Arg.Any<CancellationToken>())
+        this.attachmentWalk
+            .OpenAsync(position, Arg.Any<CancellationToken>())
             .Returns(OpenedEmailAttachmentResult.Opened(attachment));
     }
 }

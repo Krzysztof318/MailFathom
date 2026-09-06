@@ -22,10 +22,20 @@ namespace MailFathom.Application.Emails.Chunking;
 /// the honest thing to record — it is what decided which parser was offered the file.
 /// </para>
 /// </remarks>
-/// <param name="Position">The zero-based place the attachment holds in the order the message's structure is walked.</param>
-/// <param name="DeclaredMediaType">The media type the part declared, which is what chose the parser its text came from.</param>
-public sealed record EmailChunkAttachmentSource(int Position, string DeclaredMediaType)
+public sealed record EmailChunkAttachmentSource
 {
+    private EmailChunkAttachmentSource(int position, string declaredMediaType)
+    {
+        this.Position = position;
+        this.DeclaredMediaType = declaredMediaType;
+    }
+
+    /// <summary>Gets the zero-based place the attachment holds in the order the message's structure is walked.</summary>
+    public int Position { get; }
+
+    /// <summary>Gets the media type the part declared, which is what chose the parser its text came from.</summary>
+    public string DeclaredMediaType { get; }
+
     /// <summary>Builds the source of a passage cut from one attachment.</summary>
     /// <param name="position">The zero-based walk position of the attachment.</param>
     /// <param name="declaredMediaType">The media type the part declared.</param>

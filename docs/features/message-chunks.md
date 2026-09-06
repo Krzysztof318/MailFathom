@@ -93,6 +93,14 @@ it excludes is the log dump, the exported table, and the machine-generated trans
 question about, and any of which would otherwise become hundreds of passages and hundreds of paid vectors. Raw MIME is
 bounded in megabytes, so without a ceiling here one message's cost would be whatever a sender attached.
 
+**The body and the attachments each get the ceiling once.** A message's body is cut to it, and everything attached to
+that message shares a second allowance of the same size, charged down in walk order — so the first attachment is cut to
+whatever the ceiling allows, the next to what is left, and one that arrives with nothing left is stored with its
+reading and no passages. What that bounds is one message: without it the ceiling would be a per-text limit, and a
+message carrying the default twenty attachments could be cut and embedded to twenty times the figure the key names.
+Which attachment loses the remainder follows walk order, the same order every other attachment coordinate is expressed
+in.
+
 The message is **bounded rather than refused**. Its opening is cut, embedded, and retrievable, which is the part the
 rest of a message elaborates, and the cut lands on the nearest text-element boundary at or below the ceiling like every
 other boundary here. What the ceiling left out is recorded on the message itself — the length its text had when the cut
@@ -162,7 +170,9 @@ decides and what keeps a single search over a message and its attachment one ran
 - **Every attachment passage carries a coordinate.** The extraction records where each place begins, and a passage's
   start offset resolves to the last boundary at or before it. A workbook resolves to a sheet rather than to a cell
   range; a word-processing document, which records no pagination anywhere, resolves to one place covering the whole of
-  it.
+  it. A redaction moves those boundaries with the text — a placeholder is rarely the length of what it replaced — so
+  each is carried across by the shift the redaction applied before it, and a boundary pointing into text the scan's
+  analyzed ceiling dropped is left out rather than published pointing at the wrong place.
 - **An attachment that reported a reason produces no passage.** A refusal is stored against the file so an owner asking
   why their contract was never searched is given the reason, and nothing is cut from a row that carries no words.
 - **Reconciliation is per attachment.** The reading that arrives later replaces the passages of the attachment it read

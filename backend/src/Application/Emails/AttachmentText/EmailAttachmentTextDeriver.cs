@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
@@ -96,7 +97,7 @@ public sealed class EmailAttachmentTextDeriver
     /// <param name="cancellationToken">Cancels the read between attachments and inside one.</param>
     /// <returns>What each attachment yielded, in walk order, or nothing at all where the run budget stopped the message.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="SensitiveContent.Detection.SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derivation.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derivation.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// <para>
@@ -148,6 +149,22 @@ public sealed class EmailAttachmentTextDeriver
             return await this.RequestRepairAsync(email.Id, EmailContentDefect.Missing, redactedUnder, cancellationToken);
         }
 
+        // Parsed once for the whole message rather than once per position. Parsing raw MIME is the most expensive local
+        // work this run does, and the download route's shape — one parse per request — would multiply it by the
+        // attachment count on a pass that walks a whole mailbox.
+        var walkResult = await this.attachmentReader.OpenWalkAsync(content, cancellationToken);
+
+        if (walkResult.Walk is not { } walk)
+        {
+            return await this.RequestRepairAsync(
+                email.Id,
+                EmailContentDefect.Unreadable,
+                redactedUnder,
+                cancellationToken);
+        }
+
+        await using var attachments = walk;
+
         var derived = new List<DerivedAttachmentText>();
         var readOctets = 0L;
 
@@ -159,7 +176,7 @@ public sealed class EmailAttachmentTextDeriver
 
         for (var position = 0; position < walkLimit; position++)
         {
-            var opened = await this.attachmentReader.OpenAsync(content, position, cancellationToken);
+            var opened = await attachments.OpenAsync(position, cancellationToken);
 
             // Bytes that no longer parse are a damaged local copy rather than a fact about this attachment, so the
             // repair path is told and the message keeps its place in the walk; whatever earlier positions yielded is
@@ -297,6 +314,6 @@ public sealed class EmailAttachmentTextDeriver
             return derived;
         }
 
-        return derived.WithRedactedText(await this.guard.GuardAsync(owner, text, cancellationToken));
+        return derived.WithRedactedText(await this.guard.GuardTextAsync(owner, text, cancellationToken));
     }
 }

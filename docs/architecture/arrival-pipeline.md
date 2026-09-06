@@ -35,6 +35,10 @@ flowchart TD
         direction TB
         presidio["Personal-data analyzer — shown the extracted body text"]
         spamd["Spam scanner — shown the raw MIME, deliberately unredacted"]
+    end
+
+    subgraph remote["Remote providers, reached over the network"]
+        direction TB
         vision["Chat provider — shown one image attachment, to describe it"]
     end
 
@@ -147,8 +151,10 @@ a stronger reason — a run whose whole point was to fetch mail must not be fail
 describes it; nothing else on this page concerns it either.
 
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
-outside the commit that follows them, and the embedding provider is reached only by the worker, which consumes committed
-state.
+outside the commit that follows them, so does the chat provider a picture is described by, and the embedding provider is
+reached only by the worker, which consumes committed state. The chat provider is drawn apart from the sidecars because
+it is one: a sidecar is a process a deployment runs beside MailFathom, and this is a remote endpoint configured under
+`Chat:` that mail content leaves the deployment to reach.
 
 ## The two sidecars, and why one of them sees unredacted mail
 

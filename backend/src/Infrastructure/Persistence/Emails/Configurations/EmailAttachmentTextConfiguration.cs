@@ -54,7 +54,8 @@ internal sealed class EmailAttachmentTextConfiguration : IEntityTypeConfiguratio
 
         // The message and the walk position together, because that pair is the attachment's identity: nothing else
         // about a part is stable, and a surrogate key would let one attachment be read twice into two rows.
-        entity.HasKey(text => new { text.StoredEmailId, text.AttachmentPosition });
+        entity.HasKey(text => new { text.StoredEmailId, text.AttachmentPosition })
+            .HasName(PersistenceConstraintNames.EmailAttachmentTextPrimaryKeyName);
 
         entity.Property(text => text.Kind).HasConversion<string>().HasMaxLength(32).IsRequired();
 

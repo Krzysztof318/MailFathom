@@ -297,7 +297,7 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message | restart |
+| `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message. Charged twice per message and never more: once against the body, and once against every attachment of that message together, in walk order | restart |
 | `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
 | `Embeddings:MaxInputCharactersPerPeriodPerOwner` | long | `0` | zero or positive; the characters one period may send for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |

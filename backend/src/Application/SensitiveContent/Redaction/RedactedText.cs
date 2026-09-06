@@ -24,11 +24,13 @@ public sealed record RedactedText
     private RedactedText(
         string text,
         IReadOnlyList<SensitiveContentFinding> findings,
-        int omittedCharacterCount)
+        int omittedCharacterCount,
+        IReadOnlyList<RedactedPlacement> placements)
     {
         this.Text = text;
         this.Findings = findings;
         this.OmittedCharacterCount = omittedCharacterCount;
+        this.Placements = placements;
     }
 
     /// <summary>Gets the text with every detected region replaced by its placeholder.</summary>
@@ -46,25 +48,91 @@ public sealed record RedactedText
     /// </remarks>
     public int OmittedCharacterCount { get; }
 
+    /// <summary>Gets where each placeholder stands, in the order a reader of <see cref="Text" /> meets them.</summary>
+    public IReadOnlyList<RedactedPlacement> Placements { get; }
+
     /// <summary>Gets whether anything was redacted at all.</summary>
     public bool IsRedacted => this.Findings.Count > 0;
+
+    /// <summary>Gets how many characters of the original text this redaction actually looked at.</summary>
+    /// <remarks>
+    /// Recovered from <see cref="Text" /> and <see cref="Placements" /> rather than stored beside them, so the three
+    /// cannot disagree: every character of the analyzed text either survived into the result or was replaced by a
+    /// placeholder whose length is recorded.
+    /// </remarks>
+    private int AnalyzedCharacterCount =>
+        this.Text.Length - this.Placements.Sum(placement => placement.PlaceholderLength - placement.Length);
+
+    /// <summary>Finds where an offset into the text that was analyzed ended up in <see cref="Text" />.</summary>
+    /// <param name="analyzedOffset">The offset in the text handed to the redaction.</param>
+    /// <returns>The offset in <see cref="Text" />, or <see langword="null" /> where the analyzed ceiling dropped it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="analyzedOffset" /> is negative.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is what lets an offset recorded against a text survive its redaction. A page boundary inside an attachment
+    /// is such an offset, and without this every boundary of a document carrying one detected address would be dropped
+    /// — a two-hundred-page contract losing every citation because a signature block held an email address.
+    /// </para>
+    /// <para>
+    /// An offset that fell <em>inside</em> a replaced region answers with the start of the placeholder that replaced
+    /// it, which is the nearest position that still exists. An offset past what the ceiling admitted answers with
+    /// nothing at all, because the text it pointed into is not in the result: a coordinate that says nothing is better
+    /// than one that sends a reader to the wrong page.
+    /// </para>
+    /// </remarks>
+    public int? MapOffset(int analyzedOffset)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(analyzedOffset);
+
+        if (analyzedOffset > this.AnalyzedCharacterCount)
+        {
+            return null;
+        }
+
+        var shift = 0;
+
+        foreach (var placement in this.Placements)
+        {
+            if (analyzedOffset < placement.Start)
+            {
+                break;
+            }
+
+            if (analyzedOffset < placement.Start + placement.Length)
+            {
+                return placement.Start + shift;
+            }
+
+            shift += placement.PlaceholderLength - placement.Length;
+        }
+
+        return analyzedOffset + shift;
+    }
 
     /// <summary>Records a redaction.</summary>
     /// <param name="text">The text with every detected region replaced.</param>
     /// <param name="findings">Every finding the scanners reported.</param>
     /// <param name="omittedCharacterCount">How many characters lay beyond what one scan analyzes.</param>
+    /// <param name="placements">Where each placeholder stands, in order, or nothing where none was applied.</param>
     /// <returns>The result.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> or <paramref name="findings" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="omittedCharacterCount" /> is negative.</exception>
+    /// <remarks>
+    /// <paramref name="placements" /> defaults to none, which is the identity mapping and is what a caller composing a
+    /// result with no findings means. Nothing derives it from <paramref name="findings" />: those are reported before
+    /// overlapping regions were merged, so one placeholder need not correspond to one finding, and reconstructing the
+    /// merge here would be a second copy of the rule the redactor applies.
+    /// </remarks>
     public static RedactedText Create(
         string text,
         IReadOnlyList<SensitiveContentFinding> findings,
-        int omittedCharacterCount)
+        int omittedCharacterCount,
+        IReadOnlyList<RedactedPlacement>? placements = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(findings);
         ArgumentOutOfRangeException.ThrowIfNegative(omittedCharacterCount);
 
-        return new RedactedText(text, [.. findings], omittedCharacterCount);
+        return new RedactedText(text, [.. findings], omittedCharacterCount, [.. placements ?? []]);
     }
 }

@@ -63,4 +63,21 @@ public interface IStoredEmailAttachmentTextStore
         StoredEmailId emailId,
         EmailAttachmentTextDerivation derived,
         CancellationToken cancellationToken);
+
+    /// <summary>Stages the removal of every reading stored for one message's attachments.</summary>
+    /// <param name="session">The explicit persistence session this removal participates in.</param>
+    /// <param name="emailId">The message whose readings are removed.</param>
+    /// <param name="cancellationToken">Cancels the read before anything is staged.</param>
+    /// <returns>How many readings the removal reached, which is zero for a message whose attachments nothing read.</returns>
+    /// <remarks>
+    /// The junk verdict's other half. A reading is a second durable copy of derived mail content — a document's whole
+    /// text, a model's description of a picture, and the file name a sender chose — so removing the passages cut from
+    /// it while leaving it stored would keep exactly what the verdict called for the removal of. The stamp on the
+    /// message is deliberately left where it is: nothing should read a junk message's attachments a second time.
+    /// Idempotent and staged, on the same terms the passage removal is.
+    /// </remarks>
+    Task<int> DiscardAttachmentTextAsync(
+        IPersistenceSession session,
+        StoredEmailId emailId,
+        CancellationToken cancellationToken);
 }

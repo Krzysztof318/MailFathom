@@ -66,14 +66,23 @@ internal static class PersistenceConcurrencyConflicts
     /// rests on rather than a provider failure ending the pass that lost.
     /// </para>
     /// <para>
-    /// The last two are one message met by two writers, at the two stages that write per passage. The passage
-    /// ordinal is two cutters: the account run's cut and the embedding sweep select the same rows and walk them in
-    /// the same order, and the sweep runs on its own interval while a run is still fetching, so on a first
-    /// synchronization both can reach one message. The embedding row is the same pair one stage later, over the
-    /// passages that cut produced. Each reads inside its own transaction, so the one that commits second read
-    /// nothing and writes a row the winner already wrote. The retry is exactly right for both: it re-reads the
-    /// winner's rows in a fresh session, finds them identical to what it would have written, and updates in place
-    /// rather than inserting again.
+    /// The next four are one message met by two writers, at the stages that write per attachment and per passage. The
+    /// passage ordinal is two cutters: the account run's cut and the embedding sweep select the same rows and walk
+    /// them in the same order, and the sweep runs on its own interval while a run is still fetching, so on a first
+    /// synchronization both can reach one message. The attachment ordinal is that same pair over the passages cut
+    /// from one attachment, which both writers reconcile through the same walk position. The embedding row is the
+    /// same pair one stage later, over the passages that cut produced. Each reads inside its own transaction, so the
+    /// one that commits second read nothing and writes a row the winner already wrote. The retry is exactly right
+    /// for all three: it re-reads the winner's rows in a fresh session, finds them identical to what it would have
+    /// written, and updates in place rather than inserting again.
+    /// </para>
+    /// <para>
+    /// The attachment-text row is the reading itself rather than what was cut from it, and its key is the message
+    /// together with the walk position the attachment holds. The account run's attachment stage reaches a message a
+    /// second time whenever a run overlaps a retry of itself, both read that the position carries no row, and the
+    /// loser violates the key. The retry re-reads and replaces the winner's row in place, which is what keeps a
+    /// message read twice holding one reading per attachment instead of ending the account run on a violation the
+    /// stage could not have avoided.
     /// </para>
     /// <para>
     /// The next is the re-derivation cursor of a scope nobody has walked, and it is the mutation identity's case a

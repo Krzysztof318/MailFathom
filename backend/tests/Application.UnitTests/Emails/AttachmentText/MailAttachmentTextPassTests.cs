@@ -81,6 +81,31 @@ public sealed class MailAttachmentTextPassTests
         Assert.Equal([first, second], backlog.Accepted);
     }
 
+    /// <summary>
+    /// The counter an operator reads to tell a message this stage held from one it released, so a run that reads a
+    /// message the gate let go after a wait says so rather than reporting it as ordinary admitted work.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_EachMessageItReads_ReportsTheAdmissionTheGateGaveIt()
+    {
+        // Arrange
+        var released = StoredEmailId.Create(Guid.CreateVersion7());
+        var admitted = StoredEmailId.Create(Guid.CreateVersion7());
+        var telemetry = new RecordingDerivedWorkGateTelemetry();
+        var pass = CreatePass(
+            StoreReturning([Awaiting(released, DerivedWorkAdmission.ReleasedAfterWaiting), Awaiting(admitted)]),
+            new RecordingEmailEmbeddingBacklog(),
+            gateTelemetry: telemetry);
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [DerivedWorkAdmission.ReleasedAfterWaiting, DerivedWorkAdmission.Admitted],
+            telemetry.Admissions);
+    }
+
     /// <summary>The ordering the offer rests on: the readings are durable before the worker is told about them.</summary>
     [Fact]
     public async Task RunAsync_OneMessage_CommitsItsReadingsBeforeOfferingIt()
@@ -289,11 +314,13 @@ public sealed class MailAttachmentTextPassTests
         .. Enumerable.Range(0, 25).Select(_ => Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))),
     ];
 
-    private static EmailAwaitingAttachmentText Awaiting(StoredEmailId storedEmailId) => new(
+    private static EmailAwaitingAttachmentText Awaiting(
+        StoredEmailId storedEmailId,
+        DerivedWorkAdmission admission = DerivedWorkAdmission.Admitted) => new(
         storedEmailId,
         SyntheticMailOwner.Deployment,
         AttachmentCount: 1,
-        DerivedWorkAdmission.Admitted);
+        admission);
 
     private static IStoredEmailAttachmentTextStore StoreReturning(IReadOnlyList<EmailAwaitingAttachmentText> batch)
     {
@@ -318,7 +345,8 @@ public sealed class MailAttachmentTextPassTests
         IStoredEmailAttachmentTextStore store,
         RecordingEmailEmbeddingBacklog backlog,
         EmailAttachmentTextBounds? bounds = null,
-        AttachmentTextExtractionResult? extraction = null)
+        AttachmentTextExtractionResult? extraction = null,
+        RecordingDerivedWorkGateTelemetry? gateTelemetry = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory
@@ -330,7 +358,7 @@ public sealed class MailAttachmentTextPassTests
             Deriver(extraction),
             bounds ?? Bounds(),
             backlog,
-            new RecordingDerivedWorkGateTelemetry(),
+            gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -352,10 +380,13 @@ public sealed class MailAttachmentTextPassTests
         AttachmentFileName.TryNormalize("lease.pdf", out var fileName);
         opened.Description.Returns(new ExtractedEmailAttachment(fileName, "application/pdf", AttachmentOctets));
 
+        var walk = Substitute.For<IOpenedEmailAttachmentWalk>();
+        walk.OpenAsync(0, Arg.Any<CancellationToken>()).Returns(OpenedEmailAttachmentResult.Opened(opened));
+
         var attachmentReader = Substitute.For<IEmailAttachmentContentReader>();
         attachmentReader
-            .OpenAsync(Arg.Any<StoredEmailContent>(), 0, Arg.Any<CancellationToken>())
-            .Returns(OpenedEmailAttachmentResult.Opened(opened));
+            .OpenWalkAsync(Arg.Any<StoredEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(OpenedEmailAttachmentWalkResult.Opened(walk));
 
         var extractor = Substitute.For<IAttachmentTextExtractor>();
         extractor

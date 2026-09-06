@@ -139,6 +139,13 @@ internal sealed class EmailChunkWriter(
     /// to are exactly what
     /// <see cref="IEmailChunkStore" /> exists to prevent elsewhere.
     /// </para>
+    /// <para>
+    /// The attachments of one message share one character allowance, charged down in walk order, so the ceiling
+    /// <c>Embeddings:MaxCharactersPerEmail</c> names bounds them together rather than each of them. A message therefore
+    /// costs at most that ceiling for its body and that ceiling again for everything attached to it, and never a
+    /// multiple of the attachment count. Walk order is what decides which attachment loses the remainder, which is the
+    /// same order every other coordinate on this feature is expressed in.
+    /// </para>
     /// </remarks>
     public async Task SaveAttachmentChunksAsync(
         MailFathomDbContext dbContext,
@@ -157,15 +164,36 @@ internal sealed class EmailChunkWriter(
 
         await RemovePassagesOfDroppedAttachmentsAsync(dbContext, storedEmail, attachmentTexts, cancellationToken);
 
+        // One allowance for the whole message rather than one per attachment. Handing the ceiling to each attachment in
+        // turn would make it a per-text limit, and at the default of twenty attachments one message would be cut and
+        // embedded to twenty times what the key says a message may cost — which is the number an operator agreed to a
+        // provider bill against.
+        var remainingCharacters = inputBound.MaximumCharacterCount;
+
         foreach (var attachment in attachmentTexts)
         {
-            var chunks = attachment.Text is { } text
-                ? chunker.DeriveAttachmentChunks(
+            IReadOnlyList<EmailTextChunk> chunks = [];
+
+            if (attachment.Text is { Length: > 0 } text && remainingCharacters > 0)
+            {
+                var spent = Math.Min(text.Length, remainingCharacters);
+
+                var cut = chunker.DeriveAttachmentChunks(
                     text,
                     rules,
-                    inputBound,
-                    EmailChunkAttachmentSource.Create(attachment.Position, attachment.DeclaredMediaType)).Chunks
-                : [];
+                    EmbeddingInputBound.Create(remainingCharacters),
+                    EmailChunkAttachmentSource.Create(attachment.Position, attachment.DeclaredMediaType));
+
+                chunks = cut.Chunks;
+                remainingCharacters -= spent;
+
+                // Reported rather than recorded on the message: the truncation column beside the passages describes the
+                // body's own cut, and an attachment writing into it would say the body was truncated when it was not.
+                if (cut.TruncatedFromCharacterCount is not null)
+                {
+                    telemetry.RecordTruncatedEmbeddingInput(text.Length - spent);
+                }
+            }
 
             await this.ReplaceAsync(dbContext, storedEmail, attachment.Position, chunks, cancellationToken);
         }

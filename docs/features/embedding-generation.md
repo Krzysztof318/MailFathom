@@ -372,7 +372,9 @@ one leaves every stored vector exactly as comparable as it was.
 - **What one message may cost.** `MaxCharactersPerEmail` is how much of a message's extracted text is cut into
   passages. Raw MIME is bounded in megabytes, so one message can carry more text than an ordinary mailbox does in a
   month; beyond this ceiling the message is bounded rather than refused — its opening is embedded and retrievable, and
-  [message chunks](message-chunks.md#the-per-message-ceiling) records what the cut left out, on the message.
+  [message chunks](message-chunks.md#the-per-message-ceiling) records what the cut left out, on the message. It is
+  charged twice per message and never more: once against the body, and once against every attachment of that message
+  together.
 - **How fast requests may go out.** `MaxRequestsPerMinute` spaces requests so a deployment never sends faster than it
   declared. It paces nothing by default, and it is for a provider whose quota is stated per minute: being refused for
   exceeding one costs an attempt, a retry, and a place in a circuit-breaker window other work is measured in. A caller

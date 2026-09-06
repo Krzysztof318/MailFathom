@@ -1,6 +1,6 @@
 # Attachment text extraction
 
-<!-- describes: backend/src/Application/Emails/Extraction/Attachments/**, backend/src/Infrastructure/Documents/**, backend/src/Host/Configuration/Embeddings/AttachmentTextOptions.cs -->
+<!-- describes: backend/src/Application/Emails/Extraction/Attachments/**, backend/src/Application/Emails/Extraction/Images/**, backend/src/Application/Emails/AttachmentText/DerivedAttachmentText.cs, backend/src/Infrastructure/Documents/**, backend/src/Host/Configuration/Embeddings/AttachmentTextOptions.cs -->
 
 MailFathom reads the words inside a document somebody attached, so that a contract or an invoice is findable by what it
 says rather than only by the note it arrived with. `IAttachmentTextExtractor` is the one way that happens: it is handed
@@ -114,6 +114,35 @@ number. #1682 is where that is tracked. An OpenDocument file holds one content p
 A "page" is what the format has one of: a PDF page, a presentation slide, an OpenDocument drawing page, and a sheet of
 either spreadsheet format each count as one. A word-processing document counts as one page whatever it prints as,
 because neither office format records pagination and reading one would mean laying the document out.
+
+## What a described picture reports, and what a message's own ceiling reports
+
+A picture is not read by a parser, so it carries a set of its own: `Described` where a description came back, and one of
+nine refusals where none did. The stored row names whichever word applies beside the word `Document` or
+`ImageDescription`, so the two sets never have to be told apart by guessing which one a value came from.
+
+| Outcome | What it means | What an operator or owner does |
+| --- | --- | --- |
+| `Described` | The provider answered, and the words it produced are the attachment's text | Nothing |
+| `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
+| `FormatNotSupported` | The octets are not one of the raster formats a request may carry | Nothing; the attachment is not a picture this can send |
+| `FormatExcluded` | The octets are a markup document — an SVG among them — rather than a raster picture | Nothing; rendering one is executing a document somebody else composed |
+| `ImageTooLarge` | The attachment holds more octets than `Chat:MaxRequestImageOctets` | Raise the ceiling deliberately, having seen what one request then costs |
+| `PixelGridTooLarge` | The image's header declares a grid larger than `Embeddings:ImageDescription:MaxPixels` | Raise the ceiling, or treat a file declaring an enormous grid as one worth looking at |
+| `ImageUnreadable` | The octets name a supported format and do not hold one | Nothing; truncated and malformed pictures are expected of real mail |
+| `ProviderTimedOut` | The request outlived the time one chat call is allowed | Raise the timeout, or accept that the message is read again on a later run |
+| `ProviderUnavailable` | The provider did not answer, and asking again later may produce one | Nothing; the message is read again on a later run |
+| `ProviderRefused` | The provider answered by refusing, and repeating cannot change that | Read the log line: a rejected credential is an operator's to fix, a refused request is not |
+
+`ProviderTimedOut` and `ProviderUnavailable` are the two that leave the message unsettled, so it is offered again on the
+next account run. Every other refusal here settles it, including the ones a configuration change lifts — raising a
+ceiling or turning the switch on therefore changes what arrives next rather than what is already stored.
+
+**A message's own ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written for an
+attachment nothing was offered at all. `Embeddings:AttachmentText:MaxAttachmentsPerEmail` and
+`MaxInputOctetsPerEmail` bound what one message may cost, and an attachment past either is recorded as having yielded
+nothing rather than left absent — so an owner asking why their contract was not searched is given the ceiling as the
+answer. The row carries no text and no pages, and neither index holds anything for it.
 
 ## The posture every read is performed under
 

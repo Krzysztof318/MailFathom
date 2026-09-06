@@ -886,6 +886,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<ISpamClassificationSettingsReader>(),
             provider.GetRequiredService<IEmailSpamClassificationStore>(),
             provider.GetRequiredService<IEmailChunkStore>(),
+            provider.GetRequiredService<IStoredEmailAttachmentTextStore>(),
             provider.GetRequiredService<IDerivedWorkGateTelemetry>(),
             provider.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
             provider.GetRequiredService<TimeProvider>(),
