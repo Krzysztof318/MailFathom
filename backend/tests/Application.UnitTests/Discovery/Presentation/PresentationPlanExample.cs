@@ -32,8 +32,22 @@ internal static class PresentationPlanExample
 
     /// <summary>Builds a plan holding one block of every catalogued type.</summary>
     /// <returns>The plan.</returns>
-    internal static PresentationPlan Compose() =>
-        PresentationPlan.Compose(EveryBlock(), Citations(), [PresentationLimitation.RetrievalTruncated]);
+    internal static PresentationPlan Compose() => PresentationPlan.Compose(
+        EveryBlock(),
+        Citations(),
+        Coverage(),
+        [PresentationLimitation.RetrievalTruncated]);
+
+    /// <summary>Builds what the run read of its own accounts, which every plan reports.</summary>
+    /// <returns>The coverage.</returns>
+    internal static IReadOnlyList<AccountCoverage> Coverage() =>
+    [
+        new(
+            Text("work"),
+            PresentationFreshness.CurrentAt(ObservedAt),
+            ObservedAt.AddDays(-30),
+            ObservedAt),
+    ];
 
     /// <summary>Builds one block of every catalogued type, in the catalogue's own order.</summary>
     /// <returns>The blocks.</returns>
@@ -57,19 +71,22 @@ internal static class PresentationPlanExample
         new(
             FirstCitation,
             new EmailCitationTarget(StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111"))),
-            Text("Revised figures, 2 March")),
+            Text("Revised figures, 2 March"),
+            PresentationSourceMedium.Written),
         new(
             SecondCitation,
             new FragmentCitationTarget(
                 StoredEmailId.Create(new Guid("22222222-2222-2222-2222-222222222222")),
                 EmailChunkId.Create(new Guid("33333333-3333-3333-3333-333333333333"))),
-            Text("Re: Revised figures, paragraph two")),
+            Text("Re: Revised figures, paragraph two"),
+            PresentationSourceMedium.Written),
         new(
             AttachmentCitation,
             new AttachmentCitationTarget(
                 StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111")),
                 attachmentPosition: 0),
-            Text("renewal.pdf")),
+            Text("renewal.pdf"),
+            PresentationSourceMedium.Written),
     ];
 
     /// <summary>Builds evidence resting on the example's first citation.</summary>

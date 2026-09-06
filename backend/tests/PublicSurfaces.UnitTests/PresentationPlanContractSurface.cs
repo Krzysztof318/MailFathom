@@ -61,7 +61,9 @@ internal static class PresentationPlanContractSurface
     {
         ["planBlocks"] = PresentationPlan.MaxBlocks,
         ["planCitations"] = PresentationPlan.MaxCitations,
+        ["planAccountsCovered"] = PresentationPlan.MaxAccountsCovered,
         ["blockCitations"] = PresentationEvidence.MaxCitations,
+        ["blockConflictingClaims"] = PresentationEvidence.MaxConflictingClaims,
         ["textLength"] = PresentationText.MaxLength,
         ["citationIdentifierLength"] = PresentationCitationId.MaxLength,
         ["addressOctets"] = EmailAddressJsonConverter.MaxOctets,

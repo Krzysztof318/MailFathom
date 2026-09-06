@@ -14,12 +14,14 @@
     "addressOctets": 320,
     "attachmentGalleryEntries": 50,
     "blockCitations": 24,
+    "blockConflictingClaims": 6,
     "citationIdentifierLength": 32,
     "draftRecipients": 20,
     "evidenceListEntries": 50,
     "factTableColumns": 8,
     "factTableRows": 50,
     "peopleEntries": 30,
+    "planAccountsCovered": 32,
     "planBlocks": 20,
     "planCitations": 200,
     "textLength": 4000,
@@ -58,6 +60,29 @@
                     "citations": {
                       "type": "array"
                     },
+                    "conflictingClaims": {
+                      "default": null,
+                      "items": {
+                        "properties": {
+                          "sources": {
+                            "type": "array"
+                          },
+                          "statement": true
+                        },
+                        "required": [
+                          "statement",
+                          "sources"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    },
                     "freshness": {
                       "properties": {
                         "observedAt": {
@@ -85,7 +110,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -162,6 +188,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -169,7 +199,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -231,6 +262,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -238,7 +273,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -277,6 +313,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -284,7 +324,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -385,6 +426,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -392,7 +437,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -489,6 +535,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -496,7 +546,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -589,6 +640,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -596,7 +651,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -640,6 +696,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -647,7 +707,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -695,6 +756,10 @@
                     "citations": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
                     },
+                    "conflictingClaims": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/conflictingClaims",
+                      "default": null
+                    },
                     "freshness": {
                       "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
                     },
@@ -702,7 +767,8 @@
                       "enum": [
                         "Supported",
                         "Unsupported",
-                        "Conflicting"
+                        "Conflicting",
+                        "Stale"
                       ]
                     }
                   },
@@ -755,6 +821,12 @@
           "properties": {
             "id": true,
             "label": true,
+            "medium": {
+              "enum": [
+                "Written",
+                "Depicted"
+              ]
+            },
             "target": {
               "anyOf": [
                 {
@@ -801,12 +873,81 @@
                 "kind"
               ],
               "type": "object"
+            },
+            "unreadable": {
+              "default": null,
+              "enum": [
+                "Encrypted",
+                "Corrupt",
+                "FormatNotRead",
+                "TooLarge",
+                "NoTextFound",
+                "NotAttempted",
+                "ReadingFailed",
+                null
+              ]
             }
           },
           "required": [
             "id",
             "target",
-            "label"
+            "label",
+            "medium"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "type": "array"
+      },
+      "coverage": {
+        "items": {
+          "properties": {
+            "account": true,
+            "earliestReceivedAt": {
+              "format": "date-time",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "freshness": {
+              "properties": {
+                "observedAt": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "staleness": {
+                  "enum": [
+                    "Current",
+                    "Stale",
+                    "Unknown"
+                  ]
+                }
+              },
+              "required": [
+                "staleness",
+                "observedAt"
+              ],
+              "type": "object"
+            },
+            "latestReceivedAt": {
+              "format": "date-time",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "account",
+            "freshness",
+            "earliestReceivedAt",
+            "latestReceivedAt"
           ],
           "type": [
             "object",
@@ -836,6 +977,7 @@
       "schemaVersion",
       "blocks",
       "citations",
+      "coverage",
       "limitations"
     ],
     "type": [
@@ -843,5 +985,5 @@
       "null"
     ]
   },
-  "schemaVersion": 1
+  "schemaVersion": 2
 }

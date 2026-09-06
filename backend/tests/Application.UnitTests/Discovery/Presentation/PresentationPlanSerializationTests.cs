@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Presentation.Blocks;
 using MailFathom.Application.Discovery.Presentation.Citations;
+using MailFathom.Domain.Emails;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Discovery.Presentation;
@@ -224,5 +225,98 @@ public sealed class PresentationPlanSerializationTests
         // Assert
         Assert.NotNull(read);
         Assert.Equal(PresentationBlockType.Answer.Version, read.Blocks[0].Version);
+    }
+
+    /// <summary>What the run drew on reaches the client beside the answer, which is the only place it can be drawn.</summary>
+    [Fact]
+    public void Serialization_APlan_WritesWhatEachAccountWasReadAsBeing()
+    {
+        // Act
+        var written = JsonNode.Parse(JsonSerializer.Serialize(PresentationPlanExample.Compose(), Contract))!.AsObject();
+        var account = written["coverage"]!.AsArray()[0]!.AsObject();
+
+        // Assert
+        Assert.Equal("work", (string?)account["account"]);
+        Assert.Equal("Current", (string?)account["freshness"]!["staleness"]);
+        Assert.NotNull(account["earliestReceivedAt"]);
+        Assert.NotNull(account["latestReceivedAt"]);
+    }
+
+    /// <summary>Both sides of a disagreement survive the wire, or the state resolves itself into one answer at the boundary.</summary>
+    [Fact]
+    public void RoundTrip_ABlockWhoseSourcesDisagree_ReadsBackAsBothSides()
+    {
+        // Arrange
+        var plan = PresentationPlan.Compose(
+            [
+                new AnswerBlock(
+                    PresentationEvidence.Conflicting(
+                        [PresentationPlanExample.FirstCitation, PresentationPlanExample.SecondCitation],
+                        PresentationFreshness.CurrentAt(PresentationPlanExample.ObservedAt),
+                        [
+                            new ConflictingClaim(PresentationPlanExample.Text("£40,000"), [PresentationPlanExample.FirstCitation]),
+                            new ConflictingClaim(PresentationPlanExample.Text("£44,000"), [PresentationPlanExample.SecondCitation]),
+                        ]),
+                    PresentationPlanExample.Text("The correspondence quotes two figures."),
+                    PresentationConfidence.Moderate),
+            ],
+            [.. PresentationPlanExample.Citations().Take(2)],
+            [],
+            []);
+
+        // Act
+        var read = JsonSerializer.Deserialize<PresentationPlan>(JsonSerializer.Serialize(plan, Contract), Contract);
+
+        // Assert
+        Assert.NotNull(read);
+        Assert.Equal(
+            ["£40,000", "£44,000"],
+            read.Blocks[0].Evidence.ConflictingClaims.Select(side => side.Statement.Value));
+    }
+
+    /// <summary>A source nobody could read and a source that is a machine's reading of a picture both travel as what they are.</summary>
+    [Fact]
+    public void RoundTrip_ACitationNothingCouldRead_ReadsBackWithItsMediumAndItsReason()
+    {
+        // Arrange
+        var citation = new PresentationCitation(
+            PresentationPlanExample.FirstCitation,
+            new AttachmentCitationTarget(
+                StoredEmailId.Create(new Guid("11111111-1111-1111-1111-111111111111")),
+                attachmentPosition: 0),
+            PresentationPlanExample.Text("scan.pdf"),
+            PresentationSourceMedium.Depicted,
+            UnreadableSourceReason.NoTextFound);
+        var plan = PresentationPlan.Compose(
+            [
+                new AnswerBlock(
+                    PresentationEvidence.Unsupported(PresentationFreshness.Unknown),
+                    PresentationPlanExample.Text("The mail this run read does not answer the question."),
+                    PresentationConfidence.Low),
+            ],
+            [citation],
+            [],
+            [PresentationLimitation.SourcesUnavailable]);
+
+        // Act
+        var read = JsonSerializer.Deserialize<PresentationPlan>(JsonSerializer.Serialize(plan, Contract), Contract);
+
+        // Assert
+        Assert.NotNull(read);
+        Assert.Equal(PresentationSourceMedium.Depicted, read.Citations[0].Medium);
+        Assert.Equal(UnreadableSourceReason.NoTextFound, read.Citations[0].Unreadable);
+    }
+
+    /// <summary>An ordinal would change meaning the first time either set gained a member in the middle.</summary>
+    [Fact]
+    public void Serialization_ACitationTheRunCouldRead_WritesItsMediumByNameAndOmitsTheReason()
+    {
+        // Act
+        var written = JsonNode.Parse(JsonSerializer.Serialize(PresentationPlanExample.Compose(), Contract))!.AsObject();
+        var citation = written["citations"]!.AsArray()[0]!.AsObject();
+
+        // Assert
+        Assert.Equal("Written", (string?)citation["medium"]);
+        Assert.False(citation.ContainsKey("unreadable"));
     }
 }

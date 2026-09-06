@@ -12,6 +12,7 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
@@ -405,6 +406,36 @@ public sealed class AiServiceCollectionExtensionsTests
         Assert.NotSame(
             scope.ServiceProvider.GetRequiredService<IDiscoveryRunPlanner>(),
             otherScope.ServiceProvider.GetRequiredService<IDiscoveryRunPlanner>());
+    }
+
+    /// <summary>Both halves of a run's chat configuration arrive together, so a deployment that derives a plan composes a result from it.</summary>
+    [Fact]
+    public void AddDiscoveryRunPlanner_ADeploymentThatDerivesAPlan_AlsoResolvesTheCompositionOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddDiscoveryRunPlanner();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>(),
+            otherScope.ServiceProvider.GetRequiredService<IDiscoveryResultComposer>());
     }
 
     /// <summary>The envelope is a seam a deployment fills, so the planner keeps one that is already registered.</summary>

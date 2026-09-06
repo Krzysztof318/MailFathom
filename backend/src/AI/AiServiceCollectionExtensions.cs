@@ -14,6 +14,7 @@ using MailFathom.AI.Retrieval;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
+using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Extraction.Images;
@@ -235,14 +236,18 @@ public static class AiServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers the derivation a Discover run reads one question into a plan through.</summary>
+    /// <summary>Registers the two agents a Discover run reaches the model through: the derivation that reads one question into a plan, and the composition that turns what it found into a result.</summary>
     /// <param name="services">The service collection to add to.</param>
     /// <returns>The same service collection, so registration reads as one expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Registered beside the answering agent and behind the same declaration, because both are the one dependency a
-    /// supported deployment may not have. An instance that declared no chat endpoint registers neither, which is what
-    /// lets the run report that it derives nothing rather than fail to resolve.
+    /// Registered beside the answering agent and behind the same declaration, because all of them share the one
+    /// dependency a supported deployment may not have. An instance that declared no chat endpoint registers none of
+    /// them, which is what lets the run report that it derives nothing rather than fail to resolve.
+    /// <para>
+    /// The two are registered together rather than separately because a run needs both: a deployment holding a plan it
+    /// cannot compose an answer from would refuse in the middle of a question rather than before it.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddDiscoveryRunPlanner(this IServiceCollection services)
     {
@@ -251,6 +256,7 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IDiscoveryRunPlanner, DiscoveryPlanningAgent>();
+        services.AddScoped<IDiscoveryResultComposer, DiscoveryCompositionAgent>();
 
         return services;
     }
