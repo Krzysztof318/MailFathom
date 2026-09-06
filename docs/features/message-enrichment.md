@@ -44,8 +44,8 @@ No deterministic rule writes a mark today, and the record can express one anyway
 of the two would make the source column a constant, and the first deterministic producer would then arrive as a schema
 change rather than as a caller.
 
-A third source will name what a person approved, once approvals are recorded. It is absent rather than reserved,
-because a member nothing ever writes is a state every reader has to rule out on every row.
+The column carries the two kinds of producer that exist and no reserved member beside them, because a member nothing
+ever writes is a state every reader has to rule out on every row.
 
 ## When it runs
 
@@ -161,10 +161,10 @@ A mark is a sentence derived from somebody's mail and inherits its classificatio
 ## What a client reads
 
 A message's enrichment reaches the client timeline beside its preview, as the derivation instant and the list of marks.
-The whole object is **absent** for a message no derivation has reached, and **present with an empty list** for one a
-derivation settled with nothing to say. That is how a client tells *not derived yet* from *nothing to say* without a
-third field saying which, and both are renderable states rather than failures — a deployment with enrichment off draws
-every row exactly as it did before.
+The field is always on the row: it is **`null`** for a message no derivation has reached, and an **object carrying an
+empty list** for one a derivation settled with nothing to say. That is how a client tells *not derived yet* from
+*nothing to say* without a third field saying which, and both are renderable states rather than failures — a deployment
+with enrichment off draws every row exactly as it did before.
 
 ## What is not here
 

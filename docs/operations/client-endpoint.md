@@ -399,7 +399,7 @@ not the same as a message whose text is empty. The bound is fixed: no request ma
 change it.
 
 **`enrichment` is what a derivation concluded about the message**, and it is present only on a deployment that turned
-[message enrichment](https://krzysztof318.github.io/MailFathom/features/message-enrichment.html) on. It carries at most
+[message enrichment](../features/message-enrichment.md) on. It carries at most
 three marks, one of each `aspect` — `Sense`, `Significance`, `Commitment` — each with the sentence itself, the `reason`
 behind it, the `source` and `origin` that produced it, and the `evidence` it rests on. `dueAt` is set only on a
 commitment whose message named a date.

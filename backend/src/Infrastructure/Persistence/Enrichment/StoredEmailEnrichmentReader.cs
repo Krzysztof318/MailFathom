@@ -68,12 +68,22 @@ internal sealed class StoredEmailEnrichmentReader(MailFathomDbContext dbContext)
 
     /// <summary>Reads one stored row back into the mark it was written from, or into nothing where it is no longer one.</summary>
     /// <remarks>
+    /// <para>
     /// The value object's own rules are re-applied rather than trusted, because a row is read back long after it was
     /// written and nothing between the two is under this code's control. A row that would break one of them is dropped
     /// rather than raised: a mark whose evidence has gone is exactly the claim nobody can check, and refusing it takes
     /// one row off a screen instead of failing the page every other row was going to be drawn on.
+    /// </para>
+    /// <para>
+    /// Two mechanisms rather than one, and the split is by what the case is rather than by what is cheap. A mark whose
+    /// evidence a re-cut removed is an ordinary state this schema produces, so it is a guard. Everything else the value
+    /// objects refuse — an aspect or a source naming no member, an origin no longer written the way one is — means the
+    /// row was written by something this build does not agree with, which is why it is caught rather than enumerated:
+    /// a list of today's rules here would silently stop covering a rule added to the value object tomorrow, and the
+    /// failure would be a page that throws rather than a row that is missing.
+    /// </para>
     /// </remarks>
-    private static EmailEnrichmentMark? ToMark(MarkRow row)
+    internal static EmailEnrichmentMark? ToMark(MarkRow row)
     {
         IReadOnlyList<EmailChunkId> evidence =
         [
@@ -87,18 +97,26 @@ internal sealed class StoredEmailEnrichmentReader(MailFathomDbContext dbContext)
             return null;
         }
 
-        return EmailEnrichmentMark.Create(
-            row.Aspect,
-            row.Text,
-            row.Reason,
-            evidence,
-            EmailEnrichmentProvenance.Restore(row.Source, row.Origin),
-            row.Aspect is EmailEnrichmentAspect.Commitment ? row.DueAt : null);
+        try
+        {
+            return EmailEnrichmentMark.Create(
+                row.Aspect,
+                row.Text,
+                row.Reason,
+                evidence,
+                EmailEnrichmentProvenance.Restore(row.Source, row.Origin),
+                row.Aspect is EmailEnrichmentAspect.Commitment ? row.DueAt : null);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     private sealed record EnrichmentRow(Guid StoredEmailId, DateTimeOffset DerivedAt, IReadOnlyList<MarkRow> Marks);
 
-    private sealed record MarkRow(
+    /// <summary>One stored mark as the projection returns it, before the value objects have judged it.</summary>
+    internal sealed record MarkRow(
         EmailEnrichmentAspect Aspect,
         string Text,
         string Reason,
