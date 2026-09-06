@@ -3181,7 +3181,8 @@
           "TemporarilyUnavailable",
           "RetrievalRefused",
           "TimedOut",
-          "Failed"
+          "Failed",
+          "Stopped"
         ]
       },
       "DiscoveryRunId": {

@@ -11,6 +11,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Discovery.Streaming;
@@ -24,13 +25,15 @@ public sealed class StreamedDiscoveryRunTests
         MailQuestionText.Create("which supplier quoted least"),
         MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
 
+    private readonly FakeTimeProvider clock = new(DiscoveryRuns.Now);
+
     /// <summary>A person watching sees the run open, work, declare its sources, and only then read a block.</summary>
     [Fact]
     public async Task RunAsync_ARunThatRetrievedMail_PublishesTheOpeningTheProgressTheSourcesAndThenTheBlocks()
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(new ScriptedEmailKnowledgeSearch()
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
         // Act
@@ -54,7 +57,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(new ScriptedEmailKnowledgeSearch()
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch()
             .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation")));
 
         // Act
@@ -78,7 +81,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(
+        var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch()
                 .Returning("quotation", ScriptedEmailKnowledgeSearch.Passage("the quotation"))
                 .Returning("oferta", ScriptedEmailKnowledgeSearch.Passage("the oferta")),
@@ -100,7 +103,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(
+        var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch().Returning(
                 "quotation",
                 ScriptedEmailKnowledgeSearch.Passage("the quotation"),
@@ -122,7 +125,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(new ScriptedEmailKnowledgeSearch());
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch());
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
@@ -139,7 +142,8 @@ public sealed class StreamedDiscoveryRunTests
         // Arrange
         var journal = NewJournal();
         var run = new StreamedDiscoveryRun(
-            DiscoveryRuns.Composing(planner: null, new ScriptedEmailKnowledgeSearch()));
+            DiscoveryRuns.Composing(planner: null, new ScriptedEmailKnowledgeSearch()),
+            this.clock);
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
@@ -154,10 +158,12 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = new StreamedDiscoveryRun(DiscoveryRuns.Composing(
-            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
-            new ScriptedEmailKnowledgeSearch(),
-            chatState: AiProviderHealthState.Unavailable));
+        var run = new StreamedDiscoveryRun(
+            DiscoveryRuns.Composing(
+                DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, SufficientPassages, "quotation"),
+                new ScriptedEmailKnowledgeSearch(),
+                chatState: AiProviderHealthState.Unavailable),
+            this.clock);
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
@@ -172,7 +178,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(new ScriptedEmailKnowledgeSearch().Refusing("quotation"));
+        var run = this.RunOver(new ScriptedEmailKnowledgeSearch().Refusing("quotation"));
 
         // Act
         await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
@@ -187,7 +193,7 @@ public sealed class StreamedDiscoveryRunTests
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(
+        var run = this.RunOver(
             new ScriptedEmailKnowledgeSearch().Refusing("quotation").Refusing("oferta"),
             "quotation",
             "oferta");
@@ -201,13 +207,13 @@ public sealed class StreamedDiscoveryRunTests
             Published(journal).Select(@event => @event.EventName));
     }
 
-    /// <summary>A run stopped at the longest one may take says so, rather than leaving a client on a connection that closes.</summary>
+    /// <summary>A deployment stopping mid-run says so, rather than leaving a client on a connection that closes.</summary>
     [Fact]
-    public async Task RunAsync_ARunStopped_EndsTheRunAsTimedOut()
+    public async Task RunAsync_ADeploymentStoppingMidRun_EndsTheRunAsStopped()
     {
         // Arrange
         var journal = NewJournal();
-        var run = RunOver(new StoppedEmailKnowledgeSearch());
+        var run = this.RunOver(new StoppedEmailKnowledgeSearch());
         using var stopped = new CancellationTokenSource();
         await stopped.CancelAsync();
 
@@ -215,36 +221,60 @@ public sealed class StreamedDiscoveryRunTests
         await run.RunAsync(Question, journal, stopped.Token);
 
         // Assert
+        Assert.Equal(DiscoveryRunFailure.Stopped, Failure(journal));
+    }
+
+    /// <summary>A run that spent the longest one may take is told apart from one a stopping deployment cut short.</summary>
+    [Fact]
+    public async Task RunAsync_ARunSpendingTheLongestOneMayTake_EndsTheRunAsTimedOut()
+    {
+        // Arrange
+        var journal = NewJournal();
+        var run = this.RunOver(new StoppedEmailKnowledgeSearch(this.clock));
+
+        // Act
+        await run.RunAsync(Question, journal, TestContext.Current.CancellationToken);
+
+        // Assert
         Assert.Equal(DiscoveryRunFailure.TimedOut, Failure(journal));
     }
 
-    /// <summary>Retrieval as it behaves once the run has been stopped, which is what the longest a run may take does.</summary>
-    private sealed class StoppedEmailKnowledgeSearch : IEmailKnowledgeSearch
+    /// <summary>Retrieval as it behaves for a run that has been stopped, whether by a shutdown or by its own bound.</summary>
+    /// <remarks>
+    /// A clock handed over here is the run's own, and spending the longest a run may take against it is what makes the
+    /// timeout observable: the bound is applied inside the run rather than by whoever passed the token, so there is no
+    /// second cancellation source for a test to trip instead.
+    /// </remarks>
+    private sealed class StoppedEmailKnowledgeSearch(FakeTimeProvider? clock = null) : IEmailKnowledgeSearch
     {
         public Task<EmailKnowledgeLookup> FindPassagesAsync(
             MailboxScope scope,
             EmailKnowledgeQuery query,
             CancellationToken cancellationToken)
         {
+            clock?.Advance(DiscoveryRunBounds.MaximumDuration);
+
             cancellationToken.ThrowIfCancellationRequested();
 
-            throw new InvalidOperationException("The run was expected to have been stopped before retrieval ran.");
+            throw new InvalidOperationException("The run was expected to have been stopped before retrieval answered.");
         }
     }
 
-    private static StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search) =>
-        RunOver(search, SufficientPassages, "quotation");
+    private StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search) =>
+        this.RunOver(search, SufficientPassages, "quotation");
 
-    private static StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search, params string[] queries) =>
-        RunOver(search, SufficientPassages, queries);
+    private StreamedDiscoveryRun RunOver(IEmailKnowledgeSearch search, params string[] queries) =>
+        this.RunOver(search, SufficientPassages, queries);
 
-    private static StreamedDiscoveryRun RunOver(
+    private StreamedDiscoveryRun RunOver(
         IEmailKnowledgeSearch search,
         int sufficientPassages,
         params string[] queries) =>
-        new(DiscoveryRuns.Composing(
-            DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, sufficientPassages, queries),
-            search));
+        new(
+            DiscoveryRuns.Composing(
+                DiscoveryRuns.PlannerDeriving(DiscoveryIntent.FindFact, sufficientPassages, queries),
+                search),
+            this.clock);
 
     private static DiscoveryRunJournal NewJournal() =>
         new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment);

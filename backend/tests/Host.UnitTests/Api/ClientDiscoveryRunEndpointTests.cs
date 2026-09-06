@@ -204,6 +204,29 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.DoesNotContain("endsTheRun", streamed, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Why a run ended crosses the wire as the word a client branches on, which is the enum member's own name.</summary>
+    /// <remarks>
+    /// The value is a closed set a screen decides what to offer next from, so its spelling is the contract rather than an
+    /// artefact of how it is serialized — nothing on this surface applies a naming policy to an enum, and a client
+    /// matching a differently-cased word would fall through every branch it has and offer nothing.
+    /// </remarks>
+    [Fact]
+    public async Task Watch_ARunThatEndedBadly_WritesWhyAsTheClosedValuesOwnName()
+    {
+        // Arrange
+        var registry = NewRegistry();
+        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        Assert.NotNull(journal);
+        journal.Append(new DiscoveryRunStarted());
+        journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut));
+
+        // Act
+        var streamed = await StreamedBody(journal, registry, resumedFrom: null);
+
+        // Assert
+        Assert.Contains("\"failure\":\"TimedOut\"", streamed, StringComparison.Ordinal);
+    }
+
     /// <summary>A dropped connection is resumed from the place the protocol's own header states, so nothing is sent twice.</summary>
     [Fact]
     public async Task Watch_AClientStatingWhereItLeftOff_StreamsOnlyWhatItMissed()

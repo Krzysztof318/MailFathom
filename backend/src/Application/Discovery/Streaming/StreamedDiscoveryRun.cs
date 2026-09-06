@@ -2,7 +2,6 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Discovery.Presentation;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Mailboxes;
@@ -20,9 +19,11 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// reads a block before the rest arrives, and keeps what arrived when the run ends badly.
 /// </para>
 /// <para>
-/// <strong>Nothing that ends the run reaches the caller.</strong> Every failure becomes the run's own ending, because
-/// by the time this executes the request that asked the question has already been answered and there is nobody left to
-/// throw at. Which failure it was is published as a closed value carrying nothing about the question or the mail.
+/// <strong>Every failure this type can name becomes the run's own ending</strong>, because by the time this executes the
+/// request that asked the question has already been answered and there is nobody left to throw at. Which failure it was
+/// is published as a closed value carrying nothing about the question or the mail. A failure it cannot name is left to
+/// propagate deliberately: naming it would need a log to name it in, this layer has no logger by construction, and a
+/// caller that records it is the only place <see cref="DiscoveryRunFailure.Failed" /> becomes readable to an operator.
 /// </para>
 /// <para>
 /// A run publishes its sources before the blocks that name them, so a client can render a block the moment it arrives
@@ -33,29 +34,42 @@ namespace MailFathom.Application.Discovery.Streaming;
 public sealed class StreamedDiscoveryRun
 {
     private readonly DiscoveryRun run;
+    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the use case one streamed run is performed through.</summary>
     /// <param name="run">The run itself, which decides what to retrieve and retrieves it.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="run" /> is <see langword="null" />.</exception>
-    public StreamedDiscoveryRun(DiscoveryRun run)
+    /// <param name="timeProvider">Measures the longest a run may take, which this type rather than its caller applies.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="run" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
+    public StreamedDiscoveryRun(DiscoveryRun run, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.run = run;
+        this.timeProvider = timeProvider;
     }
 
     /// <summary>Runs the question and publishes the run to its stream, ending it however it ends.</summary>
     /// <param name="question">The question and the scope bounding what may be read to answer it.</param>
     /// <param name="journal">Where the run publishes, which is what a client reads and reattaches to.</param>
-    /// <param name="cancellationToken">Ends the run, which is what the longest a run may take is applied through.</param>
+    /// <param name="cancellationToken">Stops the run where it stands, which is how the deployment shutting down reaches it.</param>
     /// <returns>A task that completes once the run has published its ending.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="question" /> or <paramref name="journal" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// Cancellation ends the run as a stated failure rather than as a cancelled task, because the caller is a background
     /// worker with nowhere to report one and because a client watching a run that was stopped has to be told that rather
     /// than left on a connection that closes silently.
+    /// </para>
+    /// <para>
+    /// <strong>Which cancellation it was is part of what the client is told.</strong> The longest a run may take is
+    /// applied here, over a source of this type's own, so a run that spent it ends as
+    /// <see cref="DiscoveryRunFailure.TimedOut" /> while a deployment stopping mid-run ends as
+    /// <see cref="DiscoveryRunFailure.Stopped" /> — one says the question was too much to answer and the other says
+    /// nothing about the question at all. A caller applying the bound to the token it passes would collapse the two into
+    /// whichever the caller happened to name.
+    /// </para>
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The run is executed after its request was answered, so an unhandled failure would be lost; it is published as the run's own stated ending instead.")]
     public async Task RunAsync(
         MailQuestion question,
         DiscoveryRunJournal journal,
@@ -66,16 +80,23 @@ public sealed class StreamedDiscoveryRun
 
         journal.Append(new DiscoveryRunStarted());
 
+        using var budget = new CancellationTokenSource(DiscoveryRunBounds.MaximumDuration, this.timeProvider);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, budget.Token);
+
         try
         {
             var result = await this.run.RunAsync(
                 question,
                 progress => journal.Append(new DiscoveryRetrievalProgressed(progress)),
-                cancellationToken);
+                bounded.Token);
 
             journal.Append(new DiscoveryRunCompleted(Present(result, journal)));
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.Stopped));
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested)
         {
             journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut));
         }
@@ -89,10 +110,6 @@ public sealed class StreamedDiscoveryRun
         catch (MailboxQueryFilterInvalidException)
         {
             journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.RetrievalRefused));
-        }
-        catch (Exception)
-        {
-            journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.Failed));
         }
     }
 

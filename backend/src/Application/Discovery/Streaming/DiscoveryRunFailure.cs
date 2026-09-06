@@ -30,4 +30,15 @@ public enum DiscoveryRunFailure
 
     /// <summary>The run ended for a reason it does not publish, which an operator reads in the deployment's own logs.</summary>
     Failed = 4,
+
+    /// <summary>
+    /// The deployment stopped while the run was executing, so nothing was established about the question and asking it
+    /// again is worth doing once the deployment is back.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="TimedOut" /> because the two are the same cancellation to the code that observes it
+    /// and opposite facts to a person reading it: a timeout says this question was more than one run could answer, and
+    /// this says the run never got its turn.
+    /// </remarks>
+    Stopped = 5,
 }

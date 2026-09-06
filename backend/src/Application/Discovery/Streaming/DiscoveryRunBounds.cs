@@ -58,6 +58,11 @@ public static class DiscoveryRunBounds
     /// whose provider never answers stops holding a scope and a database connection. It is what a run that lost its
     /// client is eventually ended by, and it ends the run as <see cref="DiscoveryRunFailure.TimedOut" /> with whatever
     /// it had already published still readable.
+    /// <para>
+    /// <see cref="StreamedDiscoveryRun" /> applies it, over a cancellation source of its own rather than over the token
+    /// its caller passes, which is what keeps a run that spent this bound distinguishable from one a stopping
+    /// deployment cut short.
+    /// </para>
     /// </remarks>
     public static TimeSpan MaximumDuration { get; } = TimeSpan.FromMinutes(5);
 

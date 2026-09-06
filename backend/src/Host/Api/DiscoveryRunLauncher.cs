@@ -24,10 +24,16 @@ namespace MailFathom.Host.Api;
 /// whatever it would have refused in the foreground.
 /// </para>
 /// <para>
-/// Two things bound it, and both are the run's own rather than the connection's. It is stopped when the process is
-/// stopping, because a run holds a database connection and there is nobody left to answer; and it is stopped once it
-/// has taken the longest a run may take, which is what ends a run whose provider never answered. Neither is the
-/// client's connection: a person who closed the page does not stop a run, because they may reattach to it.
+/// What this bounds is the process stopping, because a run holds a database connection and there is nobody left to
+/// answer. The longest a run may take is the run's own and is applied inside it, so the two endings stay distinguishable
+/// to the client. Neither is the client's connection: a person who closed the page does not stop a run, because they may
+/// reattach to it.
+/// </para>
+/// <para>
+/// <strong>It is also where a run's unnamed failure is recorded.</strong> The use case publishes every ending it can
+/// name and lets the rest propagate, because <c>Application</c> holds no logger and a failure nothing writes down is one
+/// <see cref="DiscoveryRunFailure.Failed" /> promises an operator can read. Here there is a logger, so the fault is
+/// logged and the run is ended on it.
 /// </para>
 /// </remarks>
 internal sealed partial class DiscoveryRunLauncher
@@ -41,7 +47,7 @@ internal sealed partial class DiscoveryRunLauncher
     /// <param name="scopeFactory">Makes the scope one run executes in.</param>
     /// <param name="registry">Holds the run while it executes and while a client can still come back for it.</param>
     /// <param name="lifetime">Reports that the process is stopping, which ends every run it is holding.</param>
-    /// <param name="logger">Reports a run this deployment could not compose at all, which nothing else would.</param>
+    /// <param name="logger">Reports the failures a run cannot name to its client, which nothing else would.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public DiscoveryRunLauncher(
         IServiceScopeFactory scopeFactory,
@@ -80,17 +86,15 @@ internal sealed partial class DiscoveryRunLauncher
 
     /// <summary>Executes one run on a scope of its own and leaves it ended however it went.</summary>
     /// <remarks>
-    /// The run publishes every ending it can reach itself, so the handler here is for the one it cannot: a scope this
-    /// process could not compose the use case out of. That is a deployment fault rather than a run's, and it is the one
-    /// failure nothing else would report — nothing awaits this task, so an exception escaping here would be observed by
-    /// nobody and would leave a client watching a run that never ends.
+    /// The handler here is for the two endings the run cannot state to its client: a scope this process could not
+    /// compose the use case out of, and a fault the use case has no name for. Both are the deployment's rather than the
+    /// question's, both are what <see cref="DiscoveryRunFailure.Failed" /> stands for, and nothing else would report
+    /// either — nothing awaits this task, so an exception escaping here would be observed by nobody and would leave a
+    /// client watching a run that never ends.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Nothing awaits this task, so an escaping exception would be observed by nobody and would leave the run unended; it is logged and the run is ended instead.")]
     private async Task ExecuteAsync(MailQuestion question, DiscoveryRunJournal journal, AuthorizedPrincipal caller)
     {
-        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(this.lifetime.ApplicationStopping);
-        stopping.CancelAfter(DiscoveryRunBounds.MaximumDuration);
-
         try
         {
             await using var scope = this.scopeFactory.CreateAsyncScope();
@@ -99,11 +103,11 @@ internal sealed partial class DiscoveryRunLauncher
 
             await scope.ServiceProvider
                 .GetRequiredService<StreamedDiscoveryRun>()
-                .RunAsync(question, journal, stopping.Token);
+                .RunAsync(question, journal, this.lifetime.ApplicationStopping);
         }
-        catch (Exception composition)
+        catch (Exception failure)
         {
-            this.LogRunNotComposed(composition);
+            this.LogRunFailedWithoutANameForIt(failure);
 
             journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.Failed));
         }
@@ -115,7 +119,8 @@ internal sealed partial class DiscoveryRunLauncher
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "A Discover run could not be composed, so it ended without answering. Neither the question nor the "
-            + "mail it would have read is in this record; what failed is this deployment's own composition.")]
-    private partial void LogRunNotComposed(Exception failure);
+        Message = "A Discover run ended on a failure it had no name for, so its client was told only that it failed. "
+            + "Neither the question nor the mail it read is in this record; what failed is this deployment's own "
+            + "composition or a dependency it called.")]
+    private partial void LogRunFailedWithoutANameForIt(Exception failure);
 }

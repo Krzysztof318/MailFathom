@@ -135,9 +135,13 @@ public static class DiscoveryPresentationComposition
     /// <remarks>
     /// The rank expressed as a fraction, which is exactly what the block publishes it as: retrieval hands its passages
     /// over best-ranked first and attaches no score, so the ordering is the whole of what is known about how well each
-    /// one answers. ponytail: an ordinal stands in for a judged score until a derivation produces one, which is #1173.
+    /// one answers.
     /// </remarks>
-    private static double RelevanceOf(int position, int count) => (double)(count - position) / count;
+    private static double RelevanceOf(int position, int count)
+    {
+        // ponytail: an ordinal stands in for a judged score until a derivation produces one, which is #1173.
+        return (double)(count - position) / count;
+    }
 
     /// <summary>Says what a client prints where a source is named.</summary>
     /// <remarks>

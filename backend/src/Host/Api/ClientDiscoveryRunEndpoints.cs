@@ -83,6 +83,21 @@ internal static class ClientDiscoveryRunEndpoints
             .RequirePermission(MailFathomPermission.MailAsk);
     }
 
+    /// <summary>Composes the address one run's events are read at.</summary>
+    /// <param name="id">The run the address names.</param>
+    /// <returns>The path, from the client prefix, that <c>202</c> points a client at.</returns>
+    /// <remarks>
+    /// Built out of the route the run is actually mapped at rather than written a second time, so the pattern and the
+    /// address a client is handed cannot drift apart — a route renamed in one place and not the other would answer
+    /// <c>202</c> pointing at nothing, and a client following the header would meet a <c>404</c> for a run that exists.
+    /// </remarks>
+    internal static string EventsAddressOf(DiscoveryRunId id) =>
+        ClientEndpointOptions.RoutePrefix
+        + DiscoveryRunEventsRoute.Replace(
+            "{runId:guid}",
+            id.Value.ToString("D", CultureInfo.InvariantCulture),
+            StringComparison.Ordinal);
+
     /// <summary>Starts a run over the question, or reports what was wrong with it.</summary>
     /// <param name="request">The question and the mail it may be answered from.</param>
     /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting owner.</param>
@@ -148,7 +163,7 @@ internal static class ClientDiscoveryRunEndpoints
         launcher.Start(question, journal, caller);
 
         return TypedResults.Accepted(
-            $"{ClientEndpointOptions.RoutePrefix}/discovery/runs/{journal.Id.Value}/events",
+            EventsAddressOf(journal.Id),
             new ClientDiscoveryRunResponse(journal.Id.Value));
     }
 

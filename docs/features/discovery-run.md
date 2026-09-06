@@ -142,7 +142,17 @@ order and never has to sort. Six kinds are published, and the run ends on exactl
 | `citation` | One source the run declares, ready to be named by a block |
 | `block` | One composed block, ready to be drawn |
 | `completed` | The run finished, with what made the answer narrower than the question |
-| `failed` | The run stopped, as one of `unavailable`, `temporarilyUnavailable`, `retrievalRefused`, `timedOut`, or `failed` |
+| `failed` | The run stopped, as one of `Unavailable`, `TemporarilyUnavailable`, `RetrievalRefused`, `TimedOut`, `Stopped`, or `Failed` |
+
+Those six cross the wire as written here. This surface applies no naming policy to an enum, so the value is the member's
+own name — unlike the same kind of value on the MCP surface, where the tool contract's serializer lower-cases the first
+letter, and a client matching the wrong spelling falls through every branch it has.
+
+`TimedOut` and `Stopped` are the pair worth telling apart, because the same cancellation produces both: the first says
+the run spent the longest a run may take, the second says the deployment shut down while it was executing. One is about
+the question having been more than a run could answer and the other says nothing about the question at all, so a client
+offering to retry has a reason to offer it differently. `Failed` is the value that carries nothing: the reason is in the
+deployment's own logs, which is where it is written when a run ends on something it has no name for.
 
 Two orderings hold within that. **A source is always declared before the block naming it**, so a block can be drawn the
 moment it arrives instead of being held until the run closes. And **an ending is the last thing a run publishes** —
@@ -188,7 +198,7 @@ metered budget is separate work.
 | Bound | What it is | What happens when it is reached |
 |---|---|---|
 | The longest one run may take | Five minutes | The run is stopped and ends as `failed` with `timedOut` |
-| Events one run may publish | Fifty-two — one opening, six lookups, twenty-four sources, twenty blocks, one ending | Nothing further is composed, and the run still ends: it completes stating `blocksOmitted` |
+| Events one run may publish | Fifty-two — one opening, six lookups, twenty-four sources, twenty blocks, one ending | Nothing further is composed, and the run still ends: it completes stating `BlocksOmitted` |
 | Runs this process holds at once | Eight | The asking route answers `429` rather than opening a ninth |
 | How long a finished run is held | Five minutes after it was last read | The run is forgotten, and reading it reports no such run |
 
@@ -218,8 +228,13 @@ to make checkable. Those are filled by separate work.
 
 Everything a run publishes about the mail — a source, a quoted fragment, a subject — reaches the caller over these two
 routes and nowhere else. The events that describe how a run is *going* carry counts and closed values alone, which is
-what makes a run observable without any of the mail: a failure names one of five words, and retrieval progress names
+what makes a run observable without any of the mail: a failure names one of six words, and retrieval progress names
 four numbers.
+
+The one thing that does reach a log is the failure a run has no word for. `failed` promises an operator can read what
+happened, so the run itself publishes only the endings it can name and lets the rest travel out to the composition root,
+which is where a logger exists — the application layer has none, deliberately. What is written there is the fault and
+nothing about the question or the mail it read.
 
 ## What is deliberately not here
 

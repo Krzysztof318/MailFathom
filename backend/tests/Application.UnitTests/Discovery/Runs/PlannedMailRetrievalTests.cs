@@ -135,6 +135,32 @@ public sealed class PlannedMailRetrievalTests
         Assert.Equal(1, evidence.LookupsRefused);
     }
 
+    /// <summary>A lookup the deployment refused is still a lookup that settled, so a watcher sees the plan advance past it.</summary>
+    [Fact]
+    public async Task RetrieveAsync_OneRefusedLookupAmongSeveral_ReportsTheRefusalAsProgressOfItsOwn()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch()
+            .Refusing("invoice")
+            .Returning("faktura", ScriptedEmailKnowledgeSearch.Passage("the faktura"));
+        List<DiscoveryRetrievalProgress> reported = [];
+
+        // Act
+        await new PlannedMailRetrieval(search).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 10, "invoice", "faktura"),
+            reported.Add,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                new DiscoveryRetrievalProgress(LookupsRun: 0, LookupsRefused: 1, LookupsPlanned: 2, PassagesFound: 0),
+                new DiscoveryRetrievalProgress(LookupsRun: 1, LookupsRefused: 1, LookupsPlanned: 2, PassagesFound: 1),
+            ],
+            reported);
+    }
+
     /// <summary>A plan nothing ran is told apart from a mailbox that held nothing, by the refusal that names the filter.</summary>
     [Fact]
     public async Task RetrieveAsync_EveryLookupRefused_RaisesTheRefusalRatherThanAnsweringEmpty()
@@ -196,6 +222,31 @@ public sealed class PlannedMailRetrievalTests
 
         // Assert
         Assert.Equal(["first", "second"], evidence.Passages.Select(passage => passage.Text));
+    }
+
+    /// <summary>What a watcher is told it found never exceeds what the plan called enough, however much a lookup returned.</summary>
+    [Fact]
+    public async Task RetrieveAsync_ALookupReturningMoreThanEnough_ReportsNoMoreFoundThanThePlanAskedFor()
+    {
+        // Arrange
+        var search = new ScriptedEmailKnowledgeSearch().Returning(
+            "invoice",
+            ScriptedEmailKnowledgeSearch.Passage("first"),
+            ScriptedEmailKnowledgeSearch.Passage("second"),
+            ScriptedEmailKnowledgeSearch.Passage("third"));
+        List<DiscoveryRetrievalProgress> reported = [];
+
+        // Act
+        await new PlannedMailRetrieval(search).RetrieveAsync(
+            Question(WholeMailbox),
+            PlanOf(sufficientPassages: 2, "invoice"),
+            reported.Add,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [new DiscoveryRetrievalProgress(LookupsRun: 1, LookupsRefused: 0, LookupsPlanned: 1, PassagesFound: 2)],
+            reported);
     }
 
     private static MailQuestion Question(MailboxScope scope) =>
