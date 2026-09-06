@@ -245,8 +245,8 @@ is told what happened rather than that the tool failed; the same
 
 A read that redacts a body and a link that serves the unredacted original beside it is not a screened deployment, so the
 same screen sits on the two paths that hand an attachment's octets to somebody outside: the signed
-[download link](email-content.md#attachment-downloads) the tool surface mints, and the
-[client's own attachment route](../operations/client-endpoint.md).
+[download link](email-content.md#what-a-download-link-is-and-what-bounds-it) the tool surface mints, and the
+[client's own attachment route](../operations/client-endpoint.md#the-attachment-route).
 
 - **The rule is the one above.** The file's text is extracted afresh — nothing here depends on what a derived pass
   stored, on the format being one a search stage indexes, or on the message having been read yet — and judged by the
