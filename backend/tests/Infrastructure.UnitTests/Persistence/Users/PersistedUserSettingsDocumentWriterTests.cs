@@ -24,7 +24,7 @@ public sealed class PersistedUserSettingsDocumentWriterTests
     private const string UnreachedDatabase = "Host=localhost;Port=1;Database=mailfathom;Username=mailfathom";
 
     [Fact]
-    public async Task CommitAsync_AnUserNamingNobody_IsRejectedAsAnArgument()
+    public async Task CommitAsync_AUserNamingNobody_IsRejectedAsAnArgument()
     {
         // Act
         var rejected = await CommitAsync(default, "{}", expectedVersion: 1);

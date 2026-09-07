@@ -15,7 +15,7 @@ namespace MailFathom.Domain.UnitTests.Access;
 public sealed class MailUserIdTests
 {
     [Fact]
-    public void Create_AGeneratedIdentifier_CarriesItAndNamesAnUser()
+    public void Create_AGeneratedIdentifier_CarriesItAndNamesAUser()
     {
         // Arrange
         var value = new Guid("0198f0aa-0000-7000-8000-0000000000a1");

@@ -87,7 +87,7 @@ public sealed class UserRecordEndpointsTests
     /// identifiers exist.
     /// </summary>
     [Fact]
-    public async Task EraseAsync_AnUserThisDeploymentDoesNotHold_ReportsNothingErasedRatherThanRefusing()
+    public async Task EraseAsync_AUserThisDeploymentDoesNotHold_ReportsNothingErasedRatherThanRefusing()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
@@ -107,7 +107,7 @@ public sealed class UserRecordEndpointsTests
 
     /// <summary>The response says whether the erasure also removed the person from the running process.</summary>
     [Fact]
-    public async Task EraseAsync_AnUserThisProcessIsServing_ReportsThatItWasServingThem()
+    public async Task EraseAsync_AUserThisProcessIsServing_ReportsThatItWasServingThem()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
@@ -147,7 +147,7 @@ public sealed class UserRecordEndpointsTests
 
     /// <summary>The label the request carried is the whole of what changed, so acceptance is the whole answer.</summary>
     [Fact]
-    public async Task RelabelAsync_AnUserThisDeploymentHolds_AnswersWithNoContent()
+    public async Task RelabelAsync_AUserThisDeploymentHolds_AnswersWithNoContent()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -173,7 +173,7 @@ public sealed class UserRecordEndpointsTests
     /// able to tell a user who exists from one who does not.
     /// </summary>
     [Fact]
-    public async Task RelabelAsync_AnUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchRecord()
+    public async Task RelabelAsync_AUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchRecord()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -226,7 +226,7 @@ public sealed class UserRecordEndpointsTests
     }
 
     [Fact]
-    public async Task ReadRecordAsync_AnUserThisDeploymentHolds_ReportsTheRecordAndTheVersionAChangeIsAcceptedAgainst()
+    public async Task ReadRecordAsync_AUserThisDeploymentHolds_ReportsTheRecordAndTheVersionAChangeIsAcceptedAgainst()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
@@ -248,7 +248,7 @@ public sealed class UserRecordEndpointsTests
 
     /// <summary>The same answer a user this deployment genuinely does not hold receives, which is what keeps a caller from learning which identifiers exist by asking about them.</summary>
     [Fact]
-    public async Task ReadRecordAsync_AnUserThisDeploymentDoesNotHold_AnswersWithoutSayingAnythingAboutTheIdentifier()
+    public async Task ReadRecordAsync_AUserThisDeploymentDoesNotHold_AnswersWithoutSayingAnythingAboutTheIdentifier()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
@@ -413,7 +413,7 @@ public sealed class UserRecordEndpointsTests
     }
 
     [Fact]
-    public async Task AddMailAccountAsync_AnUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchUser()
+    public async Task AddMailAccountAsync_AUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchUser()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -474,7 +474,7 @@ public sealed class UserRecordEndpointsTests
     }
 
     [Fact]
-    public async Task StoreSecretAsync_AnUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchUser()
+    public async Task StoreSecretAsync_AUserThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchUser()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -517,7 +517,7 @@ public sealed class UserRecordEndpointsTests
 
     /// <summary>The preview names what stops deciding this user's mailboxes once the adoption commits, which is the part an operator weighs.</summary>
     [Fact]
-    public async Task ReadAdoptableAsync_AnUserThisDeploymentHolds_ReportsWhetherThereIsAnAdoptionToPerform()
+    public async Task ReadAdoptableAsync_AUserThisDeploymentHolds_ReportsWhetherThereIsAnAdoptionToPerform()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);

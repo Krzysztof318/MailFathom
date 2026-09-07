@@ -26,7 +26,7 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// user's waiting work has reached, on the enqueue rather than on the hot path.
 /// </para>
 /// <para>
-/// Two enqueues for one user arriving together both read the same latest turn and both take the one after it, so an
+/// Two enqueues for one user arriving together both read the same latest turn and both take the one after it, so a
 /// user occasionally holds two jobs at a single turn. That is the shape the queue-depth bound already has and is
 /// answered the same way: what fairness owes is a limit on how far a backlog may run ahead of everybody else rather
 /// than an invariant, and a turn shared by as many jobs as raced for it costs nothing that serializing every enqueue

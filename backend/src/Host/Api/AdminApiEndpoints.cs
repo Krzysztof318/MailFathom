@@ -110,7 +110,7 @@ namespace MailFathom.Host.Api;
 /// should bound who may add to it, read it out, or erase somebody from it.
 /// </para>
 /// <para>
-/// Then come the users themselves, which <see cref="UserRecordEndpoints" /> describes: the roster, recording an
+/// Then come the users themselves, which <see cref="UserRecordEndpoints" /> describes: the roster, recording a
 /// user, erasing one, and everything done to one user's own record — reading it, saving it edited, declaring a
 /// mailbox, withdrawing one, and the adoption that moves them off this deployment's files. They are here because a
 /// deployment-wide list of the people it serves is the one listing a user-facing surface must never compose, and

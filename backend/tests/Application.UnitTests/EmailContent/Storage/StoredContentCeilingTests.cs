@@ -260,7 +260,7 @@ public sealed class StoredContentCeilingTests
     /// ceiling for "nobody" — which reads as a working bound until somebody asks whose share it was.
     /// </remarks>
     [Fact]
-    public void EveryMember_AnUserNamingNobody_IsRefused()
+    public void EveryMember_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var ceiling = new StoredContentCeiling(1000, 800);
@@ -275,7 +275,7 @@ public sealed class StoredContentCeilingTests
 
     /// <summary>The refusal leaves nothing claimed, because a claim whose scope was never handed back is never released.</summary>
     [Fact]
-    public void TryClaim_AnUserNamingNobody_LeavesTheDeploymentLevelUntouched()
+    public void TryClaim_AUserNamingNobody_LeavesTheDeploymentLevelUntouched()
     {
         // Arrange
         var ceiling = new StoredContentCeiling(1000, 800);

@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// after the erasure commits, so callers and synchronization stop reaching them without a restart.
 /// </para>
 /// <para>
-/// The third is a refusal rather than an outcome, and it exists because one erasure undoes itself: a start writes an
+/// The third is a refusal rather than an outcome, and it exists because one erasure undoes itself: a start writes a
 /// user a configuration source names back into the roster, under the identifier the declaration carries and with the
 /// mail accounts it supplies, so a deletion request answered against one of them would be answered and then reversed.
 /// </para>

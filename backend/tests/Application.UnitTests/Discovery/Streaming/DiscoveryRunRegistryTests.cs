@@ -19,7 +19,7 @@ public sealed class DiscoveryRunRegistryTests
 
     /// <summary>A run is addressed by its identifier the moment it is opened, which is what the asking request answers with.</summary>
     [Fact]
-    public void TryOpen_ARunForAnUser_IsFoundBackByThatUser()
+    public void TryOpen_ARunForAUser_IsFoundBackByThatUser()
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);

@@ -24,7 +24,7 @@ public sealed class OtlpExportPayloadTests
 
     /// <summary>The claim the whole attribution rests on: a client cannot export as somebody else.</summary>
     [Fact]
-    public void Rewrite_ABatchClaimingAnUserOfItsOwn_ReplacesTheClaimWithTheAuthenticatedOne()
+    public void Rewrite_ABatchClaimingAUserOfItsOwn_ReplacesTheClaimWithTheAuthenticatedOne()
     {
         // Arrange
         var request = OtlpExportRequests.Batch([new KeyValuePair<string, string>(UserKey, "somebody-else")], 1);

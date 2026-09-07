@@ -105,7 +105,7 @@ public sealed class ConfiguredMailAccountCatalogTests
 
     /// <summary>A user who has taken their record over is served from it, and that is the source the roster carries.</summary>
     [Fact]
-    public void ServedAccounts_AnUserServedFromTheirOwnDocument_PublishesWhatTheDocumentHolds()
+    public void ServedAccounts_AUserServedFromTheirOwnDocument_PublishesWhatTheDocumentHolds()
     {
         // Arrange
         var settings = Synchronizing();

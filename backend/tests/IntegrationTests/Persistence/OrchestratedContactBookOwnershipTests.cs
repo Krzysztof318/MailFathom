@@ -133,7 +133,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         }
         finally
         {
-            // The provisioned user goes first, because the erasure below is asserted and an assertion that fails is an
+            // The provisioned user goes first, because the erasure below is asserted and an assertion that fails is a
             // user left behind: ReadSoleUserAsync reads the sole user with SingleAsync, so a second settings_accounts
             // row makes every later start in this collection throw in classes that never touched a contact.
             try

@@ -163,7 +163,7 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// refuses two acts a start apart — a roster this start would serve, and a user an administrator is provisioning
     /// into a deployment that is already running — and an operator correcting one is correcting the other.
     /// </remarks>
-    public static DeploymentMailUserUnresolvedException SeveralUsersOnAnUserFacingSurface(string refusal)
+    public static DeploymentMailUserUnresolvedException SeveralUsersOnAUserFacingSurface(string refusal)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refusal);
 
@@ -236,7 +236,7 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
             $"More than one user this deployment would serve names a mail account {string.Join(", ", sharedNames)}. "
             + "A mail account belongs to its user, but this release resolves an account's settings by its identifier "
             + "alone, so a name two users share would reach whichever of the two the lookup met first. Give each of "
-            + "them a name no other user uses, with 'mfctl user account remove' and 'mfctl user account add' for an "
+            + "them a name no other user uses, with 'mfctl user account remove' and 'mfctl user account add' for a "
             + "user whose record is their own, and in the declaration for one a file supplies.");
     }
 

@@ -21,7 +21,7 @@ public enum StoredContentBound
 
     /// <summary>The deployment's content storage is at its ceiling, whatever any one user is occupying of it.</summary>
     /// <remarks>
-    /// Reported in preference to <see cref="User" /> when both are reached, because it is the wider fact: raising an
+    /// Reported in preference to <see cref="User" /> when both are reached, because it is the wider fact: raising a
     /// user's share would change nothing while the instance itself is full.
     /// </remarks>
     Deployment = 2,

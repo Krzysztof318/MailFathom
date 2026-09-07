@@ -614,7 +614,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             Assert.Equal(2, claimed.Count);
             Assert.Single(claimed, job => job.AccountId?.Value == SecondUserAccount);
 
-            // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether an
+            // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether a
             // user's work is handed out in the order it was queued.
             Assert.Equal(
                 backlog[0],

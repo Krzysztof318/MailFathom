@@ -34,7 +34,7 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// The walk is one walk over the deployment's mail and its resume position is one cursor, deliberately, on a system
 /// that bounds embedding spend per user. A cursor per user would be the shape to reach for if a sweep served one
 /// user at a time; it serves all of them at once, in identifier order, so a per-user cursor would record the same
-/// walk several times over and the run would still have to visit every message to decide which cursor to move. What an
+/// walk several times over and the run would still have to visit every message to decide which cursor to move. What a
 /// user's ceiling costs is that user's messages being stepped over for the rest of the period, which the walk above
 /// already does without remembering anything. The embedding profile is deployment-wide for the same kind of reason and
 /// a different one:

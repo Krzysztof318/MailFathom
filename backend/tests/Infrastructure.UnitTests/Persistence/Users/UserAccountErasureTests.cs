@@ -13,7 +13,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Users;
 /// <remarks>
 /// <para>
 /// The walk is derived from the model so it cannot fall behind the schema, and this is what keeps its answer readable:
-/// a table entering or leaving the list is a diff a reviewer sees rather than a silent change in how much of an
+/// a table entering or leaving the list is a diff a reviewer sees rather than a silent change in how much of a
 /// user's record an erasure request actually discharges. So a failure here is answered by deciding what the moved
 /// table is — one that records a mail account with nothing keying it onto one, or one a cascade already reaches —
 /// never by copying the reported names over the expected ones.

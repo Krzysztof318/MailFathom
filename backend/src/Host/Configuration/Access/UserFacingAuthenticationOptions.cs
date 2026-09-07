@@ -57,7 +57,7 @@ internal sealed class UserFacingAuthenticationOptions
     /// Required on an entry naming OAuth and refused on every other, because it is the one method whose acceptance the
     /// deployment genuinely configures: which servers are trusted, what this resource is called, and which scopes a
     /// token must carry are decisions about the deployment rather than about a person. What it no longer carries is
-    /// which subjects are served — that is one credential record per person, which is what makes a token resolve an
+    /// which subjects are served — that is one credential record per person, which is what makes a token resolve a
     /// user instead of admitting whoever the server signed in.
     /// </remarks>
     public OAuthValidationOptions? OAuth { get; set; }
@@ -66,7 +66,7 @@ internal sealed class UserFacingAuthenticationOptions
     /// <remarks>
     /// With it, a token holds the published names its scopes carry <em>and</em> the record grants, so the authorization
     /// server decides per subject within a bound the deployment provisioned. Available only to an entry naming OAuth,
-    /// because none of the other three credentials can carry a claim about what it may do — a key, a public key, and an
+    /// because none of the other three credentials can carry a claim about what it may do — a key, a public key, and a
     /// user's password are each judged against something this deployment holds — so startup refuses it elsewhere
     /// rather than asking a credential a question it cannot answer.
     /// </remarks>

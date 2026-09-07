@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.Persistence.Contacts.Configurations;
 /// <summary>Declares the people a user's contact book holds.</summary>
 /// <remarks>
 /// <para>
-/// The user is a column and a foreign key rather than a property of the surface that reads the table, so erasing an
+/// The user is a column and a foreign key rather than a property of the surface that reads the table, so erasing a
 /// user takes their book with it and every read leads with it. It is also an alternate key beside the identity, which
 /// is what lets an address row's foreign key carry the user and therefore be unable to name a different one.
 /// </para>

@@ -36,7 +36,7 @@ public sealed class UserCredentialEndpointsTests
 
     /// <summary>A listing says what exists, how it is presented, and what it grants — never anything the secret produced.</summary>
     [Fact]
-    public async Task ListAsync_AnUserHoldingACredential_ReportsWhatItIsAndWhatItGrants()
+    public async Task ListAsync_AUserHoldingACredential_ReportsWhatItIsAndWhatItGrants()
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
@@ -403,7 +403,7 @@ public sealed class UserCredentialEndpointsTests
 
     /// <summary>The listing an operator revokes from is bounded, so a credential written past that bound would authenticate where nothing lists it — which is why the ceiling is a refusal rather than a row.</summary>
     [Fact]
-    public async Task ProvisionAsync_AnUserAlreadyHoldingAsManyCredentialsAsOneMay_IsAnsweredAsAConflict()
+    public async Task ProvisionAsync_AUserAlreadyHoldingAsManyCredentialsAsOneMay_IsAnsweredAsAConflict()
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
@@ -428,7 +428,7 @@ public sealed class UserCredentialEndpointsTests
 
     /// <summary>A user identifier copied out of the wrong place is a correction an administrator can act on rather than a write that silently did nothing.</summary>
     [Fact]
-    public async Task ProvisionAsync_AnUserThisDeploymentHoldsNoRecordFor_IsRefusedNamingTheIdentifier()
+    public async Task ProvisionAsync_AUserThisDeploymentHoldsNoRecordFor_IsRefusedNamingTheIdentifier()
     {
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);

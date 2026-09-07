@@ -398,7 +398,7 @@ public sealed class AdminApiEndpointsTests
     [InlineData("POST", UserRecordEndpoints.UserMailAccountsRoute)]
     [InlineData("POST", UserRecordEndpoints.UserMailAccountRemovalRoute)]
     [InlineData("POST", UserRecordEndpoints.UserAdoptionRoute)]
-    public void MapAdminApi_AnUserRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
+    public void MapAdminApi_AUserRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
     {
         // Arrange
         var endpoints = BuildRouteBuilder();

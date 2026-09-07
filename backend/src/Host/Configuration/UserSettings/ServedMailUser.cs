@@ -24,7 +24,7 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// The accounts are empty for a user whose source is <see cref="MailUserAccountSource.DeploymentSection" />, and
 /// deliberately so: those declarations are in the reloadable mail snapshot, which is where a reload of the file has to
 /// be able to reach them. Copying them here would freeze a deployment's existing shape at the start that read it, so
-/// what this record carries is what the snapshot cannot — a user's own declared section, and the document of an
+/// what this record carries is what the snapshot cannot — a user's own declared section, and the document of a
 /// user who has taken their record over.
 /// <para>
 /// The scanning block is absent for the sole user a deployment serves from its own section, who has no record of their

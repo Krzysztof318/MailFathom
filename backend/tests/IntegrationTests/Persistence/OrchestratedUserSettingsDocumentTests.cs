@@ -68,7 +68,7 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
 
     /// <summary>A user this deployment holds no record of is an absence rather than an empty record.</summary>
     [Fact]
-    public async Task ReadAsync_AnUserTheDeploymentHoldsNoRecordOf_IsAbsent()
+    public async Task ReadAsync_AUserTheDeploymentHoldsNoRecordOf_IsAbsent()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -144,7 +144,7 @@ public sealed class OrchestratedUserSettingsDocumentTests(MailFathomOrchestratio
     /// beside the assertion that the provisioned user's is clear.
     /// </remarks>
     [Fact]
-    public async Task ReadAsync_AnUserWhoseDocumentWasWrittenAtRuntime_CarriesTheMarkerSet()
+    public async Task ReadAsync_AUserWhoseDocumentWasWrittenAtRuntime_CarriesTheMarkerSet()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

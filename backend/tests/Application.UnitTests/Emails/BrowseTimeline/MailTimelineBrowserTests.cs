@@ -505,7 +505,7 @@ public sealed class MailTimelineBrowserTests
 
     /// <summary>A user who owns no account reads an empty list rather than every other user's mail.</summary>
     [Fact]
-    public async Task BrowsePageAsync_AnUserWhoOwnsNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
+    public async Task BrowsePageAsync_AUserWhoOwnsNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
     {
         // Arrange
         var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));

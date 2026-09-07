@@ -42,7 +42,7 @@ public sealed class AccountReferenceOwnershipTests
         using var context = CreateContext();
 
         // Act
-        string[] withoutAnUser =
+        string[] withoutAUser =
         [
             .. EntityTypesNamingAnAccount(context)
                 .Where(entityType => entityType.FindProperty(UserColumn) is null)
@@ -51,7 +51,7 @@ public sealed class AccountReferenceOwnershipTests
         ];
 
         // Assert
-        Assert.Empty(withoutAnUser);
+        Assert.Empty(withoutAUser);
     }
 
     /// <summary>

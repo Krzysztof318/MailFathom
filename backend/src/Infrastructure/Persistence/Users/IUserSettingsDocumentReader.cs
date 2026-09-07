@@ -8,7 +8,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 
 /// <summary>Reads one user's persisted record.</summary>
 /// <remarks>
-/// One read answers for one user and never for the deployment. That is the whole of the contract's shape: an
+/// One read answers for one user and never for the deployment. That is the whole of the contract's shape: a
 /// user-scoped view is a view of one person's record, so the read is a key lookup rather than a query, and a caller
 /// holding several users asks for each rather than being handed a page of other people's documents to filter.
 /// </remarks>

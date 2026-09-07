@@ -31,7 +31,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>Tightening is the whole point of the block: a scanner nobody was paying for runs over the mail of whoever asked.</summary>
     [Fact]
-    public void FindRefusals_AnUserSwitchingOnAScannerTheDeploymentLeftOff_IsAccepted()
+    public void FindRefusals_AUserSwitchingOnAScannerTheDeploymentLeftOff_IsAccepted()
     {
         // Arrange
         var user = new UserSensitiveContentOptions();
@@ -50,7 +50,7 @@ public sealed class UserSensitiveContentRulesTests
     /// the operator holding that switch and safe to log.
     /// </summary>
     [Fact]
-    public void FindRefusals_AnUserSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
+    public void FindRefusals_AUserSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -72,7 +72,7 @@ public sealed class UserSensitiveContentRulesTests
     /// that fails closed on its next message.
     /// </summary>
     [Fact]
-    public void FindRefusals_AnUserAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheMissingSetting()
+    public void FindRefusals_AUserAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheMissingSetting()
     {
         // Arrange
         var user = new UserSensitiveContentOptions();
@@ -88,7 +88,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>The other half: an analyzer the deployment stood up is one a user may ask to be scanned by.</summary>
     [Fact]
-    public void FindRefusals_AnUserAskingForThePersonalDataScannerWhereAnAnalyzerIsConfigured_IsAccepted()
+    public void FindRefusals_AUserAskingForThePersonalDataScannerWhereAnAnalyzerIsConfigured_IsAccepted()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -105,7 +105,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>An entry naming no scanner would be dropped in silence and read as a record that screens more than it does.</summary>
     [Fact]
-    public void FindRefusals_AnUserScreeningForSomethingNoScannerIsCalled_IsRefusedNamingWhatIsAccepted()
+    public void FindRefusals_AUserScreeningForSomethingNoScannerIsCalled_IsRefusedNamingWhatIsAccepted()
     {
         // Arrange
         var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety"] };
@@ -122,7 +122,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>The refusal is what an administrator and a start both read, so its noun agrees with the count it reports.</summary>
     [Fact]
-    public void FindRefusals_AnUserScreeningForSeveralUnknownScanners_CountsThemAsEntries()
+    public void FindRefusals_AUserScreeningForSeveralUnknownScanners_CountsThemAsEntries()
     {
         // Arrange
         var user = new UserSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety", "Dane"] };
@@ -136,7 +136,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>The list is the user's whole answer, so one naming fewer scanners than the deployment stops mail for is a narrowing.</summary>
     [Fact]
-    public void FindRefusals_AnUserScreeningForFewerScannersThanTheDeployment_IsRefusedNamingWhatIsMissing()
+    public void FindRefusals_AUserScreeningForFewerScannersThanTheDeployment_IsRefusedNamingWhatIsMissing()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -154,7 +154,7 @@ public sealed class UserSensitiveContentRulesTests
 
     /// <summary>Naming what the deployment stops mail for and something beside it is an addition, which is allowed.</summary>
     [Fact]
-    public void FindRefusals_AnUserAddingAScannerToWhatTheDeploymentAlreadyStopsMailFor_IsAccepted()
+    public void FindRefusals_AUserAddingAScannerToWhatTheDeploymentAlreadyStopsMailFor_IsAccepted()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();

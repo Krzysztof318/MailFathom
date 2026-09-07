@@ -16,7 +16,7 @@ namespace MailFathom.SharedSources.UnitTests;
 public sealed class InMemoryUserStoredContentLedgerTests
 {
     [Fact]
-    public async Task ReadStoredContentBytesAsync_AnUserHoldingNothing_AnswersWithZero()
+    public async Task ReadStoredContentBytesAsync_AUserHoldingNothing_AnswersWithZero()
     {
         // Arrange
         var ledger = new InMemoryUserStoredContentLedger();
@@ -55,7 +55,7 @@ public sealed class InMemoryUserStoredContentLedgerTests
 
     /// <summary>Re-deriving is counted apart from reading, which is what tells a maintained figure from a recomputed one.</summary>
     [Fact]
-    public async Task RederiveStoredContentBytesAsync_AnUserHoldingPayloads_AnswersTheSameFigureAndCountsSeparately()
+    public async Task RederiveStoredContentBytesAsync_AUserHoldingPayloads_AnswersTheSameFigureAndCountsSeparately()
     {
         // Arrange
         var ledger = new InMemoryUserStoredContentLedger().Holding(SyntheticMailUser.Deployment, 4_096);
@@ -77,7 +77,7 @@ public sealed class InMemoryUserStoredContentLedgerTests
     /// would be refused by in a deployment, which is the one thing a double must not do.
     /// </remarks>
     [Fact]
-    public async Task EveryMember_AnUserNamingNobody_IsRefused()
+    public async Task EveryMember_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var ledger = new InMemoryUserStoredContentLedger();

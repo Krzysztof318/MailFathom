@@ -99,7 +99,7 @@ public sealed class DeclaredUsersTests
 
     /// <summary>A user declared before their first mailbox is an ordinary state rather than an unfinished one.</summary>
     [Fact]
-    public void FindConfigurationErrors_AnUserDeclaringNoMailbox_AcceptsThem()
+    public void FindConfigurationErrors_AUserDeclaringNoMailbox_AcceptsThem()
     {
         // Arrange
         var configuration = Configuration(
@@ -117,7 +117,7 @@ public sealed class DeclaredUsersTests
 
     /// <summary>A mail account of a user's own is judged by every rule the deployment's own section is judged by.</summary>
     [Fact]
-    public void FindConfigurationErrors_AnUsersMailboxNamingNoHost_IsRefusedUnderTheirLabel()
+    public void FindConfigurationErrors_AUsersMailboxNamingNoHost_IsRefusedUnderTheirLabel()
     {
         // Arrange
         var configuration = Configuration(
@@ -140,7 +140,7 @@ public sealed class DeclaredUsersTests
     /// mailbox that synchronizes nothing rather than as a setting nobody could have meant.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_AnUsersMailboxWhoseWindowOpensAfterToday_IsRefusedUnderTheirLabel()
+    public void FindConfigurationErrors_AUsersMailboxWhoseWindowOpensAfterToday_IsRefusedUnderTheirLabel()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>

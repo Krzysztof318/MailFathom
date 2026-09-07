@@ -21,7 +21,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// <b>Neither act names a user.</b> The person is the one the credential authenticated, resolved from the principal
 /// exactly as the record's own acts resolve it, so a request about somebody else is something a caller cannot express.
-/// The read is a key lookup on that one user rather than a roster filtered down to them, which is what keeps an
+/// The read is a key lookup on that one user rather than a roster filtered down to them, which is what keeps a
 /// user-facing surface from composing a deployment-wide catalog of people.
 /// </para>
 /// <para>

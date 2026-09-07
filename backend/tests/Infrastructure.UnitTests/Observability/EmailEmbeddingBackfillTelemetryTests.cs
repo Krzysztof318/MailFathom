@@ -120,7 +120,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
     /// nothing, so an instance with no user over their share stays distinguishable from one that has.
     /// </remarks>
     [Fact]
-    public void RecordPass_ASweepSteppedPastAnUserOverTheirShare_CountsEveryPass()
+    public void RecordPass_ASweepSteppedPastAUserOverTheirShare_CountsEveryPass()
     {
         // Arrange
         var telemetry = new EmailEmbeddingBackfillTelemetry();

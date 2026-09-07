@@ -200,7 +200,7 @@ public sealed class RedactingEmailMimeReaderTests
     /// beside it never went through, and a row stamped stricter than what produced it is a row nothing revisits.
     /// </summary>
     [Fact]
-    public async Task ReadMetadataAsync_ABodyRedactedForAnUser_CarriesThePostureItWasRedactedUnder()
+    public async Task ReadMetadataAsync_ABodyRedactedForAUser_CarriesThePostureItWasRedactedUnder()
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);

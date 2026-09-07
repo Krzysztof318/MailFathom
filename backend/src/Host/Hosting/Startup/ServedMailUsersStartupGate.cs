@@ -126,7 +126,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             .. await this.ServeUsersOfTheirOwnRecordAsync(scope, declaredUsers, held, cancellationToken),
         ];
 
-        this.RefuseSeveralUsersOnAnUserFacingSurface(served);
+        this.RefuseSeveralUsersOnAUserFacingSurface(served);
 
         this.RefuseMailAccountNamesTwoUsersShare(served);
 
@@ -456,11 +456,11 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// roster of several rather than a wrong one.
     /// </para>
     /// </remarks>
-    private void RefuseSeveralUsersOnAnUserFacingSurface(IReadOnlyList<ServedMailUser> served)
+    private void RefuseSeveralUsersOnAUserFacingSurface(IReadOnlyList<ServedMailUser> served)
     {
         if (served.Count > 1 && this.admission.AdmitsACallerNamingNoUser)
         {
-            throw DeploymentMailUserUnresolvedException.SeveralUsersOnAnUserFacingSurface(this.admission.Refusal);
+            throw DeploymentMailUserUnresolvedException.SeveralUsersOnAUserFacingSurface(this.admission.Refusal);
         }
     }
 

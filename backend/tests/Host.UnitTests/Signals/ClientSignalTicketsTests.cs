@@ -135,7 +135,7 @@ public sealed class ClientSignalTicketsTests
 
     /// <summary>A ticket says when it stops working, so a client mints another rather than retrying one that cannot open a connection.</summary>
     [Fact]
-    public void Mint_ForAnUser_ReportsWhenPresentingItStopsWorking()
+    public void Mint_ForAUser_ReportsWhenPresentingItStopsWorking()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));

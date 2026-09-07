@@ -97,7 +97,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
 
     /// <summary>Nothing writes to a mailbox this deployment does not serve, whatever the deployment's own section says.</summary>
     [Fact]
-    public void ActionsFor_AnUserThisDeploymentDoesNotServe_AsksForNothing()
+    public void ActionsFor_AUserThisDeploymentDoesNotServe_AsksForNothing()
     {
         // Arrange
         var reader = ReaderFor(new SpamClassificationOptions

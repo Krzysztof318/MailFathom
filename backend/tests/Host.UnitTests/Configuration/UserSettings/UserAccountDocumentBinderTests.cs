@@ -33,7 +33,7 @@ public sealed class UserAccountDocumentBinderTests
 
     /// <summary>A user is provisioned before their first mailbox, so the empty record is an ordinary one.</summary>
     [Fact]
-    public void Bind_EmptyDocument_IsAnUserWhoOwnsNoMailAccount()
+    public void Bind_EmptyDocument_IsAUserWhoOwnsNoMailAccount()
     {
         // Arrange
         var binder = CreateBinder();

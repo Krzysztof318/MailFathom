@@ -121,7 +121,7 @@ public sealed class ClientMailAccountsEndpointTests
 
     /// <summary>A user with no account reads an empty collection, which is a state a client renders rather than an error.</summary>
     [Fact]
-    public void For_AnUserWithNoAccount_CarriesAnEmptyCollection()
+    public void For_AUserWithNoAccount_CarriesAnEmptyCollection()
     {
         // Arrange
         var directory = new MailAccountFreshnessDirectory(SynchronizationEnabled: true, []);

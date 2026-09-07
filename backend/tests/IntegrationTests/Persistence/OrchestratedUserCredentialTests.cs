@@ -147,7 +147,7 @@ public sealed class OrchestratedUserCredentialTests(MailFathomOrchestrationFixtu
 
     /// <summary>A user this deployment holds no record for is answered rather than raised, which is what the <c>EXISTS</c> subquery is for.</summary>
     [Fact]
-    public async Task CreateAsync_AnUserTheDeploymentHoldsNoRecordFor_IsRefusedWithoutWriting()
+    public async Task CreateAsync_AUserTheDeploymentHoldsNoRecordFor_IsRefusedWithoutWriting()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

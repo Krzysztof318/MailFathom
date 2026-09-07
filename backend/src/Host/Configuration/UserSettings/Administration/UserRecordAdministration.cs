@@ -38,7 +38,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// The one rule that reads which of the two is acting is the secret-bearing settings. A secret reference is a path into
 /// whatever this deployment can read — a mounted file, a credential, an environment variable — and the server a mail
-/// account names is the user's own, so a reference a user wrote would hand them whatever stands behind it. What an
+/// account names is the user's own, so a reference a user wrote would hand them whatever stands behind it. What a
 /// user may name is therefore bounded to material provisioned for them, which an operator declares by naming it after
 /// them; the references their record already carries survive a change that was never about them, and anything else is
 /// declared by whoever administers the deployment.

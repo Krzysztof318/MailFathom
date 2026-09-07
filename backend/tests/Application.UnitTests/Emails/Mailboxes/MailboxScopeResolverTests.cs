@@ -164,7 +164,7 @@ public sealed class MailboxScopeResolverTests
     /// records is the user axis rather than a mapping that admitted nothing to begin with.
     /// </remarks>
     [Fact]
-    public void ReadableScope_AnUserWhoOwnsNoAccount_ReadsNothingRatherThanEverything()
+    public void ReadableScope_AUserWhoOwnsNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
         var resolver = ResolverFor(SyntheticMailUser.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
@@ -194,7 +194,7 @@ public sealed class MailboxScopeResolverTests
     [Theory]
     [InlineData(JunkMailInclusion.Included, true)]
     [InlineData(JunkMailInclusion.Excluded, false)]
-    public void ReadableScope_AnUserWhoOwnsNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
+    public void ReadableScope_AUserWhoOwnsNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
         JunkMailInclusion junkMail,
         bool recorded)
     {

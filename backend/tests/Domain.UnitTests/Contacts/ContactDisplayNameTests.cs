@@ -11,7 +11,7 @@ public sealed class ContactDisplayNameTests
 {
     /// <summary>The user's casing is what a reader is shown, and the sort key is what a listing is ordered by.</summary>
     [Fact]
-    public void Create_NameWrittenByAnUser_KeepsTheCasingAndDerivesTheComparisonForm()
+    public void Create_NameWrittenByAUser_KeepsTheCasingAndDerivesTheComparisonForm()
     {
         // Arrange
         const string written = "  Anna Kowalska  ";

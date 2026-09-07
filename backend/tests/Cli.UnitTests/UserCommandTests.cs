@@ -69,7 +69,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>A label is the operator's own text and nothing is keyed by it, so a rename asks nothing and reports what the user now carries.</summary>
     [Fact]
-    public async Task Rename_AnUserTheDeploymentHolds_SendsTheLabelAndReportsIt()
+    public async Task Rename_AUserTheDeploymentHolds_SendsTheLabelAndReportsIt()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.Holding(User);
@@ -101,7 +101,7 @@ public sealed class UserCommandTests : IDisposable
     /// restart. Reporting the new label without saying so would report a change the deployment undoes.
     /// </summary>
     [Fact]
-    public async Task Rename_AnUserAConfigurationSourceDeclares_SaysTheLabelLastsUntilARestart()
+    public async Task Rename_AUserAConfigurationSourceDeclares_SaysTheLabelLastsUntilARestart()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -127,7 +127,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>A user nothing declares keeps the label a rename writes, so nothing qualifies what the command reported.</summary>
     [Fact]
-    public async Task Rename_AnUserNoConfigurationSourceDeclares_ReportsTheLabelWithNothingQualifyingIt()
+    public async Task Rename_AUserNoConfigurationSourceDeclares_ReportsTheLabelWithNothingQualifyingIt()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.Holding(User);
@@ -174,7 +174,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The listing is where the two states that decide what to do next are read.</summary>
     [Fact]
-    public async Task List_AnUserServedFromConfiguration_SaysTheAdoptionIsWhatMovesThem()
+    public async Task List_AUserServedFromConfiguration_SaysTheAdoptionIsWhatMovesThem()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -190,7 +190,7 @@ public sealed class UserCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task List_AnUserReadingTheirOwnRecord_SaysWhereTheirMailAccountsAreMaintained()
+    public async Task List_AUserReadingTheirOwnRecord_SaysWhereTheirMailAccountsAreMaintained()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.Holding(User);
@@ -253,7 +253,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>A record whose mailboxes are in a file is empty, and reading that without being told why looks like a user with no mailboxes.</summary>
     [Fact]
-    public async Task Show_AnUserServedFromConfiguration_SaysWhyTheRecordIsEmpty()
+    public async Task Show_AUserServedFromConfiguration_SaysWhyTheRecordIsEmpty()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -348,7 +348,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The one refusal a command can repair names the repair, which is the adoption that moves the user out of the files.</summary>
     [Fact]
-    public async Task AccountAdd_AnUserAConfigurationSourceSupplies_NamesTheAdoptionAsTheRepair()
+    public async Task AccountAdd_AUserAConfigurationSourceSupplies_NamesTheAdoptionAsTheRepair()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.RefusingTheWrite(
@@ -403,7 +403,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>A user already reading their own record has nothing to move, and saying so is not a refusal.</summary>
     [Fact]
-    public async Task Adopt_AnUserAlreadyReadingTheirOwnRecord_SaysThereIsNothingToAdopt()
+    public async Task Adopt_AUserAlreadyReadingTheirOwnRecord_SaysThereIsNothingToAdopt()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.Holding(User);
@@ -421,7 +421,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The preview names the mailboxes and the path behind them, which is the moment to notice it covers more than was meant.</summary>
     [Fact]
-    public async Task Adopt_AnUserAConfigurationSourceSupplies_PreviewsTheMailboxesAndThePathBehindThem()
+    public async Task Adopt_AUserAConfigurationSourceSupplies_PreviewsTheMailboxesAndThePathBehindThem()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "primary", "archive");
@@ -439,7 +439,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The adoption is composed over the version the preview reported, which is what the deployment accepts it against.</summary>
     [Fact]
-    public async Task Adopt_AnUserAConfigurationSourceSupplies_ComposesTheAdoptionOverThePreviewedVersion()
+    public async Task Adopt_AUserAConfigurationSourceSupplies_ComposesTheAdoptionOverThePreviewedVersion()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "primary");
@@ -543,7 +543,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>A user the deployment does not hold is nothing to erase rather than a failure, and the confirmation is never reached.</summary>
     [Fact]
-    public async Task Remove_AnUserTheDeploymentDoesNotHold_SaysThereIsNothingToErase()
+    public async Task Remove_AUserTheDeploymentDoesNotHold_SaysThereIsNothingToErase()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.Holding(User);

@@ -252,7 +252,7 @@ public sealed class AccessAuthorizationTests
 
     /// <summary>A caller admitted to act for a user carries that user into every use case reading one user's mail.</summary>
     [Fact]
-    public void RequireUser_ACallerAdmittedToActForAnUser_ReportsThatUser()
+    public void RequireUser_ACallerAdmittedToActForAUser_ReportsThatUser()
     {
         // Arrange
         var authorization = AuthorizationOver(
@@ -271,7 +271,7 @@ public sealed class AccessAuthorizationTests
     /// narrowing the requirement to the caller kind would refuse every download while this class stayed green.
     /// </summary>
     [Fact]
-    public void RequireUser_ACapabilityRedeemedForAnUsersAttachment_ReportsThatUser()
+    public void RequireUser_ACapabilityRedeemedForAUsersAttachment_ReportsThatUser()
     {
         // Arrange
         var authorization = AuthorizationOver(

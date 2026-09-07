@@ -12,7 +12,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <param name="Permissions">What the request may do, in the published order.</param>
 /// <remarks>
 /// <para>
-/// The three facts are one shape because they are established together and travel together: a credential resolves an
+/// The three facts are one shape because they are established together and travel together: a credential resolves a
 /// user, and what that user's caller may do was decided when the credential was provisioned. Four methods producing
 /// four shapes of the same answer would be four places for one of the three to be dropped on the way to the principal.
 /// </para>

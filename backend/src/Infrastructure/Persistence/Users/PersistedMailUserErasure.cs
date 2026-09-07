@@ -24,7 +24,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// and reaches the same end state, which is what makes repeating it safe.
 /// </para>
 /// <para>
-/// What the count of rows the cascade did not reach says is left where it is measured. A caller asking to erase an
+/// What the count of rows the cascade did not reach says is left where it is measured. A caller asking to erase a
 /// user is asking whether the deployment still holds them, and how many rows of which shape it took to answer that is
 /// the seam's own accounting rather than an operator's.
 /// </para>

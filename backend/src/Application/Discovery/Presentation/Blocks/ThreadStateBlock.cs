@@ -122,7 +122,7 @@ public sealed record ThreadStatement
 
 /// <summary>Something somebody undertook to do, and when they said they would.</summary>
 /// <remarks>
-/// The user is optional because a commitment is often made without naming who keeps it — "we will send the revised
+/// <c>OwedBy</c> is optional because a commitment is often made without naming who keeps it — "we will send the revised
 /// figures" — and inventing a name for it would be the assistant asserting something the mail did not.
 /// </remarks>
 public sealed record ThreadCommitment

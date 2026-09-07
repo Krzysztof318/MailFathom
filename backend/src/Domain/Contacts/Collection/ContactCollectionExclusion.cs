@@ -87,7 +87,7 @@ public sealed record ContactCollectionExclusion
     /// <remarks>
     /// <para>
     /// Blank text and text beyond <see cref="MaximumPatternLength" /> are refused, and so is a pattern that narrows
-    /// nothing: an entry matching every address would switch collection off through a list written to narrow it, and an
+    /// nothing: an entry matching every address would switch collection off through a list written to narrow it, and a
     /// user meaning that turns collection off where it is turned on.
     /// </para>
     /// <para>

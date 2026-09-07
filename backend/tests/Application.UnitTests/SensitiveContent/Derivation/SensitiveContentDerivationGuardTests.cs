@@ -198,7 +198,7 @@ public sealed class SensitiveContentDerivationGuardTests
 
     /// <summary>A stamp on a row promises the text beside it went through a redaction, so neither travels alone.</summary>
     [Fact]
-    public void StampFor_AnUserNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
+    public void StampFor_AUserNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
     {
         // Arrange
         var guard = ScanningSensitiveContentDerivation.Inactive();

@@ -21,7 +21,7 @@ namespace MailFathom.Application.Accounts;
 /// A user who owns nothing answers with an empty set, and that is a real answer rather than an absent one: the
 /// resolution turns it into a scope that reads nothing, never into an unrestricted query. A principal acting for no
 /// user at all is a different case and is refused rather than answered — the deployment administrator and this
-/// process's own identity reach this port only by mistake, and an empty answer would let that mistake look like an
+/// process's own identity reach this port only by mistake, and an empty answer would let that mistake look like a
 /// user with no mail.
 /// </para>
 /// <para>

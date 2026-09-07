@@ -204,7 +204,7 @@ public sealed class ClientMailFoldersEndpointTests
 
     /// <summary>A user with no account reads an empty tree, which is a state a client renders rather than an error.</summary>
     [Fact]
-    public void For_AnUserWithNoAccount_CarriesAnEmptyCollection()
+    public void For_AUserWithNoAccount_CarriesAnEmptyCollection()
     {
         // Arrange
         var directory = new MailFolderDirectory(SynchronizationEnabled: true, []);

@@ -417,7 +417,7 @@ public sealed class MailFolderParticipationOptionsTests
     /// that section reported every folder as unmapped and hid mail the deployment had already stored.
     /// </summary>
     [Fact]
-    public void GetParticipation_AFolderDeclaredUnderAnUser_AnswersForThatFolderRatherThanUnmapped()
+    public void GetParticipation_AFolderDeclaredUnderAUser_AnswersForThatFolderRatherThanUnmapped()
     {
         // Arrange
         var options = UserDeclaring(CreateAccount(new MailFolderMappingOptions
@@ -440,7 +440,7 @@ public sealed class MailFolderParticipationOptionsTests
 
     /// <summary>The junk catalog reads the same entries, so a user-declared junk folder is withheld as a mapped one is.</summary>
     [Fact]
-    public void JunkFolders_AFolderDeclaredUnderAnUser_NamesThatFolder()
+    public void JunkFolders_AFolderDeclaredUnderAUser_NamesThatFolder()
     {
         // Arrange
         var options = UserDeclaring(CreateAccount(new MailFolderMappingOptions

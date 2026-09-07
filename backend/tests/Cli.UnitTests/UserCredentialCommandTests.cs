@@ -182,7 +182,7 @@ public sealed class UserCredentialCommandTests : IDisposable
 
     /// <summary>A named user is acted on as written, because the deployment refuses one it holds no record for and says so.</summary>
     [Fact]
-    public async Task Create_AnUserTheInvocationNamed_ActsForThatUserWithoutReadingTheRoster()
+    public async Task Create_AUserTheInvocationNamed_ActsForThatUserWithoutReadingTheRoster()
     {
         // Arrange
         using var deployment = FakeUserCredentialDeployment.Holding([User, AnotherUser]);
@@ -210,7 +210,7 @@ public sealed class UserCredentialCommandTests : IDisposable
 
     /// <summary>A listing is a fact about the record rather than about the secret, which is what makes it safe to print and keep.</summary>
     [Fact]
-    public async Task List_AnUserHoldingCredentials_ReportsEachOneWithNothingDerivedFromItsPassword()
+    public async Task List_AUserHoldingCredentials_ReportsEachOneWithNothingDerivedFromItsPassword()
     {
         // Arrange
         using var deployment = FakeUserCredentialDeployment.Holding(
@@ -230,7 +230,7 @@ public sealed class UserCredentialCommandTests : IDisposable
 
     /// <summary>Nothing provisions a credential on its own, so an empty listing is a state to explain rather than a table with no rows.</summary>
     [Fact]
-    public async Task List_AnUserHoldingNone_SaysSoRatherThanDrawingAnEmptyTable()
+    public async Task List_AUserHoldingNone_SaysSoRatherThanDrawingAnEmptyTable()
     {
         // Arrange
         using var deployment = FakeUserCredentialDeployment.Holding([User]);

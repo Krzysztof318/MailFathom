@@ -78,14 +78,14 @@ public sealed class JobLeaseTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("attempt\ta")]
-    public void Create_AnUserThatIsBlankOrCarriesAControlCharacter_IsRefused(string value)
+    public void Create_AUserThatIsBlankOrCarriesAControlCharacter_IsRefused(string value)
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => JobLeaseOwner.Create(value));
     }
 
     [Fact]
-    public void Create_AnUserLongerThanTheBound_IsRefused()
+    public void Create_AUserLongerThanTheBound_IsRefused()
     {
         // Arrange
         var overLongUser = new string('o', JobLeaseOwner.MaximumLength + 1);

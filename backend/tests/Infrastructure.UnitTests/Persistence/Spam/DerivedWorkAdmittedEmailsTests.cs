@@ -188,7 +188,7 @@ public sealed class DerivedWorkAdmittedEmailsTests
     /// server already filed as junk under a name their own account happens to share.
     /// </remarks>
     [Fact]
-    public void Admitting_MailOfAnUserWhoseAccountDoesNotClassify_LetsItThroughUnscored()
+    public void Admitting_MailOfAUserWhoseAccountDoesNotClassify_LetsItThroughUnscored()
     {
         // Arrange
         var emails = Emails(

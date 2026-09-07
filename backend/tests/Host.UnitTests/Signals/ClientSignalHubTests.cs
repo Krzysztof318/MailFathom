@@ -119,7 +119,7 @@ public sealed class ClientSignalHubTests
 
     /// <summary>A group name is composed from the user's own identifier, which no caller writes.</summary>
     [Fact]
-    public void GroupOf_AnUser_ComposesTheNameFromTheUsersIdentifier() =>
+    public void GroupOf_AUser_ComposesTheNameFromTheUsersIdentifier() =>
         Assert.Contains(
             SyntheticMailUser.Deployment.Value.ToString(),
             ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),

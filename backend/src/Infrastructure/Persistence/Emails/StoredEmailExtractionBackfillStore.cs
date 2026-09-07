@@ -39,7 +39,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// change what the walk in flight is selecting or what it stamps its cursor with. Were it re-read, the rows already
     /// behind the cursor would stay derived under the weaker posture while the cursor recorded the stricter composite,
     /// and the next run would read that agreement as everything behind the position being done. The deployment's own
-    /// posture needs no such capture, being restart-scoped and therefore fixed for the life of the process; only an
+    /// posture needs no such capture, being restart-scoped and therefore fixed for the life of the process; only a
     /// user's record moves under a run.
     /// </para>
     /// </remarks>
@@ -215,7 +215,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
 
         var posture = this.RebuiltTowards.FirstOrDefault(candidate => candidate.User.Value == storedEmail.UserId);
 
-        // A user off the roster is judged by the deployment's own posture, exactly as the selection judges them. An
+        // A user off the roster is judged by the deployment's own posture, exactly as the selection judges them. A
         // user on it whose mail nothing scans has no stamp to be stale against, and falling through to the deployment's
         // would re-read their attachments against a posture that was never applied to them.
         if ((posture is null ? this.UnrosteredRebuiltTowards : posture.Posture.Stamp) is not { } current)

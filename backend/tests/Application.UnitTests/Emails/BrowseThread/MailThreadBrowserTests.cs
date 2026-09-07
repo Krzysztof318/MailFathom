@@ -459,7 +459,7 @@ public sealed class MailThreadBrowserTests
 
     /// <summary>A user who owns no account reads nothing rather than every other user's conversation.</summary>
     [Fact]
-    public async Task BrowsePageAsync_AnUserWhoOwnsNoAccount_AnswersWithNothingWithoutReachingStorage()
+    public async Task BrowsePageAsync_AUserWhoOwnsNoAccount_AnswersWithNothingWithoutReachingStorage()
     {
         // Arrange
         var threadReader = new StubEmailThreadReader([.. ConversationOf(2).Select(message => (Conversation, message))]);

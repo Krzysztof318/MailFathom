@@ -365,7 +365,7 @@ public sealed class RootSettingsWriterTests
 
     /// <summary>A setting another store owns is refused rather than written into the root document.</summary>
     /// <remarks>
-    /// The refusal names both ways a user's mail accounts are changed, because this writer sees a path rather than an
+    /// The refusal names both ways a user's mail accounts are changed, because this writer sees a path rather than a
     /// user and cannot tell which of the two applies: an operator handed only one of them would be sent to edit a file
     /// that no longer reaches that user, or to a command that refuses one who has not been adopted.
     /// </remarks>

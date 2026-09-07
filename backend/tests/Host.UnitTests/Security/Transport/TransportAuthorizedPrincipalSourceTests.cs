@@ -148,7 +148,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     [InlineData(McpEndpointRoute.Path, true)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_AnAuthenticatedRequest_CarriesAnUserOnlyOnASurfaceServingOneUsersMail(
+    public void Current_AnAuthenticatedRequest_CarriesAUserOnlyOnASurfaceServingOneUsersMail(
         string path,
         bool servesOneUsersMail)
     {
@@ -176,7 +176,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     [InlineData(McpEndpointRoute.Path, true)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAnUserOnlyOnASurfaceServingOneUsersMail(
+    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAUserOnlyOnASurfaceServingOneUsersMail(
         string path,
         bool servesOneUsersMail)
     {
@@ -276,7 +276,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     [Theory]
     [InlineData(McpEndpointRoute.Path)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session")]
-    public void Current_ARequestAuthenticatedByAnUsersCredential_ActsForThatUserRatherThanTheDeploymentsUser(string path)
+    public void Current_ARequestAuthenticatedByAUsersCredential_ActsForThatUserRatherThanTheDeploymentsUser(string path)
     {
         // Arrange
         var source = SourceOver(
@@ -296,7 +296,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
     /// <summary>The administrative surface has nowhere to put a user, so a claim carrying one is dropped rather than admitted with it.</summary>
     [Fact]
-    public void Current_AnUsersCredentialOnASurfaceServingNoOnesMail_ActsForNoUser()
+    public void Current_AUsersCredentialOnASurfaceServingNoOnesMail_ActsForNoUser()
     {
         // Arrange
         var source = SourceOver(

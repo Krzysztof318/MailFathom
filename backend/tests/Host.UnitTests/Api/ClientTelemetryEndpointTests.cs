@@ -76,7 +76,7 @@ public sealed class ClientTelemetryEndpointTests
 
     /// <summary>The claim the whole feature rests on, asserted at the wire rather than at the argument.</summary>
     [Fact]
-    public async Task AcceptAsync_ABatchClaimingAnUserOfItsOwn_ForwardsItNamingTheAuthenticatedOne()
+    public async Task AcceptAsync_ABatchClaimingAUserOfItsOwn_ForwardsItNamingTheAuthenticatedOne()
     {
         // Arrange
         using var collector = AcceptingCollector();

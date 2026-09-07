@@ -585,7 +585,7 @@ public sealed class MailSearchBrowserTests
 
     /// <summary>A user who owns no account this deployment serves is still told what semantic retrieval can do, because that describes the instance.</summary>
     [Fact]
-    public async Task SearchPageAsync_AnUserOwningNoAccount_ReturnsAnEmptyPageStillReportingTheCapability()
+    public async Task SearchPageAsync_AUserOwningNoAccount_ReturnsAnEmptyPageStillReportingTheCapability()
     {
         // Arrange
         var browser = BrowserOver(IndexOver(RankedCorpus(1)), accountCatalog: CatalogServing());

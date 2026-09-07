@@ -121,7 +121,7 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     [Fact]
-    public async Task StartAsync_AnUserDeclaredWithNoRow_GivesThemTheRowTheMailGraphHangsOn()
+    public async Task StartAsync_AUserDeclaredWithNoRow_GivesThemTheRowTheMailGraphHangsOn()
     {
         // Arrange
         var provisioning = ProvisioningThatRecords();
@@ -192,7 +192,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// declaration that changed it would leave all of it belonging to nobody.
     /// </summary>
     [Fact]
-    public async Task StartAsync_ADeclaredIdentifierChangedForAnUserAlreadyHeld_FailsStartupNamingTheUser()
+    public async Task StartAsync_ADeclaredIdentifierChangedForAUserAlreadyHeld_FailsStartupNamingTheUser()
     {
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
@@ -267,7 +267,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// deployment already holds are reconciled before the ones it does not.
     /// </summary>
     [Fact]
-    public async Task StartAsync_ALabelPassedToAnUserDeclaredAboveTheOneLosingIt_ServesBothInOneStart()
+    public async Task StartAsync_ALabelPassedToAUserDeclaredAboveTheOneLosingIt_ServesBothInOneStart()
     {
         // Arrange
         var roster = new ServedMailUsers();
@@ -410,7 +410,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// while it serves one person.
     /// </summary>
     [Fact]
-    public async Task StartAsync_SeveralUsersServedWithAnUserFacingSurfaceAuthenticatingNobody_FailsStartupSayingWhy()
+    public async Task StartAsync_SeveralUsersServedWithAUserFacingSurfaceAuthenticatingNobody_FailsStartupSayingWhy()
     {
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailUserUnresolvedException>(() =>
@@ -549,7 +549,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// to synchronize is in the one place a file never carries, which is the user's own record.
     /// </summary>
     [Fact]
-    public async Task StartAsync_SynchronizationOnAndTheOnlyMailboxDeclaredInAnUsersRecord_ServesThem()
+    public async Task StartAsync_SynchronizationOnAndTheOnlyMailboxDeclaredInAUsersRecord_ServesThem()
     {
         // Arrange
         var user = MailUserId.Create(DeclaredIdentifier);
@@ -609,7 +609,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// file's — permanently, and for that user alone.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnUserWhoseDocumentWasWrittenAtRuntime_ServesThemFromItRatherThanTheirDeclaration()
+    public async Task StartAsync_AUserWhoseDocumentWasWrittenAtRuntime_ServesThemFromItRatherThanTheirDeclaration()
     {
         // Arrange
         var user = MailUserId.Create(DeclaredIdentifier);
@@ -664,7 +664,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// could not compose, which is what every provisioned user would be until somebody edited a file.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnUserRecordedAtRuntimeThatNoFileDeclares_ServesThemFromTheirOwnRecord()
+    public async Task StartAsync_AUserRecordedAtRuntimeThatNoFileDeclares_ServesThemFromTheirOwnRecord()
     {
         // Arrange
         var provisioned = SyntheticMailUser.Another;
@@ -695,7 +695,7 @@ public sealed class ServedMailUsersStartupGateTests
     /// that order to take — so a recorded user is served after the ones a file names rather than among them.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnUserRecordedAtRuntimeBesideADeclaredOne_ServesThemAfterTheUsersAFileNames()
+    public async Task StartAsync_AUserRecordedAtRuntimeBesideADeclaredOne_ServesThemAfterTheUsersAFileNames()
     {
         // Arrange
         var declared = MailUserId.Create(DeclaredIdentifier);

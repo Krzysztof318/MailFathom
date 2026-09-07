@@ -78,11 +78,11 @@ public sealed class AuthorizedPrincipalTests
 
     /// <summary>
     /// Both factories that carry a user refuse one that names nobody, and the guard is what stops the struct default
-    /// from being minted into a principal: a use case reading such a principal's user would scope a mail query to an
+    /// from being minted into a principal: a use case reading such a principal's user would scope a mail query to a
     /// user no row belongs to, which is a query that answers rather than one that refuses.
     /// </summary>
     [Fact]
-    public void EveryFactoryCarryingAnUser_AnUserThatNamesNobody_IsRejected()
+    public void EveryFactoryCarryingAUser_AUserThatNamesNobody_IsRejected()
     {
         // Arrange
         Action[] factories =

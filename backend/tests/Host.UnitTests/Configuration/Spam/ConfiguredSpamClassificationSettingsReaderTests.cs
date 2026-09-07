@@ -137,7 +137,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>Nobody is served a posture by default, so a user this deployment does not hold classifies nothing.</summary>
     [Fact]
-    public void SettingsFor_AnUserThisDeploymentDoesNotServe_ClassifiesNothing()
+    public void SettingsFor_AUserThisDeploymentDoesNotServe_ClassifiesNothing()
     {
         // Arrange
         var reader = ReaderFor(
@@ -164,7 +164,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>A user whose document has been written is read from it, and the deployment's section stops reaching them.</summary>
     [Fact]
-    public void SettingsFor_AnUserWhoseDocumentWasWritten_TakesTheBlockThatDocumentCarries()
+    public void SettingsFor_AUserWhoseDocumentWasWritten_TakesTheBlockThatDocumentCarries()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
@@ -196,7 +196,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>Switching classification off in a written record actually switches it off, rather than reverting to the file.</summary>
     [Fact]
-    public void SettingsFor_AnUserWhoseDocumentSwitchedClassificationOff_ClassifiesNothingWhileTheSectionStaysOn()
+    public void SettingsFor_AUserWhoseDocumentSwitchedClassificationOff_ClassifiesNothingWhileTheSectionStaysOn()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(

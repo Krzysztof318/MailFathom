@@ -31,7 +31,7 @@ public sealed class ClientSignalEndpointsTests
 
     /// <summary>A minted ticket is answered with the value to present and the moment presenting it stops working.</summary>
     [Fact]
-    public void MintTicket_ACallerActingForAnUser_AnswersTheTicketAndWhenItExpires()
+    public void MintTicket_ACallerActingForAUser_AnswersTheTicketAndWhenItExpires()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));

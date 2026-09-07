@@ -221,7 +221,7 @@ public sealed class EmbeddingSpendGateTests
 
     /// <summary>Work is performed for somebody, so a charge that names nobody is a defect rather than a deployment charge.</summary>
     [Fact]
-    public async Task ReadCurrentPeriodForAsync_AnUserNamingNobody_IsRefused()
+    public async Task ReadCurrentPeriodForAsync_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var gate = CreateGate(new InMemoryEmbeddingSpendLedger(), Bounded(1_000), new FakeTimeProvider(Midday));

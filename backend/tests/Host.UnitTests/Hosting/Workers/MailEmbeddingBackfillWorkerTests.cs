@@ -329,7 +329,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
     /// operator reads that a bound was reached at all, since no wait follows to announce it.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AnUserHasSpentTheirShare_StepsPastTheirMailAndReportsHowMuch()
+    public async Task ExecuteAsync_AUserHasSpentTheirShare_StepsPastTheirMailAndReportsHowMuch()
     {
         // Arrange
         using var world = CreateWorld(
@@ -390,7 +390,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
     /// carries the rest, which is what keeps one user over their share from burying the log for everybody.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AnUserStaysOverTheirShareAcrossPasses_WarnsOnceForThePeriod()
+    public async Task ExecuteAsync_AUserStaysOverTheirShareAcrossPasses_WarnsOnceForThePeriod()
     {
         // Arrange
         using var world = CreateWorld(

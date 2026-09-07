@@ -251,7 +251,7 @@ public sealed class ComposedClientEndpointSecurityTests
     /// <summary>
     /// The route is served on its own listener and is gated there, which the pair above reads as a refusal rather than
     /// as an absence. The credential is one an operator narrowed to the answering grant alone: it authenticates, it
-    /// reaches the session route, and it is refused this one — which is a different answer from the empty collection an
+    /// reaches the session route, and it is refused this one — which is a different answer from the empty collection a
     /// user with no account receives.
     /// </summary>
     [Fact]

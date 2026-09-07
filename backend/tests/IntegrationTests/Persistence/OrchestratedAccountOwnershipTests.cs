@@ -84,7 +84,7 @@ public sealed class OrchestratedAccountOwnershipTests(MailFathomOrchestrationFix
     /// nobody can be shown to own.
     /// </remarks>
     [Fact]
-    public async Task SaveResolutionAsync_AnUserTheDeploymentHoldsNoRecordOf_IsRefusedRatherThanWrittenDown()
+    public async Task SaveResolutionAsync_AUserTheDeploymentHoldsNoRecordOf_IsRefusedRatherThanWrittenDown()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

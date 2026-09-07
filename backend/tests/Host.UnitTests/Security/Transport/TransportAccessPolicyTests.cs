@@ -141,13 +141,13 @@ public sealed class TransportAccessPolicyTests
     }
 
     /// <summary>
-    /// A password is a configured credential in the same sense a key is — an administrator provisioned it against an
+    /// A password is a configured credential in the same sense a key is — an administrator provisioned it against a
     /// user this deployment serves — so it is admitted on that provisioning rather than sent back to a subject list it
     /// names nothing in. Nothing else would admit it: a password names no issuer and carries no scope, so a principal
     /// this method authenticated would be refused on every route of both surfaces.
     /// </summary>
     [Fact]
-    public void IsAuthorized_AnUserPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
+    public void IsAuthorized_AUserPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
     {
         // Arrange
         var caller = UserPasswordPrincipal();

@@ -25,7 +25,7 @@ public sealed class ConfiguredUserSettingsTests
 
     /// <summary>A deployment holding one user declares their mailboxes in the section that names nobody.</summary>
     [Fact]
-    public void DeclaredFor_AnUserServedFromTheDeploymentSection_ReadsThatSectionsMailboxes()
+    public void DeclaredFor_AUserServedFromTheDeploymentSection_ReadsThatSectionsMailboxes()
     {
         // Arrange
         var reading = Reading(
@@ -45,7 +45,7 @@ public sealed class ConfiguredUserSettingsTests
 
     /// <summary>A declared user's mailboxes are addressed by the position their declaration occupies, which is how a configuration key names an element.</summary>
     [Fact]
-    public void DeclaredFor_AnUserDeclaringTheirOwnMailboxes_ReadsTheEntryTheyAreDeclaredIn()
+    public void DeclaredFor_AUserDeclaringTheirOwnMailboxes_ReadsTheEntryTheyAreDeclaredIn()
     {
         // Arrange
         var reading = Reading(
@@ -97,7 +97,7 @@ public sealed class ConfiguredUserSettingsTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void SectionFor_AnUserNoConfigurationSourceReaches_ReportsNothing(bool onTheRoster)
+    public void SectionFor_AUserNoConfigurationSourceReaches_ReportsNothing(bool onTheRoster)
     {
         // Arrange
         var reading = onTheRoster
@@ -113,7 +113,7 @@ public sealed class ConfiguredUserSettingsTests
 
     /// <summary>A declaration the file no longer carries is a file edited between the start that reconciled the roster and this read.</summary>
     [Fact]
-    public void SectionFor_AnUserTheRosterHoldsAndTheFileNoLongerDeclares_ReportsNothing()
+    public void SectionFor_AUserTheRosterHoldsAndTheFileNoLongerDeclares_ReportsNothing()
     {
         // Arrange
         var reading = Reading(
@@ -128,7 +128,7 @@ public sealed class ConfiguredUserSettingsTests
     }
 
     [Fact]
-    public void SectionFor_AnUserNamingNobody_IsRefused()
+    public void SectionFor_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var reading = Reading(new Dictionary<string, string?>(), Serving(Alex, MailUserAccountSource.DeploymentSection));
@@ -142,7 +142,7 @@ public sealed class ConfiguredUserSettingsTests
     /// and a declared user's both land on the one property a user's record holds mailboxes under.
     /// </summary>
     [Fact]
-    public void AdoptionEditsFor_AnUserServedFromTheDeploymentSection_RerootsEveryKeyAtTheRecordsOwnCollection()
+    public void AdoptionEditsFor_AUserServedFromTheDeploymentSection_RerootsEveryKeyAtTheRecordsOwnCollection()
     {
         // Arrange
         var reading = Reading(
@@ -164,7 +164,7 @@ public sealed class ConfiguredUserSettingsTests
 
     /// <summary>Whichever of the two sections an operator had been writing in, the same keys come out.</summary>
     [Fact]
-    public void AdoptionEditsFor_AnUserDeclaringTheirOwnMailboxes_RerootsEveryKeyAtTheSameCollection()
+    public void AdoptionEditsFor_AUserDeclaringTheirOwnMailboxes_RerootsEveryKeyAtTheSameCollection()
     {
         // Arrange
         var reading = Reading(
@@ -327,7 +327,7 @@ public sealed class ConfiguredUserSettingsTests
     }
 
     [Fact]
-    public void AdoptionEditsFor_AnUserNoConfigurationSourceReaches_StatesNoChanges()
+    public void AdoptionEditsFor_AUserNoConfigurationSourceReaches_StatesNoChanges()
     {
         // Arrange
         var reading = Reading(

@@ -40,7 +40,7 @@ public sealed class UserRecordAdministrationTests
     private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task ReadRecordAsync_AnUserThisDeploymentHolds_ReportsTheirRecordAndTheVersionAChangeIsComposedOver()
+    public async Task ReadRecordAsync_AUserThisDeploymentHolds_ReportsTheirRecordAndTheVersionAChangeIsComposedOver()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead);
@@ -81,7 +81,7 @@ public sealed class UserRecordAdministrationTests
     /// would look like a user with no mailboxes rather than one whose mailboxes are in a file.
     /// </summary>
     [Fact]
-    public async Task ReadRecordAsync_AnUserAConfigurationSourceSupplies_SaysTheirRecordIsNotWhereTheirMailboxesAre()
+    public async Task ReadRecordAsync_AUserAConfigurationSourceSupplies_SaysTheirRecordIsNotWhereTheirMailboxesAre()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead);
@@ -98,7 +98,7 @@ public sealed class UserRecordAdministrationTests
     }
 
     [Fact]
-    public async Task ReadRecordAsync_AnUserThisDeploymentDoesNotHold_ReportsNothing()
+    public async Task ReadRecordAsync_AUserThisDeploymentDoesNotHold_ReportsNothing()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead);
@@ -126,7 +126,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>A user's own entry point resolves the user from whoever was admitted, so no request can name another.</summary>
     [Fact]
-    public async Task ReadOwnRecordAsync_AnUserSignedIn_ReadsTheRecordOfWhoeverWasAdmittedRatherThanOneNamedInARequest()
+    public async Task ReadOwnRecordAsync_AUserSignedIn_ReadsTheRecordOfWhoeverWasAdmittedRatherThanOneNamedInARequest()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.MailRead, actingFor: SyntheticMailUser.Deployment);
@@ -152,7 +152,7 @@ public sealed class UserRecordAdministrationTests
     }
 
     [Fact]
-    public async Task ReadRecordAsync_AnUserNamingNobody_IsRefusedWithoutReachingTheStore()
+    public async Task ReadRecordAsync_AUserNamingNobody_IsRefusedWithoutReachingTheStore()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead);
@@ -170,7 +170,7 @@ public sealed class UserRecordAdministrationTests
     /// somebody edited a record nobody was reading.
     /// </summary>
     [Fact]
-    public async Task AddMailAccountAsync_AnUserAConfigurationSourceStillSupplies_IsRefusedNamingTheAdoption()
+    public async Task AddMailAccountAsync_AUserAConfigurationSourceStillSupplies_IsRefusedNamingTheAdoption()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -195,7 +195,7 @@ public sealed class UserRecordAdministrationTests
     /// a user an administrator has just recorded writable at once rather than after a restart.
     /// </summary>
     [Fact]
-    public async Task AddMailAccountAsync_AnUserProvisionedAfterTheRosterWasSettled_IsAnOrdinaryWrite()
+    public async Task AddMailAccountAsync_AUserProvisionedAfterTheRosterWasSettled_IsAnOrdinaryWrite()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -628,7 +628,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>A user's own write resolves them from the principal, so a user may withdraw one of their own mailboxes and nobody else's.</summary>
     [Fact]
-    public async Task RemoveOwnMailAccountAsync_AnUserSignedIn_ComposesTheChangeOverTheirOwnRecord()
+    public async Task RemoveOwnMailAccountAsync_AUserSignedIn_ComposesTheChangeOverTheirOwnRecord()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.MailAccountsWrite, actingFor: SyntheticMailUser.Deployment);
@@ -822,7 +822,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>The preview is what an operator confirms an adoption against, so it names the section and the mailboxes the move would materialize.</summary>
     [Fact]
-    public async Task ReadAdoptableAsync_AnUserServedFromTheDeploymentSection_NamesTheSectionAndTheMailboxesItSupplies()
+    public async Task ReadAdoptableAsync_AUserServedFromTheDeploymentSection_NamesTheSectionAndTheMailboxesItSupplies()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead, DeploymentSectionDeclaring("configured"));
@@ -873,7 +873,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>A user whose record is already their own has nothing to adopt, which is a preview offering nothing rather than an absent one.</summary>
     [Fact]
-    public async Task ReadAdoptableAsync_AnUserWhoseRecordIsAlreadyTheirOwn_OffersNothingToAdopt()
+    public async Task ReadAdoptableAsync_AUserWhoseRecordIsAlreadyTheirOwn_OffersNothingToAdopt()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminRead, DeploymentSectionDeclaring("configured"));
@@ -892,7 +892,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>The one act that moves a decision from a file into the database, and the only thing in MailFathom that ever does it.</summary>
     [Fact]
-    public async Task AdoptAsync_AnUserServedFromTheDeploymentSection_CommitsTheirConfiguredMailboxesIntoTheirRecord()
+    public async Task AdoptAsync_AUserServedFromTheDeploymentSection_CommitsTheirConfiguredMailboxesIntoTheirRecord()
     {
         // Arrange
         var harness = new RecordHarness(
@@ -949,7 +949,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>Adoption is the one act permitted to open the record of a user a configuration source supplies, which is what makes it the way out of that state.</summary>
     [Fact]
-    public async Task AdoptAsync_AnUserServedFromTheirOwnDeclaration_IsNotRefusedTheWayAnOrdinaryWriteIs()
+    public async Task AdoptAsync_AUserServedFromTheirOwnDeclaration_IsNotRefusedTheWayAnOrdinaryWriteIs()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -968,7 +968,7 @@ public sealed class UserRecordAdministrationTests
 
     /// <summary>A user already reading their own record has nothing to move, and saying so is not a refusal.</summary>
     [Fact]
-    public async Task AdoptAsync_AnUserWhoseMailboxesAlreadyComeFromTheirOwnRecord_ChangesNothing()
+    public async Task AdoptAsync_AUserWhoseMailboxesAlreadyComeFromTheirOwnRecord_ChangesNothing()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -992,7 +992,7 @@ public sealed class UserRecordAdministrationTests
     /// start to stop applying the configured section to this user.
     /// </summary>
     [Fact]
-    public async Task AdoptAsync_AnUserWhoseConfigurationSectionDeclaresNoMailbox_StillCommitsSoTheNextStartStopsReadingTheSection()
+    public async Task AdoptAsync_AUserWhoseConfigurationSectionDeclaresNoMailbox_StillCommitsSoTheNextStartStopsReadingTheSection()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -1140,7 +1140,7 @@ public sealed class UserRecordAdministrationTests
                     Arg.Any<CancellationToken>())
                 .Returns(call => (long?)call.ArgAt<long>(2) + 1);
 
-            // The roster is settled with somebody the tests never write for, so the default deployment reads as an
+            // The roster is settled with somebody the tests never write for, so the default deployment reads as a
             // user nothing declares — which is the ordinary case — until a test states otherwise.
             this.ServedUsers.Resolved(
                 [Serving(MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")), MailUserAccountSource.UserDocument)]);

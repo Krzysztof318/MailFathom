@@ -35,7 +35,7 @@ public sealed class MailFolderDirectoryReaderTests
 
     /// <summary>The user story: several mailboxes and their folders arrive as one tree rather than as one request per mailbox.</summary>
     [Fact]
-    public async Task ReadAsync_AnUserWithSeveralMailboxes_AnswersEveryOneOfThemWithItsFoldersInOneRead()
+    public async Task ReadAsync_AUserWithSeveralMailboxes_AnswersEveryOneOfThemWithItsFoldersInOneRead()
     {
         // Arrange
         var reader = ReaderOver(
@@ -188,7 +188,7 @@ public sealed class MailFolderDirectoryReaderTests
 
     /// <summary>A user who owns no account reads an empty tree, and nothing counts mail on their behalf.</summary>
     [Fact]
-    public async Task ReadAsync_AnUserOwningNoAccount_AnswersAnEmptyTreeWithoutCountingAnything()
+    public async Task ReadAsync_AUserOwningNoAccount_AnswersAnEmptyTreeWithoutCountingAnything()
     {
         // Arrange
         var storedFolders = StoredFolders();

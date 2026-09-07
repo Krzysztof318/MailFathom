@@ -91,7 +91,7 @@ public sealed class UserSensitiveContentPosturesTests : IDisposable
 
     /// <summary>A user tightens by adding to what the deployment requires, and what it requires stays in force.</summary>
     [Fact]
-    public void ForUser_AnUserTighteningWhatTheDeploymentRequires_RunsBothScannersOverTheirMail()
+    public void ForUser_AUserTighteningWhatTheDeploymentRequires_RunsBothScannersOverTheirMail()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();
@@ -141,7 +141,7 @@ public sealed class UserSensitiveContentPosturesTests : IDisposable
 
     /// <summary>A user the roster does not name reads the deployment's own answer rather than nothing at all.</summary>
     [Fact]
-    public void ForUser_AnUserThisRosterDoesNotName_ReadsTheDeploymentsOwnPosture()
+    public void ForUser_AUserThisRosterDoesNotName_ReadsTheDeploymentsOwnPosture()
     {
         // Arrange
         var deployment = new SensitiveContentOptions();

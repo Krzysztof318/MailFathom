@@ -69,7 +69,7 @@ public sealed class OrchestratedUserPortraitStoreTests(MailFathomOrchestrationFi
 
     /// <summary>The caller is a person whose row was erased under a credential that has not yet been withdrawn, so the write reports that there is nothing here of theirs instead of raising a constraint violation.</summary>
     [Fact]
-    public async Task SaveAsync_AnUserThisDeploymentDoesNotHold_AffectsNoRowAndReportsIt()
+    public async Task SaveAsync_AUserThisDeploymentDoesNotHold_AffectsNoRowAndReportsIt()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -123,7 +123,7 @@ public sealed class OrchestratedUserPortraitStoreTests(MailFathomOrchestrationFi
 
     /// <summary>The cascade is what makes a picture go with the person, without the erasure walk having to know this table exists.</summary>
     [Fact]
-    public async Task EraseAsync_AnUserWhoSuppliedAPicture_TakesItWithEverythingElseDerivedFromThem()
+    public async Task EraseAsync_AUserWhoSuppliedAPicture_TakesItWithEverythingElseDerivedFromThem()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

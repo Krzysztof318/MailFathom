@@ -65,7 +65,7 @@ public sealed class TransportGrantStartupReportTests
     /// where to read it instead of stating a grant the entry does not carry.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnUserFacingEntry_NamesTheMethodAndWhereItsGrantIsRecorded()
+    public async Task StartAsync_AUserFacingEntry_NamesTheMethodAndWhereItsGrantIsRecorded()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -90,7 +90,7 @@ public sealed class TransportGrantStartupReportTests
     /// recorded permissions are a ceiling. Reading the two lines the same way would over-read every token's grant.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnUserFacingEntryNarrowedByTokenScopes_SaysTheRecordedGrantIsACeiling()
+    public async Task StartAsync_AUserFacingEntryNarrowedByTokenScopes_SaysTheRecordedGrantIsACeiling()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();

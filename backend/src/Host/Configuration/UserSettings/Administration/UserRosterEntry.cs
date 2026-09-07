@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="DeclaredInConfiguration">Whether a configuration source names this user, so a start would put back what an act here changed.</param>
 /// <remarks>
 /// <para>
-/// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves an
+/// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves a
 /// user by it — every later act names the identifier — but choosing which user to act on is what an administrator
 /// does first, and the identifier says nothing about who the person is.
 /// </para>

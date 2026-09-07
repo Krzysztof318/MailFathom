@@ -60,7 +60,7 @@ public sealed class UserRosterAdministrationTests
     /// told, instead of finding out from a refusal.
     /// </summary>
     [Fact]
-    public async Task ReadRosterAsync_AnUserAConfigurationSourceDeclares_ReportsThemAsDeclaredInConfiguration()
+    public async Task ReadRosterAsync_AUserAConfigurationSourceDeclares_ReportsThemAsDeclaredInConfiguration()
     {
         // Arrange
         var harness = new RosterHarness(
@@ -193,7 +193,7 @@ public sealed class UserRosterAdministrationTests
     /// record for, which is the one state every read of that user then answers as an absence.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_AnUserRemovedBeforeTheirRecordWasWritten_IsRefusedRatherThanReportedAsProvisioned()
+    public async Task ProvisionAsync_AUserRemovedBeforeTheirRecordWasWritten_IsRefusedRatherThanReportedAsProvisioned()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -252,7 +252,7 @@ public sealed class UserRosterAdministrationTests
     /// serving one person another person's mail, so the roster is held to one user instead.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_ASecondUserWhileAnUserFacingSurfaceAdmitsACallerNamingNobody_IsRefused()
+    public async Task ProvisionAsync_ASecondUserWhileAUserFacingSurfaceAdmitsACallerNamingNobody_IsRefused()
     {
         // Arrange
         var harness = new RosterHarness(
@@ -273,7 +273,7 @@ public sealed class UserRosterAdministrationTests
     /// unauthenticated surface is still recorded — which is the deployment an easy first run produces.
     /// </summary>
     [Fact]
-    public async Task ProvisionAsync_TheFirstUserWhileAnUserFacingSurfaceAdmitsACallerNamingNobody_IsRecorded()
+    public async Task ProvisionAsync_TheFirstUserWhileAUserFacingSurfaceAdmitsACallerNamingNobody_IsRecorded()
     {
         // Arrange
         var harness = new RosterHarness(
@@ -340,7 +340,7 @@ public sealed class UserRosterAdministrationTests
     /// deployment the caller asked about rather than the one the erasure left.
     /// </summary>
     [Fact]
-    public async Task EraseAsync_AnUserThisProcessIsServing_ReportsThatARestartIsOwed()
+    public async Task EraseAsync_AUserThisProcessIsServing_ReportsThatARestartIsOwed()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
@@ -388,7 +388,7 @@ public sealed class UserRosterAdministrationTests
     }
 
     [Fact]
-    public async Task EraseAsync_AnUserThisDeploymentDoesNotHold_ReportsThatNothingWasRemoved()
+    public async Task EraseAsync_AUserThisDeploymentDoesNotHold_ReportsThatNothingWasRemoved()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
@@ -408,7 +408,7 @@ public sealed class UserRosterAdministrationTests
     /// remove first rather than performing a deletion the deployment would undo.
     /// </summary>
     [Fact]
-    public async Task EraseAsync_AnUserADeclarationNames_IsRefusedNamingWhatToRemoveFirst()
+    public async Task EraseAsync_AUserADeclarationNames_IsRefusedNamingWhatToRemoveFirst()
     {
         // Arrange
         var harness = new RosterHarness(
@@ -432,7 +432,7 @@ public sealed class UserRosterAdministrationTests
     /// that section exactly as a listed user is declared by theirs — and the next start supplies them again.
     /// </summary>
     [Fact]
-    public async Task EraseAsync_AnUserServedFromTheDeploymentsOwnSection_IsRefusedNamingWhatToRemoveFirst()
+    public async Task EraseAsync_AUserServedFromTheDeploymentsOwnSection_IsRefusedNamingWhatToRemoveFirst()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
@@ -452,7 +452,7 @@ public sealed class UserRosterAdministrationTests
     }
 
     [Fact]
-    public async Task EraseAsync_AnUserNamingNobody_IsRefusedWithoutReachingTheErasure()
+    public async Task EraseAsync_AUserNamingNobody_IsRefusedWithoutReachingTheErasure()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminErase);
@@ -478,7 +478,7 @@ public sealed class UserRosterAdministrationTests
 
     /// <summary>A label is what an administrator selects a user by, and nothing is keyed by it, so replacing one is an ordinary write.</summary>
     [Fact]
-    public async Task RelabelAsync_AnUserThisDeploymentHolds_PutsTheLabelOnTheirRow()
+    public async Task RelabelAsync_AUserThisDeploymentHolds_PutsTheLabelOnTheirRow()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -571,7 +571,7 @@ public sealed class UserRosterAdministrationTests
     /// same absence every other user-scoped route answers with, so the outcome carries which of them it is.
     /// </remarks>
     [Fact]
-    public async Task RelabelAsync_AnUserThisDeploymentDoesNotHold_ReportsTheUserAsUnheld()
+    public async Task RelabelAsync_AUserThisDeploymentDoesNotHold_ReportsTheUserAsUnheld()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -614,7 +614,7 @@ public sealed class UserRosterAdministrationTests
     }
 
     [Fact]
-    public async Task RelabelAsync_AnUserNamingNobody_IsRefusedWithoutReachingTheRow()
+    public async Task RelabelAsync_AUserNamingNobody_IsRefusedWithoutReachingTheRow()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);

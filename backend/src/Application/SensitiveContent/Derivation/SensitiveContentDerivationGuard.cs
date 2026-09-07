@@ -83,7 +83,7 @@ public sealed class SensitiveContentDerivationGuard
 
     /// <summary>Gets what a row belonging to a user this deployment no longer serves is judged against.</summary>
     /// <remarks>
-    /// The deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForUser" /> answers for an
+    /// The deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForUser" /> answers for a
     /// user off the roster and is the stricter of the two candidates. Read by the walk that judges rows belonging to
     /// several users at once, so that mail still stored for somebody a deployment has stopped serving is judged by
     /// something rather than stepped over.

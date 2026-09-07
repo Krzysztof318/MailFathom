@@ -34,7 +34,7 @@ public sealed class MailAccountFreshnessReaderTests
 
     /// <summary>The accounts are the user's own, published under the names configuration gave them.</summary>
     [Fact]
-    public async Task ReadAsync_AnUserOwningTwoAccounts_PublishesBothUnderTheirConfiguredNames()
+    public async Task ReadAsync_AUserOwningTwoAccounts_PublishesBothUnderTheirConfiguredNames()
     {
         // Arrange
         var reader = ReaderOver(Freshness(), OwningAccounts(Work, Private));
@@ -51,7 +51,7 @@ public sealed class MailAccountFreshnessReaderTests
     /// collection, which is what an account belonging to somebody else looks like too.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AnUserOwningNoAccount_PublishesAnEmptyCollectionRatherThanAnError()
+    public async Task ReadAsync_AUserOwningNoAccount_PublishesAnEmptyCollectionRatherThanAnError()
     {
         // Arrange
         var reader = ReaderOver(Freshness(), OwningAccounts());

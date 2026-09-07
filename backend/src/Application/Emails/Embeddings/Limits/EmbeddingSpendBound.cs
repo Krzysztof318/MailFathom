@@ -21,7 +21,7 @@ public enum EmbeddingSpendBound
 
     /// <summary>The deployment has spent what one period admits in total, whatever any one user has left.</summary>
     /// <remarks>
-    /// Reported in preference to <see cref="User" /> when both are reached, because it is the wider fact: raising an
+    /// Reported in preference to <see cref="User" /> when both are reached, because it is the wider fact: raising a
     /// user's ceiling would change nothing while the instance itself is at its budget.
     /// </remarks>
     Deployment = 2,

@@ -17,7 +17,7 @@ namespace MailFathom.SharedSources.UnitTests;
 public sealed class ContactBookOwnershipsTests
 {
     [Fact]
-    public void For_ACallerActingForAnUser_ResolvesToThatUser()
+    public void For_ACallerActingForAUser_ResolvesToThatUser()
     {
         // Arrange
         var authorization = AccessAuthorizations.ForUserGranted(

@@ -16,7 +16,7 @@ namespace MailFathom.Application.Accounts;
 /// </para>
 /// <para>
 /// What decides the answer is the user each served account already carries. The deployment's own
-/// <c>MailSynchronization:Accounts</c> section names nobody, so the roster is what attributes its accounts, and an
+/// <c>MailSynchronization:Accounts</c> section names nobody, so the roster is what attributes its accounts, and a
 /// user's own declared section or record arrives with the user attached; either way the attribution is settled before
 /// this reads it, and a caller owns exactly the accounts attributed to the user they were admitted for. Nothing here
 /// compares against a sole user the deployment holds, because a deployment whose user-facing surfaces authenticate

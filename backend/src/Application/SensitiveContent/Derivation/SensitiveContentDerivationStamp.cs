@@ -107,7 +107,7 @@ public readonly record struct SensitiveContentDerivationStamp
     /// </para>
     /// <para>
     /// It carries the user beside each stamp, so two users exchanging postures is a different composite rather than
-    /// the same one. Users whose mail nothing scans are in the digest as well, by their identifier alone, because an
+    /// the same one. Users whose mail nothing scans are in the digest as well, by their identifier alone, because a
     /// user who switched their scanner off since the cursor was written is exactly the case that has to discard it.
     /// </para>
     /// <para>

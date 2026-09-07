@@ -26,7 +26,7 @@ public sealed class ClientUserRecordEndpointTests
     private const string EmptyRecord = "{}";
 
     [Fact]
-    public async Task ReadAsync_AnUserSignedIn_HandsThemTheirOwnRecordAndTheVersionAChangeIsAcceptedAgainst()
+    public async Task ReadAsync_AUserSignedIn_HandsThemTheirOwnRecordAndTheVersionAChangeIsAcceptedAgainst()
     {
         // Arrange
         var deployment = SignedInAs(SyntheticMailUser.Deployment, MailFathomPermission.MailRead);

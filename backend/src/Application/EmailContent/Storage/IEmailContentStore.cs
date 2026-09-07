@@ -196,7 +196,7 @@ public interface IEmailContentStore
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The stored content, or <see langword="null" /> when no draft content is stored under that identifier.</returns>
     /// <remarks>
-    /// It is what the drafts folder is appended from and what a promotion transmits, which is what keeps the message an
+    /// It is what the drafts folder is appended from and what a promotion transmits, which is what keeps the message a
     /// user reads in their own mail client and the message their correspondent receives the same bytes.
     /// </remarks>
     Task<StoredEmailContent?> FindMailDraftContentAsync(MailDraftId draftId, CancellationToken cancellationToken);

@@ -26,7 +26,7 @@ public sealed class PersistedMailUserProvisioningTests
     /// whose label differed.
     /// </summary>
     [Fact]
-    public void RowsToRelabel_AnUser_SelectsTheirOwnRowAlone()
+    public void RowsToRelabel_AUser_SelectsTheirOwnRowAlone()
     {
         // Arrange
         using var context = DesignTimeContext();

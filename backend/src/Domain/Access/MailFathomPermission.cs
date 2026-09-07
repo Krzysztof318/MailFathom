@@ -167,7 +167,7 @@ public readonly record struct MailFathomPermission
     /// </para>
     /// <para>
     /// It is deliberately not the administrative <see cref="AdminConfigurationWrite" /> under another name. That one
-    /// decides what the deployment is — the endpoints it opens, the grants it honours, the model it bills — and an
+    /// decides what the deployment is — the endpoints it opens, the grants it honours, the model it bills — and a
     /// user holds none of it; this one decides which mailboxes are that person's, which is the only configuration
     /// that is theirs at all.
     /// </para>
