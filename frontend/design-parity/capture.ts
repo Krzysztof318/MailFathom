@@ -5,7 +5,7 @@
 import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve as resolvePath, sep } from 'node:path';
-import { chromium, type Browser, type Locator, type Page } from '@playwright/test';
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { password, userName } from '../tests/fixtures/deployment';
 
 // The browser half of the design-parity loop. `scripts/capture-design.sh` and `scripts/capture-client.sh` are the two
@@ -45,39 +45,41 @@ interface Target {
     nth?: number;
 }
 
-/** One capture: a screen, at a composition, reached by these steps. */
-interface Pair {
+/** What every capture states, whichever side it is of. */
+interface Capture {
     screen: string;
     composition: Composition;
-
-    /** The design side: the mirrored file to open, and the component properties to set on it before anything else. */
-    file?: string;
-    properties?: Record<string, unknown>;
-
-    /** The client side: the address to open, and whether the credential has to be given first. */
-    route?: string;
-    signIn?: boolean;
-
     steps: Step[];
 }
 
-interface Plan {
-    side: 'design' | 'client';
+/** The design side: the mirrored artboard to open, and the component properties to set on it before anything else. */
+interface DesignCapture extends Capture {
+    file: string;
+    properties: Record<string, unknown>;
+}
 
+/** The client side: the address to open, and whether the credential has to be given first. */
+interface ClientCapture extends Capture {
+    route: string;
+    signIn: boolean;
+}
+
+/** What both plans state. */
+interface PlannedRun {
     /** Where the captures are written. `scripts/` confines this; nothing here invents a path. */
     outputDirectory: string;
 
     /** Light or dark, applied to both sides the same way — as the browser's own `prefers-color-scheme`. */
     theme: 'light' | 'dark';
-
-    /** The design side: the mirror directory this module serves the artboards out of. */
-    designRoot?: string;
-
-    /** The client side: the origin the development server serving the fixture corpus is already answering on. */
-    clientOrigin?: string;
-
-    pairs: Pair[];
 }
+
+// The two sides are one type discriminated by `side` rather than one type with four optional fields, because the
+// fields are not optional: a design plan without a mirror directory and a client plan without an origin are each a
+// plan that cannot run. Reading them apart at the boundary is what lets everything below take what it needs without a
+// fallback standing in for a value that was never allowed to be absent.
+type Plan =
+    | (PlannedRun & { side: 'design'; designRoot: string; pairs: DesignCapture[] })
+    | (PlannedRun & { side: 'client'; clientOrigin: string; pairs: ClientCapture[] });
 
 /** How long a screen is given to settle before it is captured, in milliseconds. */
 const settleFor = 400;
@@ -184,14 +186,114 @@ function proxyFromEnvironment(): { server: string; username: string; password: s
     };
 }
 
+// The roles `getByRole` accepts, written out because Playwright states them as a type and publishes no list of them at
+// run time. A role here comes out of a manifest rather than out of this file, so it is checked against this rather than
+// asserted into the union — and the check is what names the manifest entry that is wrong instead of leaving Playwright
+// to fail on a locator nobody wrote. A role missing from this list fails to compile at the call below, which is how it
+// stays the same set Playwright accepts.
+const ariaRoles = [
+    'alert',
+    'alertdialog',
+    'application',
+    'article',
+    'banner',
+    'blockquote',
+    'button',
+    'caption',
+    'cell',
+    'checkbox',
+    'code',
+    'columnheader',
+    'combobox',
+    'complementary',
+    'contentinfo',
+    'definition',
+    'deletion',
+    'dialog',
+    'directory',
+    'document',
+    'emphasis',
+    'feed',
+    'figure',
+    'form',
+    'generic',
+    'grid',
+    'gridcell',
+    'group',
+    'heading',
+    'img',
+    'insertion',
+    'link',
+    'list',
+    'listbox',
+    'listitem',
+    'log',
+    'main',
+    'marquee',
+    'math',
+    'meter',
+    'menu',
+    'menubar',
+    'menuitem',
+    'menuitemcheckbox',
+    'menuitemradio',
+    'navigation',
+    'none',
+    'note',
+    'option',
+    'paragraph',
+    'presentation',
+    'progressbar',
+    'radio',
+    'radiogroup',
+    'region',
+    'row',
+    'rowgroup',
+    'rowheader',
+    'scrollbar',
+    'search',
+    'searchbox',
+    'separator',
+    'slider',
+    'spinbutton',
+    'status',
+    'strong',
+    'subscript',
+    'superscript',
+    'switch',
+    'tab',
+    'table',
+    'tablist',
+    'tabpanel',
+    'term',
+    'textbox',
+    'time',
+    'timer',
+    'toolbar',
+    'tooltip',
+    'tree',
+    'treegrid',
+    'treeitem',
+] as const;
+
+type AriaRole = (typeof ariaRoles)[number];
+
+function isAriaRole(value: string): value is AriaRole {
+    return (ariaRoles as readonly string[]).includes(value);
+}
+
 function locate(page: Page, target: Target): Locator {
-    const found =
-        target.role === undefined
-            ? page.getByText(target.text ?? '', { exact: true })
-            : page.getByRole(
-                  target.role as Parameters<Page['getByRole']>[0],
-                  target.name === undefined ? {} : { name: target.name },
-              );
+    let found: Locator;
+
+    if (target.role === undefined) {
+        found = page.getByText(target.text ?? '', { exact: true });
+    } else {
+        if (!isAriaRole(target.role)) {
+            throw new Error(`A step names the role ${target.role}, which getByRole does not accept.`);
+        }
+
+        found = page.getByRole(target.role, target.name === undefined ? {} : { name: target.name });
+    }
 
     return target.nth === undefined ? found.first() : found.nth(target.nth);
 }
@@ -225,29 +327,35 @@ async function settle(page: Page): Promise<void> {
     await page.waitForTimeout(settleFor);
 }
 
-async function captureDesign(browser: Browser, plan: Plan, origin: string): Promise<string[]> {
+/** A context whose size and pointer are the composition's, so neither side of a pair can be given one of its own. */
+function contextFor(browser: Browser, plan: PlannedRun, composition: Composition): Promise<BrowserContext> {
+    return browser.newContext({
+        viewport: { width: composition.width, height: composition.height },
+        deviceScaleFactor: 1,
+        hasTouch: composition.touch,
+        isMobile: composition.touch,
+        colorScheme: plan.theme,
+    });
+}
+
+async function captureDesign(
+    browser: Browser,
+    plan: PlannedRun & { pairs: DesignCapture[] },
+    origin: string,
+): Promise<string[]> {
     const written: string[] = [];
 
     for (const pair of plan.pairs) {
-        const context = await browser.newContext({
-            viewport: { width: pair.composition.width, height: pair.composition.height },
-            deviceScaleFactor: 1,
-            hasTouch: pair.composition.touch,
-            isMobile: pair.composition.touch,
-            colorScheme: plan.theme,
-        });
+        const context = await contextFor(browser, plan, pair.composition);
         const page = await context.newPage();
 
-        await page.goto(`${origin}/${encodeURIComponent(pair.file ?? '')}`);
+        await page.goto(`${origin}/${encodeURIComponent(pair.file)}`);
 
         // The artboard is a component the design runtime boots after fetching React, so the page being loaded says
         // nothing about the screen being drawn. The runtime publishes the mounted component's name when it is.
         await page.waitForFunction(artboardIsMounted);
         await page.addStyleTag({ content: stillness });
-
-        if (pair.properties !== undefined) {
-            await page.evaluate(`window.__dcSetProps(window.__dcRootName(), ${JSON.stringify(pair.properties)})`);
-        }
+        await page.evaluate(`window.__dcSetProps(window.__dcRootName(), ${JSON.stringify(pair.properties)})`);
 
         await settle(page);
         await walk(page, pair.steps);
@@ -263,23 +371,20 @@ async function captureDesign(browser: Browser, plan: Plan, origin: string): Prom
     return written;
 }
 
-async function captureClient(browser: Browser, plan: Plan): Promise<string[]> {
+async function captureClient(
+    browser: Browser,
+    plan: PlannedRun & { clientOrigin: string; pairs: ClientCapture[] },
+): Promise<string[]> {
     const written: string[] = [];
 
     for (const pair of plan.pairs) {
-        const context = await browser.newContext({
-            viewport: { width: pair.composition.width, height: pair.composition.height },
-            deviceScaleFactor: 1,
-            hasTouch: pair.composition.touch,
-            isMobile: pair.composition.touch,
-            colorScheme: plan.theme,
-        });
+        const context = await contextFor(browser, plan, pair.composition);
         const page = await context.newPage();
 
-        await page.goto(`${plan.clientOrigin ?? ''}${pair.route ?? '/'}`);
+        await page.goto(`${plan.clientOrigin}${pair.route}`);
         await page.addStyleTag({ content: stillness });
 
-        if (pair.signIn === true) {
+        if (pair.signIn) {
             // The credential is the corpus's own rather than a second copy of it written here, which is the same rule
             // the browser suite follows: the example mail and the credential that reaches it are one file.
             await page.getByRole('textbox', { name: 'Login' }).fill(userName);
@@ -289,8 +394,8 @@ async function captureClient(browser: Browser, plan: Plan): Promise<string[]> {
 
             // Signing in lands on the client's default space, so an address naming another one is asked for again —
             // the fragment was read before the credential was accepted.
-            if (pair.route !== undefined && pair.route !== '/') {
-                await page.goto(`${plan.clientOrigin ?? ''}${pair.route}`);
+            if (pair.route !== '/') {
+                await page.goto(`${plan.clientOrigin}${pair.route}`);
                 await page.addStyleTag({ content: stillness });
             }
         }
@@ -309,18 +414,175 @@ async function captureClient(browser: Browser, plan: Plan): Promise<string[]> {
     return written;
 }
 
-async function readPlan(): Promise<Plan> {
+// What arrives on standard input is a document a shell script composed, which is a boundary rather than a value this
+// module already knows the shape of. So it is read as `unknown` and narrowed a field at a time: a plan that is wrong
+// says which field is wrong, here, instead of failing several steps later inside browser automation with an error
+// about something else. Each reader names the path it is at, because "a pair is missing its composition" is a
+// different thing to fix from "the third pair's composition has no width".
+
+function fields(value: unknown, at: string): Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error(`${at} is not an object.`);
+    }
+
+    return value as Record<string, unknown>;
+}
+
+function text(value: unknown, at: string): string {
+    if (typeof value !== 'string') {
+        throw new Error(`${at} is not a string.`);
+    }
+
+    return value;
+}
+
+function whole(value: unknown, at: string): number {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+        throw new Error(`${at} is not a whole number.`);
+    }
+
+    return value;
+}
+
+function readTarget(value: unknown, at: string): Target {
+    const given = fields(value, at);
+    const target: Target = {};
+
+    if (given['role'] !== undefined) {
+        target.role = text(given['role'], `${at}.role`);
+    }
+
+    if (given['name'] !== undefined) {
+        target.name = text(given['name'], `${at}.name`);
+    }
+
+    if (given['text'] !== undefined) {
+        target.text = text(given['text'], `${at}.text`);
+    }
+
+    if (given['nth'] !== undefined) {
+        target.nth = whole(given['nth'], `${at}.nth`);
+    }
+
+    if (target.role === undefined && target.text === undefined) {
+        throw new Error(`${at} names neither a role nor a text to find an element by.`);
+    }
+
+    return target;
+}
+
+function readSteps(value: unknown, at: string): Step[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`${at} is not a list of steps.`);
+    }
+
+    return value.map((entry, index) => {
+        const given = fields(entry, `${at}[${String(index)}]`);
+        const step: Step = {};
+
+        if (given['click'] !== undefined) {
+            step.click = readTarget(given['click'], `${at}[${String(index)}].click`);
+        }
+
+        if (given['expect'] !== undefined) {
+            step.expect = readTarget(given['expect'], `${at}[${String(index)}].expect`);
+        }
+
+        if (step.click === undefined && step.expect === undefined) {
+            throw new Error(`${at}[${String(index)}] is neither a click nor an expect.`);
+        }
+
+        return step;
+    });
+}
+
+function readCapture(value: unknown, at: string): Capture {
+    const given = fields(value, at);
+    const composition = fields(given['composition'], `${at}.composition`);
+
+    return {
+        screen: text(given['screen'], `${at}.screen`),
+        composition: {
+            name: text(composition['name'], `${at}.composition.name`),
+            width: whole(composition['width'], `${at}.composition.width`),
+            height: whole(composition['height'], `${at}.composition.height`),
+            touch: composition['touch'] === true,
+        },
+        steps: readSteps(given['steps'], `${at}.steps`),
+    };
+}
+
+function readDesignCapture(value: unknown, at: string): DesignCapture {
+    const given = fields(value, at);
+
+    return {
+        ...readCapture(value, at),
+        file: text(given['file'], `${at}.file`),
+        properties: given['properties'] === undefined ? {} : fields(given['properties'], `${at}.properties`),
+    };
+}
+
+function readClientCapture(value: unknown, at: string): ClientCapture {
+    const given = fields(value, at);
+
+    return {
+        ...readCapture(value, at),
+        route: text(given['route'], `${at}.route`),
+        signIn: given['signIn'] === true,
+    };
+}
+
+function readPlan(value: unknown): Plan {
+    const given = fields(value, 'the plan');
+    const side = text(given['side'], 'the plan’s side');
+    const theme = text(given['theme'], 'the plan’s theme');
+
+    if (side !== 'design' && side !== 'client') {
+        throw new Error(`A plan captures the design side or the client side, not ${side}.`);
+    }
+
+    if (theme !== 'light' && theme !== 'dark') {
+        throw new Error(`A plan is captured under light or dark, not ${theme}.`);
+    }
+
+    const pairs = given['pairs'];
+
+    if (!Array.isArray(pairs)) {
+        throw new Error('The plan states no list of pairs.');
+    }
+
+    const run: PlannedRun = {
+        theme,
+        outputDirectory: text(given['outputDirectory'], 'the plan’s outputDirectory'),
+    };
+
+    return side === 'design'
+        ? {
+              ...run,
+              side,
+              designRoot: text(given['designRoot'], 'the plan’s designRoot'),
+              pairs: pairs.map((entry, index) => readDesignCapture(entry, `pair ${String(index)}`)),
+          }
+        : {
+              ...run,
+              side,
+              clientOrigin: text(given['clientOrigin'], 'the plan’s clientOrigin'),
+              pairs: pairs.map((entry, index) => readClientCapture(entry, `pair ${String(index)}`)),
+          };
+}
+
+async function planFromStandardInput(): Promise<Plan> {
     const chunks: Buffer[] = [];
 
     for await (const chunk of process.stdin) {
         chunks.push(chunk as Buffer);
     }
 
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Plan;
+    return readPlan(JSON.parse(Buffer.concat(chunks).toString('utf8')));
 }
 
 async function main(): Promise<void> {
-    const plan = await readPlan();
+    const plan = await planFromStandardInput();
 
     // How many pairs one invocation produces is bounded by `scripts/capture-plan.sh`, which is where both entry
     // points read the manifest and decide what they were asked for. It is stated there rather than here so the two
@@ -337,7 +599,7 @@ async function main(): Promise<void> {
         let written: string[];
 
         if (plan.side === 'design') {
-            served = serveDirectory(plan.designRoot ?? '');
+            served = serveDirectory(plan.designRoot);
             const port = await listening(served.server);
 
             written = await captureDesign(browser, plan, `http://127.0.0.1:${String(port)}`);

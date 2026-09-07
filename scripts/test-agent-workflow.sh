@@ -9063,6 +9063,12 @@ the_comparison_reports_where_a_pair_differs_before_any_image_is_opened() {
   # ImageMagick stands in here, because what is under test is the report rather than the pixels: the
   # sizes agree, some pixels differ, and the connected components are two regions. The real thing
   # measures all three; this states them so the shape of the answer can be asserted.
+  #
+  # The two differing regions are spelled differently on purpose. What ImageMagick calls white in a
+  # component listing depends on the build and the version — 7.1.2 prints `gray(255)` for a grayscale
+  # mask at any quantum depth, and a build scaling it to the quantum range would print `gray(65535)` —
+  # so the filter is written as "not the ground" rather than as an equality, and this fixture is what
+  # holds it to that.
   cat >"$stub/magick" <<'FAKE_MAGICK'
 #!/usr/bin/env bash
 for argument in "$@"; do
@@ -9077,7 +9083,7 @@ for argument in "$@"; do
     printf 'Objects (id: bounding-box centroid area mean-color):\n'
     printf '  0: 20x10+0+0 9.0,4.0 170 gray(0)\n'
     printf '  1: 6x4+2+3 4.0,4.0 24 gray(255)\n'
-    printf '  2: 3x2+11+6 12.0,6.0 6 gray(255)\n'
+    printf '  2: 3x2+11+6 12.0,6.0 6 gray(65535)\n'
     exit 0
   fi
 done

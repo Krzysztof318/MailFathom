@@ -147,6 +147,12 @@ for design in "${design_captures[@]}"; do
   # Where, as regions rather than as one number for the frame. Connected components is ImageMagick's own, so the
   # grouping is a measurement rather than a heuristic written here: each row is one blob of differing pixels with the
   # bounding box that holds it.
+  #
+  # The mask is binary, so a component is either the difference or the ground between differences, and the filter is
+  # written as "not the ground" rather than as an equality against what white is called. What white is called is not
+  # this script's to predict: ImageMagick 7.1.2 prints `gray(255)` for a grayscale mask whatever its quantum depth or
+  # the file's own bit depth — measured at Q16 against masks written at 1, 8 and 16 bits — while a build or a version
+  # that scaled it to the quantum range would print `gray(65535)` instead, and either would match here.
   regions="$(
     magick "$mask" \
       -define connected-components:verbose=true \
@@ -154,7 +160,7 @@ for design in "${design_captures[@]}"; do
       -define connected-components:mean-color=true \
       -connected-components 8 null: 2>/dev/null |
       awk -v smallest="$smallest" '
-        NR > 1 && $NF == "gray(255)" && $4 + 0 >= smallest { print $2, $4 }
+        NR > 1 && $NF != "gray(0)" && $4 + 0 >= smallest { print $2, $4 }
       ' | sort -k2 -nr
   )"
 
