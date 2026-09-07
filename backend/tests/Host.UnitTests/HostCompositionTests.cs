@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Xml.Linq;
 using MailFathom.Application.Access;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
@@ -110,6 +112,22 @@ public sealed class HostCompositionTests
         new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", "https://sso.example.test/realms/mailfathom"),
     ];
 
+    /// <summary>Writes one HTTPS profile under a surface's section, which is what makes that surface terminate TLS.</summary>
+    /// <remarks>
+    /// The material is inline rather than a file, for the reason every other secret in these shapes is: the startup
+    /// validator resolves each reference while the graph is resolved, and a path on the machine running the suite would
+    /// decide whether a shape composes. Nothing here opens the material — a shape composes a service graph and starts no
+    /// server — so what the profile has to be is bindable and valid rather than loadable.
+    /// </remarks>
+    private static KeyValuePair<string, string?>[] HttpsProfile(string sectionName, string profileName, int port) =>
+    [
+        new($"{sectionName}:Https:Endpoints:0:Name", profileName),
+        new($"{sectionName}:Https:Endpoints:0:Domain", $"{profileName}.example.test"),
+        new($"{sectionName}:Https:Endpoints:0:Port", port.ToString(CultureInfo.InvariantCulture)),
+        new($"{sectionName}:Https:Endpoints:0:ServerCertificate:Bundle:Name", $"{profileName}-certificate"),
+        new($"{sectionName}:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference", "plaintext:not-a-real-certificate-bundle"),
+    ];
+
     /// <summary>Each deployment shape, as the configuration an operator would have written to reach it.</summary>
     /// <remarks>
     /// Written as configuration rather than as flags, because that is the input the composition actually reads: the
@@ -134,6 +152,35 @@ public sealed class HostCompositionTests
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
                 new("ClientEndpoint:Authentication:0:Method", "api-key"),
+            ],
+
+            // The deployment the client surface was refusing every handshake on, and the smallest shape that reaches
+            // the certificate store nobody loaded: one endpoint, terminating its own TLS, with no other surface served.
+            ["client terminating its own tls"] =
+            [
+                new("ClientEndpoint:Enabled", "true"),
+                new("ClientEndpoint:Transport", "HttpsOnly"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
+                .. HttpsProfile(ClientEndpointOptions.SectionName, "client", 8445),
+            ],
+
+            // Every store the composition registers, all three published at once, which is the only shape in which the
+            // registration list and the loading list can be held against each other in full.
+            ["every surface terminating tls"] =
+            [
+                new("McpEndpoint:Enabled", "true"),
+                new("McpEndpoint:Transport", "HttpsOnly"),
+                new("McpEndpoint:Authentication:0:Method", "api-key"),
+                .. HttpsProfile(McpEndpointOptions.SectionName, "mcp", 8443),
+                new("AdminEndpoint:Enabled", "true"),
+                new("AdminEndpoint:Transport", "HttpsOnly"),
+                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
+                new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                .. HttpsProfile(AdminEndpointOptions.SectionName, "admin", 8444),
+                new("ClientEndpoint:Enabled", "true"),
+                new("ClientEndpoint:Transport", "HttpsOnly"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
+                .. HttpsProfile(ClientEndpointOptions.SectionName, "client", 8445),
             ],
 
             // One shape per accepted method, because each registers services the others do not: a password entry adds
@@ -375,6 +422,48 @@ public sealed class HostCompositionTests
         Assert.False(surfaces.Admin.Enabled);
         Assert.NotNull(surfaces.ClientRateLimits);
         Assert.NotNull(surfaces.ClientRequestTimeout);
+    }
+
+    /// <summary>
+    /// The registration and the loading are two lists that nothing else holds against each other. The client surface's
+    /// store was registered here and consulted on every handshake while the startup path loaded only the other two, so
+    /// its listener bound and then refused every connection — with no test naming the store to report the asymmetry.
+    /// A fourth surface added to the registration and not to the loading fails here instead of shipping mute.
+    /// </summary>
+    [Fact]
+    public void TlsTerminatingStoreKeys_NameEveryCertificateStoreTheCompositionRegistered()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("every surface terminating tls");
+
+        // Act
+        var surfaces = HostComposition.Compose(builder);
+
+        // Assert
+        var registeredStoreKeys = builder.Services
+            .Where(static registration => registration.ServiceType == typeof(TransportServerCertificateStore))
+            .Select(static registration => registration.ServiceKey)
+            .ToHashSet();
+
+        Assert.Equal(registeredStoreKeys, HostCertificates.TlsTerminatingStoreKeys(surfaces).ToHashSet());
+    }
+
+    /// <summary>
+    /// The deployment the defect was observed on: the client endpoint alone, terminating its own TLS. Its store is what
+    /// the handshake callback consults for that listener, so a startup path that names the other two surfaces and not
+    /// this one leaves the client page and every route beneath it unreachable over the only transport it opened.
+    /// </summary>
+    [Fact]
+    public void TlsTerminatingStoreKeys_WithTheClientSurfaceAlone_NameTheClientsOwnStore()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("client terminating its own tls");
+
+        // Act
+        var storeKeys = HostCertificates.TlsTerminatingStoreKeys(HostComposition.Compose(builder));
+
+        // Assert
+        Assert.Equal([HostComposition.ClientEndpointCertificateStoreKey], storeKeys);
     }
 
     /// <summary>

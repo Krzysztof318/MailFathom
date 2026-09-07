@@ -179,9 +179,17 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
 
     /// <summary>Records that a profile has an identity, and how long that identity lasts.</summary>
     /// <remarks>
+    /// <para>
     /// The profile name and the expiry instant are the whole of it. The subject, the serial number, and the thumbprint
     /// are deliberately absent: they identify the certificate wherever this log is read or shipped, and an operator
     /// renewing it needs to know which profile and by when, not which certificate it was.
+    /// </para>
+    /// <para>
+    /// The section the profile was configured under is named beside them, because one store exists per endpoint and the
+    /// profile name alone is an operator's own word for one of several. Both messages said <c>MCP</c> instead, from when
+    /// that was the only surface terminating TLS, so an administrative or client profile was announced as a protocol
+    /// one — which is the record an operator diagnoses a refused handshake from.
+    /// </para>
     /// </remarks>
     private void ReportLoaded(string profileName, X509Certificate2 leaf)
     {
@@ -189,12 +197,12 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
 
         if (ServerCertificateExpiry.IsExpiringSoon(expiration, this.timeProvider.GetUtcNow()))
         {
-            this.LogServerCertificateExpiringSoon(profileName, expiration);
+            this.LogServerCertificateExpiringSoon(this.configurationSectionPath, profileName, expiration);
 
             return;
         }
 
-        this.LogServerCertificateLoaded(profileName, expiration);
+        this.LogServerCertificateLoaded(this.configurationSectionPath, profileName, expiration);
     }
 
     /// <inheritdoc />
@@ -215,13 +223,21 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The MCP HTTPS profile {HttpsProfileName} presents a server certificate valid until {ServerCertificateExpiration:u}.")]
-    private partial void LogServerCertificateLoaded(string httpsProfileName, DateTimeOffset serverCertificateExpiration);
+        Message = "The HTTPS profile {HttpsProfileName} configured under {HttpsConfigurationSection} presents a server "
+            + "certificate valid until {ServerCertificateExpiration:u}.")]
+    private partial void LogServerCertificateLoaded(
+        string httpsConfigurationSection,
+        string httpsProfileName,
+        DateTimeOffset serverCertificateExpiration);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The MCP HTTPS profile {HttpsProfileName} presents a server certificate that expires at {ServerCertificateExpiration:u}. "
+        Message = "The HTTPS profile {HttpsProfileName} configured under {HttpsConfigurationSection} presents a server "
+            + "certificate that expires at {ServerCertificateExpiration:u}. "
             + "Renew it before then: once it expires the profile stops starting, because a certificate outside its validity "
             + "period is refused rather than served.")]
-    private partial void LogServerCertificateExpiringSoon(string httpsProfileName, DateTimeOffset serverCertificateExpiration);
+    private partial void LogServerCertificateExpiringSoon(
+        string httpsConfigurationSection,
+        string httpsProfileName,
+        DateTimeOffset serverCertificateExpiration);
 }
