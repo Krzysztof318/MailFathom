@@ -6,9 +6,11 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 
 /// <summary>Names why a screened egress was stopped rather than served.</summary>
 /// <remarks>
-/// Two reasons rather than one, because the two leave whoever wrote the message with different work to do: the first
-/// asks them to take something out of it, and the second asks them to make it shorter or asks the operator to raise the
-/// analyzed ceiling. A single reason would tell the second author to look for material that was never found.
+/// Three reasons rather than one, because each leaves whoever wrote the message with different work to do: the first
+/// asks them to take something out of it, the second asks them to make it shorter or asks the operator to raise the
+/// analyzed ceiling, and the third asks them to attach the file in a form something can read. A single reason would
+/// tell the second author to look for material that was never found, and the third to look inside a body that was
+/// scanned and came back clean.
 /// </remarks>
 public enum SensitiveContentEgressRefusalReason
 {
@@ -23,4 +25,13 @@ public enum SensitiveContentEgressRefusalReason
     /// has no answer to that question except no.
     /// </remarks>
     TextExceededScanCeiling = 1,
+
+    /// <summary>A file the act would have carried out of the deployment could not be read, so nothing established what it holds.</summary>
+    /// <remarks>
+    /// The one reason that is not about text at all. An encrypted document, one in a format nothing here parses, one
+    /// whose bytes do not parse as what they declare, and one whose reading ran past a ceiling are the same fact to a
+    /// screen: the file is going out and nobody knows what is in it. Treating that as clean would make the whole screen
+    /// a property of the format a sender chose.
+    /// </remarks>
+    AttachmentNotRead = 2,
 }

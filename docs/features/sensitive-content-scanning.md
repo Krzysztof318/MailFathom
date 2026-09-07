@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Application/Mail/Delivery/Screening/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/AttachmentText/EmailAttachmentTextDeriver.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
+<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Application/Mail/Delivery/Screening/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/AttachmentText/EmailAttachmentTextDeriver.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise
@@ -18,7 +18,8 @@ The boundary is **egress and derived data**, never ingestion. The table names th
 | --- | --- |
 | Extracted text, chunks, and the embeddings built from them | Redacted before they are written, so the placeholder is what is stored and later retrieved |
 | Text handed to a model, to a hosted embedding endpoint, or back through an MCP tool | Redacted in flight, on every call |
-| The message a caller asks this deployment to send or to hold as a draft | **Nothing is rewritten.** What is found cancels the act instead |
+| The message a caller asks this deployment to send or to hold as a draft, attached documents included | **Nothing is rewritten.** What is found cancels the act instead |
+| An attachment a caller asks this deployment to hand back | **Nothing is rewritten.** What is found in its text refuses the download instead |
 | The stored RFC 822 bytes | **Nothing.** They are never rewritten |
 
 Raw MIME stays byte-exact because it is the fetched artifact and the local source of truth: redacting it would break
@@ -104,7 +105,7 @@ switching a scanner on leaves everybody else's rows exactly where they were.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-eight, and the register is closed: a ninth is a code change rather than a configuration one, which is what makes the
+nine, and the register is closed: a tenth is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -113,10 +114,11 @@ list below answerable by reading it.
 | `hosted_embedding_input` | Every passage sent to a hosted embedding endpoint |
 | `mcp_snippet` | The mail text an MCP tool answers with: the subjects and sender display names of a listing, the same plus the extracts of a search, and an answer with its citations |
 | `mcp_email_content` | The message `get_email_content` returns: both body representations, the subject, and every participant's display name |
-| `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject and both body representations, read back out of the MIME it would be transmitted as |
+| `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject, both body representations, and the extracted text of every document attached to it, read back out of the MIME it would be transmitted as |
 | `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them. A conversation crosses here too, for its messages and for the display names its participant list names |
 | `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
 | `client_citation_resolution` | The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands |
+| `attachment_download` | The extracted text of one attachment about to be streamed whole, on the signed link route and on the client's own attachment route alike — the one point whose subject is a file's own words rather than a message's |
 
 `client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
 a folder nor a query but by a claim a model already made: the passage is the evidence behind one sentence of an answer,
@@ -176,14 +178,17 @@ contracts already hold rather than something redaction would enforce. MailFathom
 deterministic in-process embedding generator is exempt for a different reason: nothing leaves the process, so there is
 nothing for a guard to sit in front of.
 
-**The fifth is the one a redaction never reaches**, because rewriting what an author wrote is not a disposition
-MailFathom may take: a placeholder in a message somebody signed would be sent in their name. It refuses the act instead,
-and [outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) is where that
-difference is stated in full.
+**Two of them are the ones a redaction never reaches**, and each for its own reason. At `outgoing_mail` rewriting what
+an author wrote is not a disposition MailFathom may take: a placeholder in a message somebody signed would be sent in
+their name. At `attachment_download` what crosses is not text at all but a byte stream, and a region replaced inside one
+produces a file its author never composed whose reader has no way of knowing it was changed. Both refuse the act
+instead, which is why `stopped` is a series either of them can produce and no other point can;
+[outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) states the difference
+in full and carries the download rule beneath it.
 
-A refusal at any of the five fails the operation it guards, as [failing closed](#failing-closed) describes — the
+A refusal at any of the nine fails the operation it guards, as [failing closed](#failing-closed) describes — the
 question is not answered, the passages are not embedded, the listing is not served, the message is not returned, the
-send is not queued. What
+send is not queued, the file is not served. What
 each guarded call found, refused, and cost is published; [telemetry § what guarding an egress point
 publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
 
@@ -206,23 +211,82 @@ the plain-text body, and the HTML alternative exactly as it will leave, markup a
 rather than the arguments a caller sent is what makes the routes above one contract — a promotion and a recurring
 occasion carry bytes and no authored fields at all.
 
-**Attachments are not screened.** A scan is over text, and an attachment of an outgoing message is a byte stream a
-caller supplied whose type this deployment does not undertake to parse on the way out. An operator who needs an
-attachment examined before it leaves needs a different control than this one, and reporting it as covered here would be
-worse than saying it is not. That a deployment may read the attachments of *arriving* mail does not change it: reading
-one is a background derivation over stored mail under its own ceilings, and holding a send open on a document parser
-would be a different act with a different failure mode.
+**Every attached document is read and screened with the message.** MailFathom reads an attachment's text under the
+ceilings [attachment text extraction](attachment-text-extraction.md) declares and hands what it yields to the same
+screen the subject and the two bodies go through, so a credential typed into a covering note and the same credential
+inside the attached PDF stop the act identically. Each file is scanned as its own value, for the reason the three
+values above are separate: a match straddling the join between two files is a match against something nobody attached.
+
+**A file nothing could read stops the act too**, and that is a deliberate refusal rather than a gap. An encrypted
+document, one in a format nothing here parses — the three legacy binary formats among them — one whose bytes do not
+parse as what they declare, and one whose reading ran past a ceiling all mean the same thing: the file is going out and
+nobody established what is in it. Treating that as clean would make the whole screen a property of the format a sender
+chose.
+
+**What is not read is what falls outside a closed set of ten formats**, and the page says so rather than implying
+coverage. Recognition is decided by `AttachmentDocumentFormats` from the media type the sender declared and the file
+name's extension, so what is screened is a PDF, the three Office Open XML families, and the three OpenDocument ones —
+and everything else is sent and served unread. That is a photograph, a recording, and an archive, which carry no text a
+scanner reads. **It is also a plain-text note, a `.csv` export, a `.json` file, and a source file, which plainly do**:
+a credential in an attached `.txt` leaves a screened deployment exactly as it did before, and nothing here pretends
+otherwise. The same is true of a recognized document whose every page is a scan of paper, which is read successfully
+and yields nothing.
+
+**Two of those are worth stating apart**, because they are not the same fact. A format outside the set is not read and
+not refused. A format *inside* it that yields no text — a `.doc`, `.xls`, or `.ppt`, or one an operator excluded from
+`Embeddings:AttachmentText:Formats` — is refused, on the rule that an attachment which was not read is never treated
+as clean. Describing an image at a provider is egress rather than a screen on one, and it is not
+what this does.
 
 **Nothing is written down when the screen stops the act.** No outbox row, no draft, no revision, no content row. The
 draft being revised keeps the text it already had, and the message is refused before the transaction the act would have
 committed is opened.
 
 **A caller reads why.** The refusal carries `59001` naming the category that stopped it — never the rule, the position,
-the confidence, or one character of what was found — and `59002` when the text was longer than
+the confidence, or one character of what was found — `59002` when the text was longer than
 `SensitiveContent:MaximumAnalyzedCharacters`, which stops the act because nothing read the remainder and a message
-whose tail nobody analyzed is exactly the message that must not leave. Both belong to the MCP boundary's own category,
-so an MCP client is told what happened rather than that the tool failed; the same
+whose tail nobody analyzed is exactly the message that must not leave, and the same code again when the message's
+attachments come to more than a whole message is read within, which is the same fact about the same message — and
+`59003` when one file the message attaches could not be read at all. The third names neither which file it was, what it
+is called, where it sits, nor which of the several ways it defeated the reader, for the reason the first names no
+position: a refusal is a line in a log, and a file name is mail content exactly as a body is. It is also not the answer
+where every document was read and there was simply too much of them, because converting a file that was read
+successfully would change nothing. A message carrying both a finding and an unreadable file is refused for the
+finding, which is the half its author can act on. All three belong to the MCP boundary's own category, so an MCP client
+is told what happened rather than that the tool failed; the same
 [error reporting](mcp-tools.md#error-reporting) rule governs every other code.
+
+### An attachment is screened on the way out as well
+
+A read that redacts a body and a link that serves the unredacted original beside it is not a screened deployment, so the
+same screen sits on the two paths that hand an attachment's octets to somebody outside: the signed
+[download link](email-content.md#what-a-download-link-is-and-what-bounds-it) the tool surface mints, and the
+[client's own attachment route](../operations/client-endpoint.md#the-attachment-route).
+
+- **The rule is the one above.** The file's text is extracted afresh — nothing here depends on what a derived pass
+  stored or on the message having been read yet — and judged by the owner's own posture. A finding refuses the
+  download; a document nothing could read refuses it; a file no reader recognizes as a document is served as it always
+  was. What the read *is* bounded by is `Embeddings:AttachmentText:Formats`, the same set the search stage is
+  configured with, so a format an operator excluded from it answers `FormatNotExtracted` and is refused rather than
+  served — which is the paragraph above's rule reaching a key that reads like an indexing choice and is not one here.
+- **Nothing is redacted and nothing partial is served.** Replacing a region inside a byte stream produces a file its
+  author never composed and whose reader has no way of knowing it was changed, so the answer is the whole file or none
+  of it.
+- **A stopped download says so, and says nothing else.** It answers `409` carrying `59004`, which is deliberately
+  distinct from the single refusal every other stopped download shares: whoever asked was already told by the read
+  beside it that the attachment exists and what it is called, so the answer discloses nothing that description did not.
+  Four things reach it — a scanner named something in the file's text; nothing here could read the file; its text was
+  longer than `SensitiveContent:MaximumAnalyzedCharacters`, so the remainder went unscanned; or a switched-on scanner
+  could not answer at all — and the answer says which of the four it was no more than it names a category. Telling them
+  apart would say that this file holds a credential, or that this deployment's analyzer is down, to somebody the
+  deployment has just decided may not have the file.
+- **An owner who screens nothing pays for none of it, and serves attachments unscreened.** The posture is read before
+  anything is opened, so a deployment this is inactive for serves a download at exactly the cost it did before. Which
+  deployments those are is `SensitiveContent:ScreenOutgoingMailFor` and nothing else — the same key that decides
+  whether a send is screened. A deployment that switched no scanner on is one of them; so is one running every scanner
+  that wrote `[]` to that key, which keeps redacting every read and serves every attachment whole beside it. That
+  combination is the asymmetry this section exists to close, so an operator writing that list is deciding about
+  downloads as well as about sends.
 
 ### What it screens for, and why the default is secrets alone
 
@@ -476,6 +540,15 @@ no switch at all, because the operator would believe it was in force.
 
 Every one of those failures reports error code `81001` and names the scanner. None of them names the text or the
 finding: the content the scan was about is exactly what must not appear in a failure written to a log.
+
+**`attachment_download` is the one egress point where that code does not reach the caller**, and it is a disclosure rule
+rather than an exception to failing closed. The download refuses exactly as every other guarded operation does — nothing
+is served — but the answer is the same `409` and `59004` a screened file gets, because a caller holding a capability who
+could tell "this file carries something" from "the analyzer is down" would be reading this deployment's health off a
+link somebody handed them. What an operator reads instead is the instrument beside the screen, which records the
+scanner's refusal at that point exactly as it records one anywhere else;
+[telemetry § what guarding an egress point publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes)
+names it.
 
 One failure in this feature is an availability failure rather than a scan's: `81002`, raised when the personal-data
 analyzer cannot be reached, answers the availability probe with a refusal, or recognises nothing the configured

@@ -42,10 +42,10 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// without constructing a detector, taking a concurrency permit, or touching an instrument.
 /// </para>
 /// <para>
-/// <b>Which findings stop a message is the author's own posture.</b> The deployment names the categories no message
-/// may carry out of it and an owner may add to that set for their own mail, so what a send is judged by is composed
-/// from both rather than read off the deployment alone. The owner is an argument here because the two callers — the
-/// outbox and the draft book — hold the message's author before they hold its bytes.
+/// <b>Which findings stop an act is the owner's own posture.</b> The deployment names the categories nothing may carry
+/// out of it and an owner may add to that set for their own mail, so what an act is judged by is composed from both
+/// rather than read off the deployment alone. The owner is an argument here because every caller — the outbox, the
+/// draft book, and the reader that serves one attachment — holds whose mail it is before it holds any bytes.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentEgressScreen

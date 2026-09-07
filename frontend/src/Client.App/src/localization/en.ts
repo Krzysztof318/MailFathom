@@ -364,9 +364,21 @@ export const en = {
     'compose.refusedContent':
         'Screening refused what this message carries. Changing what it says, or what it attaches, is what would change that.',
     'compose.refusedNotScanned':
-        'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
+        'Part of this message could not be screened, so it was not sent. Try again in case the read ran out of time; if it is refused again, taking off what could not be read is what would change that.',
+    'compose.refusedAttachmentNotRead':
+        'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
     'compose.refusedScreeningUnavailable':
         'Screening is not answering, so nothing goes out until it does. The message is still here.',
+    'compose.saveRefusedContent':
+        'Screening refused what this message carries, so it was not filed. Changing what it says, or what it attaches, is what would change that. Nothing you wrote has been lost.',
+    'compose.saveRefusedNotScanned':
+        'Part of this message could not be screened, so it was not filed. Try again in case the read ran out of time; if it is refused again, taking off what could not be read is what would change that. Nothing you wrote has been lost.',
+    'compose.saveRefusedAttachmentNotRead':
+        'One of the attached files could not be read, so nothing screened what would have been filed with it and the message was not filed. Try again in case the read ran out of time; if it is refused again, saving without that file, or attaching it in a form that can be read, is what would change that.',
+    'compose.saveRefusedScreeningUnavailable':
+        'Screening is not answering, so nothing is filed until it does. The message is still here.',
+    'compose.saveRefusedForAnotherReason':
+        'Your deployment refused to file it. Whoever runs it can say why from its own log. Nothing you wrote has been lost.',
     'compose.refusedForAnotherReason':
         'Your deployment refused to send it. Whoever runs it can say why from its own log.',
     'compose.failedUnauthenticated':
@@ -668,6 +680,8 @@ export const en = {
     'attachment.refusedUnauthorized':
         'This credential may not read mail on this deployment, so the file was not downloaded.',
     'attachment.refusedUnavailable': 'The deployment did not answer, so the file was not downloaded. Try again.',
+    'attachment.refusedScreened':
+        'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Try again in case the read ran out of time or the screen was momentarily not answering.',
     'attachment.refusedLargerThanDescribed':
         'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
     'attachment.reading': 'Reading {name}…',
@@ -678,6 +692,8 @@ export const en = {
     'attachment.notShownUnauthorized':
         'This credential may not read mail on this deployment, so the file could not be shown.',
     'attachment.notShownUnavailable': 'The deployment did not answer, so the file could not be shown. Try again.',
+    'attachment.notShownScreened':
+        'This deployment screens the files it serves and does not serve this one, so it cannot be shown. Try again in case the read ran out of time or the screen was momentarily not answering.',
     'attachment.notShownUnreadable':
         'What arrived is not what this message said the file holds, so nothing is drawn from it. Download it, and report this as a defect.',
     'attachment.empty': 'This file holds nothing.',

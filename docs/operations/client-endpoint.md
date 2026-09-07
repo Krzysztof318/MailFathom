@@ -1016,7 +1016,10 @@ address the operator publishes MailFathom at. `no-store` is there because this i
 response is mail content, and the deployments this surface is documented for put a reverse proxy in front of it.
 
 **The octets are streamed rather than buffered**, decoded from the stored copy straight into the response, so a large
-attachment costs the copy buffer rather than its own size on either side.
+attachment costs the copy buffer rather than its own size on either side — on a deployment that screens nothing. Where
+screening is on the file is read whole before a byte leaves, because every parser behind the extraction seeks, so a
+16 MiB attachment costs its own size for the length of one extraction and the claim above describes the answer rather
+than the whole request.
 
 **It is the client's own route rather than the signed link the tool surface mints**, and the difference is who is being
 served. [A download link](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential) exists to be handed
@@ -1032,6 +1035,16 @@ is answered `403`, as everywhere else on this surface.
 
 **It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
 and cannot set the remote `\Seen` flag.
+
+**A screened deployment reads the file before it streams it.** Where
+[sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
+is switched on for this owner, the document's own text is extracted and scanned, and the route answers `409` with
+`errorCode` `59004` rather than the octets when a scanner names something in it — and equally when nothing could read
+the file at all, since an attachment that was not read is never treated as clean. The answer names no scanner, no
+category, and nothing about the file, and it is deliberately a different status from the `404` above: this reader is
+already authenticated for this message and this position, so what they learn is that the deployment screens what it
+serves rather than anything about mail they may not read. Nothing is redacted — a file is served whole or refused —
+and an owner who screens nothing pays no extraction and reads exactly the answer the paragraphs above describe.
 
 ### The citation route
 
@@ -1566,6 +1579,13 @@ sentence carries no recipient, no subject, and no fragment of the message. `409`
 what the author already wrote, so no rewriting of the request would help; `503` is the one temporary refusal here and
 the only one worth retrying, and means the message was neither refused nor sent because what would have judged it could
 not be reached. Nothing on any of these routes reaches a log, a span attribute, or a telemetry event.
+
+**A save and a revision are screened by the same rules and answer the same way.** The draft book is judged by the
+screening the outbox is judged by, so writing a message down can be refused for what it carries exactly as sending it
+can: `409` with the same error codes where a rule refused what the author wrote, and `503` where what would have judged
+it could not be reached. What the recipient policy and the spending ceilings refuse is the send's alone — a message
+merely written down goes to nobody and costs nothing. A client that reads every non-`200` on those two routes as an
+outage tells an author their deployment did not answer when it answered precisely.
 
 **Nothing has been transmitted when a send answers.** The message is queued, and the outbox routes below are where a
 client watches what becomes of it.

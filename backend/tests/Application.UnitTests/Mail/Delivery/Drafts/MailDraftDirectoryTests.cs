@@ -120,6 +120,11 @@ public sealed class MailDraftDirectoryTests
     }
 
     /// <summary>Opening a draft answers with the words its stored message carries rather than a second copy of them.</summary>
+    /// <remarks>
+    /// It asserts which of the port's two reads was asked as well as what came back: the reader here throws from
+    /// <c>ReadForScreeningAsync</c>, so a read-back that reached for it would fail this test rather than pass while
+    /// running a document parser per attachment on a request that discards the result.
+    /// </remarks>
     [Fact]
     public async Task ReadComposedAsync_ADraftThisOwnerHolds_AnswersWithWhatTheStoredMessageSays()
     {
@@ -206,7 +211,19 @@ public sealed class MailDraftDirectoryTests
     /// </remarks>
     private sealed class HeaderReadingOutgoingMailText : IOutgoingMailTextReader
     {
-        public Task<OutgoingMailText> ReadAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
+        /// <summary>
+        /// It throws rather than answering, so a read-back reaching for it fails instead of passing quietly. Reading a
+        /// draft back for its author discards every attachment field, so asking the screening read for one would run a
+        /// document parser per attachment on a request nothing screens — and both reads answering the same thing is
+        /// exactly what would hide that.
+        /// </summary>
+        public Task<OutgoingMailText> ReadForScreeningAsync(
+            ReadOnlyMemory<byte> rawMime,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "Reading a draft back for its author asks for the message's words, never for a screening read.");
+
+        public Task<OutgoingMailText> ReadWordsAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
         {
             var message = Encoding.ASCII.GetString(rawMime.Span).Split("\r\n\r\n", 2);
             var subject = message[0].StartsWith("Subject: ", StringComparison.Ordinal)

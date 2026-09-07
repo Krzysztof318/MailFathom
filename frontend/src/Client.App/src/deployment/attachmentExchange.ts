@@ -27,12 +27,12 @@ import { asDataUrl } from './dataUrl';
 
 /** What happened to a download, where an expected failure is a value rather than an exception. */
 export type AttachmentDeliveryOutcome =
-    'delivered' | 'abandoned' | 'unauthenticated' | 'unauthorized' | 'unavailable' | 'largerThanDescribed';
+    'delivered' | 'abandoned' | 'unauthenticated' | 'unauthorized' | 'unavailable' | 'screened' | 'largerThanDescribed';
 
 /**
  * Why a file could not be shown.
  *
- * The five a download can end on, and one that only showing has: octets that arrived whole and that nothing here could
+ * The six a download can end on, and one that only showing has: octets that arrived whole and that nothing here could
  * turn into something to draw. A download cannot reach it — what it does with the octets is hand them to the platform
  * to save, which does not read them.
  */
@@ -90,15 +90,18 @@ export interface AttachmentExchange {
 /**
  * Which failure a download amounts to, for the record `Client.Backend` keeps of the request it composed.
  *
- * Two of the six are not failures of the request. A delivered file plainly is not, and neither is a download somebody
- * stopped: it ended because the person asked it to, and recording that as `unavailable` would put their change of mind
- * in the dimension an operator reads for a deployment that is not answering. An answer larger than the message
- * described is `unreadable` — the body was refused rather than absent, which is the reason that word already carries.
+ * Three of the seven are not failures of the request. A delivered file plainly is not, and neither is a download
+ * somebody stopped: it ended because the person asked it to, and recording that as `unavailable` would put their change
+ * of mind in the dimension an operator reads for a deployment that is not answering. Nor is a file the deployment
+ * screened: it answered exactly as it meant to, and counting a working policy as a fault would report a deployment as
+ * unhealthy for doing its job. An answer larger than the message described is `unreadable` — the body was refused
+ * rather than absent, which is the reason that word already carries.
  */
 export function deliveryFailureOf(outcome: AttachmentDeliveryOutcome): ClientFailureReason | null {
     switch (outcome) {
         case 'delivered':
         case 'abandoned':
+        case 'screened':
             return null;
         case 'largerThanDescribed':
             return 'unreadable';

@@ -100,4 +100,29 @@ public enum SensitiveContentEgressPoint
     /// its own instrument rather than averaged into a listing's rows.
     /// </remarks>
     ClientCitationResolution = 7,
+
+    /// <summary>The text of one attachment this deployment is about to stream out: the file a signed link redeems, and the file the client API serves a signed-in reader.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The second member a redaction never reaches</b>, and for a different reason from <see cref="OutgoingMail" />.
+    /// There the text is words an author wrote and rewriting them would forge a message; here the text is not what
+    /// crosses at all — what crosses is a byte stream, and a region replaced inside one produces a file its author never
+    /// composed and whose reader has no way of knowing it was changed. So the download is refused whole, and nothing
+    /// partial is ever served.
+    /// </para>
+    /// <para>
+    /// It is apart from every read above rather than folded into one, because it is the point that answers with a file
+    /// rather than with text. The two routes share it — the capability the tool surface mints and the client API's own
+    /// attachment route — for the reason a draft shares a member with a send: both hand the same octets to somebody
+    /// outside this deployment, and an instrument that told them apart would report which entrypoint was used rather
+    /// than what left.
+    /// </para>
+    /// <para>
+    /// What is scanned here is the attachment's own extracted text and nothing else. A file no reader here recognizes
+    /// as a document — a photograph, a recording, an archive — is served as it always was, because no text scanner ever
+    /// undertook to read one; a document that is recognized and cannot be read is refused rather than served, because
+    /// the alternative is treating every locked file as clean.
+    /// </para>
+    /// </remarks>
+    AttachmentDownload = 8,
 }

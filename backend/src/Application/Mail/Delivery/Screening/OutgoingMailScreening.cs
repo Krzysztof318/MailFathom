@@ -25,8 +25,15 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// </para>
 /// <para>
 /// Nothing is parsed where nothing screens this author's mail. The screen answers whether it is active for them before
-/// the message is read back, so an opt-in nobody took costs a send no parse, no allocation, and no scan — and an owner
-/// who added a category pays for one while the owner beside them does not.
+/// the message is read back, so an opt-in nobody took costs a send no parse, no allocation, no document read, and no
+/// scan — and an owner who added a category pays for one while the owner beside them does not. That test is what keeps
+/// the attachment reading below out of the cost of an unscreened send entirely.
+/// </para>
+/// <para>
+/// <b>What the message attaches is screened with what it says</b>, and a document nothing here could read stops the act
+/// rather than passing as clean. A file is refused after the scan rather than before it, so a message that carries both
+/// a credential and a locked archive is refused for the credential, which is the half its author can do something
+/// about.
 /// </para>
 /// </remarks>
 /// <param name="textReader">Reads back what the composed message says.</param>
@@ -74,12 +81,22 @@ public sealed class OutgoingMailScreening(
             return null;
         }
 
-        var composed = await textReader.ReadAsync(rawMime, cancellationToken);
+        var composed = await textReader.ReadForScreeningAsync(rawMime, cancellationToken);
 
-        return await screen.ScreenAsync(
+        var found = await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
             owner,
             composed.ScreenedValues,
             cancellationToken);
+
+        // Read after the findings rather than before them, for the reason the screen reads its own ceiling last: a
+        // message carrying something a scanner named is refused for what was found rather than for a file nobody could
+        // open, and only the first of those tells the author something they can act on.
+        return found ?? composed.AttachmentRefusal switch
+        {
+            OutgoingAttachmentRefusal.NotRead => SensitiveContentEgressRefusal.AttachmentNotRead(),
+            OutgoingAttachmentRefusal.MessageCeilingReached => SensitiveContentEgressRefusal.NotFullyScanned(),
+            _ => null,
+        };
     }
 }

@@ -277,6 +277,10 @@ describe('AttachmentView', () => {
         ['unauthorized', 'This credential may not read mail on this deployment, so the file could not be shown.'],
         ['unavailable', 'The deployment did not answer, so the file could not be shown. Try again.'],
         [
+            'screened',
+            'This deployment screens the files it serves and does not serve this one, so it cannot be shown. Try again in case the read ran out of time or the screen was momentarily not answering.',
+        ],
+        [
             'largerThanDescribed',
             'What arrived is not what this message said the file holds, so nothing is drawn from it. Download it, and report this as a defect.',
         ],
@@ -288,6 +292,22 @@ describe('AttachmentView', () => {
         drawing(photograph, reading({ outcome: 'refused', refusal }).exchange);
 
         expect(await screen.findByText(said)).toBeDefined();
+    });
+
+    // Two of the four causes behind a screened refusal are transient — a read that ran past the extraction timeout,
+    // and a scanner that could not answer — and the deployment deliberately does not say which of the four it was, so
+    // a person who met a momentary one must not be left with no way on.
+    it('offers a second attempt at a screened read, which two of its four causes may answer differently', async () => {
+        const held = reading(
+            { outcome: 'refused', refusal: 'screened' },
+            { outcome: 'shown', content: 'data:application/octet-stream;base64,AQID' },
+        );
+        drawing(photograph, held.exchange);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByRole('img', { name: 'harbour.png' })).toBeDefined();
+        expect(held.asked.length).toBe(2);
     });
 
     it('offers a second attempt at a deployment that did not answer, and reads again when it is taken', async () => {

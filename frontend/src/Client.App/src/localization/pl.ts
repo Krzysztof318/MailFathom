@@ -368,9 +368,21 @@ export const pl: Catalogue = {
     'compose.refusedContent':
         'Kontrola treści odrzuciła to, co niesie ta wiadomość. Zmiana treści albo załączników jest tym, co to zmieni.',
     'compose.refusedNotScanned':
-        'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
+    'compose.refusedAttachmentNotRead':
+        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało z nim wyjść, i wiadomość nie została wysłana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, wysłanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
     'compose.refusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie wychodzi, dopóki nie odpowie. Wiadomość nadal tu jest.',
+    'compose.saveRefusedContent':
+        'Kontrola treści odrzuciła to, co niesie ta wiadomość, więc nie została zapisana. Zmiana tego, co mówi, albo tego, co załącza, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
+    'compose.saveRefusedNotScanned':
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
+    'compose.saveRefusedAttachmentNotRead':
+        'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało zostać z nim zapisane, i wiadomość nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, zapisanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
+    'compose.saveRefusedScreeningUnavailable':
+        'Kontrola treści nie odpowiada, więc nic nie jest zapisywane, dopóki nie odpowie. Wiadomość nadal tu jest.',
+    'compose.saveRefusedForAnotherReason':
+        'Twoje wdrożenie odmówiło zapisania jej. Osoba, która je prowadzi, może powiedzieć dlaczego z jego dziennika. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.refusedForAnotherReason':
         'Twoje wdrożenie odmówiło wysłania. Osoba prowadząca wdrożenie odczyta powód z jego dziennika.',
     'compose.failedUnauthenticated':
@@ -675,6 +687,8 @@ export const pl: Catalogue = {
     'attachment.refusedUnauthorized':
         'Te dane logowania nie pozwalają czytać poczty w tym wdrożeniu, więc plik nie został pobrany.',
     'attachment.refusedUnavailable': 'Wdrożenie nie odpowiedziało, więc plik nie został pobrany. Spróbuj ponownie.',
+    'attachment.refusedScreened':
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie został pobrany. Spróbuj ponownie — odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
     'attachment.refusedLargerThanDescribed':
         'Wdrożenie przysłało więcej, niż ta wiadomość deklaruje dla tego pliku, więc nic nie zostało zapisane. Zgłoś to jako usterkę.',
     'attachment.reading': 'Trwa otwieranie pliku {name}…',
@@ -686,6 +700,8 @@ export const pl: Catalogue = {
         'Te poświadczenia nie mogą czytać poczty w tym wdrożeniu, więc nie udało się pokazać pliku.',
     'attachment.notShownUnavailable':
         'Wdrożenie nie odpowiedziało, więc nie udało się pokazać pliku. Spróbuj ponownie.',
+    'attachment.notShownScreened':
+        'To wdrożenie sprawdza pliki, które udostępnia, i tego nie udostępnia, więc nie udało się go pokazać. Spróbuj ponownie — odczyt mógł przekroczyć czas albo kontrola chwilowo nie odpowiadała.',
     'attachment.notShownUnreadable':
         'To, co dotarło, nie zgadza się z tym, co ta wiadomość mówi o pliku, więc nic z niego nie rysujemy. Pobierz go i zgłoś to jako usterkę.',
     'attachment.empty': 'Ten plik nic nie zawiera.',

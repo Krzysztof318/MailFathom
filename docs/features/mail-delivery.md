@@ -566,8 +566,16 @@ until a later moment, an occasion of a repeated send, a draft, a revision of one
 all judged the same way — including the promotion of a draft written before the operator switched screening on, since
 what is judged is the message leaving rather than when it was composed.
 
-**What is read is the composed MIME**: the subject and both body representations, exactly as they would be transmitted.
-Attachments are not read, and neither are the addresses — an address is what the message is for rather than text to
+**What is read is the composed MIME**: the subject, both body representations, and the text of every attached document,
+exactly as they would be transmitted. Each attached document is opened through
+[attachment text extraction](attachment-text-extraction.md) under that feature's own bounds, so what a scanner sees is
+the words of the file rather than its octets; nothing is executed and nothing is written to disk. A file no reader
+*recognizes* — an image, a recording, an archive, a plain-text note, anything outside the ten formats
+`AttachmentDocumentFormats` names — is passed over rather than refused, because no text scanner ever undertook to read
+one. A file whose format is recognized and which yields no text is the opposite: a `.doc`, `.xls`, or `.ppt`, or any
+format an operator excluded from `Embeddings:AttachmentText:Formats`, stops the act with `59003` exactly as an
+encrypted or malformed document does, because a format this deployment knows about and cannot read is a document
+leaving unscreened rather than something that was never a document. The addresses are still not read: an address is what the message is for rather than text to
 examine, on the same line every other guarded point here draws.
 
 **The refusal is asked after the grant, the recipient policy, and the ceilings above, and before the transaction that
@@ -579,10 +587,17 @@ used costs nothing further, since the charge is keyed on the send's own idempote
 that key is admitted without being charged again. Only a fresh key spends another message and its recipients. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
 records and the refusal writes none.
 
-A caller reads `59001` naming the category, or `59002` where one screened value — the subject or either body — was
-longer than the deployment's analyzed ceiling and nothing read the remainder of it; the ceiling is applied to each value
-on its own rather than to the message as a whole. Neither carries the rule, the position, or one character of what was
-found.
+A caller reads `59001` naming the category, `59002` where the message is more than one screen covers, or `59003` where
+an attached document could not be read at all and so nothing screened what would have left with it. Two ceilings reach
+`59002` and the remedy is the same for both: one screened value — the subject, either body, or the text of one attached
+document — was longer than the deployment's analyzed ceiling and nothing read the remainder of it, or the message's
+attachments together exhausted what a whole message is read within, leaving files unopened. The analyzed ceiling is
+applied to each value on its own rather than to the message as a whole, while the extraction bounds are applied per
+attachment and across the message together. None of the three carries the rule, the position, or one character of what
+was found, and `59003` names neither the file nor why it could not be read — nor is it the answer when every file was
+read and there was merely too much of them, because converting a document that was read successfully would change
+nothing. A finding wins over both: a message that carries one answers `59001`, which is the one thing here its author
+can act on directly.
 Which scanners stop a send is the operator's, defaults to secrets alone, and is
 [`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent); [sensitive-content
 scanning § outgoing mail is screened rather than

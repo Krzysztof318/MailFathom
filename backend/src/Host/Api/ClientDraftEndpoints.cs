@@ -200,7 +200,7 @@ internal static class ClientDraftEndpoints
     /// <param name="drafting">Writes a draft of a message of its own.</param>
     /// <param name="answering">Writes a draft of a reply, a reply to all, or a forward.</param>
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
-    /// <returns><c>200</c> with the draft, or <c>400</c> naming what the author has to change.</returns>
+    /// <returns><c>200</c> with the draft, <c>400</c> naming what the author has to change, <c>409</c> where a rule of this deployment refused what was written, or <c>503</c> where screening could not run.</returns>
     internal static Task<Results<Ok<ClientDraftResponse>, ProblemHttpResult>> WriteDraftAsync(
         [FromBody] ClientDraftWriteRequest? request,
         [FromServices] AuthoredMailDrafting drafting,
@@ -214,7 +214,7 @@ internal static class ClientDraftEndpoints
     /// <param name="drafting">Writes a draft of a message of its own.</param>
     /// <param name="answering">Writes a draft of a reply, a reply to all, or a forward.</param>
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
-    /// <returns><c>200</c> with the draft, <c>404</c> where this owner holds no such draft, or <c>400</c> naming what the author has to change.</returns>
+    /// <returns><c>200</c> with the draft, <c>404</c> where this owner holds no such draft, <c>400</c> naming what the author has to change, <c>409</c> where a rule of this deployment refused what was written, or <c>503</c> where screening could not run.</returns>
     /// <remarks>
     /// The revision keeps whichever shape the draft already is: an answer re-derives its account, its subject, and its
     /// threading identifiers from the message it answers rather than from the revision it replaces, which is what keeps
@@ -463,6 +463,13 @@ internal static class ClientDraftEndpoints
         {
             return Refuse("The account is not one this owner owns.");
         }
+        catch (SensitiveContentScannerUnavailableException refusal)
+        {
+            // A save is screened by the same rules as a send, so it meets the same outage: what would have judged the
+            // message could not be reached, and the draft was neither refused nor filed. Answered as the send answers
+            // it, because the author's next act is the same one — waiting and asking again.
+            return Coded(refusal, StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     /// <summary>Composes the request for a draft of a message of its own, which states its own account and subject.</summary>
@@ -607,6 +614,7 @@ internal static class ClientDraftEndpoints
             ? StatusCodes.Status404NotFound
             : refusal.ErrorCode == MailFathomErrorCode.OutgoingMailContentRefused
                 || refusal.ErrorCode == MailFathomErrorCode.OutgoingMailNotFullyScanned
+                || refusal.ErrorCode == MailFathomErrorCode.OutgoingMailAttachmentNotRead
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status400BadRequest);
 

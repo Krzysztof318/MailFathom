@@ -355,7 +355,11 @@ describe('Composer, a message of its own', () => {
         ],
         [
             59_002,
-            'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
+            'Part of this message could not be screened, so it was not sent. Try again in case the read ran out of time; if it is refused again, taking off what could not be read is what would change that.',
+        ],
+        [
+            59_003,
+            'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
         ],
         [81_001, 'Screening is not answering, so nothing goes out until it does. The message is still here.'],
         [12, 'Your deployment refused to send it. Whoever runs it can say why from its own log.'],
@@ -374,6 +378,41 @@ describe('Composer, a message of its own', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
         expect(await screen.findByText(/no longer signed in/u)).toBeDefined();
+    });
+
+    // The deployment screens the draft book by the same rules as the outbox and answers the same codes, so a save can
+    // meet a refusal rather than a failure of the request — and the words have to be a save's, not a send's.
+    it.each([
+        [
+            59_003,
+            'One of the attached files could not be read, so nothing screened what would have been filed with it and the message was not filed. Try again in case the read ran out of time; if it is refused again, saving without that file, or attaching it in a form that can be read, is what would change that.',
+        ],
+        [
+            59_001,
+            'Screening refused what this message carries, so it was not filed. Changing what it says, or what it attaches, is what would change that. Nothing you wrote has been lost.',
+        ],
+    ])('says a refused save in the words of a save rather than of a send: %i', async (code, said) => {
+        drawComposer({ kind: 'new' }, { save: { status: 409, body: JSON.stringify({ errorCode: code }) } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        expect(await screen.findByText(said)).toBeDefined();
+    });
+
+    // A send writes the draft before it posts it, and the deployment screens the draft book by the same rules, so the
+    // refusal a send meets is the one the write answered — never the send's own request. Worded as a save's, it would
+    // tell somebody who pressed Send that the message was not filed, and never that it was not sent.
+    it('says a send refused at the write it performs first in the words of a send', async () => {
+        drawComposer({ kind: 'new' }, { save: { status: 409, body: JSON.stringify({ errorCode: 59_003 }) } });
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        expect(
+            await screen.findByText(
+                'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
+            ),
+        ).toBeDefined();
     });
 
     it('says what is kept while the machine is offline rather than offering a send that cannot happen', () => {

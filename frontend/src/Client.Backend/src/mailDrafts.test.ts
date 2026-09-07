@@ -125,13 +125,16 @@ describe('writeMailDraft', () => {
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: {
-                draftId,
-                account: 'work',
-                subject: 'Renewal terms',
-                recipients: [{ role: 'To', address: 'anna@example.invalid', displayName: 'Anna' }],
-                attachments: [],
-                revision: 1,
-                sizeOctets: 812,
+                written: true,
+                draft: {
+                    draftId,
+                    account: 'work',
+                    subject: 'Renewal terms',
+                    recipients: [{ role: 'To', address: 'anna@example.invalid', displayName: 'Anna' }],
+                    attachments: [],
+                    revision: 1,
+                    sizeOctets: 812,
+                },
             },
         });
     });
@@ -143,7 +146,9 @@ describe('writeMailDraft', () => {
             composition,
         );
 
-        expect(answer.outcome === 'read' ? answer.value.recipients[0] : null).toStrictEqual({
+        expect(
+            answer.outcome === 'read' && answer.value.written ? answer.value.draft.recipients[0] : null,
+        ).toStrictEqual({
             role: 'Bcc',
             address: 'anna@example.invalid',
             displayName: null,
@@ -169,9 +174,9 @@ describe('writeMailDraft', () => {
             composition,
         );
 
-        expect(answer.outcome === 'read' ? answer.value.attachments : null).toStrictEqual([
-            { attachmentId, fileName: 'Renewal.pdf', mediaType: 'application/pdf', sizeOctets: 248_000 },
-        ]);
+        expect(answer.outcome === 'read' && answer.value.written ? answer.value.draft.attachments : null).toStrictEqual(
+            [{ attachmentId, fileName: 'Renewal.pdf', mediaType: 'application/pdf', sizeOctets: 248_000 }],
+        );
     });
 
     it.each([
@@ -251,6 +256,34 @@ describe('writeMailDraft', () => {
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
+
+    it.each<{ errorCode: number; refusal: MailSendRefusal }>([
+        { errorCode: 59_001, refusal: 'contentRefused' },
+        { errorCode: 59_002, refusal: 'notFullyScanned' },
+        { errorCode: 59_003, refusal: 'attachmentNotRead' },
+        { errorCode: 12, refusal: 'refusedForAnotherReason' },
+    ])(
+        'reads a refused save as the rule that refused it rather than as a failure of the request: %o',
+        async ({ errorCode, refusal }) => {
+            const answer = await writeMailDraft(
+                session,
+                answering({ status: 409, body: JSON.stringify({ errorCode }) }),
+                composition,
+            );
+
+            expect(answer).toStrictEqual({ outcome: 'read', value: { written: false, refusal } });
+        },
+    );
+
+    it('reads a screen that could not answer as its own refusal, not as the deployment being down', async () => {
+        const answer = await writeMailDraft(
+            session,
+            answering({ status: 503, body: JSON.stringify({ errorCode: 81_001 }) }),
+            composition,
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'read', value: { written: false, refusal: 'screeningUnavailable' } });
+    });
 });
 
 describe('reviseMailDraft', () => {
@@ -261,7 +294,18 @@ describe('reviseMailDraft', () => {
 
         expect(requests[0]?.method).toBe('PUT');
         expect(requests[0]?.path).toBe(`https://mail.example.invalid/api/client/drafts/${draftId}`);
-        expect(answer.outcome === 'read' ? answer.value.revision : null).toBe(2);
+        expect(answer.outcome === 'read' && answer.value.written ? answer.value.draft.revision : null).toBe(2);
+    });
+
+    it('reads a refused revision the same way a refused save is read', async () => {
+        const answer = await reviseMailDraft(
+            session,
+            answering({ status: 409, body: JSON.stringify({ errorCode: 59_003 }) }),
+            draftId,
+            composition,
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'read', value: { written: false, refusal: 'attachmentNotRead' } });
     });
 });
 
@@ -381,6 +425,7 @@ describe('sendMailDraft', () => {
         { status: 409, errorCode: 57_002, refusal: 'ceilingReached' },
         { status: 409, errorCode: 59_001, refusal: 'contentRefused' },
         { status: 409, errorCode: 59_002, refusal: 'notFullyScanned' },
+        { status: 409, errorCode: 59_003, refusal: 'attachmentNotRead' },
         { status: 503, errorCode: 81_001, refusal: 'screeningUnavailable' },
     ])('reads the deployment refusing with $errorCode as $refusal', async ({ status, errorCode, refusal }) => {
         const answer = await sendMailDraft(session, answering(refusing(status, errorCode)), draftId);

@@ -872,13 +872,75 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailContentRefused { get; } = new(59001);
 
-    /// <summary>Gets subcategory 9, content policy: a message is longer than one scan analyzes, so nothing established what its remainder carries.</summary>
+    /// <summary>Gets subcategory 9, content policy: a message is more than one screen covers, so nothing established what its remainder carries.</summary>
     /// <remarks>
-    /// Separate from the code above because the remedy is separate and because nothing was found: the author shortens
-    /// the message, or the operator raises the analyzed ceiling. Telling them a category was detected would send them
-    /// looking through a message for material no scanner ever reported.
+    /// <para>
+    /// Separate from the code above because the remedy is separate and because nothing was found: the author sends less,
+    /// or the operator raises the ceiling that stopped it. Telling them a category was detected would send them looking
+    /// through a message for material no scanner ever reported.
+    /// </para>
+    /// <para>
+    /// Three ceilings reach it, and none of them is about any one file — every attachment may have been read
+    /// successfully — which is why the code beside this one is not the answer to any of them. One value of the message
+    /// may be longer than a single scan analyzes; the documents attached to it may together exhaust the octets a whole
+    /// message is read within, or come to more documents than one is read from; and the walk across those documents may
+    /// run past the budget it is held to. Either of the first two is about what the message carries, and the author
+    /// acts on both the same way.
+    /// </para>
+    /// <para>
+    /// <b>The third is not, which is why the answer offers asking again first.</b> That budget is wall-clock time
+    /// against a host under whatever load it was under, so a message of perfectly ordinary documents can reach it once
+    /// and never again, and telling its author to send less would name a length that was never the problem. Which of
+    /// the three it was is not published, for the reason none of the others is: it is a fact about this deployment's
+    /// configuration and its load rather than about the message. So the one remedy is ordered to cost least — ask
+    /// again, then shorten — which is right for all three and misleads for none.
+    /// </para>
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailNotFullyScanned { get; } = new(59002);
+
+    /// <summary>Gets subcategory 9, content policy: a file the message attaches could not be read, so nothing established what it carries.</summary>
+    /// <remarks>
+    /// <para>
+    /// A third code beside the two above because the author's remedy is a third one again. The first asks them to take
+    /// something out of the message and the second to send less of it; this one says the deployment got no text out of
+    /// a file they attached — it is encrypted, it is a format nothing here parses, it is malformed, or reading that one
+    /// file ran past a ceiling of its own — so the message goes without that file, or with it in a form the screen can
+    /// read. The last of those four is the reason the answer offers asking again first: a read that ran out of time
+    /// says nothing about the file and may well succeed on a quieter host, while the other three answer the same way
+    /// forever. Which of the four it was is never published, so the one remedy is written to fit all four. A message
+    /// whose attachments were read and merely came to more than a whole message may spend is the code above rather
+    /// than this one, because converting a document that was read successfully would change nothing.
+    /// </para>
+    /// <para>
+    /// It names none of that. Which of the reasons stopped the read, which file it was, what the file is called, and
+    /// where in the message it sits are all withheld for the reason the codes above withhold a position: a refusal is a
+    /// line in a log, and a file name is mail content exactly as a body is. An attachment nothing recognized as a
+    /// document at all — a photograph, a recording, an archive — is not this code, because no screen ever undertook to
+    /// read one.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingMailAttachmentNotRead { get; } = new(59003);
+
+    /// <summary>Gets subcategory 9, content policy: an attachment this deployment screens was not served, because of what it carries or because nothing could read it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Separate from the three codes above because it stops a read rather than a write, and one code covers every one of
+    /// its reasons because whoever asked can act on none of them. The file carries something a scanner named; or nothing
+    /// here could read it; or its text was longer than one scan analyzes, so the remainder went unread; or a switched-on
+    /// scanner could not answer at all. An author told their own message was refused edits it; a caller redeeming a
+    /// download link holds nothing to edit, so telling them which of the four it was would publish a fact about the
+    /// file — that it carries a credential, or that this deployment's analyzer is down — to somebody the deployment has
+    /// just decided may not have the file. A scanner that could not answer is recorded where an operator reads it, on
+    /// the instrument beside the screen, rather than in this answer.
+    /// </para>
+    /// <para>
+    /// It is answered distinctly rather than folded into the refusal every other stopped download shares, because the
+    /// two disclose different things. That refusal is uniform so a capability cannot be used to learn what became of
+    /// mail; this one says only that the deployment screens what it serves and would not serve this, to somebody who
+    /// was already told the attachment exists and what it is called by the read that offered them the link.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode AttachmentDownloadScreened { get; } = new(59004);
 
     #endregion
 
@@ -1073,6 +1135,8 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailNoLongerCancellable,
         OutgoingMailContentRefused,
         OutgoingMailNotFullyScanned,
+        OutgoingMailAttachmentNotRead,
+        AttachmentDownloadScreened,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

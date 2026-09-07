@@ -87,6 +87,16 @@ What bounds it instead:
   decides where the URL it receives resolves to.
 - Redemption reads the mailbox afresh, so a link dies with the message it points at. An expired capability, a forged
   one, and one whose mail is gone are all `404` with the same body.
+- On a deployment that screens what leaves it, the file's own text is read and scanned before a byte is streamed, and a
+  file a scanner names — or one nothing could read at all — answers `409` with error code `59004` rather than the
+  octets. That is the one refusal of this route *about the mail* that is not the shared `404`, because the holder is
+  already admitted to that attachment and learns only that this deployment screens what it serves. The route answers one
+  other `409`, which is about the deployment rather than the message: one serving several owners resolves none for a
+  capability that names no owner, and answers with its own code;
+  [sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
+  holds the rule. It is paid inside the permit and the request ceiling above, under
+  [attachment text extraction](../features/attachment-text-extraction.md)'s own bounds, so a hostile document lengthens
+  one redemption rather than escaping either limit. A deployment screening nothing reads no document and pays nothing.
 - It rides this endpoint's listeners, its transport, both of its rate limits, and its
   [request ceiling](#request-timeouts). It spends the surface's shared anonymous per-caller bucket, because it presents
   no credential to partition on, and it takes a permit from the same process-wide concurrency limiter the protocol

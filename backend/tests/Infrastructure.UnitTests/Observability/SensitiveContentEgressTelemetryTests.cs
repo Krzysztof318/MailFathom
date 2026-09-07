@@ -154,6 +154,7 @@ public sealed class SensitiveContentEgressTelemetryTests
     [InlineData(nameof(SensitiveContentEgressPoint.ClientMailListing), "client_mail_listing")]
     [InlineData(nameof(SensitiveContentEgressPoint.ClientMailSearch), "client_mail_search")]
     [InlineData(nameof(SensitiveContentEgressPoint.ClientCitationResolution), "client_citation_resolution")]
+    [InlineData(nameof(SensitiveContentEgressPoint.AttachmentDownload), "attachment_download")]
     public void RecordGuarded_EachEgressPoint_PublishesItsOwnTagValue(string egressPointName, string expectedTag)
     {
         // Arrange

@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -63,14 +64,15 @@ internal static class ClientMailAttachmentEndpoint
     /// <param name="attachments">Opens the attachment, for a caller the read's own grant admits.</param>
     /// <param name="context">The request being answered, whose response body the file is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns>The file's octets, <c>404</c> where this owner has no such file, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
+    /// <returns>The file's octets, <c>404</c> where this owner has no such file, <c>409</c> where this deployment's screen stopped the file, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
-    /// Every refusal is one refusal. A message this owner does not hold, one no deployment ever held, a local copy that
-    /// is damaged or missing, and a position the message carries no part at all answer identically, because telling them
-    /// apart would let a caller learn what became of mail they cannot read by asking about it.
+    /// Every refusal about the mail is one refusal. A message this owner does not hold, one no deployment ever held, a
+    /// local copy that is damaged or missing, and a position the message carries no part at all answer identically,
+    /// because telling them apart would let a caller learn what became of mail they cannot read by asking about it. A
+    /// file the screen stopped is not one of those and says so, for the reason the signed route's own refusal gives.
     /// </remarks>
-    internal static async Task<Results<EmptyHttpResult, NotFound>> DownloadAsync(
+    internal static async Task<Results<EmptyHttpResult, NotFound, ProblemHttpResult>> DownloadAsync(
         [FromRoute] Guid storedEmailId,
         [FromRoute] int position,
         [FromServices] EmailAttachmentDownloadReader attachments,
@@ -85,10 +87,17 @@ internal static class ClientMailAttachmentEndpoint
             return TypedResults.NotFound();
         }
 
-        await using var attachment = await attachments.OpenForReaderAsync(
+        var download = await attachments.OpenForReaderAsync(
             StoredEmailId.Create(storedEmailId),
             position,
             cancellationToken);
+
+        await using var attachment = download.Attachment;
+
+        if (download.Screened)
+        {
+            return ScreenedOut();
+        }
 
         if (attachment is null)
         {
@@ -101,4 +110,20 @@ internal static class ClientMailAttachmentEndpoint
 
         return TypedResults.Empty;
     }
+
+    /// <summary>States that this deployment screens the files it serves and would not serve this one.</summary>
+    /// <remarks>
+    /// The one answer here that is not the uniform <c>404</c>, and it is <c>409</c> for the reason a draft the screen
+    /// refused is: the request named something that exists and this deployment's own rule about its content is what
+    /// stopped it. It says nothing about what was found — this reader has already been shown the file's name, its type,
+    /// and its size by the message they opened, and naming a category would add to that the fact that it holds a
+    /// credential.
+    /// </remarks>
+    private static ProblemHttpResult ScreenedOut() => TypedResults.Problem(
+        EmailAttachmentDownloadEndpoint.ScreenedDetail,
+        statusCode: StatusCodes.Status409Conflict,
+        extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [RouteAuthorization.ErrorCodeExtension] = MailFathomErrorCode.AttachmentDownloadScreened.Value,
+        });
 }

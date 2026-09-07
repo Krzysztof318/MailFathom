@@ -46,6 +46,7 @@ const failureMessages: Readonly<Record<ShowingRefusal, MessageKey>> = {
     unauthenticated: 'attachment.notShownUnauthenticated',
     unauthorized: 'attachment.notShownUnauthorized',
     unavailable: 'attachment.notShownUnavailable',
+    screened: 'attachment.notShownScreened',
     largerThanDescribed: 'attachment.notShownUnreadable',
     unreadable: 'attachment.notShownUnreadable',
 };
@@ -211,9 +212,13 @@ function Inside({
                     {translate(failureMessages[answer.refusal])}
                 </p>
 
-                {/* Reading again is the way out of exactly one of the refusals, for the reason
-                    `shell/ConnectionSummary.tsx` gives: the others repeat identically on a second attempt. */}
-                {answer.refusal === 'unavailable' ? (
+                {/* Reading again is the way out of two of the refusals, for the reason
+                    `shell/ConnectionSummary.tsx` gives about the first: the others repeat identically on a second
+                    attempt. A screened refusal is the second because two of the four causes behind it are transient —
+                    a read that ran past the extraction timeout, and a scanner that could not answer — and the service
+                    deliberately does not say which of the four it was, so a person meeting a momentary one with no
+                    way on would be told to stop over something that would work in a minute. */}
+                {answer.refusal === 'unavailable' || answer.refusal === 'screened' ? (
                     <SecondaryButton
                         label={translate('connection.retry')}
                         onActivate={() => {

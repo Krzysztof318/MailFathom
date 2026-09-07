@@ -31,8 +31,34 @@ public interface IOutgoingMailTextReader
     /// <summary>Reads the subject and the body representations out of one composed message.</summary>
     /// <param name="rawMime">The RFC 822 bytes that will be stored and transmitted.</param>
     /// <param name="cancellationToken">Cancels the parse.</param>
-    /// <returns>What the message says in words.</returns>
+    /// <returns>What the message says in words, with no attachment read and no refusal.</returns>
+    /// <remarks>
+    /// This is the cheap read and the one to reach for by default. It opens no attachment, so it reaches no document
+    /// parser and costs the parse of the message's own structure — which is what a caller wanting to show an author
+    /// their own draft back needs, and all it needs.
+    /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
-    Task<OutgoingMailText> ReadAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken);
+    Task<OutgoingMailText> ReadWordsAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken);
+
+    /// <summary>Reads the same words plus the text of every document the message attaches.</summary>
+    /// <param name="rawMime">The RFC 822 bytes that will be stored and transmitted.</param>
+    /// <param name="cancellationToken">Cancels the parse and the extraction.</param>
+    /// <returns>What the message says in words, or why its attachments left nothing to judge them by.</returns>
+    /// <remarks>
+    /// <para>
+    /// Separate from the read above because it costs a different order of work: it opens each attachment and offers it
+    /// to <see cref="Emails.Extraction.Attachments.IAttachmentTextExtractor" />, so a message of large documents runs
+    /// document parsers on whatever thread the caller is holding. Only a caller that will judge what comes back asks
+    /// for it, and a caller that only wants the words asks for the read above instead.
+    /// </para>
+    /// <para>
+    /// An attachment nothing here recognizes as a document contributes nothing and refuses nothing, because no text
+    /// scanner ever undertook to read one. Everything else that yields no text is a refusal, since an attachment that
+    /// was not read must never be treated as clean.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
+    Task<OutgoingMailText> ReadForScreeningAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken);
 }

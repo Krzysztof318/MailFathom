@@ -32,6 +32,12 @@ import { wireComposition, type Composition } from './composition';
 // work without a third that says "save before attaching" — and it is still a save the person asked for, because
 // attaching and sending are both acts they asked for.
 
+// Which act asked for the write, which is not the same question as which request went out: attaching and sending both
+// write the draft first, and a refusal met there is the refusal that act met. Only two words exist for one because
+// only two are true of the person — they pressed save, or they pressed send — and an attach is a save with a file
+// behind it.
+type DraftAct = 'save' | 'send';
+
 /** What the composer is doing about the deployment, which is one piece of state rather than a set of flags. */
 export type DraftStanding =
     | { readonly kind: 'held' }
@@ -42,6 +48,7 @@ export type DraftStanding =
     | { readonly kind: 'queued'; readonly outgoingEmailId: string }
     | { readonly kind: 'withdrawn'; readonly withdrawal: MailSendWithdrawal }
     | { readonly kind: 'refused'; readonly refusal: MailSendRefusal }
+    | { readonly kind: 'refusedSave'; readonly refusal: MailSendRefusal }
     | { readonly kind: 'failed'; readonly reason: ClientFailureReason };
 
 /** The draft the deployment holds for what is being written, and what a person does to it. */
@@ -101,14 +108,14 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         [],
     );
 
-    function saved(composition: Composition): Promise<string | null> {
+    function saved(composition: Composition, asked: DraftAct): Promise<string | null> {
         const already = saving.current;
 
         if (already !== null) {
             return already;
         }
 
-        const writing = write(composition);
+        const writing = write(composition, asked);
 
         saving.current = writing;
 
@@ -117,7 +124,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         });
     }
 
-    async function write(composition: Composition): Promise<string | null> {
+    async function write(composition: Composition, asked: DraftAct): Promise<string | null> {
         const held = draftId.current;
         const wire = wireComposition(composition);
         const at = ++staging.current;
@@ -133,13 +140,30 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return null;
         }
 
-        draftId.current = answer.value.draftId;
+        // A refusal is said in the words of the act that met it. The deployment screens the draft book by the same
+        // rules as the outbox and answers the same codes, so the same refusal reaches a save — and telling its author
+        // the message was not sent, when they pressed save, names an act nobody performed. A send writes the draft
+        // before it posts it, so the refusal it meets here is the one it would have met at the send itself, and is
+        // worded as the send's.
+        if (!answer.value.written) {
+            setStanding(
+                asked === 'send'
+                    ? { kind: 'refused', refusal: answer.value.refusal }
+                    : { kind: 'refusedSave', refusal: answer.value.refusal },
+            );
 
-        if (at === staging.current) {
-            setStaged(answer.value.attachments);
+            return null;
         }
 
-        return answer.value.draftId;
+        const written = answer.value.draft;
+
+        draftId.current = written.draftId;
+
+        if (at === staging.current) {
+            setStaged(written.attachments);
+        }
+
+        return written.draftId;
     }
 
     // Every act ends by saying what happened, and a failure says which of the four it was rather than that something
@@ -157,7 +181,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         save: async (composition) => {
             setStanding({ kind: 'saving' });
 
-            if ((await saved(composition)) === null) {
+            if ((await saved(composition, 'save')) === null) {
                 return false;
             }
 
@@ -169,7 +193,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         attach: async (composition, file) => {
             setStanding({ kind: 'attaching', fileName: file.name });
 
-            const held = await saved(composition);
+            const held = await saved(composition, 'save');
 
             if (held === null) {
                 return;
@@ -219,7 +243,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         send: async (composition) => {
             setStanding({ kind: 'sending' });
 
-            const held = await saved(composition);
+            const held = await saved(composition, 'send');
 
             if (held === null) {
                 return;

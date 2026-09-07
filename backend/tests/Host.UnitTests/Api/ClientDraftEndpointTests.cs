@@ -425,7 +425,19 @@ public sealed class ClientDraftEndpointTests
     /// </remarks>
     private sealed class HeaderReadingOutgoingMailText : IOutgoingMailTextReader
     {
-        public Task<OutgoingMailText> ReadAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
+        /// <summary>
+        /// It throws rather than answering, so a read-back reaching for it fails instead of passing quietly. Reading a
+        /// draft back for its author discards every attachment field, so asking the screening read for one would run a
+        /// document parser per attachment on a request nothing screens — and both reads answering the same thing is
+        /// exactly what would hide that.
+        /// </summary>
+        public Task<OutgoingMailText> ReadForScreeningAsync(
+            ReadOnlyMemory<byte> rawMime,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "Reading a draft back for its author asks for the message's words, never for a screening read.");
+
+        public Task<OutgoingMailText> ReadWordsAsync(ReadOnlyMemory<byte> rawMime, CancellationToken cancellationToken)
         {
             var message = Encoding.ASCII.GetString(rawMime.Span).Split("\r\n\r\n", 2);
             var subject = message[0].StartsWith("Subject: ", StringComparison.Ordinal)

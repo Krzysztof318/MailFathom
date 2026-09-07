@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -30,11 +31,17 @@ namespace MailFathom.Host.Api;
 /// serves no MCP endpoint serves no download route either, which is the same answer an operator already expects.
 /// </para>
 /// <para>
-/// Every refusal is one refusal. An expired capability, a forged one, one naming an email this deployment no longer
-/// serves, one whose local copy is damaged, and one naming an attachment the message does not carry are all
-/// <c>404</c> with the same body, because telling them apart would let whoever holds a capability learn what became of
-/// mail they can no longer read. Nothing about a request or a response is logged here: the capability is an
-/// unauthenticated way to obtain mail content, and the file name and octets are mail content themselves.
+/// Every refusal about the mail is one refusal. An expired capability, a forged one, one naming an email this
+/// deployment no longer serves, one whose local copy is damaged, and one naming an attachment the message does not
+/// carry are all <c>404</c> with the same body, because telling them apart would let whoever holds a capability learn
+/// what became of mail they can no longer read. Nothing about a request or a response is logged here: the capability is
+/// an unauthenticated way to obtain mail content, and the file name and octets are mail content themselves.
+/// </para>
+/// <para>
+/// A file this deployment's screen stopped is the one refusal outside that uniformity, and it answers <c>409</c>
+/// instead. It is safe because it says nothing the read that minted this link had not already said — that the
+/// attachment exists and what it is called — while a <c>404</c> there would tell an operator's own reader that a file
+/// they can see described has quietly vanished. It never says why the screen stopped it.
 /// </para>
 /// </remarks>
 internal static class EmailAttachmentDownloadEndpoint
@@ -44,6 +51,10 @@ internal static class EmailAttachmentDownloadEndpoint
 
     /// <summary>The one thing a refused request is told, whatever the reason was.</summary>
     internal const string RefusalDetail = "This attachment link is not valid.";
+
+    /// <summary>The one thing a request stopped by this deployment's screen is told.</summary>
+    internal const string ScreenedDetail =
+        "This deployment screens the files it serves, and this one is not served.";
 
     /// <summary>Maps the download route.</summary>
     /// <param name="endpoints">The application's route builder.</param>
@@ -64,7 +75,7 @@ internal static class EmailAttachmentDownloadEndpoint
     /// <param name="deploymentOwner">Names the owner whose mail a redeemed capability reaches.</param>
     /// <param name="context">The request being answered, whose response body the attachment is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
-    /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment has no sole owner for a ticket naming nobody.</returns>
+    /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment's screen stopped the file or has no sole owner for a ticket naming nobody.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The verified ticket is what the request runs under, and it is stated onto the scope before the use case is
@@ -114,7 +125,15 @@ internal static class EmailAttachmentDownloadEndpoint
 
         principals.Assume(AuthorizedPrincipal.SignedCapability(owner, AuthorizedObjectOf(ticket)));
 
-        await using var attachment = await downloadReader.OpenAsync(ticket, cancellationToken);
+        var download = await downloadReader.OpenAsync(ticket, cancellationToken);
+
+        await using var attachment = download.Attachment;
+
+        if (download.Screened)
+        {
+            return ScreenedOut();
+        }
+
         if (attachment is null)
         {
             return Refused();
@@ -142,5 +161,20 @@ internal static class EmailAttachmentDownloadEndpoint
             Title = "Not found",
             Detail = RefusalDetail,
             Status = StatusCodes.Status404NotFound,
+        });
+
+    /// <summary>States that this deployment screens what it serves and would not serve this file.</summary>
+    /// <remarks>
+    /// The one refusal here that is not the uniform <c>404</c>, and the exception is safe for a reason the uniform
+    /// answer does not have: whoever holds this capability was handed it by a read that had already told them the
+    /// attachment exists and what it is called, so saying the deployment refused to serve it discloses nothing that
+    /// description did not. What it never says is why — a category would tell them the file carries a credential.
+    /// </remarks>
+    private static ProblemHttpResult ScreenedOut() => TypedResults.Problem(
+        ScreenedDetail,
+        statusCode: StatusCodes.Status409Conflict,
+        extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [RouteAuthorization.ErrorCodeExtension] = MailFathomErrorCode.AttachmentDownloadScreened.Value,
         });
 }

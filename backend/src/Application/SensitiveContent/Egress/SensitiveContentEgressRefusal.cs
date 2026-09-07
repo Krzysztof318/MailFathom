@@ -62,4 +62,17 @@ public sealed record SensitiveContentEgressRefusal
         SensitiveContentEgressRefusalReason.TextExceededScanCeiling,
         scanner: null,
         category: null);
+
+    /// <summary>Reports a file the act would have carried out that nothing here could read, so nothing established what it holds.</summary>
+    /// <returns>The refusal to report.</returns>
+    /// <remarks>
+    /// Both values are absent for the reason they are absent above, and one more: which of the several ways a document
+    /// defeats a reader it was — encrypted, unparsed, malformed, past a ceiling — is deliberately not carried either.
+    /// A consumer holding it would put it in the sentence it answers with, and that sentence tells whoever composed the
+    /// file which shape of unreadable file this deployment stops at.
+    /// </remarks>
+    public static SensitiveContentEgressRefusal AttachmentNotRead() => new(
+        SensitiveContentEgressRefusalReason.AttachmentNotRead,
+        scanner: null,
+        category: null);
 }

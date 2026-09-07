@@ -18,6 +18,7 @@ const refusalMessages: Readonly<Record<Exclude<AttachmentDeliveryOutcome, 'deliv
     unauthenticated: 'attachment.refusedUnauthenticated',
     unauthorized: 'attachment.refusedUnauthorized',
     unavailable: 'attachment.refusedUnavailable',
+    screened: 'attachment.refusedScreened',
     largerThanDescribed: 'attachment.refusedLargerThanDescribed',
 };
 

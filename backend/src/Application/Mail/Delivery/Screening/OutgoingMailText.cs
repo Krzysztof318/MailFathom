@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Extraction.Attachments;
+
 namespace MailFathom.Application.Mail.Delivery.Screening;
 
 /// <summary>Everything an outgoing message says in words, read back out of the bytes that will be transmitted.</summary>
@@ -17,9 +19,11 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// it is worth as much: a match straddling a MIME boundary is a match against something nobody wrote.
 /// </para>
 /// <para>
-/// <b>Three is the whole count, and that is what bounds the work.</b> One screened act is at most three scans, whatever
-/// the message is addressed to or carries, so this path needs no ceiling of its own the way a consumer screening a
-/// collection of participants does.
+/// <b>The attachments are the one part of the count a message decides.</b> Everything the author typed is at most three
+/// scans; each readable attachment adds one more, so what bounds the work is what bounds the extraction behind it —
+/// the per-attachment ceilings <see cref="AttachmentTextExtractionOptions" /> declares, and the same numbers applied
+/// across the message by whatever reads it back. A message that carries no attachment costs exactly what it cost
+/// before.
 /// </para>
 /// <para>
 /// <b>No header is among the three, and they are not all covered by the same thing.</b> A message identity is composed
@@ -32,22 +36,52 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// their own words is what would make it one, and screening the header is what it would owe.
 /// </para>
 /// <para>
-/// Attachments are not read. What they carry is their own question, and answering it here would mean decoding every
-/// part of every message this deployment sends in order to hand a scanner content that is as likely to be a photograph
-/// as it is to be text.
+/// <b>An attachment is read as far as something here can read it, and a file that could not be read stops the act.</b>
+/// A credential typed into a covering note and the same credential inside the attached document leave under the same
+/// address, so screening one and not the other made the protection a property of which half of the message the author
+/// put it in. What is not undertaken is anything that is not a document: a photograph, a recording, and an archive
+/// carry no text a scanner reads, so they are neither read nor counted, and the page beside this says so rather than
+/// implying coverage.
 /// </para>
 /// </remarks>
 public sealed record OutgoingMailText(string Subject, string PlainTextBody, string? HtmlBody)
 {
+    /// <summary>Gets the text each of the message's readable attachments yielded, in the order the message carries them.</summary>
+    /// <remarks>
+    /// Each attachment is one entry and one scan, for the reason the three values above are separate: a region matched
+    /// across the join between two files is a match against something nobody attached. A document that yielded no
+    /// characters at all — every page of it a scan of paper — contributes an empty entry that the screened values drop,
+    /// which is the same answer an image gets and for the same reason.
+    /// </remarks>
+    public IReadOnlyList<string> AttachmentTexts { get; init; } = [];
+
+    /// <summary>Gets why the message's attachments left nothing to judge them by, or <see langword="null" /> where every document it carries was read.</summary>
+    /// <remarks>
+    /// <para>
+    /// It distinguishes the two because the author is told a different thing by each — see
+    /// <see cref="OutgoingAttachmentRefusal" /> — and it carries neither which extraction outcome nor which ceiling it
+    /// was, because that is a fact about how this deployment is configured rather than about the message.
+    /// </para>
+    /// <para>
+    /// <see cref="AttachmentTextExtractionOutcome.FormatNotRecognized" /> produces neither of them. An attachment
+    /// nothing recognized as a document is not a document this deployment failed to read; it is a file no reader here
+    /// ever undertook to read, and stopping a send over one would refuse every message carrying a photograph.
+    /// </para>
+    /// </remarks>
+    public OutgoingAttachmentRefusal? AttachmentRefusal { get; init; }
+
     /// <summary>Gets the values to screen, in the order they are scanned and with what the message does not carry left out.</summary>
     /// <remarks>
     /// The subject comes first because it is the shortest and therefore the cheapest way for a message to be refused,
-    /// and the screen stops at the first value that refuses. Empty text is dropped rather than scanned: it can carry
-    /// nothing, and scanning it would spend one analyzer round trip per message that has no HTML alternative.
+    /// and the screen stops at the first value that refuses. The attachments come last for the same reason read the
+    /// other way: they are the longest and the ones a message may carry several of. Empty text is dropped rather than
+    /// scanned: it can carry nothing, and scanning it would spend one analyzer round trip per message that has no HTML
+    /// alternative.
     /// </remarks>
     public IReadOnlyList<string> ScreenedValues =>
     [
         .. new[] { this.Subject, this.PlainTextBody, this.HtmlBody }
+            .Concat(this.AttachmentTexts)
             .Where(value => !string.IsNullOrEmpty(value))
             .Select(value => value!),
     ];
