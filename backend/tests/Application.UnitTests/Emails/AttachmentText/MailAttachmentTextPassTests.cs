@@ -400,6 +400,34 @@ public sealed class MailAttachmentTextPassTests
             ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment)]);
     }
 
+    /// <summary>
+    /// The run's budget stopping the pass does not stop the ledger: the message the budget ran out on writes no
+    /// reading, and the message read before it is still charged, so the period reports what the provider will bill
+    /// rather than what happened to be committed alongside a reading.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheRunBudgetRunningOut_StillChargesWhatTheEarlierMailOpened()
+    {
+        // Arrange
+        var ledger = new InMemoryAttachmentDerivationSpendLedger();
+        var first = StoredEmailId.Create(Guid.CreateVersion7());
+        var second = StoredEmailId.Create(Guid.CreateVersion7());
+        var pass = CreatePass(
+            StoreReturning([Awaiting(first), Awaiting(second)]),
+            new RecordingEmailEmbeddingBacklog(),
+            Bounds() with { MaxInputOctetsPerAccountRun = AttachmentOctets },
+            spendGate: Gate(ledger));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(report.RunBudgetExhausted);
+        Assert.Equal(
+            AttachmentOctets,
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment)]);
+    }
+
     /// <summary>An owner's own ceiling refuses that owner's mail while the deployment's ceiling is nowhere near spent.</summary>
     [Fact]
     public async Task RunAsync_AnExhaustedPerOwnerCeiling_StopsThePassForThatOwnerAlone()

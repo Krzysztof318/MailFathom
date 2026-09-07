@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText.Administration;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -174,6 +176,103 @@ public sealed class EmbeddingProfileEndpointsTests
             TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// The second refusal, in a unit the first one is not counted in. Reading the mail an instance already holds is
+    /// what activation would start, so a deployment whose attachment ceiling could not admit that reading is told
+    /// before it begins — and told which key to raise, since raising the embedding one would change nothing.
+    /// </summary>
+    [Fact]
+    public async Task ActivateAsync_AnAttachmentReadingAboveItsOwnCeiling_IsRefusedNamingTheOctetsAndThatCeiling()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: AttachmentDerivationBudget.Create(4_000_000, 0, 0, 0, TimeSpan.FromDays(1)),
+            attachmentCoverage: AttachmentDerivationCoverage.Nothing with
+            {
+                EmailsWithAttachmentCount = 400,
+                Outstanding = new AttachmentDerivationEstimate(400, 8_000_000, 900),
+            });
+
+        var declared = CreateIdentity("a-model");
+        world.WorkloadIs(new EmbeddingWorkload(500, 0, 2_000, 2_000));
+
+        // Act
+        var result = await EmbeddingProfileEndpoints.ActivateAsync(
+            new DeclaredEmbeddingGeometry(declared),
+            world.Activation,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
+        Assert.Contains("8000000", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("4000000", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        await world.GenerationStore.DidNotReceiveWithAnyArgs().RegisterBuildingAsync(
+            default!,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The description ceiling refuses in calls rather than in octets, so it names its own key and figure.</summary>
+    [Fact]
+    public async Task ActivateAsync_MorePicturesThanTheDescriptionCeilingAdmits_IsRefusedNamingTheCalls()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: AttachmentDerivationBudget.Create(0, 0, 100, 0, TimeSpan.FromDays(1)),
+            attachmentCoverage: AttachmentDerivationCoverage.Nothing with
+            {
+                EmailsWithAttachmentCount = 400,
+                Outstanding = new AttachmentDerivationEstimate(400, 1_000, 900),
+            });
+
+        var declared = CreateIdentity("a-model");
+        world.WorkloadIs(new EmbeddingWorkload(500, 0, 2_000, 2_000));
+
+        // Act
+        var result = await EmbeddingProfileEndpoints.ActivateAsync(
+            new DeclaredEmbeddingGeometry(declared),
+            world.Activation,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
+        Assert.Contains("900", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+        Assert.Contains("100", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A reading the ceiling admits refuses nothing, which is what keeps the check from being a ceiling that refuses
+    /// whenever one is declared at all. Read rather than performed, because what is under test is the verdict.
+    /// </summary>
+    [Fact]
+    public async Task ReadActivationAsync_AnAttachmentReadingInsideItsCeiling_IsNotRefused()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: AttachmentDerivationBudget.Create(8_000_000, 0, 0, 0, TimeSpan.FromDays(1)),
+            attachmentCoverage: AttachmentDerivationCoverage.Nothing with
+            {
+                EmailsWithAttachmentCount = 400,
+                Outstanding = new AttachmentDerivationEstimate(400, 4_000_000, 900),
+            });
+
+        world.WorkloadIs(new EmbeddingWorkload(500, 0, 2_000, 2_000));
+
+        // Act
+        var result = await EmbeddingProfileEndpoints.ReadActivationAsync(
+            new DeclaredEmbeddingGeometry(CreateIdentity("a-model")),
+            world.Activation,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var assessment = Assert.IsType<Ok<EmbeddingActivationAssessmentResponse>>(result.Result).Value!;
+        Assert.False(assessment.ExceedsAttachmentCeiling);
+        Assert.False(assessment.Refused);
+        Assert.Equal(8_000_000, assessment.AttachmentDerivation.Extraction.CeilingUnitCount);
+    }
+
     /// <summary>One reindex runs at a time, and the refusal says what an operator does about that.</summary>
     [Fact]
     public async Task ActivateAsync_ADifferentReindexRunning_IsRefusedSayingToCancelIt()
@@ -251,7 +350,10 @@ public sealed class EmbeddingProfileEndpointsTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static EndpointWorld CreateWorld(long maxInputCharactersPerPeriod = 1_000_000)
+    private static EndpointWorld CreateWorld(
+        long maxInputCharactersPerPeriod = 1_000_000,
+        AttachmentDerivationBudget? attachmentBudget = null,
+        AttachmentDerivationCoverage? attachmentCoverage = null)
     {
         var generationStore = Substitute.For<IEmbeddingGenerationStore>();
         generationStore.ReadGenerationsAsync(Arg.Any<CancellationToken>()).Returns(EmbeddingGenerations.None);
@@ -283,7 +385,14 @@ public sealed class EmbeddingProfileEndpointsTests
             new PersistenceConcurrencyOptions(),
             timeProvider);
         var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
-        var attachmentDerivation = InMemoryAttachmentDerivationCoverageReader.Unbounded(timeProvider.GetUtcNow()).Reader;
+        var (coverage, attachmentDerivation) = InMemoryAttachmentDerivationCoverageReader.Bounded(
+            timeProvider.GetUtcNow(),
+            attachmentBudget ?? AttachmentDerivationBudget.Unbounded);
+
+        if (attachmentCoverage is { } outstanding)
+        {
+            coverage.Coverage = outstanding;
+        }
 
         return new EndpointWorld(
             generationStore,

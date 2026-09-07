@@ -248,8 +248,16 @@ to `0`, which declares no ceiling and still counts, so an operator sees the figu
 
 | Step | Unit | Deployment | Per owner |
 | --- | --- | --- | --- |
-| Extraction | octets opened out of attachments | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` |
+| Extraction | octets handed to a document parser | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` |
 | Description | calls a chat provider answered | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerOwner` |
+
+**An attachment a parser never saw is charged no octets.** Extraction counts what was handed to a parser rather than
+what the walk stepped over, so a picture, a format this deployment does not parse, and an attachment whose declared
+size already puts it past `Embeddings:AttachmentText:MaxInputOctets` cost this ceiling nothing — each is decided from
+the declaration before an octet is read. That is what keeps the two independent: without it a mailbox of photographs
+would exhaust the ceiling a mailbox of contracts is bounded by, and raising the extraction figure would be the remedy
+for a bill nothing extracted. What a picture still costs is `MaxInputOctetsPerEmail` and `MaxInputOctetsPerAccountRun`,
+which bound what a walk reads whichever port ends up with it.
 
 **A picture refused before the call is charged nothing.** A format outside the allow-list, a grid past `MaxPixels`, a
 file past `Chat:MaxRequestImageOctets`, and a header that does not hold the format it claims are all decided here, so

@@ -49,7 +49,12 @@ public sealed class AttachmentDerivationBudget
         this.Period = period;
     }
 
-    /// <summary>Gets a budget that refuses nothing, which is what an operator writing ceilings of zero asked for.</summary>
+    /// <summary>Gets a budget that refuses nothing, over the default window a deployment declaring no period gets.</summary>
+    /// <remarks>
+    /// A convenience for a composition that declares nothing at all, and for a test that is not about the window.
+    /// A deployment reaches <see cref="Create" /> instead, which keeps whatever period was configured even where every
+    /// ceiling is zero, because the period is reported to an operator whether or not anything is counted against it.
+    /// </remarks>
     public static AttachmentDerivationBudget Unbounded { get; } = new(
         maxInputOctetsPerPeriod: 0,
         maxInputOctetsPerPeriodPerOwner: 0,
@@ -99,14 +104,16 @@ public sealed class AttachmentDerivationBudget
         ArgumentOutOfRangeException.ThrowIfNegative(maxDescriptionsPerPeriodPerOwner);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
 
-        var budget = new AttachmentDerivationBudget(
+        // The caller's period is kept whether or not any ceiling was declared, so the singleton above is a default
+        // rather than a substitute. A deployment that declared no ceiling still reports a period, and reporting the
+        // singleton's own day where the deployment configured something else would put a roll-over instant on the
+        // screen that disagrees with the embedding ceiling's — the one thing this window exists to keep identical.
+        return new AttachmentDerivationBudget(
             maxInputOctetsPerPeriod,
             maxInputOctetsPerPeriodPerOwner,
             maxDescriptionsPerPeriod,
             maxDescriptionsPerPeriodPerOwner,
             period);
-
-        return budget.IsUnbounded ? Unbounded : budget;
     }
 
     /// <summary>Reads the ceiling one step is bounded by, for the deployment or for any one owner.</summary>

@@ -190,9 +190,72 @@ public sealed class EmailAttachmentTextDeriverTests
             .DeriveAsync(Awaiting(), new EmailAttachmentTextRunBudget(64), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(derived);
+        Assert.True(derived.RunBudgetExhausted);
+        Assert.False(derived.IsSettled);
+        Assert.Empty(derived.Attachments);
         await this.extractor.DidNotReceive()
             .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The reading decides nothing about the message, and still reports what reaching that point cost: the earlier
+    /// attachment was parsed for real, so a ledger that dropped it would show less consumed than was consumed.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_ARunBudgetRefusingALaterAttachment_StillReportsWhatTheEarlierOnesSpent()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "one.pdf", octets: 64);
+        this.Opens(1, "application/pdf", "two.pdf", octets: 4096);
+        this.extractor
+            .ExtractTextAsync(Arg.Any<IOpenedEmailAttachment>(), Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
+
+        // Act
+        var derived = await this.Deriver()
+            .DeriveAsync(Awaiting(), new EmailAttachmentTextRunBudget(64), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(derived.RunBudgetExhausted);
+        Assert.Equal(64, derived.ExtractedOctetCount);
+        Assert.Empty(derived.Attachments);
+    }
+
+    /// <summary>
+    /// A picture is stepped over from its declaration rather than handed to a parser, so it costs the extraction
+    /// ceiling nothing — the call it costs is what the description ceiling counts.
+    /// </summary>
+    [Fact]
+    public async Task DeriveAsync_APictureBesideADocument_ChargesTheExtractionCeilingOnlyForTheDocument()
+    {
+        // Arrange
+        this.StoreHolds();
+        this.Opens(0, "application/pdf", "one.pdf", octets: 500);
+        this.extractor
+            .ExtractTextAsync(
+                Arg.Is<IOpenedEmailAttachment>(opened => opened!.Description.MediaType == "application/pdf"),
+                Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.Extracted(
+                new ExtractedAttachmentText(Contract, PageCount: 1, [], [Page(1, 0)])));
+
+        this.Opens(1, "image/png", "two.png", octets: 9000);
+        this.extractor
+            .ExtractTextAsync(
+                Arg.Is<IOpenedEmailAttachment>(opened => opened!.Description.MediaType == "image/png"),
+                Arg.Any<CancellationToken>())
+            .Returns(AttachmentTextExtractionResult.FormatNotRecognized());
+        this.describer
+            .DescribeAsync("image/png", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ImageAttachmentDescription.Described("A tiled roof with a tarpaulin over one corner."));
+
+        // Act
+        var derived = await this.Deriver().DeriveAsync(Awaiting(), Budget(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(500, derived.ExtractedOctetCount);
+        Assert.Equal(1, derived.ProviderDescriptionCount);
     }
 
     /// <summary>A run already out of octets reaches nothing at all, and reads no content to find that out.</summary>
@@ -204,7 +267,9 @@ public sealed class EmailAttachmentTextDeriverTests
             .DeriveAsync(Awaiting(), new EmailAttachmentTextRunBudget(0), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(derived);
+        Assert.True(derived.RunBudgetExhausted);
+        Assert.Equal(0, derived.ExtractedOctetCount);
+        Assert.Equal(0, derived.ProviderDescriptionCount);
         await this.contentStore.DidNotReceive()
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
     }

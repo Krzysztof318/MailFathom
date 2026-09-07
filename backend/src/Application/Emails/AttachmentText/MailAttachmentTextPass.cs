@@ -164,18 +164,6 @@ public sealed class MailAttachmentTextPass
 
                 var derived = await this.deriver.DeriveAsync(email, runBudget, cancellationToken);
 
-                // The run ran out of octets while this message was in hand. Nothing about it has been decided, so
-                // nothing is written: it stays outstanding and the next run, which starts with a full budget, reaches
-                // it first.
-                if (derived is null)
-                {
-                    return new MailAttachmentTextPassReport(
-                        readCount,
-                        refusedCount,
-                        RunBudgetExhausted: true,
-                        EmailsRemain: true);
-                }
-
                 await this.commitPolicy.CommitAsync(
                     (session, attemptCancellationToken) => this.CommitAsync(
                         session,
@@ -183,6 +171,19 @@ public sealed class MailAttachmentTextPass
                         derived,
                         attemptCancellationToken),
                     cancellationToken);
+
+                // The run ran out of octets while this message was in hand. Nothing about the message has been decided,
+                // so no reading is written: it stays outstanding and the next run, which starts with a full budget,
+                // reaches it first. What the earlier attachments already spent was charged above, because the octets
+                // were genuinely parsed and the calls were genuinely made.
+                if (derived.RunBudgetExhausted)
+                {
+                    return new MailAttachmentTextPassReport(
+                        readCount,
+                        refusedCount,
+                        RunBudgetExhausted: true,
+                        EmailsRemain: true);
+                }
 
                 // Recorded here for the reason the cut records it where it does: this is where the gate's decision
                 // becomes an act, a message it was holding having been released by having its attachments read.
@@ -251,6 +252,9 @@ public sealed class MailAttachmentTextPass
     /// cannot leave a mailbox read that nothing was charged for, or a period charged for readings that were never
     /// stored. Each step is charged in its own unit and only where it consumed anything, which keeps a deployment that
     /// describes no pictures from writing a row saying it asked for none.
+    /// A reading the run's octet budget ran out under stores nothing and is still charged: it decided nothing about the
+    /// message, but the attachments it reached before the budget ran out were parsed and described for real, and a
+    /// ledger that omitted them would report less consumed than the provider is about to bill.
     /// </remarks>
     private async Task CommitAsync(
         IPersistenceSession session,
@@ -258,13 +262,16 @@ public sealed class MailAttachmentTextPass
         EmailAttachmentTextDerivation derived,
         CancellationToken cancellationToken)
     {
-        await this.attachmentTextStore.SaveAttachmentTextAsync(session, email.Id, derived, cancellationToken);
+        if (!derived.RunBudgetExhausted)
+        {
+            await this.attachmentTextStore.SaveAttachmentTextAsync(session, email.Id, derived, cancellationToken);
+        }
 
         await this.spendGate.RecordSpendAsync(
             session,
             AttachmentDerivationStep.Extraction,
             email.Owner,
-            derived.ReadOctetCount,
+            derived.ExtractedOctetCount,
             cancellationToken);
 
         await this.spendGate.RecordSpendAsync(

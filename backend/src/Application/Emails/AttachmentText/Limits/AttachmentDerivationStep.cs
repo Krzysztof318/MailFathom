@@ -26,6 +26,12 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 public enum AttachmentDerivationStep
 {
     /// <summary>Reading a document attachment's own text, counted in the octets a parser was handed.</summary>
+    /// <remarks>
+    /// A parser was handed them, rather than a walk having stepped over them: a picture, a format nothing here parses,
+    /// and one the declared size already puts past the per-attachment input ceiling are each decided from the
+    /// declaration alone and are charged nothing. Charging what a walk saw would let a mailbox of pictures spend the
+    /// ceiling a mailbox of documents is bounded by, which is exactly the independence the two steps exist for.
+    /// </remarks>
     Extraction = 0,
 
     /// <summary>Asking a chat provider what a picture shows, counted in the calls made.</summary>
