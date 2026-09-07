@@ -72,31 +72,31 @@ internal static class EmailAttachmentDownloadEndpoint
     /// <param name="ticketReader">Verifies the capability against the deployment's key ring.</param>
     /// <param name="downloadReader">Opens the attachment the verified capability names.</param>
     /// <param name="principals">Carries what authorized this request into the application layer.</param>
-    /// <param name="deploymentOwner">Names the owner whose mail a redeemed capability reaches.</param>
+    /// <param name="deploymentUser">Names the user whose mail a redeemed capability reaches.</param>
     /// <param name="context">The request being answered, whose response body the attachment is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
-    /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment's screen stopped the file or has no sole owner for a ticket naming nobody.</returns>
+    /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment's screen stopped the file or has no sole user for a ticket naming nobody.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The verified ticket is what the request runs under, and it is stated onto the scope before the use case is
     /// reached. Nothing authenticated here, so without that statement the use case would be reached under no principal
     /// and would refuse — which is the same rule that makes an entrypoint added later say what admitted it rather than
-    /// inherit a permission from somewhere. The principal states an owner beside the capability, because the read behind
-    /// it is bounded to one owner's accounts like every other mail read rather than to the deployment's.
+    /// inherit a permission from somewhere. The principal states a user beside the capability, because the read behind
+    /// it is bounded to one user's accounts like every other mail read rather than to the deployment's.
     /// </remarks>
     internal static async Task<Results<EmptyHttpResult, NotFound<ProblemDetails>, ProblemHttpResult>> DownloadAsync(
         string capability,
         IAttachmentDownloadTicketReader ticketReader,
         EmailAttachmentDownloadReader downloadReader,
         TransportAuthorizedPrincipalSource principals,
-        IDeploymentMailOwnerSource deploymentOwner,
+        IDeploymentMailUserSource deploymentUser,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ticketReader);
         ArgumentNullException.ThrowIfNull(downloadReader);
         ArgumentNullException.ThrowIfNull(principals);
-        ArgumentNullException.ThrowIfNull(deploymentOwner);
+        ArgumentNullException.ThrowIfNull(deploymentUser);
         ArgumentNullException.ThrowIfNull(context);
 
         var ticket = await ticketReader.RedeemAsync(capability, cancellationToken);
@@ -105,25 +105,25 @@ internal static class EmailAttachmentDownloadEndpoint
             return Refused();
         }
 
-        // The owner comes from the deployment rather than from the ticket, which is exact on a deployment holding one
-        // owner and has no answer on one holding several: the capability is a signed ticket rather than a credential, so
+        // The user comes from the deployment rather than from the ticket, which is exact on a deployment holding one
+        // user and has no answer on one holding several: the capability is a signed ticket rather than a credential, so
         // nothing presented here names a person. Such a deployment refuses the download rather than guessing whose mail
         // it is, and the refusal is composed by the same helper the route groups' filter uses — this route is mapped
         // outside every group deliberately, so nothing else would classify it and the caller would meet an unhandled
-        // fault carrying the capability into a framework log. Recording the owner in the ticket is what ends the
+        // fault carrying the capability into a framework log. Recording the user in the ticket is what ends the
         // refusal itself, and it changes the capability's own format.
-        MailOwnerId owner;
+        MailUserId user;
 
         try
         {
-            owner = deploymentOwner.Owner;
+            user = deploymentUser.User;
         }
-        catch (DeploymentMailOwnerUnresolvedException unattributable)
+        catch (DeploymentMailUserUnresolvedException unattributable)
         {
             return RouteAuthorization.Unattributable(unattributable);
         }
 
-        principals.Assume(AuthorizedPrincipal.SignedCapability(owner, AuthorizedObjectOf(ticket)));
+        principals.Assume(AuthorizedPrincipal.SignedCapability(user, AuthorizedObjectOf(ticket)));
 
         var download = await downloadReader.OpenAsync(ticket, cancellationToken);
 

@@ -184,7 +184,7 @@ public sealed class EmailEnrichmentAgentTests
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(Marks));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var agent = provider.EnricherOver(egressGuard: egress.Guard);
         var carryingASecret = new EnrichableEmail(
             StoredEmailId.Create(Guid.CreateVersion7()),

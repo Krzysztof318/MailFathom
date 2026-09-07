@@ -38,7 +38,7 @@ public sealed class SensitiveContentOptionsTests
         Assert.Equal(SensitiveContentScanBounds.Default.MaximumConcurrentScans, settings.MaximumConcurrentScans);
     }
 
-    /// <summary>The secrets scanner runs inside this process, so every deployment can serve an owner who asks for it.</summary>
+    /// <summary>The secrets scanner runs inside this process, so every deployment can serve a user who asks for it.</summary>
     [Fact]
     public void ProvidedScanners_ADeploymentWithNoAnalyzerAddress_ProvidesTheSecretsScannerAlone()
     {
@@ -223,13 +223,13 @@ public sealed class SensitiveContentOptionsTests
     }
 
     /// <summary>
-    /// An address alone stands the analyzer up, for the owners who may switch the scanner on for their own mail, so the
+    /// An address alone stands the analyzer up, for the users who may switch the scanner on for their own mail, so the
     /// block beside it is judged whether or not this deployment scans with it. Left unjudged, the profile the
     /// composition root builds from these keys would throw out of the first posture that resolved it, taking every
     /// scanning path down with nothing naming the key that did it.
     /// </summary>
     [Fact]
-    public void Validate_AMalformedAnalyzerLanguageUnderAScannerOnlyOwnersRun_IsReported()
+    public void Validate_AMalformedAnalyzerLanguageUnderAScannerOnlyUsersRun_IsReported()
     {
         // Arrange
         var settings = new SensitiveContentOptions();

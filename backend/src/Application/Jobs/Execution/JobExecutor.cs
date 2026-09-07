@@ -151,7 +151,7 @@ public sealed class JobExecutor
             if (leaseLostSource.IsCancellationRequested)
             {
                 // Nothing is written: the row is owned by the attempt that reclaimed it, and every write here is
-                // conditional on the owner anyway, so asking would only be a refused statement.
+                // conditional on the user anyway, so asking would only be a refused statement.
                 return this.Report(job, JobExecutionOutcome.LeaseLost, attemptFailure: null, startingTimestamp);
             }
 
@@ -201,7 +201,7 @@ public sealed class JobExecutor
     /// A renewal the store refuses means another attempt holds the job, so the work stops rather than going on to
     /// produce a second execution's effects. A renewal that fails for any other reason stops the renewing without
     /// stopping the work: the lease may well still hold, the timeout still bounds the attempt, and every write that
-    /// ends it is conditional on the owner, so a lease that really was lost is reported as such when the outcome is
+    /// ends it is conditional on the user, so a lease that really was lost is reported as such when the outcome is
     /// recorded.
     /// </remarks>
     [SuppressMessage(
@@ -225,7 +225,7 @@ public sealed class JobExecutor
 
                 var renewedLease = await this.store.RenewLeaseAsync(
                     job.JobId,
-                    job.Lease.Owner,
+                    job.Lease.User,
                     this.settings.LeaseDuration,
                     renewalToken);
 
@@ -246,7 +246,7 @@ public sealed class JobExecutor
 
     private async Task<JobExecutionResult> RecordCompletionAsync(LeasedJob job, long startingTimestamp)
     {
-        var completed = await this.store.CompleteAsync(job.JobId, job.Lease.Owner, CancellationToken.None);
+        var completed = await this.store.CompleteAsync(job.JobId, job.Lease.User, CancellationToken.None);
 
         return this.Report(
             job,
@@ -277,7 +277,7 @@ public sealed class JobExecutor
 
         var deadLettered = await this.store.DeadLetterAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             failure,
             CancellationToken.None);
 
@@ -305,7 +305,7 @@ public sealed class JobExecutor
 
         var scheduled = await this.store.ScheduleRetryAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             failure,
             availableAt,
             CancellationToken.None);
@@ -324,7 +324,7 @@ public sealed class JobExecutor
 
     private async Task<JobExecutionResult> ReleaseAsync(LeasedJob job, long startingTimestamp)
     {
-        var released = await this.store.ReleaseAsync(job.JobId, job.Lease.Owner, CancellationToken.None);
+        var released = await this.store.ReleaseAsync(job.JobId, job.Lease.User, CancellationToken.None);
 
         return this.Report(
             job,

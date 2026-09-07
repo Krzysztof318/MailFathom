@@ -8,7 +8,7 @@ using MailFathom.Domain.Contacts;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>Keeps one owner's contact book, and erases a record of it completely when they ask.</summary>
+/// <summary>Keeps one user's contact book, and erases a record of it completely when they ask.</summary>
 /// <remarks>
 /// <para>
 /// The two staging operations write through the caller's session and commit nothing, as
@@ -19,11 +19,11 @@ namespace MailFathom.Application.Contacts;
 /// pass any such check.
 /// </para>
 /// <para>
-/// Every operation names the owner whose book it acts on, and the store applies it rather than trusting the record it
+/// Every operation names the user whose book it acts on, and the store applies it rather than trusting the record it
 /// was handed: an identifier that names a contact of somebody else's book is a book that holds no such contact, so a
-/// write cannot cross from one owner into another by naming a row it read elsewhere. Which contact may hold an address
+/// write cannot cross from one user into another by naming a row it read elsewhere. Which contact may hold an address
 /// is therefore a rule within a book rather than across the table, and the unique constraint underneath leads with the
-/// owner to say so.
+/// user to say so.
 /// </para>
 /// <para>
 /// Erasure joins a session for the same reason the other two do, and for one of its own: what it reports having removed
@@ -34,9 +34,9 @@ namespace MailFathom.Application.Contacts;
 /// </remarks>
 public interface IContactStore
 {
-    /// <summary>Stages a contact the owner's book does not yet hold.</summary>
+    /// <summary>Stages a contact the user's book does not yet hold.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="owner">The owner whose book the contact is written into.</param>
+    /// <param name="user">The user whose book the contact is written into.</param>
     /// <param name="contact">The contact to add.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
     /// <returns>A task that completes once the insert is staged; nothing is committed here.</returns>
@@ -44,16 +44,16 @@ public interface IContactStore
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     Task AddAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken);
 
     /// <summary>Stages the held record being replaced by the one supplied, address rows included.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="owner">The owner whose book holds the record being replaced.</param>
+    /// <param name="user">The user whose book holds the record being replaced.</param>
     /// <param name="contact">The contact as it is to stand, identified by its own identity.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
-    /// <returns><see langword="true" /> when that owner's book held the contact and the replacement was staged; <see langword="false" /> when it holds none.</returns>
+    /// <returns><see langword="true" /> when that user's book held the contact and the replacement was staged; <see langword="false" /> when it holds none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
@@ -65,38 +65,38 @@ public interface IContactStore
     /// </remarks>
     Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken);
 
     /// <summary>Erases one contact and everything derived from it.</summary>
     /// <param name="session">The session the erasure joins.</param>
-    /// <param name="owner">The owner whose book the contact is erased from.</param>
+    /// <param name="user">The user whose book the contact is erased from.</param>
     /// <param name="contactId">The contact to erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed, including a book that held no such contact.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
-    /// Answering for a contact the book does not hold is a completed erasure rather than a failure: the state an owner
+    /// Answering for a contact the book does not hold is a completed erasure rather than a failure: the state a user
     /// asked for is the state the book is in, and reporting it as an error would only tell them whether somebody had
     /// already erased that person.
     /// </remarks>
     Task<ContactErasure> EraseAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         ContactId contactId,
         CancellationToken cancellationToken);
 
-    /// <summary>Erases every contact of the collected origin in one owner's book, and everything derived from them.</summary>
+    /// <summary>Erases every contact of the collected origin in one user's book, and everything derived from them.</summary>
     /// <param name="session">The session the erasure joins.</param>
-    /// <param name="owner">The owner whose collected half is erased.</param>
+    /// <param name="user">The user whose collected half is erased.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
     /// <remarks>
-    /// The asserted half is untouched, which is the whole point of the act: an owner who changed their mind about
+    /// The asserted half is untouched, which is the whole point of the act: a user who changed their mind about
     /// collection is undoing what their instance inferred rather than what they wrote. It is a set-based delete rather
     /// than a walk, because the alternative is loading a book of collected people into memory to remove it, and both
     /// counts are read in the same transaction that removes the rows so the answer is a fact rather than a number that
@@ -104,6 +104,6 @@ public interface IContactStore
     /// </remarks>
     Task<CollectedContactErasure> EraseCollectedAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken);
 }

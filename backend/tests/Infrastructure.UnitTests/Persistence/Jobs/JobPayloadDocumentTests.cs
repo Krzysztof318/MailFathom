@@ -18,10 +18,10 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Jobs;
 public sealed class JobPayloadDocumentTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
 
     private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         EmailOccurrenceId.Create(
             MailAccountId.Create("account-a"),
             new MailFolderResolutionId(
@@ -69,7 +69,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":2,"uidValidity":12345,"uid":4711}""",
             document);
     }
 
@@ -85,7 +85,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a"}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.RunScheduledMailRules, document));
     }
@@ -107,7 +107,7 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","outgoingRecordId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","outgoingRecordId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.DispatchHeldSend, document));
     }
@@ -129,22 +129,22 @@ public sealed class JobPayloadDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            """{"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.SendRecurringOccurrence, document));
     }
 
     /// <summary>
-    /// A document that names an account and no owner is refused rather than resolved to whichever owner the deployment
-    /// happens to hold, which is what keeps a queued job from performing one owner's work against another's account.
+    /// A document that names an account and no user is refused rather than resolved to whichever user the deployment
+    /// happens to hold, which is what keeps a queued job from performing one user's work against another's account.
     /// </summary>
     /// <remarks>
-    /// The refusal is why the migration that put the owner on the queue row writes it into the document beside it: a
+    /// The refusal is why the migration that put the user on the queue row writes it into the document beside it: a
     /// claim reads a batch of rows and maps them together, so a document the previous release wrote would otherwise
     /// take every job claimed beside it with it and the queue would never drain.
     /// </remarks>
     [Fact]
-    public void Deserialize_AnAccountDocumentCarryingNoOwner_IsRefusedRatherThanResolved()
+    public void Deserialize_AnAccountDocumentCarryingNoUser_IsRefusedRatherThanResolved()
     {
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() => JobPayloadDocument.Deserialize(

@@ -14,7 +14,7 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// </para>
 /// <para>
 /// There is more than one source, and that is what this contract is for rather than an accident of registration. The
-/// rules a deployment configures and the messages an owner asked to repeat are declared by different parts of the
+/// rules a deployment configures and the messages a user asked to repeat are declared by different parts of the
 /// system, out of different places, and both want the one mechanism underneath: the same occasion arithmetic, the same
 /// one-run-at-a-time guarantee, the same capacity bounds, and the same worker.
 /// </para>

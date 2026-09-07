@@ -18,12 +18,12 @@ namespace MailFathom.Domain.Contacts.Collection;
 /// <para>
 /// Three rules refuse an address, and they are deliberately of different kinds.
 /// <see cref="AutomatedMailboxName" /> is structural and every deployment gets it, because it names what nobody
-/// corresponds with. The <see cref="Exclusions" /> are the owner's, because only they know which of their real
+/// corresponds with. The <see cref="Exclusions" /> are the user's, because only they know which of their real
 /// correspondents they would rather not have written down. And the deployment's own mailbox addresses are refused
-/// because a contact book holding its owner is a book that answers "who is this from" with the person asking.
+/// because a contact book holding its user is a book that answers "who is this from" with the person asking.
 /// </para>
 /// <para>
-/// Everything the policy holds is personal data: an exclusion names somebody, and an own address names the owner.
+/// Everything the policy holds is personal data: an exclusion names somebody, and an own address names the user.
 /// Nothing here may be logged, and the policy carries no identity of its own for a log line to name instead.
 /// </para>
 /// </remarks>
@@ -46,17 +46,17 @@ public sealed class ContactCollectionPolicy
         this.ownAddresses = ownAddresses;
     }
 
-    /// <summary>Gets what the owner excluded, in the order they wrote it.</summary>
+    /// <summary>Gets what the user excluded, in the order they wrote it.</summary>
     public IReadOnlyList<ContactCollectionExclusion> Exclusions { get; }
 
     /// <summary>Builds the policy one account collects under.</summary>
-    /// <param name="exclusions">What the owner excluded by domain or by pattern.</param>
-    /// <param name="ownAddresses">The mailboxes this deployment reads on its owner's behalf.</param>
+    /// <param name="exclusions">What the user excluded by domain or by pattern.</param>
+    /// <param name="ownAddresses">The mailboxes this deployment reads on its user's behalf.</param>
     /// <returns>The policy.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The own addresses are a set rather than a list because they are matched on every address of every message, and
-    /// they are the deployment's rather than the account's: an owner writing from one of their accounts to another is
+    /// they are the deployment's rather than the account's: a user writing from one of their accounts to another is
     /// not a correspondent of themselves.
     /// </remarks>
     public static ContactCollectionPolicy Create(
@@ -80,7 +80,7 @@ public sealed class ContactCollectionPolicy
     /// </remarks>
     public bool Admits(EmailAutomation automation) => automation == EmailAutomation.None;
 
-    /// <summary>Answers whether one address may be recorded as somebody the owner corresponds with.</summary>
+    /// <summary>Answers whether one address may be recorded as somebody the user corresponds with.</summary>
     /// <param name="address">The address a message carried.</param>
     /// <returns><see langword="true" /> when nothing refuses it.</returns>
     public bool Admits(EmailAddress address) =>

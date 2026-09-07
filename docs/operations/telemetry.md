@@ -222,14 +222,14 @@ dashboard to sum it.
 
 `mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the byte limits, tagged with
 which: `run_budget` for a run that spent what it may fetch, `storage_ceiling` for one that had to record messages
-without their content, and `owner_storage_ceiling` for one whose owner was at their own share while the deployment
+without their content, and `user_storage_ceiling` for one whose user was at their own share while the deployment
 still had room. The last two are separate values rather than one because they ask an operator for different things —
 more disk or a higher instance ceiling against the first, a larger share for one person or a wait against the second —
 and a run that left messages for both reasons reports both, one measurement each. One message is deferred by one of
-them rather than by both, because the instance's room is claimed first and an owner is never charged for a payload the
+them rather than by both, because the instance's room is claimed first and a user is never charged for a payload the
 instance had no room for. All are counted rather than only logged
 because each is a condition that persists — a run that stopped for its budget will stop again next interval, and a
-deployment or an owner at a ceiling stays there until somebody acts — so a rising count says it has been running that
+deployment or a user at a ceiling stays there until somebody acts — so a rising count says it has been running that
 way rather than that it did once.
 [Bounding how much mail a run brings in](../features/imap-synchronization.md#bounding-how-much-mail-a-run-brings-in)
 states what each limit does when it is reached and how the gap a ceiling leaves is closed.
@@ -283,8 +283,8 @@ ceiling bounds.
 The backfill over mail stored before a profile existed publishes its own family beside that one, under
 `mailfathom.embedding.backfill.*`: how many messages awaited embedding when the current sweep began, how each bounded
 run ended, how many messages it cut into passages, brought up to date, and gave vectors to, and how many it stepped
-past because the owner they belong to had spent their share. That last one has an instrument rather than a tag because
-an owner's ceiling ends nothing: the run carries on, so there is no ending for a tag to describe. The instruments are
+past because the user they belong to had spent their share. That last one has an instrument rather than a tag because
+a user's ceiling ends nothing: the run carries on, so there is no ending for a tag to describe. The instruments are
 separate and the tag keys are shared, because a rate an instance settles at and a finite amount of work an operator
 started are different questions about one provider bill.
 [Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the
@@ -412,7 +412,7 @@ entrypoint over the same use case is work of the same kind:
 
 | Span | The read it reports |
 | --- | --- |
-| `read_account_directory` | Which accounts the caller's owner owns, and how current the local copy of each is |
+| `read_account_directory` | Which accounts the caller's user owns, and how current the local copy of each is |
 | `list_mailbox_timeline` | One bounded page of the stored email timeline |
 | `search_mailbox` | One window of a ranking over the stored emails |
 | `read_email_content` | The stored content of the emails one call named |
@@ -453,7 +453,7 @@ neither would otherwise be a duration with nothing under it.
 | Span | Where it is opened | What it carries |
 | --- | --- | --- |
 | `rank_mailbox_search` | Inside `search_mailbox`, and inside an answering run's own retrieval | The same two tags the reads above carry, with the count being the candidates the ranking scored rather than the window returned |
-| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, `…outcome` as `succeeded`, `refused`, `cancelled`, or `failed`, and `mailfathom.owner` as whose mail was being published |
+| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, `…outcome` as `succeeded`, `refused`, `cancelled`, or `failed`, and `mailfathom.user` as whose mail was being published |
 
 The ranking's count is deliberately the ranking's rather than the read's. A hybrid search asks each side for four times
 the window so the fusion has agreement to observe, so a call returning ten matches having scored eighty candidates —
@@ -838,7 +838,7 @@ that bound rather than an idle one, which is a distinction nothing else here mak
 Three further gauges report the process-wide connection budget per IMAP server host. Each carries only
 `mailfathom.mail.server`, whose `server-…` value is a keyed process-local pseudonym rather than the configured host:
 `mailfathom.mail.server.connections.limit` is the configured ceiling, `…connections.active` is the connections and
-attempts holding it, and `…connections.queued` is the attempts waiting for it. They aggregate every owner and account
+attempts holding it, and `…connections.queued` is the attempts waiting for it. They aggregate every user and account
 without sharing a protocol session between any two of them or exporting the server's name.
 
 Nothing published by any of this is derived from a message. The dimensions are the two configured aliases and closed
@@ -851,7 +851,7 @@ configuration key exists that could attach one.
 ### Contact collection
 
 An account that [collects contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) writes personal data
-about third parties without anybody asking it to, so an owner who switched it on is owed a way to see what it is doing.
+about third parties without anybody asking it to, so a user who switched it on is owed a way to see what it is doing.
 `mailfathom.contacts.collection.decisions` is that way: one measurement per address considered, tagged with
 `mailfathom.contacts.collection.outcome`, which carries one of six words — `recorded`, `already_held`,
 `below_threshold`, `excluded`, `not_correspondence`, and `run_bound_reached`.
@@ -860,7 +860,7 @@ The six are what make the readings distinguishable. `recorded` rising is the boo
 almost all of the traffic is one whose threshold is too low. `already_held` becoming almost everything is the ordinary
 state of a book that has filled. `excluded` at nearly the whole volume is a policy excluding everybody, which usually
 means one pattern is wider than its author meant; it also carries the rare address collection could derive no name
-from, which is why the reading is *this address was never a candidate* rather than *the owner's list caught it*. `run_bound_reached` appearing repeatedly says runs are stopping at
+from, which is why the reading is *this address was never a candidate* rather than *the user's list caught it*. `run_bound_reached` appearing repeatedly says runs are stopping at
 `MaxContactsPerRun` rather than at the end of the mail, which is expected during a first synchronization and worth
 looking at afterwards. `below_threshold` and `not_correspondence` are the two that mean collection is working as
 configured and writing nothing.
@@ -913,7 +913,7 @@ because the question it answers is about the ratio between them: attempts rising
 deployment, and retries rising while attempts do not is the same mail being offered over and over. A first attempt is
 never counted here, so the two series are read together rather than one being a subset a dashboard has to subtract.
 
-**Can the owner see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
+**Can the user see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
 outgoing message into one of this account's own folders, tagged with the account alias, `mailfathom.mail.filing.place`
 — `draft`, `held`, `sent`, or `undetermined` where a failure ended before any place was chosen — and
 `mailfathom.mail.filing.outcome`, whose values are `filed`, `already_filed`,
@@ -932,8 +932,8 @@ mailbox's drafts folder into step with a draft this deployment holds, tagged wit
 one above, because a draft was never offered to a submission server: nothing about it is a delivery, and summing the
 two would report an outbox busier than the mail actually leaving it. The first four are ordinary — a draft written, a
 draft edited, a draft given up or sent, and a pass finding nothing owed. `destination_unavailable` is a deployment
-whose drafts-role mapping resolves to nothing, so what an owner writes here is never in front of them in their own mail
-client. `diverged` is the one that names the owner rather than the system: the tracked copy is no longer provably the
+whose drafts-role mapping resolves to nothing, so what a user writes here is never in front of them in their own mail
+client. `diverged` is the one that names the user rather than the system: the tracked copy is no longer provably the
 one this deployment appended — the role resolves elsewhere, the folder was recreated, the server named no placement —
 so the message is left exactly where it is and a person decides. `outcome_unknown` means here what it means above and
 for the same reason: the append may or may not have reached the folder, nothing will attempt it again, and repeating it
@@ -1119,8 +1119,8 @@ continues. Both of its tags are written
 whatever stopped the act, and an act stopped because the analyzed ceiling cut the text reads `not_scanned` in each —
 a value rather than an absent tag, because a series missing one dimension is a second series and a query summing this
 counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's floor and the
-owner's to tighten: [`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where the floor
-is written, and [each owner's own posture](../features/sensitive-content-scanning.md#each-owners-own-posture) is what
+user's to tighten: [`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where the floor
+is written, and [each user's own posture](../features/sensitive-content-scanning.md#each-users-own-posture) is what
 may add to it.
 
 The findings are split by category rather than totalled because which kind of material a mailbox is producing is what
@@ -1129,14 +1129,14 @@ recorded only when the ceiling actually cut something: a zero on every guarded t
 ceiling is in play on ordinary mail, which is the one question that instrument exists to answer. All six read zero on a
 deployment where nothing is switched on for anybody, because nothing is constructed there.
 
-**Whose mail an operation published is on the span alone**, as `mailfathom.owner`. Postures differ between the people
+**Whose mail an operation published is on the span alone**, as `mailfathom.user`. Postures differ between the people
 one deployment serves, so a scan that cannot be attributed to one of them cannot be read against what that person asked
 for — and the same identifier on a counter incremented once per guarded text would be an unbounded dimension, which is
-what every closed tag here exists to avoid. The attribute is absent rather than zero where no owner was resolved.
+what every closed tag here exists to avoid. The attribute is absent rather than zero where no user was resolved.
 
 Nothing published here is mail or derived from it. The three tags are MailFathom's own closed sets, and the values are
 counts and durations — never a rule's match, a position, a message identity, or any part of what was found, each of
-which would put the credential in the telemetry written to prove it never left. The owner identifier on the span is the
+which would put the credential in the telemetry written to prove it never left. The user identifier on the span is the
 deployment's own configured value and names a person no more than a mail account alias does.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-guarded-egress-points) names the points
 themselves and what a refusal does to each.
@@ -1190,9 +1190,9 @@ repairs rather than waits out: the collector would not take **this deployment's 
 still told to hold — the batch was never what was wrong, and telling a browser to drop telemetry over a credential
 nobody there can repair would lose what a corrected header would have carried.
 
-**None of the five names a person.** A batch is attributed to its owner in the payload that leaves for the collector,
+**None of the five names a person.** A batch is attributed to its user in the payload that leaves for the collector,
 where it is what makes one client's traces separable from another's; the instruments here are the deployment's own
-reading of whether the relay works, and an owner dimension on them would publish how much each person's client is
+reading of whether the relay works, and a user dimension on them would publish how much each person's client is
 doing to whoever reads a dashboard. `refused` rising is a client sending something this deployment will not take, and
 `failed` rising is the collector rather than the client — which is the distinction the two counters exist to make,
 because the clients hold what they could not export and nothing is queued here.
@@ -1209,7 +1209,7 @@ a meter, for the reason [that section](#what-mailfathom-publishes-under-its-own-
 registration would be one more thing to subscribe to, and being on the second stack is not a reason to take one.
 
 **The resource identifies a client and never a person.** Three attributes are the client's own, and the receiver writes
-the owner attributes itself, from the credential the export presented, replacing whatever a page put in their place.
+the user attributes itself, from the credential the export presented, replacing whatever a page put in their place.
 
 | Attribute | What it says |
 | --- | --- |

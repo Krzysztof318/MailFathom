@@ -13,15 +13,15 @@ namespace MailFathom.Application.Jobs;
 /// no transaction may stay open across one.
 /// </para>
 /// <para>
-/// Two things keep that safe rather than merely likely. Every write against a leased job is conditional on the owner
+/// Two things keep that safe rather than merely likely. Every write against a leased job is conditional on the user
 /// still matching, so a late writer whose lease was reclaimed writes nothing. And the timeout an attempt runs under is
 /// strictly shorter than the lease it holds, so an attempt is cancelled before its lease can expire underneath it —
 /// which is what makes two workers running one job structurally impossible rather than rare.
 /// </para>
 /// </remarks>
-/// <param name="Owner">The attempt the lease is held by.</param>
+/// <param name="User">The attempt the lease is held by.</param>
 /// <param name="ExpiresAt">The instant after which the job is claimable again whatever the holder is doing.</param>
-public sealed record JobLease(JobLeaseOwner Owner, DateTimeOffset ExpiresAt)
+public sealed record JobLease(JobLeaseOwner User, DateTimeOffset ExpiresAt)
 {
     /// <summary>Reports whether the lease has run out by a given instant.</summary>
     /// <param name="instant">The instant to judge the lease at.</param>
@@ -34,13 +34,13 @@ public sealed record JobLease(JobLeaseOwner Owner, DateTimeOffset ExpiresAt)
     public bool HasExpiredAt(DateTimeOffset instant) => this.ExpiresAt <= instant;
 
     /// <summary>Reports whether a given attempt is the one holding this lease.</summary>
-    /// <param name="owner">The attempt asking.</param>
+    /// <param name="user">The attempt asking.</param>
     /// <returns><see langword="true" /> when the lease is held by that attempt.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
-    public bool IsHeldBy(JobLeaseOwner owner)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="user" /> is <see langword="null" />.</exception>
+    public bool IsHeldBy(JobLeaseOwner user)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
 
-        return this.Owner == owner;
+        return this.User == user;
     }
 }

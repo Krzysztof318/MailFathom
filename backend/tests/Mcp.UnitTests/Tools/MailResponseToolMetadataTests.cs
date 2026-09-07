@@ -11,7 +11,7 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 
 /// <summary>Covers the descriptors MailFathom advertises for <c>reply_to_email</c> and <c>forward_email</c>.</summary>
 /// <remarks>
-/// Both queue real mail to somebody who is not this mailbox's owner, so the descriptor is most of what makes each one
+/// Both queue real mail to somebody who is not this mailbox's user, so the descriptor is most of what makes each one
 /// safe: a client decides whether to ask a person from the annotations, and a model decides whether to call at all from
 /// the description. They are covered together because what makes them a family is that they take an anchor into stored
 /// mail and derive from it — so the assertions that matter are the ones about what is *not* an argument, and those are

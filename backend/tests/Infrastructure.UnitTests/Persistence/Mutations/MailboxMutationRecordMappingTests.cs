@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Mutations;
 /// <remarks>
 /// The disposition is written when the change is authored and read back by a later run, so a value the mapping drops is
 /// a decision nobody can act on afterwards: reconciliation would meet the source occurrence gone, find nothing to apply,
-/// and leave mail behind that the owner had asked to have disposed of.
+/// and leave mail behind that the user had asked to have disposed of.
 /// </remarks>
 public sealed class MailboxMutationRecordMappingTests
 {
@@ -197,12 +197,12 @@ public sealed class MailboxMutationRecordMappingTests
     {
         var folder = new MailFolderEntity
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             Alias = "INBOX",
             ResolutionGeneration = 1,
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "primary" },
         };
 
         return new MailboxMutationEntity
@@ -211,11 +211,11 @@ public sealed class MailboxMutationRecordMappingTests
             StoredEmailId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             StoredEmail = new StoredEmailEntity
             {
-                OwnerId = SyntheticMailOwner.Deployment.Value,
+                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = "primary",
                 MailFolder = folder,
             },
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             MailFolder = folder,
             UidValidity = 1,

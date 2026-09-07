@@ -9,7 +9,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 
 /// <summary>Covers the budget the attribution read applies, which belongs to one value of one occurrence.</summary>
 /// <remarks>
-/// A record this budget drops is a change MailFathom made that reconciliation then credits to the mailbox owner and
+/// A record this budget drops is a change MailFathom made that reconciliation then credits to the mailbox user and
 /// reacts to, which is the loop the read exists to prevent. The number is stated here rather than derived from
 /// anything, because everything it could be derived from has a different meaning: it is neither the size of a window
 /// nor the count of the values a <c>FLAGS</c> response reports, and expressing it as either is what let the two earlier

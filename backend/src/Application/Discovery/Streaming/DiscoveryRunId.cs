@@ -9,7 +9,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// A run is addressed by this from the moment it is started: every event it publishes names it, and a client that lost
 /// its connection reattaches by it rather than by asking the question again. It is a version 4 UUID because it is
 /// handed to a client and then presented back — a guessable identifier would let one caller ask to be shown a run
-/// somebody else started, which the owner check beside it refuses but which nothing should be able to attempt cheaply.
+/// somebody else started, which the user check beside it refuses but which nothing should be able to attempt cheaply.
 /// It is not persisted, so it means nothing after a restart.
 /// </remarks>
 public readonly record struct DiscoveryRunId

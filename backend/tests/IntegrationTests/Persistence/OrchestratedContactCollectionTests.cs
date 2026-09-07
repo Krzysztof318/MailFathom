@@ -94,7 +94,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
     /// <remarks>
     /// The address rows go by a delete narrowed on the contacts about to be deleted, so the two statements have to agree
     /// about which rows those are; the schema's foreign key would refuse the second otherwise, and that refusal is what
-    /// this proves does not happen. What the owner asserted is untouched, which is the whole claim the command makes.
+    /// this proves does not happen. What the user asserted is untouched, which is the whole claim the command makes.
     /// </remarks>
     [Fact]
     public async Task EraseCollectedAsync_ABookOfBothOrigins_RemovesEveryCollectedRecordAndLeavesTheAssertedOnes()
@@ -133,10 +133,10 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         var gone = await FindByAddressAsync(services, "picked-up@collected.contacts.test", cancellationToken);
 
         // Assert
-        // At least this test's own record and its two addresses: the served owner's book is shared by every class in
+        // At least this test's own record and its two addresses: the served user's book is shared by every class in
         // this collection, so another class's collected rows are erased by the same statement and counting them exactly
-        // would assert about somebody else's arrangement. The counts below are scoped to that owner rather than to the
-        // table, because the erasure is scoped to it and a foreign owner's collected rows are outside what it promises.
+        // would assert about somebody else's arrangement. The counts below are scoped to that user rather than to the
+        // table, because the erasure is scoped to it and a foreign user's collected rows are outside what it promises.
         Assert.True(erasure.ContactsErased >= 1);
         Assert.True(erasure.AddressesErased >= 2);
         Assert.Equal(0, collectedRowsLeft);
@@ -169,7 +169,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 foreach (var seeded in SeededEmails(binding))
                 {
                     await repository.UpsertMetadataAsync(
-                        session, SyntheticMailAccount.Owner,
+                        session, SyntheticMailAccount.User,
                         seeded.RemoteMetadata,
                         seeded.Extraction,
                         StoredEmailContentAvailability.Available,
@@ -238,7 +238,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         string address,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 Address(address),
                 token),
             cancellationToken);
@@ -250,7 +250,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 .Contacts
                 .AsNoTracking()
                 .Where(contact =>
-                    contact.OwnerId == services.ServedOwner.Value && contact.Origin == ContactOrigin.Collected)
+                    contact.UserId == services.ServedUser.Value && contact.Origin == ContactOrigin.Collected)
                 .CountAsync(token),
             cancellationToken);
 
@@ -298,7 +298,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                     SyntheticEmail.BodyTextContaining(subject, wordCount: 12),
                     senderAddress,
                     SyntheticEmail.ReceivedAt,
-                    "owner@tally.contacts.test"));
+                    "user@tally.contacts.test"));
         }
     }
 }

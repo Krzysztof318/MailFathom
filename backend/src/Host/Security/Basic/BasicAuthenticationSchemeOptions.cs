@@ -11,7 +11,7 @@ namespace MailFathom.Host.Security.Basic;
 /// <remarks>
 /// There is no credential list here and no grant, unlike the configured schemes' options, and their absence is the
 /// method: the passwords are records in the deployment's own database rather than material an operator wrote into a
-/// section, and what each one grants is recorded beside the owner it resolves. What is left for the scheme to carry is
+/// section, and what each one grants is recorded beside the user it resolves. What is left for the scheme to carry is
 /// the surface and the bound, and both reach the handler through the framework's own per-scheme options — which is
 /// what lets two surfaces register the same handler over two different bounds without the handler acquiring a settings
 /// object of its own.

@@ -27,7 +27,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     {
         ArgumentNullException.ThrowIfNull(notification);
 
-        var standing = this.recorded.Any(candidate => candidate.Owner == notification.Owner
+        var standing = this.recorded.Any(candidate => candidate.User == notification.User
             && candidate.DeduplicationKey == notification.DeduplicationKey
             && !candidate.IsRead);
 
@@ -43,7 +43,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Notification>> ReadPageAsync(
-        MailOwnerId owner,
+        MailUserId user,
         NotificationCursor? after,
         int limit,
         CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
         var ordered = this.recorded
-            .Where(candidate => candidate.Owner == owner)
+            .Where(candidate => candidate.User == user)
             .OrderByDescending(candidate => candidate.OccurredAt)
             .ThenByDescending(candidate => candidate.Id.Value);
 
@@ -65,17 +65,17 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     }
 
     /// <inheritdoc />
-    public Task<int> CountUnreadAsync(MailOwnerId owner, CancellationToken cancellationToken) =>
-        Task.FromResult(this.recorded.Count(candidate => candidate.Owner == owner && !candidate.IsRead));
+    public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken) =>
+        Task.FromResult(this.recorded.Count(candidate => candidate.User == user && !candidate.IsRead));
 
     /// <inheritdoc />
     public Task<NotificationReadOutcome> SetReadAsync(
-        MailOwnerId owner,
+        MailUserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken)
     {
-        var position = this.recorded.FindIndex(candidate => candidate.Owner == owner && candidate.Id == notification);
+        var position = this.recorded.FindIndex(candidate => candidate.User == user && candidate.Id == notification);
 
         if (position < 0)
         {
@@ -90,7 +90,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
         }
 
         if (!isRead
-            && this.recorded.Any(candidate => candidate.Owner == owner
+            && this.recorded.Any(candidate => candidate.User == user
                 && candidate.DeduplicationKey == stored.DeduplicationKey
                 && !candidate.IsRead))
         {
@@ -103,13 +103,13 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     }
 
     /// <inheritdoc />
-    public Task<int> MarkAllReadAsync(MailOwnerId owner, CancellationToken cancellationToken)
+    public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken)
     {
         var marked = 0;
 
         for (var position = 0; position < this.recorded.Count; position++)
         {
-            if (this.recorded[position] is { IsRead: false } unread && unread.Owner == owner)
+            if (this.recorded[position] is { IsRead: false } unread && unread.User == user)
             {
                 this.recorded[position] = InReadState(unread, isRead: true);
                 marked++;
@@ -122,7 +122,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
     /// <summary>Rebuilds one notification in a stated read state, which is the only field a store may move.</summary>
     private static Notification InReadState(Notification notification, bool isRead) => Notification.Restore(
         notification.Id,
-        notification.Owner,
+        notification.User,
         notification.Kind,
         notification.Title,
         notification.Body,
@@ -134,7 +134,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
 
     /// <inheritdoc />
     public Task<int> EraseOccurredBeforeAsync(
-        MailOwnerId owner,
+        MailUserId user,
         DateTimeOffset occurredBefore,
         int limit,
         CancellationToken cancellationToken)
@@ -144,7 +144,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
         Notification[] expiring =
         [
             .. this.recorded
-                .Where(candidate => candidate.Owner == owner && candidate.OccurredAt < occurredBefore)
+                .Where(candidate => candidate.User == user && candidate.OccurredAt < occurredBefore)
                 .OrderBy(candidate => candidate.OccurredAt)
                 .Take(limit),
         ];

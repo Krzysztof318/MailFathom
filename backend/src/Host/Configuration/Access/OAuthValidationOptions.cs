@@ -71,7 +71,7 @@ internal sealed class OAuthValidationOptions
     /// rather than granting them less. Where the grant lives follows the surface, which is why the refusal takes the
     /// admission this block was configured for: on the administrative surface it is
     /// <see cref="TransportAuthenticationOptions.Permissions" /> on the entry this block sits in, and on a mail-serving
-    /// surface it is the owner credential record the subject resolves to, written when the credential is provisioned.
+    /// surface it is the user credential record the subject resolves to, written when the credential is provisioned.
     /// </para>
     /// </remarks>
     public IList<string> RequiredScopes { get; } = [];
@@ -274,16 +274,16 @@ internal sealed class OAuthValidationOptions
     /// <remarks>
     /// A refusal that named the wrong place would be refused a second time when the operator followed it: on a
     /// mail-serving surface <c>Permissions</c> is a retired key the section rejects by name before it binds, so the
-    /// remedy there is the provisioning command that writes the grant onto the owner's credential record.
+    /// remedy there is the provisioning command that writes the grant onto the user's credential record.
     /// </remarks>
     private static string GrantRemedy(OAuthSubjectAdmission admission) =>
-        admission == OAuthSubjectAdmission.ResolvedOwnerCredentials
-            ? "Write it as a '--permission' of the 'mfctl credential create' that provisions the owner's credential, which is what decides what an admitted caller may do."
+        admission == OAuthSubjectAdmission.ResolvedUserCredentials
+            ? "Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, which is what decides what an admitted caller may do."
             : $"Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry, which is what decides what an admitted caller may do.";
 
     /// <summary>Names where a grant taken from the token's own scopes is turned on, on the surface this block was configured for.</summary>
     private static string ScopeGrantRemedy(OAuthSubjectAdmission admission) =>
-        admission == OAuthSubjectAdmission.ResolvedOwnerCredentials
-            ? $"Write it as a '--permission' of the 'mfctl credential create' that provisions the owner's credential, or set '{nameof(OwnerFacingAuthenticationOptions.PermissionsFromTokenScopes)}' on this entry to take the grant from the token instead."
+        admission == OAuthSubjectAdmission.ResolvedUserCredentials
+            ? $"Write it as a '--permission' of the 'mfctl credential create' that provisions the user's credential, or set '{nameof(UserFacingAuthenticationOptions.PermissionsFromTokenScopes)}' on this entry to take the grant from the token instead."
             : $"Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry and set '{nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes)}'.";
 }

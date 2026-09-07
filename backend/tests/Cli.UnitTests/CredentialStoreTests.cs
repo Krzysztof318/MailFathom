@@ -294,7 +294,7 @@ public sealed class CredentialStoreTests : IDisposable
     /// readable and tightened later is readable for the moment in between.
     /// </summary>
     [Fact]
-    public void Save_OnAPlatformWithFileModes_LeavesTheStoreAndTheKeyReadableByTheirOwnerAlone()
+    public void Save_OnAPlatformWithFileModes_LeavesTheStoreAndTheKeyReadableByTheirUserAlone()
     {
         // Arrange
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

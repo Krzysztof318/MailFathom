@@ -41,14 +41,14 @@ internal sealed class AuthoredMailTally(MailFathomDbContext readContext) : IAuth
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ceiling);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var normalizedAddress = author.NormalizedAddress;
 
         var authored = readContext.StoredEmails
             .AsNoTracking()
             .Where(email =>
-                email.OwnerId == ownerValue
+                email.UserId == userValue
                 && email.MailboxAccountId == accountValue
                 && email.SenderNormalizedAddress == normalizedAddress);
 

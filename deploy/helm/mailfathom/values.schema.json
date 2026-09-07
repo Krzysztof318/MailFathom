@@ -838,7 +838,7 @@
             },
             "dnsChecks": {
               "type": "boolean",
-              "description": "Whether the daemon resolves DNS blocklists. Off by default: those rules send sending addresses and URI host names out of the owner's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid."
+              "description": "Whether the daemon resolves DNS blocklists. Off by default: those rules send sending addresses and URI host names out of the user's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid."
             },
             "image": {
               "type": "object",

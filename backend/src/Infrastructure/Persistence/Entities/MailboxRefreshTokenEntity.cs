@@ -32,12 +32,12 @@ internal sealed class MailboxRefreshTokenEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account this credential admits.</summary>
+    /// <summary>Gets or sets the user whose account this credential admits.</summary>
     /// <remarks>
-    /// No cascade reaches this row, so the owner column is what an erasure names it by — a predicate on the
-    /// owner rather than a lookup of which accounts were theirs.
+    /// No cascade reaches this row, so the user column is what an erasure names it by — a predicate on the
+    /// user rather than a lookup of which accounts were theirs.
     /// </remarks>
-    public required Guid OwnerId { get; set; }
+    public required Guid UserId { get; set; }
 
     public required byte[] SealedRefreshToken { get; set; }
 

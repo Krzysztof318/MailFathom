@@ -124,22 +124,22 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// </remarks>
     public long MaxInputCharactersPerPeriod { get; set; } = DefaultMaxInputCharactersPerPeriod;
 
-    /// <summary>Gets or sets the characters one period may send for any one owner, or zero to bound no owner.</summary>
+    /// <summary>Gets or sets the characters one period may send for any one user, or zero to bound no user.</summary>
     /// <remarks>
     /// <para>
     /// The same ceiling asked of one person rather than of the instance. It exists because a deployment serving several
-    /// owners bounds the bill with <see cref="MaxInputCharactersPerPeriod" /> and nothing else, so an initial backfill
+    /// users bounds the bill with <see cref="MaxInputCharactersPerPeriod" /> and nothing else, so an initial backfill
     /// of one large mailbox can exhaust the window everybody else was working in. Reaching this one leaves the message
-    /// unembedded and every other owner's mail embedding normally; the rolled-over period reaches it.
+    /// unembedded and every other user's mail embedding normally; the rolled-over period reaches it.
     /// </para>
     /// <para>
-    /// Zero is the default and declares no per-owner ceiling, which is what a deployment serving one owner wants: the
+    /// Zero is the default and declares no per-user ceiling, which is what a deployment serving one user wants: the
     /// instance ceiling already bounds that person, and a second number below it would only make them meet a smaller
-    /// one. What leaving it at zero on a deployment serving several owners exposes is exactly the fault above, and the
+    /// one. What leaving it at zero on a deployment serving several users exposes is exactly the fault above, and the
     /// configuration reference says so.
     /// </para>
     /// </remarks>
-    public long MaxInputCharactersPerPeriodPerOwner { get; set; }
+    public long MaxInputCharactersPerPeriodPerUser { get; set; }
 
     /// <summary>Gets or sets the window the aggregate ceiling is counted over.</summary>
     /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
@@ -173,9 +173,9 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// </remarks>
     internal AttachmentDerivationBudget ToAttachmentDerivationBudget() => AttachmentDerivationBudget.Create(
         this.AttachmentText.MaxInputOctetsPerPeriod,
-        this.AttachmentText.MaxInputOctetsPerPeriodPerOwner,
+        this.AttachmentText.MaxInputOctetsPerPeriodPerUser,
         this.ImageDescription.MaxDescriptionsPerPeriod,
-        this.ImageDescription.MaxDescriptionsPerPeriodPerOwner,
+        this.ImageDescription.MaxDescriptionsPerPeriodPerUser,
         this.SpendPeriod);
 
     /// <inheritdoc />
@@ -238,12 +238,12 @@ internal sealed class EmbeddingOptions : IValidatableObject
                 [nameof(this.MaxInputCharactersPerPeriod)]);
         }
 
-        if (this.MaxInputCharactersPerPeriodPerOwner < 0)
+        if (this.MaxInputCharactersPerPeriodPerUser < 0)
         {
             yield return new ValidationResult(
-                "Embeddings MaxInputCharactersPerPeriodPerOwner is zero or positive. Zero declares no per-owner ceiling "
-                + "at all, which is what a deployment serving one owner wants; a negative one describes no budget.",
-                [nameof(this.MaxInputCharactersPerPeriodPerOwner)]);
+                "Embeddings MaxInputCharactersPerPeriodPerUser is zero or positive. Zero declares no per-user ceiling "
+                + "at all, which is what a deployment serving one user wants; a negative one describes no budget.",
+                [nameof(this.MaxInputCharactersPerPeriodPerUser)]);
         }
 
         if (this.SpendPeriod < ShortestSpendPeriod || this.SpendPeriod > LongestSpendPeriod)

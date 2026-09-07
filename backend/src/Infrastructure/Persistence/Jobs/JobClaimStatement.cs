@@ -34,8 +34,8 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// </para>
 /// <para>
 /// The order is the turn each job holds rather than the instant it became available, which is what makes the claim fair
-/// across owners: the enqueue placed each job one spacing past the latest turn its own owner already had waiting, so
-/// draining the queue in turn order interleaves owners instead of working through whoever queued first. Nothing here
+/// across users: the enqueue placed each job one spacing past the latest turn its own user already had waiting, so
+/// draining the queue in turn order interleaves users instead of working through whoever queued first. Nothing here
 /// ranks anything — the ordering is one column of one index — because a claim that had to rank a backlog to find out
 /// whose turn it was could no longer be one statement under <c>FOR UPDATE SKIP LOCKED</c>, which PostgreSQL refuses to
 /// combine with a window function at all.
@@ -60,7 +60,7 @@ internal static class JobClaimStatement
         var pending = nameof(JobState.Pending);
         var claimed = nameof(JobState.Claimed);
         var claimableStates = new[] { pending, claimed };
-        var leaseOwner = request.Owner.Value;
+        var leaseOwner = request.User.Value;
         var leaseExpiresAt = claimedAt + request.LeaseDuration;
         var batchSize = request.BatchSize;
 

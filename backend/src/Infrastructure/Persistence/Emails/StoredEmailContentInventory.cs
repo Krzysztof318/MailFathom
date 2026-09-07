@@ -56,7 +56,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
 
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
@@ -66,7 +66,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom
-                && email.OwnerId == owner
+                && email.UserId == user
                 && email.MailboxAccountId == mailboxAccountId
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation

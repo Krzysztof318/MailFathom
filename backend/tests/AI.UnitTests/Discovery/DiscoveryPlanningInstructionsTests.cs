@@ -90,7 +90,7 @@ public sealed class DiscoveryPlanningInstructionsTests
         // Arrange
         var email = Email("33333333-3333-3333-3333-333333333333");
         var scope = MailboxScope
-            .Create(SyntheticMailOwner.Deployment, [Primary], [new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"))])
+            .Create(SyntheticMailUser.Deployment, [Primary], [new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"))])
             .NarrowedToEmails([email]);
 
         // Act
@@ -103,7 +103,7 @@ public sealed class DiscoveryPlanningInstructionsTests
     }
 
     private static MailboxScope Scope() =>
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], []);
+        MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []);
 
     private static StoredEmailId Email(string identity) => StoredEmailId.Create(new Guid(identity));
 }

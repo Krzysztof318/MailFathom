@@ -9,8 +9,8 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <summary>What one account collects, and under what bounds.</summary>
 /// <remarks>
 /// <para>
-/// Collection is off unless an owner switched it on, and it is switched on per account rather than per deployment. An
-/// instance builds a record of who writes to its owner only because somebody asked it to, and the accounts an instance
+/// Collection is off unless a user switched it on, and it is switched on per account rather than per deployment. An
+/// instance builds a record of who writes to its user only because somebody asked it to, and the accounts an instance
 /// synchronizes are different correspondence: a work mailbox's counterparties are not a personal one's.
 /// </para>
 /// <para>
@@ -37,8 +37,8 @@ public sealed record ContactCollectionSettings
     /// <remarks>
     /// Counted over the mail this account already holds, including the message being synchronized, so a value of one
     /// records a correspondent on first sight and the default of two records them on the second message. It bounds only
-    /// the addresses that wrote to the owner: an address the owner themselves wrote to is recorded at once, because the
-    /// owner having addressed somebody is the evidence this count is otherwise looking for.
+    /// the addresses that wrote to the user: an address the user themselves wrote to is recorded at once, because the
+    /// user having addressed somebody is the evidence this count is otherwise looking for.
     /// </remarks>
     public required int MinimumMessagesFromSender { get; init; }
 

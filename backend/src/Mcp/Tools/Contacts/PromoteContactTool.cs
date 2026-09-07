@@ -21,7 +21,7 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// The one crossing between the two origins, and it runs one way: a contact this deployment collected from arriving
 /// mail becomes one somebody wrote down. It exists on this surface as well as on the administrative one because that is
 /// what a collected record is for — an agent that read the book and found somebody the deployment picked up is taking
-/// the record on for the same owner an operator at a terminal would, and a promotion reachable from only one of the two
+/// the record on for the same user an operator at a terminal would, and a promotion reachable from only one of the two
 /// would leave <c>update_contact</c> permanently refused on this surface for every record collection produced.
 /// </para>
 /// <para>
@@ -71,7 +71,7 @@ internal sealed class PromoteContactTool(ContactBookWriter contactBookWriter)
         OpenWorld = false,
         UseStructuredContent = true)]
     [Description(
-        "Takes on one person MailFathom collected from arriving mail, so the record becomes one the owner asserted "
+        "Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted "
         + "rather than one the deployment inferred. This is the only path between the two origins and it runs one way; "
         + "it is also what unlocks update_contact on a record that answered contactWasCollected. Nothing about the "
         + "person is rewritten. Writes to local state only, and touches no mail. A contact that was already asserted "

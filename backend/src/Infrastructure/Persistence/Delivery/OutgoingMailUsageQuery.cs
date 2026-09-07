@@ -21,9 +21,9 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// forgot those would let a period which failed entirely be spent twice.
 /// </para>
 /// <para>
-/// The deployment-wide composition names no account and therefore no owner, and that is the ceiling it belongs to rather
+/// The deployment-wide composition names no account and therefore no user, and that is the ceiling it belongs to rather
 /// than a narrowing left out. A deployment ceiling bounds what this process puts on the network, which is one budget
-/// however many owners it serves; narrowing it per owner would be a different ceiling than the one configured.
+/// however many users it serves; narrowing it per user would be a different ceiling than the one configured.
 /// </para>
 /// </remarks>
 internal static class OutgoingMailUsageQuery
@@ -48,10 +48,10 @@ internal static class OutgoingMailUsageQuery
             return withinPeriod;
         }
 
-        var ownerValue = narrowed.Owner.Value;
+        var userValue = narrowed.User.Value;
         var accountValue = narrowed.Id.Value;
 
-        return withinPeriod.Where(message => message.OwnerId == ownerValue
+        return withinPeriod.Where(message => message.UserId == userValue
             && message.MailboxAccountId == accountValue);
     }
 

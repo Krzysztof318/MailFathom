@@ -58,7 +58,7 @@ public sealed class EmailThreadAssembly
 
     /// <summary>Places the email, merging any conversations its identifiers prove were always one.</summary>
     /// <param name="session">The transaction the placement is part of.</param>
-    /// <param name="account">The account whose mail the email is, named by its owner and its identifier.</param>
+    /// <param name="account">The account whose mail the email is, named by its user and its identifier.</param>
     /// <param name="email">The email to place, with the identifiers its headers carried.</param>
     /// <param name="currentThreadId">The conversation the email already belongs to, or <see langword="null" /> when none.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>

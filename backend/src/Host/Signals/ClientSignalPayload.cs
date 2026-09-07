@@ -17,7 +17,7 @@ namespace MailFathom.Host.Signals;
 /// <param name="SecondLine">The notification's own second line, and nothing for every other kind.</param>
 /// <remarks>
 /// <para>
-/// <b>It names no owner.</b> The connection already belongs to one — it joined that owner's group and nothing else can
+/// <b>It names no user.</b> The connection already belongs to one — it joined that user's group and nothing else can
 /// reach it — so writing the identifier into every message would put a value the client has no use for onto the wire
 /// on every change.
 /// </para>

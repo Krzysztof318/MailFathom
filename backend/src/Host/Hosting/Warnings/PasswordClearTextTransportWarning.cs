@@ -117,7 +117,7 @@ internal sealed partial class PasswordClearTextTransportWarning : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{EndpointSectionName} accepts an owner's username and password and answers its routes on port "
+        Message = "{EndpointSectionName} accepts a user's username and password and answers its routes on port "
             + "{ClearTextPort}, which nothing encrypts, so every password signed in with crosses that hop readable by "
             + "anything on the network path — and a password is the one credential here that a person typed and may "
             + "have typed elsewhere. This is the expected posture on a loopback bind and behind a TLS-terminating "
@@ -128,7 +128,7 @@ internal sealed partial class PasswordClearTextTransportWarning : IHostedService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{EndpointSectionName} accepts an owner's username and password behind the {TrustedProxyCount} "
+        Message = "{EndpointSectionName} accepts a user's username and password behind the {TrustedProxyCount} "
             + "trusted reverse proxy source(s) ReverseProxy:TrustedProxies names, so the hop this process serves on "
             + "port {ClearTextPort} is the one between that proxy and here and TLS to your clients is the proxy's to "
             + "terminate. Keep that hop inside a network you control: on it, every password signed in with is readable "

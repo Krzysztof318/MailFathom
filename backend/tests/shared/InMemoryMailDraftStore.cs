@@ -117,15 +117,15 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         Task.FromResult(this.Peek(draftId));
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
-        MailOwnerId owner,
+    public Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
+        MailUserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<MailDraftRecord>>(
         [
             .. this.drafts.Values
-                .Where(draft => draft.Account.Owner == owner)
+                .Where(draft => draft.Account.User == user)
                 .Where(draft => account is not { } narrowed || draft.AccountId == narrowed)
                 .Where(draft => !draft.IsDiscarded && draft.PromotedTo is null)
                 .OrderByDescending(draft => draft.RevisedAt)

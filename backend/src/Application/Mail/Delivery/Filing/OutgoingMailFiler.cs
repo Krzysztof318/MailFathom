@@ -146,10 +146,10 @@ public sealed class OutgoingMailFiler
     /// A copy the server never named cannot be reached, because nothing identifies it: the alternative would be
     /// searching the folder for something that looks like the message, which is a guess about identity rather than a
     /// fact. Such a row is marked withdrawn all the same, so nothing tries forever — what is left behind is one copy of
-    /// the owner's own message in a folder they mapped, which they delete with the gesture they would have used anyway.
+    /// the user's own message in a folder they mapped, which they delete with the gesture they would have used anyway.
     /// </para>
     /// <para>
-    /// A folder that no longer holds the copy is not a failure. The owner deleting it themselves is the ordinary case,
+    /// A folder that no longer holds the copy is not a failure. The user deleting it themselves is the ordinary case,
     /// and what the withdrawal asked for is already true.
     /// </para>
     /// <para>
@@ -336,7 +336,7 @@ public sealed class OutgoingMailFiler
     /// <summary>Writes the reason a copy is not where it should be onto the record, without touching its delivery.</summary>
     /// <remarks>
     /// The write runs outside the caller's cancellation on purpose, and joins no transaction of the caller's. What it
-    /// records is why the owner cannot see a message in their own mail client, and a host that stopped while recording
+    /// records is why the user cannot see a message in their own mail client, and a host that stopped while recording
     /// it would leave a send that says it was filed and was not.
     /// </remarks>
     private async Task<OutgoingMailFilingResult> RecordFailureAsync(

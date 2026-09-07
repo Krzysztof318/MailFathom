@@ -589,15 +589,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("PeriodStartsAt");
 
-                    b.Property<Guid>("OwnerId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("OwnerId");
+                        .HasColumnName("UserId");
 
                     b.Property<long>("ConsumedInputCharacterCount")
                         .HasColumnType("bigint")
                         .HasColumnName("ConsumedInputCharacterCount");
 
-                    b.HasKey("PeriodStartsAt", "OwnerId");
+                    b.HasKey("PeriodStartsAt", "UserId");
 
                     b.ToTable("embedding_spend_periods", (string)null);
                 });
@@ -1241,13 +1241,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<Guid>("OwnerId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id")
                         .HasName("PK_mailbox_accounts");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("UserId");
 
                     b.ToTable("mailbox_accounts", (string)null);
                 });
@@ -1731,7 +1731,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("outgoing_email_recipients", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -1755,19 +1755,19 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("settings_accounts", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserStoredContentEntity", b =>
                 {
-                    b.Property<Guid>("OwnerId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("OwnerId");
+                        .HasColumnName("UserId");
 
                     b.Property<long>("StoredContentByteCount")
                         .HasColumnType("bigint")
                         .HasColumnName("StoredContentByteCount");
 
-                    b.HasKey("OwnerId");
+                    b.HasKey("UserId");
 
-                    b.ToTable("owner_stored_content", (string)null);
+                    b.ToTable("user_stored_content", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
@@ -2510,9 +2510,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()
-                        .HasForeignKey("OwnerId")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -2572,11 +2572,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("OutgoingEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.UserStoredContentEntity", b =>
                 {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.UserAccountEntity", null)
                         .WithMany()
-                        .HasForeignKey("OwnerId")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

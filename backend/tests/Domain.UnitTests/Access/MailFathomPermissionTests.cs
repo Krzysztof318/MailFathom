@@ -56,7 +56,7 @@ public sealed class MailFathomPermissionTests
     /// permission when the tool that writes a mailbox did, the send permission when the outbox began requiring one, the
     /// drafting permission when the tools that write a draft arrived beside it, the configuration permission when
     /// the commands that change a persisted setting did, the mail-account permission when the client surface began
-    /// letting an owner declare which mailboxes this deployment reads for them, and the moving permission when that
+    /// letting a user declare which mailboxes this deployment reads for them, and the moving permission when that
     /// surface began serving folder moves.
     /// </remarks>
     [Fact]

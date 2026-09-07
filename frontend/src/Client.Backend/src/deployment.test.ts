@@ -45,9 +45,9 @@ describe('resolveDeploymentEntry', () => {
     it.each([
         ['a scheme this client does not speak', 'tauri://localhost'],
         ['a link to a screen rather than a deployment', 'mail.example.test/inbox'],
-        ['a query somebody carried over from a browser', 'mail.example.test?owner=me'],
+        ['a query somebody carried over from a browser', 'mail.example.test?user=me'],
         ['a fragment', 'mail.example.test#inbox'],
-        ['a password written into the address', 'https://owner:secret@mail.example.test'],
+        ['a password written into the address', 'https://user:secret@mail.example.test'],
         ['a host that is not one', 'https://'],
         ['a sentence', 'my mail server'],
     ])('refuses %s: %j', (_, entry) => {

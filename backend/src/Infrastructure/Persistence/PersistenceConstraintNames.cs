@@ -33,19 +33,19 @@ internal static class PersistenceConstraintNames
 
     internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
 
-    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_owner_account_alias_generation";
+    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_user_account_alias_generation";
 
     internal const string StoredEmailOccurrenceUniqueIndexName = "ix_stored_emails_folder_uidvalidity_uid";
 
-    /// <summary>The order every timeline is walked in, whether it names one of an owner's accounts or all of them.</summary>
+    /// <summary>The order every timeline is walked in, whether it names one of a user's accounts or all of them.</summary>
     /// <remarks>
-    /// ADR 0014 names an owner-led index beside this one as the candidate for <em>all of my mail</em>, on the reading
+    /// ADR 0014 names a user-led index beside this one as the candidate for <em>all of my mail</em>, on the reading
     /// that a request naming no account would otherwise be planned as a scan followed by a top-N sort. That read does
     /// not exist here: <c>StoredEmailTimelineReader</c> walks each account of the scope on its own and merges the
     /// walks, so every timeline query carries an equality on the account and this index is the plan for all of them.
-    /// An owner-led index would therefore be one nothing reads, paid for on every message stored.
+    /// A user-led index would therefore be one nothing reads, paid for on every message stored.
     /// </remarks>
-    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_owner_account_timeline";
+    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_user_account_timeline";
 
     internal const string StoredEmailFolderTimelineIndexName = "ix_stored_emails_folder_timeline";
 
@@ -54,7 +54,7 @@ internal static class PersistenceConstraintNames
     internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
 
     /// <summary>The order a requested whole-mailbox rule run walks an account's mail in.</summary>
-    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_owner_account_identity";
+    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_user_account_identity";
 
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
@@ -83,7 +83,7 @@ internal static class PersistenceConstraintNames
     /// <summary>The index covering every passage of one message, whichever text it was cut from.</summary>
     /// <remarks>
     /// Unfiltered, because the two indexes beside it are not: PostgreSQL uses a partial index only where the statement's
-    /// own predicate implies the index predicate, and the deletion that follows a message — an expunge, an owner
+    /// own predicate implies the index predicate, and the deletion that follows a message — an expunge, a user
     /// erasure, a junk verdict — asks for one message's chunks without saying anything about the attachment position.
     /// Before the attachment split the unique pair covered the foreign key and EF's convention created no index of its
     /// own; this restores the cover the split removed.
@@ -151,9 +151,9 @@ internal static class PersistenceConstraintNames
 
     internal const string StoredSecretMaterialLengthCheckConstraintName = "ck_stored_secrets_material_length";
 
-    internal const string StoredSecretOwnerForeignKeyName = "fk_stored_secrets_settings_accounts";
+    internal const string StoredSecretUserForeignKeyName = "fk_stored_secrets_settings_accounts";
 
-    internal const string StoredSecretOwnerNameUniqueIndexName = "ix_stored_secrets_owner_name";
+    internal const string StoredSecretUserNameUniqueIndexName = "ix_stored_secrets_user_name";
 
     internal const string StoredSecretKeyIndexName = "ix_stored_secrets_data_encryption_key";
 
@@ -252,39 +252,39 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The index the trail is both read and aged through.</summary>
     internal const string MailboxMutationAuditEntryTimelineIndexName =
-        "ix_mailbox_mutation_audit_entries_owner_account_completed";
+        "ix_mailbox_mutation_audit_entries_user_account_completed";
 
     /// <summary>The constraint that keeps one answering entry per run per account, whatever a repeated append attempts.</summary>
-    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_owner_account";
+    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_user_account";
 
     /// <summary>The index the answering record is both read and aged through.</summary>
     internal const string MailAnsweringAuditEntryTimelineIndexName =
-        "ix_mail_answering_audit_entries_owner_account_completed";
+        "ix_mail_answering_audit_entries_user_account_completed";
 
     /// <summary>The index the rule history is walked and aged through, which is its unfiltered page and its retention.</summary>
-    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_owner_account_evaluated";
+    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_user_account_evaluated";
 
     /// <summary>The index that answers what one rule has been doing, which is the history's second question.</summary>
-    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_owner_account_rule_evaluated";
+    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_user_account_rule_evaluated";
 
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
 
-    /// <summary>The order one owner's contact book is listed and paginated in.</summary>
+    /// <summary>The order one user's contact book is listed and paginated in.</summary>
     /// <remarks>
-    /// The owner leads it because a listing is always of one person's book: leading with the name would make a page of
+    /// The user leads it because a listing is always of one person's book: leading with the name would make a page of
     /// a small book a walk of every book on the deployment, filtered afterwards.
     /// </remarks>
-    internal const string ContactListingIndexName = "ix_contacts_owner_display_name_sort_key_id";
+    internal const string ContactListingIndexName = "ix_contacts_user_display_name_sort_key_id";
 
-    /// <summary>The constraint that keeps one address in one person's hands, within one owner's book.</summary>
+    /// <summary>The constraint that keeps one address in one person's hands, within one user's book.</summary>
     /// <remarks>
     /// Named because a losing writer is recognized by the constraint its insert violated: two callers claiming one
     /// address is a race to resolve into the answer that names its holder, not a failure to report. It is also what the
-    /// lookup from an address to a person is answered from. It leads with the owner, which is what lets two owners each
+    /// lookup from an address to a person is answered from. It leads with the user, which is what lets two users each
     /// hold their own contact for one address while neither book holds it twice.
     /// </remarks>
-    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_owner_normalized_address";
+    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_user_normalized_address";
 
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
@@ -358,14 +358,14 @@ internal static class PersistenceConstraintNames
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string RecurringSendDraftForeignKeyName = "fk_recurring_send_drafts_sends";
 
-    /// <summary>The order an account's drafts are read in, which is the order their owner last touched them.</summary>
+    /// <summary>The order an account's drafts are read in, which is the order their user last touched them.</summary>
     /// <remarks>
     /// Unfiltered, unlike the outbox's, because what a pass over drafts looks for cannot be written as a predicate on
     /// this table: whether a draft owes the mail server anything is decided by the copy rows beside it. The structure
     /// is proportional to the drafts a mailbox holds, which is what a person keeps rather than what a deployment has
     /// ever done.
     /// </remarks>
-    internal const string MailDraftAccountIndexName = "ix_mail_drafts_owner_account_revised";
+    internal const string MailDraftAccountIndexName = "ix_mail_drafts_user_account_revised";
 
     /// <summary>The index a delivered send is turned back into the draft it came from through.</summary>
     /// <remarks>
@@ -421,28 +421,28 @@ internal static class PersistenceConstraintNames
     internal const string JobClaimIndexName = "ix_jobs_claimable";
 
     /// <summary>The index an account's jobs are erased and aged through.</summary>
-    internal const string JobAccountIndexName = "ix_jobs_owner_account";
+    internal const string JobAccountIndexName = "ix_jobs_user_account";
 
-    /// <summary>The index an enqueue reads one owner's latest turn from, filtered to the work that still holds one.</summary>
+    /// <summary>The index an enqueue reads one user's latest turn from, filtered to the work that still holds one.</summary>
     /// <remarks>
     /// Beside the account index rather than folded into it, because the two are read for opposite reasons and are
     /// proportional to different things. That one answers what belongs to an account across everything the queue has
-    /// ever done; this one answers where an owner's waiting work has reached, which is a backlog rather than a history,
-    /// and it is read on every enqueue. It carries no account column at all: the owner is on the row now, so the latest
-    /// turn is one descending step into this index rather than a maximum over the owner's accounts joined together.
+    /// ever done; this one answers where a user's waiting work has reached, which is a backlog rather than a history,
+    /// and it is read on every enqueue. It carries no account column at all: the user is on the row now, so the latest
+    /// turn is one descending step into this index rather than a maximum over the user's accounts joined together.
     /// </remarks>
-    internal const string JobOwnerTurnIndexName = "ix_jobs_owner_turn";
+    internal const string JobUserTurnIndexName = "ix_jobs_user_turn";
 
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
 
-    /// <summary>The rule that a queue row names an account and its owner together, or names neither.</summary>
+    /// <summary>The rule that a queue row names an account and its user together, or names neither.</summary>
     /// <remarks>
     /// Stated as a constraint because the foreign key onto the account cannot state it. An account is referenced by
     /// the pair, both columns are optional on this table, and PostgreSQL leaves a row supplying only one of them
     /// unchecked — so this is what keeps the reference enforced rather than merely declared.
     /// </remarks>
-    internal const string JobAccountOwnerCheckConstraintName = "ck_jobs_account_owner";
+    internal const string JobAccountUserCheckConstraintName = "ck_jobs_account_user";
 
     /// <summary>The key that binds one message identifier of one account to exactly one thread.</summary>
     /// <remarks>
@@ -517,25 +517,25 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string RootSettingsSingletonCheckConstraintName = "ck_settings_root_singleton";
 
-    /// <summary>The index that keeps one label to one owner across the deployment.</summary>
+    /// <summary>The index that keeps one label to one user across the deployment.</summary>
     /// <remarks>
-    /// Stated rather than left to convention because the label is what an administrator reads a list of owners by, and
+    /// Stated rather than left to convention because the label is what an administrator reads a list of users by, and
     /// the refusal an insert of a second row under one label produces is worth naming the index it came from.
     /// </remarks>
-    internal const string OwnerAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
+    internal const string UserAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
 
-    /// <summary>The index that keeps one credential lookup to one owner across the deployment, within its own method.</summary>
+    /// <summary>The index that keeps one credential lookup to one user across the deployment, within its own method.</summary>
     /// <remarks>
     /// Stated rather than left to convention because the store reads it: an insert that violates it is a lookup another
     /// credential already holds, which is an answer an operator acts on rather than a provider failure. It is
-    /// deployment-wide rather than per owner, because a request presents a lookup and nothing else, and it is scoped to
+    /// deployment-wide rather than per user, because a request presents a lookup and nothing else, and it is scoped to
     /// the method because the four vocabularies are unrelated.
     /// </remarks>
-    internal const string OwnerCredentialLookupUniqueIndexName = "ix_owner_credentials_method_lookup";
+    internal const string UserCredentialLookupUniqueIndexName = "ix_user_credentials_method_lookup";
 
-    /// <summary>The index every administrative listing of one owner's credentials is answered from.</summary>
-    /// <remarks>Stated because it covers the owner and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
-    internal const string OwnerCredentialOwnerIndexName = "ix_owner_credentials_owner_created_at";
+    /// <summary>The index every administrative listing of one user's credentials is answered from.</summary>
+    /// <remarks>Stated because it covers the user and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
+    internal const string UserCredentialUserIndexName = "ix_user_credentials_user_created_at";
 
     /// <summary>The constraint that keeps one unread notification per condition, whatever a repeated raise attempts.</summary>
     /// <remarks>
@@ -543,12 +543,12 @@ internal static class PersistenceConstraintNames
     /// not said again, and one the person has read is free to be said again when it recurs. The store reads it, because
     /// a raise that loses the race to another writer is a condition already stated rather than a provider failure.
     /// </remarks>
-    internal const string NotificationUnreadConditionUniqueIndexName = "ix_notifications_owner_unread_condition";
+    internal const string NotificationUnreadConditionUniqueIndexName = "ix_notifications_user_unread_condition";
 
     /// <summary>The index a person's notification centre is both read and aged through.</summary>
     /// <remarks>
-    /// It covers the owner and the instant together because both readers walk exactly that: the centre lists one
+    /// It covers the user and the instant together because both readers walk exactly that: the centre lists one
     /// person's notifications newest first, and retention erases the same person's oldest.
     /// </remarks>
-    internal const string NotificationTimelineIndexName = "ix_notifications_owner_occurred";
+    internal const string NotificationTimelineIndexName = "ix_notifications_user_occurred";
 }

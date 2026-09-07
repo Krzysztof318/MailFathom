@@ -114,7 +114,7 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
 
         entity.HasIndex(mutation => new
         {
-            mutation.OwnerId,
+            mutation.UserId,
             mutation.MailboxAccountId,
             mutation.RecordedAt,
         })
@@ -123,7 +123,7 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
 
         entity.HasIndex(mutation => new
         {
-            mutation.OwnerId,
+            mutation.UserId,
             mutation.MailboxAccountId,
             mutation.DestinationFolderPath,
             mutation.PlacementUidValidity,

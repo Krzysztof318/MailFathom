@@ -20,7 +20,7 @@ public sealed class NCalcMailRuleConditionTests
 
     private readonly NCalcMailRuleConditionCompiler compiler = new();
 
-    /// <summary>One email, every declared metadata fact, and the conditions an owner would write about it.</summary>
+    /// <summary>One email, every declared metadata fact, and the conditions a user would write about it.</summary>
     [Theory]
     [InlineData("account == 'work'", true)]
     [InlineData("account == 'personal'", false)]
@@ -30,7 +30,7 @@ public sealed class NCalcMailRuleConditionTests
     [InlineData("senderAddress == 'billing@supplier.test'", true)]
     [InlineData("contains(recipientDomains, 'example.test')", true)]
     [InlineData("contains(recipientDomains, 'nobody.test')", false)]
-    [InlineData("contains(recipientAddresses, 'owner@example.test')", true)]
+    [InlineData("contains(recipientAddresses, 'user@example.test')", true)]
     [InlineData("contains(subject, 'invoice')", true)]
     [InlineData("startsWith(subject, 'March')", true)]
     [InlineData("endsWith(subject, '2026')", true)]
@@ -73,7 +73,7 @@ public sealed class NCalcMailRuleConditionTests
         Assert.Equal(expectedMatch, matched);
     }
 
-    /// <summary>Text comparison ignores case throughout, so an owner never has to guess how a subject was capitalized.</summary>
+    /// <summary>Text comparison ignores case throughout, so a user never has to guess how a subject was capitalized.</summary>
     [Theory]
     [InlineData("senderDomain == 'SUPPLIER.TEST'")]
     [InlineData("contains(subject, 'INVOICE')")]
@@ -210,7 +210,7 @@ public sealed class NCalcMailRuleConditionTests
                 Folder = "inbox",
                 Subject = "March invoice 2026",
                 SenderAddress = "billing@supplier.test",
-                RecipientAddresses = ["owner@example.test", "accounts@example.test"],
+                RecipientAddresses = ["user@example.test", "accounts@example.test"],
                 ReceivedAt = ReceivedAt,
                 SentAt = ReceivedAt.AddMinutes(-5),
                 SizeInBytes = 250_000,

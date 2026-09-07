@@ -95,7 +95,7 @@ public sealed class McpTransportSecurityExtensionsTests
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
         endpointSettings.Authentication.Add(
-            new OwnerFacingAuthenticationOptions { Method = OwnerCredentialMethod.PublicKey.Name });
+            new UserFacingAuthenticationOptions { Method = UserCredentialMethod.PublicKey.Name });
 
         // Act
         services.AddMcpTransportSecurity(endpointSettings);
@@ -201,7 +201,7 @@ public sealed class McpTransportSecurityExtensionsTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
-        endpointSettings.Authentication.Add(OwnerFacingOAuth(oauthSettings));
+        endpointSettings.Authentication.Add(UserFacingOAuth(oauthSettings));
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -220,8 +220,8 @@ public sealed class McpTransportSecurityExtensionsTests
         Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
         Assert.Equal(
             ProtectedResourceMetadataDocument.For(
-                PublishedOAuthMetadata.ForOwnerFacing(
-                    [OwnerFacingOAuth(oauthSettings)],
+                PublishedOAuthMetadata.ForUserFacing(
+                    [UserFacingOAuth(oauthSettings)],
                     McpEndpointOptions.GrantedSurface)).ScopesSupported,
             published.ScopesSupported);
     }
@@ -234,15 +234,15 @@ public sealed class McpTransportSecurityExtensionsTests
         var endpointSettings = new McpEndpointOptions { Enabled = true };
 
         endpointSettings.Authentication.Add(
-            OwnerFacingOAuth(OAuthEntryFor("workforce", "https://sso.example.test")));
+            UserFacingOAuth(OAuthEntryFor("workforce", "https://sso.example.test")));
 
         services.AddMcpTransportSecurity(endpointSettings);
 
         return services.BuildServiceProvider();
     }
 
-    private static OwnerFacingAuthenticationOptions OwnerFacingOAuth(OAuthValidationOptions oauthSettings) =>
-        new() { Method = OwnerCredentialMethod.OAuthSubject.Name, OAuth = oauthSettings };
+    private static UserFacingAuthenticationOptions UserFacingOAuth(OAuthValidationOptions oauthSettings) =>
+        new() { Method = UserCredentialMethod.OAuthSubject.Name, OAuth = oauthSettings };
 
     private static OAuthValidationOptions OAuthEntryFor(string name, string issuer)
     {

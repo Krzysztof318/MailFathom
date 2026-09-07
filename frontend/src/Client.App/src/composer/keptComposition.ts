@@ -7,7 +7,7 @@ import { mostRecipientsInOneHeader, type Composition } from './composition';
 
 // Where what somebody is typing survives a reload, which a single-page application makes a cold start rather than a
 // way out. It is the local draft the composer keeps continuously, and it is a different thing from the draft in the
-// owner's own drafts folder: saving to the deployment is an act somebody asks for, because every revision of that one
+// user's own drafts folder: saving to the deployment is an act somebody asks for, because every revision of that one
 // reaches their mail server.
 //
 // **The session's store rather than the machine's, and this is the reason it is not the device store beside it.** What

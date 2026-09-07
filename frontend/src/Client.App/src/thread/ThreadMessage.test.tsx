@@ -49,7 +49,7 @@ function message(overrides: Partial<MailThreadMessage['email']> = {}): MailThrea
             sentAt: '2026-08-31T09:40:00+00:00',
             senderAddress: 'auditor@example.invalid',
             senderDisplayName: 'The auditor',
-            toAddresses: ['owner@example.invalid'],
+            toAddresses: ['user@example.invalid'],
             unread: false,
             flagged: false,
             answered: false,

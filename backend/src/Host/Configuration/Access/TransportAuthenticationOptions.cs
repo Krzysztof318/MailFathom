@@ -45,14 +45,14 @@ internal sealed class TransportAuthenticationOptions
     /// <remarks><see langword="null" /> when this entry states no API key, because the block's presence is what selects the method.</remarks>
     public ConfiguredSecret? ApiKey { get; set; }
 
-    /// <summary>Gets or sets that this endpoint accepts an owner's own username and password, and how often one may be tried.</summary>
+    /// <summary>Gets or sets that this endpoint accepts a user's own username and password, and how often one may be tried.</summary>
     /// <remarks>
     /// <see langword="null" /> when this entry states no Basic, because the block's presence is what selects the method.
     /// It is the one method whose credentials the deployment does not configure: what a caller presents is a record the
-    /// administrative surface provisioned for one owner, so this block carries a bound and nothing to steal.
+    /// administrative surface provisioned for one user, so this block carries a bound and nothing to steal.
     /// <para>
     /// It is refused on the administrative endpoint. That surface answers for the deployment rather than for a person,
-    /// and this method authenticates a person — a credential admitted here carries the owner it belongs to, which the
+    /// and this method authenticates a person — a credential admitted here carries the user it belongs to, which the
     /// administrative surface has nowhere to put and no use for.
     /// </para>
     /// </remarks>
@@ -105,7 +105,7 @@ internal sealed class TransportAuthenticationOptions
     /// With it, a token holds the published names its scopes carry <em>and</em> this entry lists, so the authorization
     /// server decides per subject within a bound the deployment fixed. Available only to an entry whose sole block is
     /// <see cref="OAuth" />, because none of the other three credentials can carry a claim about what it may do — a key,
-    /// a public key, and an owner's password are each judged against something this deployment holds — so startup
+    /// a public key, and a user's password are each judged against something this deployment holds — so startup
     /// refuses it beside any of them rather than asking a credential a question it cannot answer.
     /// </remarks>
     public bool PermissionsFromTokenScopes { get; set; }
@@ -209,7 +209,7 @@ internal sealed class TransportAuthenticationOptions
         {
             var password = surface == ProtectedSurface.Administration
                 ? "."
-                : $", or a '{nameof(this.Basic)}' block accepting an owner's own username and password.";
+                : $", or a '{nameof(this.Basic)}' block accepting a user's own username and password.";
 
             return
             [
@@ -236,8 +236,8 @@ internal sealed class TransportAuthenticationOptions
     /// <summary>Reports the one surface this method may not guard.</summary>
     /// <remarks>
     /// The administrative surface answers for the deployment rather than for a person, so every principal admitted there
-    /// acts for no owner and every owner-scoped use case refuses it. A username and password authenticate exactly one
-    /// owner, so admitting one here would either produce a principal carrying an owner the surface has no use for or
+    /// acts for no user and every user-scoped use case refuses it. A username and password authenticate exactly one
+    /// user, so admitting one here would either produce a principal carrying a user the surface has no use for or
     /// one silently stripped of it — and the second is a credential that reads like a sign-in and grants the
     /// deployment's own authority. Refusing it at startup is what makes that unreachable rather than merely unintended.
     /// </remarks>
@@ -248,14 +248,14 @@ internal sealed class TransportAuthenticationOptions
             yield break;
         }
 
-        yield return $"{settingPath}:{nameof(this.Basic)} — the administrative endpoint does not accept an owner's username and password. It answers for the deployment rather than for one person, so a credential naming an owner has nothing to act for here; provision an '{nameof(this.ApiKey)}', a '{nameof(this.PublicKey)}', or an '{nameof(this.OAuth)}' block instead, and write the '{nameof(this.Basic)}' block on the client or MCP endpoint the owner actually signs in to.";
+        yield return $"{settingPath}:{nameof(this.Basic)} — the administrative endpoint does not accept a user's username and password. It answers for the deployment rather than for one person, so a credential naming a user has nothing to act for here; provision an '{nameof(this.ApiKey)}', a '{nameof(this.PublicKey)}', or an '{nameof(this.OAuth)}' block instead, and write the '{nameof(this.Basic)}' block on the client or MCP endpoint the user actually signs in to.";
     }
 
     private IEnumerable<string> FindGrantErrors(string settingPath, ProtectedSurface surface)
     {
         if (this.PermissionsFromTokenScopes && this.StatesAConfiguredCredential)
         {
-            yield return $"{settingPath}:{nameof(this.PermissionsFromTokenScopes)} — a token's scopes can narrow a grant and a key, a public key, or an owner's password carries none, so this entry cannot be read both ways. Move the '{nameof(this.OAuth)}' block to an entry of its own, or remove this setting and write the grant in '{nameof(this.Permissions)}'.";
+            yield return $"{settingPath}:{nameof(this.PermissionsFromTokenScopes)} — a token's scopes can narrow a grant and a key, a public key, or a user's password carries none, so this entry cannot be read both ways. Move the '{nameof(this.OAuth)}' block to an entry of its own, or remove this setting and write the grant in '{nameof(this.Permissions)}'.";
         }
 
         var claimedPermissions = new HashSet<MailFathomPermission>();

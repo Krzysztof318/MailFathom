@@ -6,13 +6,13 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Domain.Contacts;
 
-/// <summary>Holds one person the book knows: their name, every address they use, and what the owner recorded about them.</summary>
+/// <summary>Holds one person the book knows: their name, every address they use, and what the user recorded about them.</summary>
 /// <remarks>
 /// <para>
 /// A contact is a person rather than an address, which is the whole reason the book exists rather than a list. One
 /// person uses a work address, a personal one, and an old one they still receive on; a record keyed on the address could
 /// not say those were the same person, so the record is the person and the addresses hang off them. Which address to use
-/// by default is the owner's choice, kept as <see cref="PreferredAddress" />, never an ordering accident.
+/// by default is the user's choice, kept as <see cref="PreferredAddress" />, never an ordering accident.
 /// </para>
 /// <para>
 /// <b>Matching is decided here and nowhere else.</b> Two addresses name the same mailbox when
@@ -26,7 +26,7 @@ namespace MailFathom.Domain.Contacts;
 /// <para>
 /// It is an entity rather than a value: <see cref="Id" /> is what makes two records the same person, and every method
 /// here answers with a new instance carrying that same identity. Value equality would be the wrong question to be able
-/// to ask of it — two people with one name and one address are still two contacts if the owner recorded them as such.
+/// to ask of it — two people with one name and one address are still two contacts if the user recorded them as such.
 /// </para>
 /// <para>
 /// Everything on this record but <see cref="Id" /> and <see cref="Origin" /> is personal data about a third party. It is
@@ -48,7 +48,7 @@ public sealed class Contact
     /// <remarks>
     /// The longest path SMTP admits: a local part of 64 octets, the at-sign, and a domain of 255. An address beyond it
     /// is refused rather than dropped, which is the opposite of what extraction does with one it met in a header —
-    /// nobody chose that address, while this one an owner typed and is entitled to be told about.
+    /// nobody chose that address, while this one a user typed and is entitled to be told about.
     /// </remarks>
     public const int MaximumAddressLength = 320;
 
@@ -75,7 +75,7 @@ public sealed class Contact
     /// <summary>Gets what addresses this person, which no amendment and no promotion ever changes.</summary>
     public ContactId Id { get; }
 
-    /// <summary>Gets the name the owner recorded for this person.</summary>
+    /// <summary>Gets the name the user recorded for this person.</summary>
     public ContactDisplayName DisplayName { get; }
 
     /// <summary>Gets every address this person uses, the preferred one first and the rest in comparison order.</summary>
@@ -89,7 +89,7 @@ public sealed class Contact
     /// <summary>Gets the address to use when something addresses this person without naming which of theirs to use.</summary>
     public EmailAddress PreferredAddress { get; }
 
-    /// <summary>Gets what the owner wrote about this person, or <see langword="null" /> when they wrote nothing.</summary>
+    /// <summary>Gets what the user wrote about this person, or <see langword="null" /> when they wrote nothing.</summary>
     public ContactNote? Note { get; }
 
     /// <summary>Gets how this contact came to be in the book, which decides who may amend it.</summary>
@@ -101,12 +101,12 @@ public sealed class Contact
     /// <summary>Gets when this contact was last amended, which equals <see cref="RecordedAt" /> until one happens.</summary>
     public DateTimeOffset AmendedAt { get; }
 
-    /// <summary>Builds a contact from what an owner or collection supplied, enforcing every invariant the book rests on.</summary>
+    /// <summary>Builds a contact from what a user or collection supplied, enforcing every invariant the book rests on.</summary>
     /// <param name="id">The identity this contact keeps for as long as it is held.</param>
     /// <param name="displayName">The name to record.</param>
     /// <param name="addresses">Every address this person uses; two spellings of one address count once.</param>
     /// <param name="preferredAddress">The address to use by default, which must be one of <paramref name="addresses" />.</param>
-    /// <param name="note">What the owner wrote about this person, or <see langword="null" />.</param>
+    /// <param name="note">What the user wrote about this person, or <see langword="null" />.</param>
     /// <param name="origin">How this contact came to be in the book.</param>
     /// <param name="recordedAt">When this contact entered the book.</param>
     /// <param name="amendedAt">When it was last amended, which is <paramref name="recordedAt" /> for a new contact.</param>
@@ -116,7 +116,7 @@ public sealed class Contact
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> names no declared value.</exception>
     /// <remarks>
     /// Two spellings of one address inside one record are one address, so they are merged rather than refused: they name
-    /// the same mailbox of the same person, and refusing would ask an owner to resolve a difference their mail server
+    /// the same mailbox of the same person, and refusing would ask a user to resolve a difference their mail server
     /// does not make. Two spellings across two contacts are a different question, which the store answers by refusing
     /// the second holder.
     /// </remarks>
@@ -178,18 +178,18 @@ public sealed class Contact
     /// <param name="writer">The origin the writer acts under.</param>
     /// <returns><see langword="true" /> when the writer's origin is this contact's own.</returns>
     /// <remarks>
-    /// The rule is symmetric and deliberately so. Collection may not touch what an owner wrote down, and an owner does
+    /// The rule is symmetric and deliberately so. Collection may not touch what a user wrote down, and a user does
     /// not amend a collected contact either — they promote it first, which is the act that makes the record theirs.
     /// </remarks>
     public bool IsAmendableBy(ContactOrigin writer) => this.Origin == writer;
 
     /// <summary>Answers whether a writer of the given origin may promote this contact.</summary>
     /// <param name="writer">The origin the writer acts under.</param>
-    /// <returns><see langword="true" /> when the writer is one acting for the owner.</returns>
+    /// <returns><see langword="true" /> when the writer is one acting for the user.</returns>
     /// <remarks>
     /// Promotion is the act of taking a record on, so only a writer acting under <see cref="ContactOrigin.Asserted" />
     /// performs it. Collection reads its own mail and would otherwise be able to declare the person it just inferred one
-    /// the owner had written down, which is the whole distinction the origin exists to keep.
+    /// the user had written down, which is the whole distinction the origin exists to keep.
     /// </remarks>
     public bool IsPromotableBy(ContactOrigin writer) => writer == ContactOrigin.Asserted;
 
@@ -197,13 +197,13 @@ public sealed class Contact
     /// <param name="displayName">The name to record instead.</param>
     /// <param name="addresses">Every address this person uses after the amendment.</param>
     /// <param name="preferredAddress">The address to use by default after the amendment.</param>
-    /// <param name="note">What the owner wrote about this person, or <see langword="null" /> to hold none.</param>
+    /// <param name="note">What the user wrote about this person, or <see langword="null" /> to hold none.</param>
     /// <param name="amendedAt">When the amendment happened.</param>
     /// <returns>The amended contact.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="addresses" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when no address is supplied or when <paramref name="preferredAddress" /> is not among them.</exception>
     /// <remarks>
-    /// An amendment states the record the owner wants rather than the difference from the one held, which is what keeps
+    /// An amendment states the record the user wants rather than the difference from the one held, which is what keeps
     /// removing an address, adding one, and choosing a different preferred address one operation instead of three that
     /// could each leave the record in a shape the invariants above refuse.
     /// </remarks>
@@ -223,7 +223,7 @@ public sealed class Contact
             this.RecordedAt,
             amendedAt);
 
-    /// <summary>Produces this contact as one the owner has taken responsibility for.</summary>
+    /// <summary>Produces this contact as one the user has taken responsibility for.</summary>
     /// <param name="promotedAt">When the promotion happened.</param>
     /// <returns>The same contact, asserted.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the contact is already asserted.</exception>

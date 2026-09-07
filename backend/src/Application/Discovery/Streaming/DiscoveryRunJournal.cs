@@ -26,7 +26,7 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// has been appended, and two clients reading at different speeds see the same events in the same order.
 /// </para>
 /// <para>
-/// The owner is carried because what a run holds is that person's mail. Whoever looks a run up is checked against it,
+/// The user is carried because what a run holds is that person's mail. Whoever looks a run up is checked against it,
 /// which is what makes a guessed identifier useless rather than merely unlikely.
 /// </para>
 /// <para>
@@ -46,12 +46,12 @@ public sealed class DiscoveryRunJournal
 
     /// <summary>Initializes the stream of one run.</summary>
     /// <param name="id">The identifier the run is addressed by.</param>
-    /// <param name="owner">Whose mail the run reads, which is who may read what it publishes.</param>
+    /// <param name="user">Whose mail the run reads, which is who may read what it publishes.</param>
     /// <param name="stopping">Cancelled when the run is stopped, which is what the execution links its own cancellation to.</param>
-    public DiscoveryRunJournal(DiscoveryRunId id, MailOwnerId owner, CancellationToken stopping = default)
+    public DiscoveryRunJournal(DiscoveryRunId id, MailUserId user, CancellationToken stopping = default)
     {
         this.Id = id;
-        this.Owner = owner;
+        this.User = user;
         this.Stopping = stopping;
     }
 
@@ -59,7 +59,7 @@ public sealed class DiscoveryRunJournal
     public DiscoveryRunId Id { get; }
 
     /// <summary>Gets whose mail the run reads.</summary>
-    public MailOwnerId Owner { get; }
+    public MailUserId User { get; }
 
     /// <summary>Gets whether the run has published its ending, after which nothing further is appended.</summary>
     public bool HasEnded

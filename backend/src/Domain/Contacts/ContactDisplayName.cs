@@ -4,10 +4,10 @@
 
 namespace MailFathom.Domain.Contacts;
 
-/// <summary>Names the person a contact is about, the way the owner who wrote them down recognizes them.</summary>
+/// <summary>Names the person a contact is about, the way the user who wrote them down recognizes them.</summary>
 /// <remarks>
 /// <para>
-/// The owner's casing is kept, because the value exists to be read and <c>Anna Kowalska</c> is not
+/// The user's casing is kept, because the value exists to be read and <c>Anna Kowalska</c> is not
 /// <c>ANNA KOWALSKA</c> to the person who wrote it. What a listing is ordered by is <see cref="SortKey" /> instead, a
 /// comparison form derived here so the order a page is walked in is decided by one rule rather than by the collation of
 /// a database MailFathom does not control.
@@ -33,7 +33,7 @@ public readonly record struct ContactDisplayName
         this.SortKey = sortKey;
     }
 
-    /// <summary>Gets the name as the owner wrote it, trimmed.</summary>
+    /// <summary>Gets the name as the user wrote it, trimmed.</summary>
     public string Value { get; }
 
     /// <summary>Gets the comparison form a listing is ordered and paginated by.</summary>
@@ -44,7 +44,7 @@ public readonly record struct ContactDisplayName
     /// </remarks>
     public string SortKey { get; }
 
-    /// <summary>Creates a contact name from text an owner supplied.</summary>
+    /// <summary>Creates a contact name from text a user supplied.</summary>
     /// <param name="value">The name to record.</param>
     /// <returns>A validated name, trimmed and otherwise as written.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or carries a character that does not render as part of the name.</exception>

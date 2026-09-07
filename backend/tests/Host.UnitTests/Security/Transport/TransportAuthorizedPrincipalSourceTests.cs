@@ -140,7 +140,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>
-    /// A surface that serves one owner's mail admits its caller for that owner, and the administrative surface does
+    /// A surface that serves one user's mail admits its caller for that user, and the administrative surface does
     /// not. That is the whole of the second axis at the transport boundary: the deployment administrator is admitted
     /// to a deployment rather than to somebody's mailbox, so a caller-scoped read refuses them instead of answering.
     /// </summary>
@@ -148,9 +148,9 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     [InlineData(McpEndpointRoute.Path, true)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_AnAuthenticatedRequest_CarriesAnOwnerOnlyOnASurfaceServingOneOwnersMail(
+    public void Current_AnAuthenticatedRequest_CarriesAnUserOnlyOnASurfaceServingOneUsersMail(
         string path,
-        bool servesOneOwnersMail)
+        bool servesOneUsersMail)
     {
         // Arrange
         var source = SourceOver(
@@ -165,20 +165,20 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
+        Assert.Equal(servesOneUsersMail ? SyntheticMailUser.Deployment : null, principal.User);
     }
 
     /// <summary>
     /// The same split holds for the surface an operator left open, which is the posture a first run is served under.
-    /// A caller admitted by the absence of a credential is still admitted to one owner's mail and to no other's.
+    /// A caller admitted by the absence of a credential is still admitted to one user's mail and to no other's.
     /// </summary>
     [Theory]
     [InlineData(McpEndpointRoute.Path, true)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
-    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAnOwnerOnlyOnASurfaceServingOneOwnersMail(
+    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAnUserOnlyOnASurfaceServingOneUsersMail(
         string path,
-        bool servesOneOwnersMail)
+        bool servesOneUsersMail)
     {
         // Arrange
         var source = SourceOver(RequestTo(path));
@@ -189,7 +189,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
+        Assert.Equal(servesOneUsersMail ? SyntheticMailUser.Deployment : null, principal.User);
     }
 
     /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>
@@ -223,7 +223,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead)));
-        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0");
 
         // Act
         source.Assume(capability);
@@ -248,7 +248,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var clientEndpoint = new ClientEndpointOptions();
         if (mcpConfiguresACredential)
         {
-            mcpEndpoint.Authentication.Add(new OwnerFacingAuthenticationOptions());
+            mcpEndpoint.Authentication.Add(new UserFacingAuthenticationOptions());
         }
 
         if (adminConfiguresACredential)
@@ -258,29 +258,29 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         if (clientConfiguresACredential)
         {
-            clientEndpoint.Authentication.Add(new OwnerFacingAuthenticationOptions());
+            clientEndpoint.Authentication.Add(new UserFacingAuthenticationOptions());
         }
 
-        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
-        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
+        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
+        deploymentUser.User.Returns(SyntheticMailUser.Deployment);
 
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
-            deploymentOwner,
+            deploymentUser,
             Options.Create(mcpEndpoint),
             Options.Create(adminEndpoint),
             Options.Create(clientEndpoint));
     }
 
-    /// <summary>A password authenticates one owner, so the credential's own owner is what the caller acts for rather than the one the deployment was configured with.</summary>
+    /// <summary>A password authenticates one user, so the credential's own user is what the caller acts for rather than the one the deployment was configured with.</summary>
     [Theory]
     [InlineData(McpEndpointRoute.Path)]
     [InlineData(ClientEndpointOptions.RoutePrefix + "/session")]
-    public void Current_ARequestAuthenticatedByAnOwnersCredential_ActsForThatOwnerRatherThanTheDeploymentsOwner(string path)
+    public void Current_ARequestAuthenticatedByAnUsersCredential_ActsForThatUserRatherThanTheDeploymentsUser(string path)
     {
         // Arrange
         var source = SourceOver(
-            RequestBy(AuthenticatedOwnerHolding(SyntheticMailOwner.Another, MailFathomPermission.MailRead), path),
+            RequestBy(AuthenticatedUserHolding(SyntheticMailUser.Another, MailFathomPermission.MailRead), path),
             mcpConfiguresACredential: true,
             adminConfiguresACredential: true,
             clientConfiguresACredential: true);
@@ -291,17 +291,17 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         // Assert
         Assert.NotNull(principal);
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
-        Assert.Equal(SyntheticMailOwner.Another, principal.Owner);
+        Assert.Equal(SyntheticMailUser.Another, principal.User);
     }
 
-    /// <summary>The administrative surface has nowhere to put an owner, so a claim carrying one is dropped rather than admitted with it.</summary>
+    /// <summary>The administrative surface has nowhere to put a user, so a claim carrying one is dropped rather than admitted with it.</summary>
     [Fact]
-    public void Current_AnOwnersCredentialOnASurfaceServingNoOnesMail_ActsForNoOwner()
+    public void Current_AnUsersCredentialOnASurfaceServingNoOnesMail_ActsForNoUser()
     {
         // Arrange
         var source = SourceOver(
             RequestBy(
-                AuthenticatedOwnerHolding(SyntheticMailOwner.Another, MailFathomPermission.AdminRead),
+                AuthenticatedUserHolding(SyntheticMailUser.Another, MailFathomPermission.AdminRead),
                 AdminEndpointOptions.RoutePrefix + "/session"),
             mcpConfiguresACredential: true,
             adminConfiguresACredential: true,
@@ -312,7 +312,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         // Assert
         Assert.NotNull(principal);
-        Assert.Null(principal.Owner);
+        Assert.Null(principal.User);
     }
 
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller) => new() { User = caller };
@@ -333,12 +333,12 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             ApiKeyAuthentication.ApiKeyNameClaimType,
             ApiKeyAuthentication.RoleClaimType));
 
-    /// <summary>Composes the principal the password scheme produces, which names the owner the credential belongs to beside its grant.</summary>
-    private static ClaimsPrincipal AuthenticatedOwnerHolding(MailOwnerId owner, params MailFathomPermission[] granted) =>
+    /// <summary>Composes the principal the password scheme produces, which names the user the credential belongs to beside its grant.</summary>
+    private static ClaimsPrincipal AuthenticatedUserHolding(MailUserId user, params MailFathomPermission[] granted) =>
         new(new ClaimsIdentity(
             [
                 new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, ConfiguredKeyName),
-                TransportCallerOwner.ClaimFor(owner),
+                TransportCallerUser.ClaimFor(user),
                 .. TransportGrant.ClaimsFor(granted),
             ],
             "test",

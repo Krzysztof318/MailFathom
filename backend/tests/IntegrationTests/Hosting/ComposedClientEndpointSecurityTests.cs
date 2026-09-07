@@ -252,7 +252,7 @@ public sealed class ComposedClientEndpointSecurityTests
     /// The route is served on its own listener and is gated there, which the pair above reads as a refusal rather than
     /// as an absence. The credential is one an operator narrowed to the answering grant alone: it authenticates, it
     /// reaches the session route, and it is refused this one — which is a different answer from the empty collection an
-    /// owner with no account receives.
+    /// user with no account receives.
     /// </summary>
     [Fact]
     public async Task ClientAccountsRoute_ACredentialWithoutTheMailboxGrant_IsRefusedRatherThanServedAnEmptyAnswer()
@@ -313,7 +313,7 @@ public sealed class ComposedClientEndpointSecurityTests
     }
 
     /// <summary>
-    /// Naming an owner's folders is the same disclosure as naming their mailboxes, so the credential narrowed to the
+    /// Naming a user's folders is the same disclosure as naming their mailboxes, so the credential narrowed to the
     /// answering grant alone is refused the tree exactly as it is refused the mailbox list.
     /// </summary>
     [Fact]

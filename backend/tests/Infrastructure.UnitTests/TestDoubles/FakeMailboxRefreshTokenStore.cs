@@ -40,9 +40,9 @@ internal sealed class FakeMailboxRefreshTokenStore : IMailboxRefreshTokenStore
 
     /// <summary>Gets the accounts a token was stored for, in the order the stores happened.</summary>
     /// <remarks>
-    /// The whole identity rather than the identifier alone, because the owner half is what decides whose row a
-    /// credential lands on: a store that recorded the identifier would let one owner's refresh token be written onto
-    /// another owner's account with nothing to assert against.
+    /// The whole identity rather than the identifier alone, because the user half is what decides whose row a
+    /// credential lands on: a store that recorded the identifier would let one user's refresh token be written onto
+    /// another user's account with nothing to assert against.
     /// </remarks>
     public List<MailAccountIdentity> StoredAccounts { get; } = [];
 

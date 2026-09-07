@@ -12,7 +12,7 @@ namespace MailFathom.Application.Mail.Delivery.Operations;
 /// <remarks>
 /// <para>
 /// It is deliberately not <see cref="OutgoingEmailRecord" />. That record carries the addresses the message is offered
-/// to, and a listing is exactly the place those must not appear: a page of an outbox is a page of who this owner writes
+/// to, and a listing is exactly the place those must not appear: a page of an outbox is a page of who this user writes
 /// to and when, which is somebody's correspondence rather than the deployment's own state. What is left — an
 /// identifier, a stage, an account alias, counts, instants, and a coded failure — is what a decision is taken from, and
 /// the single-record reading is where a caller that asked about one send by identity is told who it is for.

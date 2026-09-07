@@ -113,7 +113,7 @@ public sealed class MailDraftPass
     /// <para>
     /// It is keyed on the send having actually been delivered rather than on it having been promoted, which is the
     /// whole of what makes a promotion safe to ask for. A message that is refused, deferred, or left with an unknown
-    /// outcome leaves the draft exactly as it was, so an owner whose send failed still has the message they wrote.
+    /// outcome leaves the draft exactly as it was, so a user whose send failed still has the message they wrote.
     /// </para>
     /// <para>
     /// The draft is given up rather than deleted outright, so the removal of its copy follows the same recorded

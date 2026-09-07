@@ -80,7 +80,7 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
     /// <remarks>
     /// A password-protected OpenDocument file stays an ordinary zip and encrypts the parts inside it, so unlike a
     /// protected Office Open XML package it opens cleanly and only fails when the content part turns out to be
-    /// ciphertext rather than XML. Reported from there it would read as <c>Malformed</c>, which tells an owner their
+    /// ciphertext rather than XML. Reported from there it would read as <c>Malformed</c>, which tells a user their
     /// document is broken when what it is is locked. The manifest is where the format records that, and it is read
     /// under the same inflation budget every other part is.
     /// </remarks>

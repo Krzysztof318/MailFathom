@@ -25,7 +25,7 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// and is the whole of the access control. <see cref="OpenForReaderAsync" /> serves a caller that authenticated and
 /// holds <see cref="MailFathomPermission.MailRead" />, which is a person opening a file in their own mailbox. What
 /// neither of them may do is decide the rest: everything an authorization cannot establish — that the email exists,
-/// that it belongs to an account this deployment currently serves and this owner owns, that the stored copy is what
+/// that it belongs to an account this deployment currently serves and this user owns, that the stored copy is what
 /// was written, and that the message really carries a part at that position — is settled here for both, once.
 /// </para>
 /// <para>
@@ -61,7 +61,7 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// </para>
 /// <para>
 /// <b>What decides whether the screen runs at all is <c>SensitiveContent:ScreenOutgoingMailFor</c></b>, the same key
-/// that decides whether a send is screened, read through the owner's posture before an attachment is opened. So the
+/// that decides whether a send is screened, read through the user's posture before an attachment is opened. So the
 /// asymmetry this closes is closed exactly where that key names a scanner: a deployment that wrote an empty list keeps
 /// its scanners redacting every read and serves every attachment whole, which is a deliberate configuration rather
 /// than a gap here — but it is the same shape as the one above, and an operator writing that list is deciding about
@@ -164,7 +164,7 @@ public sealed class EmailAttachmentDownloadReader
     /// <remarks>
     /// <para>
     /// Both values arrive from the caller rather than from a signature this deployment wrote, so neither is trusted:
-    /// the email is resolved against the accounts the caller's owner owns and the folders a read may reach, and the
+    /// the email is resolved against the accounts the caller's user owns and the folders a read may reach, and the
     /// position is what the message's own walk answers for or does not. That is the same resolution the signed path
     /// runs, which is why a position naming nothing is a refusal here rather than a validation failure.
     /// </para>
@@ -199,7 +199,7 @@ public sealed class EmailAttachmentDownloadReader
 
         // A ticket outlives the configuration it was minted under and a caller names an email it read at some earlier
         // moment, so what either of them reaches is re-decided here: an account the deployment stopped serving, one
-        // belonging to another owner, and a folder an operator withheld from tools all answer with nothing, exactly as
+        // belonging to another user, and a folder an operator withheld from tools all answer with nothing, exactly as
         // an email that is no longer stored does.
         if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
         {
@@ -240,9 +240,9 @@ public sealed class EmailAttachmentDownloadReader
     /// <summary>Reads the opened attachment's text and answers whether this deployment will serve it.</summary>
     /// <remarks>
     /// <para>
-    /// The screen is asked whether it is active for this owner before anything is read, exactly as the outgoing screen
+    /// The screen is asked whether it is active for this user before anything is read, exactly as the outgoing screen
     /// asks before a message is parsed: a deployment that screens nothing pays no document read, no allocation, and no
-    /// scan for a download, and one owner's added category costs the owner beside them nothing.
+    /// scan for a download, and one user's added category costs the user beside them nothing.
     /// </para>
     /// <para>
     /// An attachment nothing recognized as a document is served unchanged, because no text scanner ever undertook to
@@ -262,7 +262,7 @@ public sealed class EmailAttachmentDownloadReader
         IOpenedEmailAttachment attachment,
         CancellationToken cancellationToken)
     {
-        if (!this.screen.IsActiveFor(this.scopeResolver.Owner))
+        if (!this.screen.IsActiveFor(this.scopeResolver.User))
         {
             return AttachmentDownloadOutcome.Served(attachment);
         }
@@ -287,7 +287,7 @@ public sealed class EmailAttachmentDownloadReader
                 ? null
                 : await this.screen.ScreenAsync(
                     SensitiveContentEgressPoint.AttachmentDownload,
-                    this.scopeResolver.Owner,
+                    this.scopeResolver.User,
                     [read.Text],
                     cancellationToken);
 

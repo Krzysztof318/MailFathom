@@ -80,7 +80,7 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
     // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did prove MailFathom
     // wrote it, a 401 that did not being an unreadable answer instead — so it reads as a refused credential and marks
     // both halves of one. `unauthorized` is the one that says something about the grant rather than about the
-    // password, and it marks nothing: retyping a password changes nothing about a permission an owner is missing.
+    // password, and it marks nothing: retyping a password changes nothing about a permission a user is missing.
     // Neither is reached from here — `signIn` and `reachDeployment` return neither — and both are named because the
     // failure set is closed by its own type rather than because this screen expects either.
     unauthenticated: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },

@@ -48,7 +48,7 @@ public sealed record MailboxMutationAuditQuery
 
     /// <summary>Gets the account whose trail is read.</summary>
     public MailAccountIdentity Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
     public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the mutation the page is narrowed to, or the unspecified default when every mutation is served.</summary>
@@ -129,7 +129,7 @@ public sealed record MailboxMutationAuditQuery
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
             account.Id.Value,
             mutation.IsSpecified ? mutation.Name : null,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),

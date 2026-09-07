@@ -34,7 +34,7 @@ public sealed class SpamClassificationRunReader
     }
 
     /// <summary>Reads the run one account has outstanding, or the last one it finished.</summary>
-    /// <param name="account">The account whose run is read, named by its owner and its identifier.</param>
+    /// <param name="account">The account whose run is read, named by its user and its identifier.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The run, or <see langword="null" /> where the account has never been asked for one.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>

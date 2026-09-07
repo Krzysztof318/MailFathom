@@ -23,7 +23,7 @@ public enum MailDraftCopyStage
     /// <summary>The append has begun and the server's answer to it has not been read.</summary>
     /// <remarks>
     /// A copy left here by a stopped process may or may not be in the folder, and it is never appended again: an
-    /// <c>APPEND</c> issued twice is a second draft in the owner's folder rather than a repeat of the first. It is also
+    /// <c>APPEND</c> issued twice is a second draft in the user's folder rather than a repeat of the first. It is also
     /// never withdrawn, because nothing names it.
     /// </remarks>
     Issued = 0,
@@ -34,7 +34,7 @@ public enum MailDraftCopyStage
     /// <summary>MailFathom took the copy back out of the folder.</summary>
     Withdrawn = 2,
 
-    /// <summary>The copy can no longer be shown to be the one MailFathom appended, so it is left as the owner's.</summary>
+    /// <summary>The copy can no longer be shown to be the one MailFathom appended, so it is left as the user's.</summary>
     /// <remarks>
     /// This is where every divergence lands. What it says is that nothing will touch the copy again — not that the
     /// folder no longer holds it — which is the only honest answer once the occurrence stopped being identifiable.

@@ -35,7 +35,7 @@ internal sealed class MailDraftCopyEntity
     /// <remarks>
     /// Keying by the revision rather than by an identifier of its own is what makes the append idempotent without a
     /// read-then-write: a second attempt to append the same revision is refused by the database rather than by a check
-    /// two callers can pass between, and a second copy in the owner's drafts folder is a draft they read as two.
+    /// two callers can pass between, and a second copy in the user's drafts folder is a draft they read as two.
     /// </remarks>
     public int Revision { get; set; }
 

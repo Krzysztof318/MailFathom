@@ -34,7 +34,7 @@ public sealed class DiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
+        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []));
 
     /// <summary>Both halves of what a run decided are its record, so neither is discarded once the other exists.</summary>
     [Fact]
@@ -207,8 +207,8 @@ public sealed class DiscoveryRunTests
     }
 
     /// <summary>
-    /// The question a derivation sends is this owner's own text, and the guard refuses to judge any text on a flow
-    /// acting for nobody wherever the deployment scans somebody. So the run states the owner before it derives: without
+    /// The question a derivation sends is this user's own text, and the guard refuses to judge any text on a flow
+    /// acting for nobody wherever the deployment scans somebody. So the run states the user before it derives: without
     /// that, a deployment with a scanner switched on would refuse every Discover run before it reached the model.
     /// </summary>
     [Fact]

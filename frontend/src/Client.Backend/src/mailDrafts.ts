@@ -9,12 +9,12 @@ import { spanned } from './telemetry';
 import { send, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';
 
 // Writing mail, which is the one thing on this surface that reaches somebody else. A draft here is the draft in the
-// owner's own drafts folder rather than anything the client keeps: saving one writes a row, a stored message, and a
+// user's own drafts folder rather than anything the client keeps: saving one writes a row, a stored message, and a
 // copy on their mail server in the same act, so the words a screen holds until somebody asks to save them are the
 // client's alone and everything past that is the deployment's.
 //
 // Two grants rather than one, because writing a message and sending it are different powers. Everything below except
-// the send is reached under `mailfathom.mail.drafts.write`, whose effect stops at the owner's own mailbox; the send is
+// the send is reached under `mailfathom.mail.drafts.write`, whose effect stops at the user's own mailbox; the send is
 // `mailfathom.mail.send`, and it is the act that cannot be taken back.
 //
 // **A refused send is a value here rather than a failure.** Screening, the recipient policy, and the spending ceilings
@@ -23,7 +23,7 @@ import { send, type ClientRequest, type ClientResponse, type MailFathomTransport
 // named by the code the deployment answered beside it, and nothing here reads the sentence: an operator-facing message
 // is written for an operator, and a screen says what would change the outcome in its own words.
 
-/** The route the drafts one owner is writing are reached at, relative to the client prefix. */
+/** The route the drafts one user is writing are reached at, relative to the client prefix. */
 export const mailDraftsRoute = '/drafts';
 
 /** The route one draft is reached at. */
@@ -218,7 +218,7 @@ export function reviseMailDraft(
 }
 
 /**
- * Gives one draft up, which takes its copies back out of the owner's drafts folder.
+ * Gives one draft up, which takes its copies back out of the user's drafts folder.
  *
  * The draft is given up whatever the mailbox answered, so what comes back says what became of the copies rather than
  * whether the act worked — which is why this answers nothing rather than an outcome no screen acts on.

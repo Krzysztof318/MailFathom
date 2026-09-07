@@ -12,9 +12,9 @@ using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Outbox;
-using MailFathom.Cli.Administration.Owners;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
+using MailFathom.Cli.Administration.Users;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
 using MailFathom.Common.OAuth;
@@ -88,23 +88,23 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(ConfigurationDocumentRequest))]
 [JsonSerializable(typeof(ConfigurationAdoptionRequest))]
 [JsonSerializable(typeof(ConfigurationWriteAnswer))]
-[JsonSerializable(typeof(MailOwnerList))]
-[JsonSerializable(typeof(OwnerProvisioningRequest))]
-[JsonSerializable(typeof(OwnerRelabelRequest))]
-[JsonSerializable(typeof(OwnerProvisioned))]
-[JsonSerializable(typeof(OwnerErasure))]
-[JsonSerializable(typeof(OwnerRecord))]
-[JsonSerializable(typeof(OwnerMailAccountRequest))]
-[JsonSerializable(typeof(OwnerMailAccountRemovalRequest))]
-[JsonSerializable(typeof(OwnerAdoptionRequest))]
-[JsonSerializable(typeof(OwnerAdoptionPreview))]
-[JsonSerializable(typeof(OwnerRecordWriteAnswer))]
-[JsonSerializable(typeof(OwnerCredentialList))]
-[JsonSerializable(typeof(OwnerCredentialProvisioningRequest))]
-[JsonSerializable(typeof(OwnerCredentialProvisioned))]
-[JsonSerializable(typeof(OwnerCredentialMaterialRequest))]
-[JsonSerializable(typeof(OwnerCredentialRotated))]
-[JsonSerializable(typeof(OwnerCredentialEnablementRequest))]
+[JsonSerializable(typeof(MailUserList))]
+[JsonSerializable(typeof(UserProvisioningRequest))]
+[JsonSerializable(typeof(UserRelabelRequest))]
+[JsonSerializable(typeof(UserProvisioned))]
+[JsonSerializable(typeof(UserErasure))]
+[JsonSerializable(typeof(UserRecord))]
+[JsonSerializable(typeof(UserMailAccountRequest))]
+[JsonSerializable(typeof(UserMailAccountRemovalRequest))]
+[JsonSerializable(typeof(UserAdoptionRequest))]
+[JsonSerializable(typeof(UserAdoptionPreview))]
+[JsonSerializable(typeof(UserRecordWriteAnswer))]
+[JsonSerializable(typeof(UserCredentialList))]
+[JsonSerializable(typeof(UserCredentialProvisioningRequest))]
+[JsonSerializable(typeof(UserCredentialProvisioned))]
+[JsonSerializable(typeof(UserCredentialMaterialRequest))]
+[JsonSerializable(typeof(UserCredentialRotated))]
+[JsonSerializable(typeof(UserCredentialEnablementRequest))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]

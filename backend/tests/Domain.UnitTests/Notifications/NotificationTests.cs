@@ -12,19 +12,19 @@ namespace MailFathom.Domain.UnitTests.Notifications;
 /// <summary>Covers what a notification refuses to be composed as, and the three shapes its target takes.</summary>
 public sealed class NotificationTests
 {
-    private static readonly MailOwnerId Owner = MailOwnerId.Create(Guid.NewGuid());
+    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>A row written under the unspecified identity would belong to nobody, so it is refused at composition.</summary>
     [Fact]
-    public void Compose_UnspecifiedOwner_IsRefused()
+    public void Compose_UnspecifiedUser_IsRefused()
     {
         // Act
-        var refusal = Assert.Throws<ArgumentException>(() => Compose(owner: default(MailOwnerId)));
+        var refusal = Assert.Throws<ArgumentException>(() => Compose(user: default(MailUserId)));
 
         // Assert
-        Assert.Equal("owner", refusal.ParamName);
+        Assert.Equal("user", refusal.ParamName);
     }
 
     /// <summary>A kind outside the declared set would be stored as text nothing can draw a row from.</summary>
@@ -55,7 +55,7 @@ public sealed class NotificationTests
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => Notification.Compose(
             id,
-            Owner,
+            User,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",
@@ -141,13 +141,13 @@ public sealed class NotificationTests
     }
 
     private static Notification Compose(
-        MailOwnerId? owner = null,
+        MailUserId? user = null,
         NotificationKind kind = NotificationKind.System,
         string title = "Something happened",
         string? source = "work") =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(OccurredAt)),
-            owner ?? Owner,
+            user ?? User,
             kind,
             title,
             body: "Something happened that nobody was at the screen for.",
@@ -164,7 +164,7 @@ public sealed class NotificationTests
         // Act
         var notification = Notification.Restore(
             NotificationId.Create(Guid.CreateVersion7()),
-            Owner,
+            User,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",
@@ -180,7 +180,7 @@ public sealed class NotificationTests
 
     /// <summary>A row read back is input from outside this process however it got there, so restoring validates what composing validates.</summary>
     [Fact]
-    public void Restore_ARowWhoseOwnerNamesNobody_IsRefusedExactlyAsComposingOneIs()
+    public void Restore_ARowWhoseUserNamesNobody_IsRefusedExactlyAsComposingOneIs()
     {
         // Act and assert
         Assert.Throws<ArgumentException>(() => Notification.Restore(

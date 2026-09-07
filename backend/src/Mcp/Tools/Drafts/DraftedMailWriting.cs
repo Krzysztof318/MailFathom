@@ -28,7 +28,7 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// answer into a message of its own.
 /// </para>
 /// <para>
-/// <b>Nothing here transmits.</b> Both use cases end at the draft book, which holds the message and brings the owner's
+/// <b>Nothing here transmits.</b> Both use cases end at the draft book, which holds the message and brings the user's
 /// own drafts folder into step with it. What sends a draft is the promotion, and that asks for the sending grant.
 /// </para>
 /// </remarks>
@@ -148,7 +148,7 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
     /// <summary>Names the act writing this draft down, which is provenance rather than an identity to compare.</summary>
     /// <remarks>
     /// A draft carries no idempotency key and takes none from a caller, because asking twice for a draft is two drafts:
-    /// the second costs an owner a deletion rather than a recipient a second message, which is exactly the reason the
+    /// the second costs a user a deletion rather than a recipient a second message, which is exactly the reason the
     /// tool is advertised as one that is not idempotent. So the identity is minted per call and says what it truly is
     /// — one act, distinct from every other — instead of asking a caller for a value nothing here would compare.
     /// </remarks>

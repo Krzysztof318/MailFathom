@@ -24,7 +24,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// crash between them leaves neither rather than half of a draft.
 /// </para>
 /// <para>
-/// Being the one way in is also what makes it the place the grant is asked for. A draft is written into the owner's own
+/// Being the one way in is also what makes it the place the grant is asked for. A draft is written into the user's own
 /// mailbox and reaches nobody else, so it is admitted under the grant that says exactly that: a caller holding
 /// <see cref="MailFathomPermission.MailDraftsWrite" /> for a command, and MailFathom's own identity for a rule. That is
 /// asked with no transport in the picture, so a second entrypoint added later meets it whatever it did first. What it
@@ -84,7 +84,7 @@ public sealed class MailDraftBook
     }
 
     /// <summary>Writes a composed draft down, as a new one or as the next revision of one that already exists.</summary>
-    /// <param name="account">The account the draft belongs to, named by its owner and its identifier.</param>
+    /// <param name="account">The account the draft belongs to, named by its user and its identifier.</param>
     /// <param name="author">The authored act writing it down.</param>
     /// <param name="composed">The composed message, its recipients, and the identity this revision carries.</param>
     /// <param name="revises">The draft this replaces, or <see langword="null" /> to write a new one.</param>
@@ -120,7 +120,7 @@ public sealed class MailDraftBook
         // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
         // asked on every revision rather than on the first one alone, because a revision is a new message and because a
         // draft written before the screen was switched on would otherwise carry its way past it one edit at a time.
-        if (await this.screening.FindRefusalAsync(account.Owner, composed.RawMime, cancellationToken) is { } screened)
+        if (await this.screening.FindRefusalAsync(account.User, composed.RawMime, cancellationToken) is { } screened)
         {
             throw MailDraftRefusedException.ContentRefused(screened);
         }
@@ -186,7 +186,7 @@ public sealed class MailDraftBook
     /// <para>
     /// <b>The draft is established as this account's before a single octet is read.</b> The identifier arrived from
     /// whoever asked, and the write beneath this establishes ownership too — but it does so after a composition that
-    /// these files are part of, so a read placed before it would carry another owner's attachments into this request
+    /// these files are part of, so a read placed before it would carry another user's attachments into this request
     /// and answer a bound-exceeded refusal where a foreign identifier has to answer exactly as an unknown one. Reading
     /// nothing until the check has passed is what leaves the two indistinguishable, in the size of the answer as well
     /// as in its code.
@@ -216,13 +216,13 @@ public sealed class MailDraftBook
     /// <remarks>
     /// <para>
     /// <b>Only a draft this system created can be given up here.</b> The identifier names a record MailFathom wrote, and
-    /// the copies that record names are the only occurrences the removal ever reaches — so a draft the owner wrote in
+    /// the copies that record names are the only occurrences the removal ever reaches — so a draft the user wrote in
     /// their own mail client is not refused by a check, it is unreachable, because nothing holds it under an identifier
     /// this method accepts.
     /// </para>
     /// <para>
     /// The record is marked before anything is issued and removed once the copies are settled, so a process that dies
-    /// in between leaves a draft the pass finishes rather than a message in the owner's folder that nothing can name.
+    /// in between leaves a draft the pass finishes rather than a message in the user's folder that nothing can name.
     /// </para>
     /// <para>
     /// <b>A promoted draft is refused rather than given up here.</b> Its message is a queued send that this would leave
@@ -282,7 +282,7 @@ public sealed class MailDraftBook
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the origin is one this method was never taught, which is a defect here rather than a refusal.</exception>
     /// <remarks>
     /// It admits the same two principals the outbox does and asks a different permission of the first, because what a
-    /// draft is and what a send is differ in exactly that: nothing here reaches anybody but the mailbox's own owner. A
+    /// draft is and what a send is differ in exactly that: nothing here reaches anybody but the mailbox's own user. A
     /// rule is admitted on MailFathom's own identity as it is at the outbox, since an act nobody is present for carries
     /// no caller's grant either way.
     /// </remarks>

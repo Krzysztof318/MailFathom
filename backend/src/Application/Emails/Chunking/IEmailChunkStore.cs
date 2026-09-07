@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.Chunking;
 /// <remarks>
 /// <para>
 /// Removal is the one end of the cut that ordering cannot supply. Everything else about a passage is decided before it
-/// exists — <see cref="IStoredEmailChunkingStore" /> cuts a message only once classification and the owner's rules have
+/// exists — <see cref="IStoredEmailChunkingStore" /> cuts a message only once classification and the user's rules have
 /// finished with it — but a message chunked and embedded before anybody scored it is what an on-demand classification
 /// run over an existing mailbox produces, and what it leaves behind is vectors nothing may retrieve, derived from the
 /// most adversarial text in the mailbox and kept under the message's own retention obligations for no reader.

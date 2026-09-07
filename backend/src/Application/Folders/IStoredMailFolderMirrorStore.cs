@@ -18,7 +18,7 @@ public interface IStoredMailFolderMirrorStore
 {
     /// <summary>Erases a bounded part of one folder's stored mail, and its checkpoint once nothing is left.</summary>
     /// <param name="session">The write transaction this erasure joins.</param>
-    /// <param name="account">The account the folder belongs to, named by its owner and its identifier.</param>
+    /// <param name="account">The account the folder belongs to, named by its user and its identifier.</param>
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>
     /// <param name="maxEmails">The greatest number of emails this pass may erase.</param>
     /// <param name="cancellationToken">Cancels the read that selects the emails and the writes that stage their removal.</param>

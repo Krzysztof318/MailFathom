@@ -29,15 +29,15 @@ internal sealed class StoredSecretConfiguration : IEntityTypeConfiguration<Store
             .HasMaxLength(StoredSecretEntity.MaximumKeyIdLength)
             .IsRequired();
 
-        entity.HasOne(secret => secret.Owner)
+        entity.HasOne(secret => secret.User)
             .WithMany()
-            .HasForeignKey(secret => secret.OwnerId)
+            .HasForeignKey(secret => secret.UserId)
             .OnDelete(DeleteBehavior.Cascade)
-            .HasConstraintName(PersistenceConstraintNames.StoredSecretOwnerForeignKeyName);
+            .HasConstraintName(PersistenceConstraintNames.StoredSecretUserForeignKeyName);
 
-        entity.HasIndex(secret => new { secret.OwnerId, secret.Name })
+        entity.HasIndex(secret => new { secret.UserId, secret.Name })
             .IsUnique()
-            .HasDatabaseName(PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName);
+            .HasDatabaseName(PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName);
         entity.HasIndex(secret => secret.DataEncryptionKeyId)
             .HasDatabaseName(PersistenceConstraintNames.StoredSecretKeyIndexName);
     }

@@ -50,10 +50,10 @@ public sealed record OutgoingEmailRequest
         this.DueAt = dueAt;
     }
 
-    /// <summary>Gets the account the message is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account the message is submitted through and sent as, named by its user and its identifier.</summary>
     /// <remarks>
-    /// The pair rather than the identifier alone, because an identifier names one account within its owner and the row
-    /// this request becomes records whose send it was. The owner is the one the catalog resolved the account through, so
+    /// The pair rather than the identifier alone, because an identifier names one account within its user and the row
+    /// this request becomes records whose send it was. The user is the one the catalog resolved the account through, so
     /// the write that keeps the request supplies it without asking the account table again.
     /// </remarks>
     public MailAccountIdentity Account { get; }
@@ -74,7 +74,7 @@ public sealed record OutgoingEmailRequest
     public ZonedInstant? DueAt { get; }
 
     /// <summary>Asks for one message to be submitted through an account and delivered to the recipients it names.</summary>
-    /// <param name="account">The account the message is sent as, named by its owner and its identifier.</param>
+    /// <param name="account">The account the message is sent as, named by its user and its identifier.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="recipients">The people the message is offered to.</param>
     /// <param name="dueAt">The time the message is to leave at, or <see langword="null" /> for as soon as it can.</param>

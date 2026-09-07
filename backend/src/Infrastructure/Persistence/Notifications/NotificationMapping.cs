@@ -32,7 +32,7 @@ internal static class NotificationMapping
 
         return Notification.Restore(
             NotificationId.Create(entity.Id),
-            MailOwnerId.Create(entity.OwnerId),
+            MailUserId.Create(entity.UserId),
             entity.Kind,
             entity.Title,
             entity.Body,
@@ -69,7 +69,7 @@ internal static class NotificationMapping
         return new NotificationEntity
         {
             Id = notification.Id.Value,
-            OwnerId = notification.Owner.Value,
+            UserId = notification.User.Value,
             Kind = notification.Kind,
             Title = notification.Title,
             Body = notification.Body,

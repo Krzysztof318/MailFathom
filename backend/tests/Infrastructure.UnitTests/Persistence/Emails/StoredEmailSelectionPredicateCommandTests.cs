@@ -22,7 +22,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 public sealed class StoredEmailSelectionPredicateCommandTests
 {
     private static MailboxScope WholeMailbox { get; } = MailboxScope.Create(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 

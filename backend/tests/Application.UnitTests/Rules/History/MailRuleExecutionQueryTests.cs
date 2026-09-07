@@ -14,7 +14,7 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 public sealed class MailRuleExecutionQueryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset Noon = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class MailRuleExecutionQueryTests
         string[] varied =
         [
             Create(account: MailAccountIdentity.Create(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 MailAccountId.Create("personal"))).Query!.FilterFingerprint,
             Create(ruleName: "file-invoices").Query!.FilterFingerprint,
             Create(storedEmailId: StoredEmailId.Create(Guid.CreateVersion7())).Query!.FilterFingerprint,

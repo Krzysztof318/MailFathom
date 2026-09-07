@@ -583,9 +583,9 @@ public sealed class MailSearchBrowserTests
             () => browser.SearchPageAsync(RequestFor(Query), TestContext.Current.CancellationToken));
     }
 
-    /// <summary>An owner who owns no account this deployment serves is still told what semantic retrieval can do, because that describes the instance.</summary>
+    /// <summary>A user who owns no account this deployment serves is still told what semantic retrieval can do, because that describes the instance.</summary>
     [Fact]
-    public async Task SearchPageAsync_AnOwnerOwningNoAccount_ReturnsAnEmptyPageStillReportingTheCapability()
+    public async Task SearchPageAsync_AnUserOwningNoAccount_ReturnsAnEmptyPageStillReportingTheCapability()
     {
         // Arrange
         var browser = BrowserOver(IndexOver(RankedCorpus(1)), accountCatalog: CatalogServing());
@@ -599,9 +599,9 @@ public sealed class MailSearchBrowserTests
         Assert.Equal(SemanticSearchCapability.Inactive, page.SemanticSearch);
     }
 
-    /// <summary>A search of the local copy never reaches an account its owner does not own.</summary>
+    /// <summary>A search of the local copy never reaches an account its user does not own.</summary>
     [Fact]
-    public async Task SearchPageAsync_AnAccountThisOwnerDoesNotOwn_IsRefused()
+    public async Task SearchPageAsync_AnAccountThisUserDoesNotOwn_IsRefused()
     {
         // Arrange
         var browser = BrowserOver(IndexOver(RankedCorpus(1)));

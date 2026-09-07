@@ -52,8 +52,8 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReadAsync_APersonWhoSuppliedNone_AnswersThatThereIsNoneRatherThanRefusing()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns((ReadOnlyMemory<byte>?)null);
 
         // Act
@@ -169,8 +169,8 @@ public sealed class ClientPortraitEndpointTests
     {
         // Arrange
         var supplied = kind == "image/png" ? Png : Jpeg;
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -182,8 +182,8 @@ public sealed class ClientPortraitEndpointTests
         // Assert
         Assert.IsType<NoContent>(result.Result);
         await store.Received(1).SaveAsync(
-            SyntheticMailOwner.Deployment,
-            Arg.Is<OwnerPortrait>(portrait =>
+            SyntheticMailUser.Deployment,
+            Arg.Is<UserPortrait>(portrait =>
                 portrait!.Type.MediaType == kind && portrait.Content.ToArray().SequenceEqual(supplied)),
             Arg.Any<CancellationToken>());
     }
@@ -196,7 +196,7 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReplaceAsync_OctetsThatAreNoImageDeclaredAsOne_AreRefusedNamingTheKindsOnOffer()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
         var upload = Uploading("<script>alert(1)</script>"u8.ToArray());
         upload.Request.ContentType = "image/png";
 
@@ -214,7 +214,7 @@ public sealed class ClientPortraitEndpointTests
         Assert.Contains("image/png", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The transport refuses the body and says nothing about why, so the one thing a person needs from it — the bound they went over — is stated here.</summary>
@@ -222,7 +222,7 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReplaceAsync_AnUploadOverTheBound_IsRefusedNamingTheLimitItHit()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
         var upload = Requesting();
         upload.Request.Body = new RefusedBodyStream();
 
@@ -239,14 +239,14 @@ public sealed class ClientPortraitEndpointTests
         Assert.Contains("1 MB", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ReplaceAsync_ARequestCarryingNoBodyAtAll_IsRefused()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
 
         // Act
         var result = await ClientPortraitEndpoint.ReplaceAsync(
@@ -260,7 +260,7 @@ public sealed class ClientPortraitEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The caller is a person whose row was erased under a credential that has not yet been withdrawn, and the answer to them is that there is nothing here of theirs.</summary>
@@ -268,8 +268,8 @@ public sealed class ClientPortraitEndpointTests
     public async Task ReplaceAsync_ADeploymentHoldingNoRecordForTheCaller_ReportsThatRatherThanStoring()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -288,7 +288,7 @@ public sealed class ClientPortraitEndpointTests
     public async Task RemoveAsync_APersonTakingTheirPictureDown_RemovesItAndAnswersThatThereIsNone()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
 
         // Act
         var result = await ClientPortraitEndpoint.RemoveAsync(
@@ -297,7 +297,7 @@ public sealed class ClientPortraitEndpointTests
 
         // Assert
         Assert.Equal(StatusCodes.Status204NoContent, result.StatusCode);
-        await store.Received(1).RemoveAsync(SyntheticMailOwner.Deployment, Arg.Any<CancellationToken>());
+        await store.Received(1).RemoveAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
     }
 
     /// <summary>Removing what is not there leaves the caller with no portrait, which is the whole of what they asked for.</summary>
@@ -305,8 +305,8 @@ public sealed class ClientPortraitEndpointTests
     public async Task RemoveAsync_APersonWhoSuppliedNoPicture_AnswersTheSameWay()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.RemoveAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var store = Substitute.For<IUserPortraitStore>();
+        store.RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         // Act
         var result = await ClientPortraitEndpoint.RemoveAsync(
@@ -320,10 +320,10 @@ public sealed class ClientPortraitEndpointTests
     private static string TagOf(IResult served) =>
         Assert.IsType<FileContentHttpResult>(served).EntityTag!.Tag.ToString();
 
-    private static IOwnerPortraitStore StoreHolding(byte[] content)
+    private static IUserPortraitStore StoreHolding(byte[] content)
     {
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(new ReadOnlyMemory<byte>(content));
 
         return store;
@@ -351,8 +351,8 @@ public sealed class ClientPortraitEndpointTests
         return context;
     }
 
-    private static OwnPortrait SignedIn(IOwnerPortraitStore store) => new(
-        AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Deployment, MailFathomPermission.MailRead),
+    private static OwnPortrait SignedIn(IUserPortraitStore store) => new(
+        AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
         store);
 
     /// <summary>A body the server stops reading because it went past the bound the route published, which is how the transport reports an upload over the limit.</summary>

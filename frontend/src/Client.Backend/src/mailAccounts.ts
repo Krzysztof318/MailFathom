@@ -8,13 +8,13 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-/** The route the owner's accounts are served at, relative to the client prefix. */
+/** The route the user's accounts are served at, relative to the client prefix. */
 export const mailAccountsRoute = '/accounts';
 
 /** Whether the deployment's last finished attempt at an account succeeded, failed, found no mail server, or never ran. */
 export type MailSynchronizationState = 'NeverSynchronized' | 'Synchronized' | 'Failing' | 'Unreachable';
 
-/** One of the signed-in owner's accounts, and how current the local copy of it is. */
+/** One of the signed-in user's accounts, and how current the local copy of it is. */
 export interface MailAccount {
     readonly id: string;
     readonly displayName: string;
@@ -23,13 +23,13 @@ export interface MailAccount {
     readonly behind: boolean;
 }
 
-/** The owner's accounts, beside the deployment-wide switch that says whether any of them is being refreshed at all. */
+/** The user's accounts, beside the deployment-wide switch that says whether any of them is being refreshed at all. */
 export interface MailAccountDirectory {
     readonly synchronizationEnabled: boolean;
     readonly accounts: readonly MailAccount[];
 }
 
-// The most accounts a directory answer may carry before it is refused unread. One owner holds a handful in practice,
+// The most accounts a directory answer may carry before it is refused unread. One user holds a handful in practice,
 // so the ceiling is far above anything real and exists for the case the answer is not: the array is walked and
 // validated element by element, and a bound applied after that walk is not a bound.
 //
@@ -44,7 +44,7 @@ const synchronizationStates: readonly MailSynchronizationState[] = [
     'Unreachable',
 ];
 
-/** Reads the signed-in owner's accounts, answering an expected failure as a value rather than by throwing. */
+/** Reads the signed-in user's accounts, answering an expected failure as a value rather than by throwing. */
 export function readMailAccounts(
     session: ClientSession,
     transport: MailFathomTransport,

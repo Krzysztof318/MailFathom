@@ -49,7 +49,7 @@ internal sealed class StoredEmailAttachmentTextStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var ownerId = account.Owner.Value;
+        var userId = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var after = resumeAfter?.Value;
 
@@ -60,7 +60,7 @@ internal sealed class StoredEmailAttachmentTextStore(
 
         var candidates = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
-                ownerId,
+                userId,
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 terms)
@@ -69,7 +69,7 @@ internal sealed class StoredEmailAttachmentTextStore(
             .Take(batchSize)
             .Select(email => new OutstandingAttachmentRow(
                 email.Id,
-                email.OwnerId,
+                email.UserId,
                 new StoredDerivedWorkCandidateRow(
                     email.MailFolder.MailboxAccountId,
                     email.MailFolder.Alias,
@@ -82,7 +82,7 @@ internal sealed class StoredEmailAttachmentTextStore(
         [
             .. candidates.Select(row => new EmailAwaitingAttachmentText(
                 StoredEmailId.Create(row.Id),
-                MailOwnerId.Create(row.OwnerId),
+                MailUserId.Create(row.UserId),
                 row.Candidate.AdmittedUnder(terms))),
         ];
     }
@@ -146,7 +146,7 @@ internal sealed class StoredEmailAttachmentTextStore(
 
     /// <summary>Narrows stored mail to the messages whose attachments nothing has read yet.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="ownerId">The owner whose account this pass belongs to, which is what the index leads with.</param>
+    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to embedding, which is what decides the reading.</param>
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
@@ -159,11 +159,11 @@ internal sealed class StoredEmailAttachmentTextStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid ownerId,
+        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => SelectingEverywhere(
-        emails.Where(email => email.OwnerId == ownerId && email.MailboxAccountId == mailboxAccountId),
+        emails.Where(email => email.UserId == userId && email.MailboxAccountId == mailboxAccountId),
         embeddedFolders,
         terms);
 
@@ -250,6 +250,6 @@ internal sealed class StoredEmailAttachmentTextStore(
     /// <summary>One message awaiting a reading of its attachments, as the walk's projection returns it.</summary>
     private sealed record OutstandingAttachmentRow(
         Guid Id,
-        Guid OwnerId,
+        Guid UserId,
         StoredDerivedWorkCandidateRow Candidate);
 }

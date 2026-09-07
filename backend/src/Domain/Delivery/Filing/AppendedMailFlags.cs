@@ -9,10 +9,10 @@ namespace MailFathom.Domain.Delivery.Filing;
 /// <param name="IsSeen">Whether the copy is marked <c>\Seen</c>, which says nobody has to read it.</param>
 /// <remarks>
 /// <para>
-/// Two flags and no more, because those are the two an appended copy of the owner's own message can honestly carry.
+/// Two flags and no more, because those are the two an appended copy of the user's own message can honestly carry.
 /// <c>\Draft</c> states that the message is still being composed or is still waiting to go out, and <c>\Seen</c> states
-/// that the owner need not read what they wrote themselves — a sent copy arriving unread would put an unread count on
-/// the owner's own outgoing mail in every client they open.
+/// that the user need not read what they wrote themselves — a sent copy arriving unread would put an unread count on
+/// the user's own outgoing mail in every client they open.
 /// </para>
 /// <para>
 /// The set is closed rather than a general flag bag, for the reason

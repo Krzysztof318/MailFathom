@@ -15,7 +15,7 @@ informed:
 
 Every question asked in Discover is a model call over retrieved mail, and both halves of it are spent: tokens against a provider's bill, and seconds of somebody's attention. The service side of that already exists and is decided. [Mail answering § What one question may spend](../features/mail-answering.md#what-one-question-may-spend) bounds a run three ways — retrieved characters, provider calls, and tokens — and bounds every run of a period two ways again, over a fixed window anchored at the Unix epoch. `MailAnsweringBudgetScope` already separates the two refusals, `MailAnsweringRunOutcome` already carries `Cancelled` as an ending distinct from `Failed`, and the audit entry already records which endpoint conducted the run.
 
-What none of that answers is what reaches the person who asked. `MailAnsweringBudgetExhaustedException` deliberately names no ceiling, no count, and no model, because its audience is an MCP caller — a program the operator granted, which cannot act on a figure and has no business learning how much a deployment spends on somebody's mail. The client has a different audience: the mailbox owner, signed in over `/api/client` with their own credential, watching a run they started. Telling that person nothing produces exactly the failure the client exists to avoid, which is that somebody who asks a question and receives nothing, slowly, cannot tell a bounded system from a broken one.
+What none of that answers is what reaches the person who asked. `MailAnsweringBudgetExhaustedException` deliberately names no ceiling, no count, and no model, because its audience is an MCP caller — a program the operator granted, which cannot act on a figure and has no business learning how much a deployment spends on somebody's mail. The client has a different audience: the mailbox user, signed in over `/api/client` with their own credential, watching a run they started. Telling that person nothing produces exactly the failure the client exists to avoid, which is that somebody who asks a question and receives nothing, slowly, cannot tell a bounded system from a broken one.
 
 Three of the questions underneath that are the client's and one is not. What a run reports about its cost, what stopping one means, and how a refusal reads are all decisions about what a person is told. Whether the model that answered is disclosed is a decision about trust and about the deployment: the architecture keeps a provider a configuration choice and never compiles one in, so the model is a property of a run rather than of the product, and a result from a small fast model and a result from a large one look identical on screen.
 
@@ -26,7 +26,7 @@ Recorded on issue [#1145](https://github.com/Krzysztof318/MailFathom/issues/1145
 ## Decision Drivers
 
 - **A refusal a person cannot act on is worse than no answer.** A spend ceiling is the deployment behaving exactly as its operator configured it, and rendering that as an error produces somebody retrying three times something that will not become cheaper.
-- **A number about a mailbox is a number about a person.** [Mail answering § What never reaches a log](../features/mail-answering.md#what-never-reaches-a-log) already holds that what a period consumed is published as counts to an operator's meter and to nobody else, and [ADR 0014](0014-single-tenant-multi-user-ownership-on-the-mail-account.md) means a deployment can serve several owners who never see each other's mail.
+- **A number about a mailbox is a number about a person.** [Mail answering § What never reaches a log](../features/mail-answering.md#what-never-reaches-a-log) already holds that what a period consumed is published as counts to an operator's meter and to nobody else, and [ADR 0014](0014-single-tenant-multi-user-ownership-on-the-mail-account.md) means a deployment can serve several users who never see each other's mail.
 - **A figure that is routinely wrong destroys the figure that is right.** A run is a conversation whose length is the model's decision, so anything shown before it starts is a guess, and a guess people learn to ignore takes the true figure with it.
 - **What the client shows must not become a second public contract by accident.** The MCP surface's answer to all of this is already decided and published; a client that needed the same shape would be changing a contract for a caller that never asked.
 - **Cancelling has to be real.** A cancelled run that keeps executing while the client stops listening costs the same and merely hides the cost, which is the one outcome that would make the control a lie.
@@ -63,7 +63,7 @@ Recorded on issue [#1145](https://github.com/Krzysztof318/MailFathom/issues/1145
 
 **E — whether cost is per run, per Case, or per person:**
 
-- E1 — per person, each owner carrying a running total of what they have spent.
+- E1 — per person, each user carrying a running total of what they have spent.
 - E2 — per run, with a Case owning the runs it caused, and no per-person total anywhere.
 - E3 — per Case only, an ad-hoc question belonging to no Case reporting nothing.
 
@@ -102,7 +102,7 @@ The two scopes `MailAnsweringBudgetScope` already separates become two states, b
 - **The period is spent.** The state says this deployment has spent what it allows answering to cost for now, that nothing about the question caused it, and **when the allowance returns** — the roll-over instant, which the fixed epoch-anchored window makes a function of the clock and the configured period rather than of anybody's activity. The action is re-enabled at that instant instead of offering a retry that will be refused.
 - **The question is spent.** The state says the run reached what one question may cost and was stopped before an answer was written, and offers the one thing the person can change, which is asking for less. There is no instant to name, because asking the same question again reaches the same ceiling by the same route, and there is nothing to keep, because this ceiling stops the run rather than cutting its retrieval.
 
-**Neither state names a consumed amount, and C3 is refused for that reason.** How much of the period is left is a fact about what every owner of the deployment has been asking, and on a deployment serving several people it would report one person's activity to another. The roll-over instant carries no such thing.
+**Neither state names a consumed amount, and C3 is refused for that reason.** How much of the period is left is a fact about what every user of the deployment has been asking, and on a deployment serving several people it would report one person's activity to another. The roll-over instant carries no such thing.
 
 **Both states name the deployment rather than the person.** The ceiling is deployment-wide, so a state phrased as *you have run out* would be false wherever more than one person shares the allowance, and would leave somebody trying to be more frugal about a limit they did not reach.
 
@@ -122,18 +122,18 @@ The attribution is **per run, never per block.** A declaration reload landing mi
 
 Every charge belongs to exactly one run, and every run belongs to exactly one cause: a question somebody asked, or an update a live Case ran. A Case's history therefore shows the runs it ran and what each of them consumed, which is what makes unattended spend legible without attaching it to whoever opened the Case afterwards.
 
-**There is no per-person total, because there is no per-person ceiling.** E1 was refused on that ground: a running total shown per owner states a bound that does not exist, and the first thing somebody does with such a figure is ask to be given more, which is a per-person allowance this record does not create and [#1145](https://github.com/Krzysztof318/MailFathom/issues/1145) puts out of scope. What a person sees is their own runs, and the Case histories their membership admits them to.
+**There is no per-person total, because there is no per-person ceiling.** E1 was refused on that ground: a running total shown per user states a bound that does not exist, and the first thing somebody does with such a figure is ask to be given more, which is a per-person allowance this record does not create and [#1145](https://github.com/Krzysztof318/MailFathom/issues/1145) puts out of scope. What a person sees is their own runs, and the Case histories their membership admits them to.
 
 ### Consequences
 
 - Good, because a person watching a run sees the same three quantities that will stop it, so *is this working* and *is this about to be refused* are answered by one figure rather than by a spinner and a surprise.
-- Good, because a refusal is legible without publishing anything about how much a deployment or anybody on it has spent, which keeps the client's honesty and the multi-owner privacy boundary from pulling against each other.
+- Good, because a refusal is legible without publishing anything about how much a deployment or anybody on it has spent, which keeps the client's honesty and the multi-user privacy boundary from pulling against each other.
 - Good, because cancelling is defined at the provider call rather than at the listener, so the control means what a person takes it to mean.
 - Good, because the model attribution is a declaration, so a deployment discloses what its operator decided to disclose and no more.
-- Neutral, because the client learns a deployment's run bounds and the length of its period, both being configuration rather than activity — which is a disclosure to a signed-in owner that the MCP surface deliberately does not make, and is stated here rather than left to be noticed.
+- Neutral, because the client learns a deployment's run bounds and the length of its period, both being configuration rather than activity — which is a disclosure to a signed-in user that the MCP surface deliberately does not make, and is stated here rather than left to be noticed.
 - Neutral, because a live Case's cost is visible to the Case's members and to nobody else, which follows the Case's own membership rather than adding a rule about cost.
 - Bad, because the figure is a floor: a call abandoned in flight may be billed by the provider and counted here as nothing, so a person reading the number after a cancellation is reading less than they were charged.
-- Bad, because two owners share one allowance and one of them can exhaust it for the other, and this record makes that legible without fixing it — a per-owner ceiling is work neither this decision nor its issue carries.
+- Bad, because two users share one allowance and one of them can exhaust it for the other, and this record makes that legible without fixing it — a per-user ceiling is work neither this decision nor its issue carries.
 - Bad, because the second model key is one more thing an operator has to set to get a useful answer on screen, and a deployment that leaves it empty shows an alias that may mean nothing to the person reading it.
 
 ## Validation
@@ -177,7 +177,7 @@ By review of the changes that implement it, against the acceptance of [#1172](ht
 ### C3 — name the remaining allowance
 
 - Good, because a person could see a refusal coming rather than meeting it.
-- Bad, because on a deployment serving several owners the remaining allowance is a report of what the others have been doing.
+- Bad, because on a deployment serving several users the remaining allowance is a report of what the others have been doing.
 
 ### D1 — show nothing
 
@@ -211,4 +211,4 @@ By review of the changes that implement it, against the acceptance of [#1172](ht
 - [ADR 0011](0011-reaching-a-provider-outside-the-openai-wire-protocol.md) is why a model is a configuration choice rather than a compiled-in one, which is what makes the attribution question exist at all.
 - [ADR 0014](0014-single-tenant-multi-user-ownership-on-the-mail-account.md) is why the remaining allowance is somebody else's activity.
 - [#1144](https://github.com/Krzysztof318/MailFathom/issues/1144) settles under whose identity a live Case updates and how often; this record settles only how what it spends is accounted and shown.
-- Revisit if a per-owner spend ceiling is introduced, at which point a per-person figure would state a real bound rather than an imagined one, or if a deployment gains more than one declared chat endpoint per run, at which point the per-run attribution above would need to say which of them produced which part.
+- Revisit if a per-user spend ceiling is introduced, at which point a per-person figure would state a real bound rather than an imagined one, or if a deployment gains more than one declared chat endpoint per run, at which point the per-run attribution above would need to say which of them produced which part.

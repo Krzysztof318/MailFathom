@@ -148,12 +148,12 @@ public sealed class FileCliInvocationLogTests : IDisposable
 
     /// <summary>
     /// The log names which deployments an operator administers and when, which is what makes it worth reading on a
-    /// shared machine, so it is created on the credential store's terms: readable by its owner and nobody else, and set
+    /// shared machine, so it is created on the credential store's terms: readable by its user and nobody else, and set
     /// as the file is created rather than tightened afterwards. Windows carries no mode to read back, as
     /// <see cref="CredentialStoreTests" /> says of the store itself.
     /// </summary>
     [Fact]
-    public void TryAppend_OnAPlatformWithFileModes_CreatesTheLogReadableByItsOwnerAlone()
+    public void TryAppend_OnAPlatformWithFileModes_CreatesTheLogReadableByItsUserAlone()
     {
         // Arrange
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

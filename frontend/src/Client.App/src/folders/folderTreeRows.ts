@@ -15,7 +15,7 @@ import { everything, roleRank, scopeKey, type MailScope } from '../workspace/mai
 // component does while rendering: the shape of the tree is the interesting decision here, and a decision that can be
 // read as a value can be tested as one.
 //
-// Three things it decides. The owner's mailboxes are one workspace rather than four applications, so the tree opens
+// Three things it decides. The user's mailboxes are one workspace rather than four applications, so the tree opens
 // with every account at once and the roles that span them — the inbox of all three accounts is a thing somebody wants
 // as often as the inbox of one. Below that each account carries its own folders, nested the way its mail server nests
 // them, which is what the levels of a folder's path are for. And a folder that plays a role is placed by that role

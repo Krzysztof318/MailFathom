@@ -71,9 +71,9 @@ public sealed class MailRuleFactsTests
     }
 
     [Theory]
-    [InlineData("owner")]
+    [InlineData("user")]
     [InlineData("@example.test")]
-    [InlineData("owner@")]
+    [InlineData("user@")]
     [InlineData("")]
     [InlineData(null)]
     public void SenderDomain_AddressWithoutOne_IsAbsentRatherThanEmpty(string? address)
@@ -374,7 +374,7 @@ public sealed class MailRuleFactsTests
             Folder = "inbox",
             Subject = "March invoice 2026",
             SenderAddress = "billing@supplier.test",
-            RecipientAddresses = ["owner@example.test", "accounts@example.test", "billing@supplier.test"],
+            RecipientAddresses = ["user@example.test", "accounts@example.test", "billing@supplier.test"],
             ReceivedAt = ReceivedAt,
             SentAt = ReceivedAt.AddMinutes(-5),
             SizeInBytes = 250_000,

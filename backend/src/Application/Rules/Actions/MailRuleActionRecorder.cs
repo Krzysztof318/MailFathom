@@ -67,7 +67,7 @@ public sealed class MailRuleActionRecorder
     /// <summary>Opens one mutation record per action the plan honors, in the order the changes are applied.</summary>
     /// <param name="session">The session the records are staged in, which is the one the batch commits.</param>
     /// <param name="storedEmailId">The local email the rules matched.</param>
-    /// <param name="owner">The owner whose account the email belongs to, which every record written here carries.</param>
+    /// <param name="user">The user whose account the email belongs to, which every record written here carries.</param>
     /// <param name="occurrence">Where that email is, which is what an IMAP command will be issued against.</param>
     /// <param name="plan">What the matching rules together ask for.</param>
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
@@ -79,7 +79,7 @@ public sealed class MailRuleActionRecorder
     public async Task<MailRuleActionRecording> RecordAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailRuleActionPlan plan,
         MailRuleSetRevision revision,
@@ -126,7 +126,7 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            var request = this.BuildRequest(storedEmailId, owner, occurrence, planned, revision, destinations, failures);
+            var request = this.BuildRequest(storedEmailId, user, occurrence, planned, revision, destinations, failures);
 
             if (request is null)
             {
@@ -173,7 +173,7 @@ public sealed class MailRuleActionRecorder
     /// <summary>Turns one planned action into the request that carries it, or records why it has none.</summary>
     private MailboxMutationRequest? BuildRequest(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         PlannedMailRuleAction planned,
         MailRuleSetRevision revision,
@@ -185,24 +185,24 @@ public sealed class MailRuleActionRecorder
 
         if (action.DesiredSeenState is { } isSeen)
         {
-            return MailboxMutationRequest.SetSeen(storedEmailId, owner, occurrence, requester, isSeen);
+            return MailboxMutationRequest.SetSeen(storedEmailId, user, occurrence, requester, isSeen);
         }
 
         if (action.DesiredFlaggedState is { } isFlagged)
         {
-            return MailboxMutationRequest.SetFlagged(storedEmailId, owner, occurrence, requester, isFlagged);
+            return MailboxMutationRequest.SetFlagged(storedEmailId, user, occurrence, requester, isFlagged);
         }
 
         if (action.Keywords is { } keywords)
         {
-            return BuildKeywordRequest(storedEmailId, owner, occurrence, requester, action.Mutation, keywords);
+            return BuildKeywordRequest(storedEmailId, user, occurrence, requester, action.Mutation, keywords);
         }
 
         if (action.Destination is { } destination)
         {
             return this.BuildFilingRequest(
                 storedEmailId,
-                owner,
+                user,
                 occurrence,
                 planned,
                 requester,
@@ -210,7 +210,7 @@ public sealed class MailRuleActionRecorder
                 failures);
         }
 
-        return this.BuildDeleteRequest(storedEmailId, owner, occurrence, planned, requester, failures);
+        return this.BuildDeleteRequest(storedEmailId, user, occurrence, planned, requester, failures);
     }
 
     /// <summary>Builds the keyword change one action asked for, which needs nothing of the account to resolve.</summary>
@@ -222,7 +222,7 @@ public sealed class MailRuleActionRecorder
     /// </remarks>
     private static MailboxMutationRequest BuildKeywordRequest(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         MailboxMutation mutation,
@@ -230,12 +230,12 @@ public sealed class MailRuleActionRecorder
     {
         if (mutation == MailboxMutation.AddKeywords)
         {
-            return MailboxMutationRequest.AddKeywords(storedEmailId, owner, occurrence, requester, keywords);
+            return MailboxMutationRequest.AddKeywords(storedEmailId, user, occurrence, requester, keywords);
         }
 
         return mutation == MailboxMutation.RemoveKeywords
-            ? MailboxMutationRequest.RemoveKeywords(storedEmailId, owner, occurrence, requester, keywords)
-            : MailboxMutationRequest.SetKeywords(storedEmailId, owner, occurrence, requester, keywords);
+            ? MailboxMutationRequest.RemoveKeywords(storedEmailId, user, occurrence, requester, keywords)
+            : MailboxMutationRequest.SetKeywords(storedEmailId, user, occurrence, requester, keywords);
     }
 
     /// <summary>Builds the relocation or the copy one action asked for, against the folder its destination resolved to.</summary>
@@ -248,7 +248,7 @@ public sealed class MailRuleActionRecorder
     /// </remarks>
     private MailboxMutationRequest? BuildFilingRequest(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         PlannedMailRuleAction planned,
         MailboxMutationRequester requester,
@@ -269,16 +269,16 @@ public sealed class MailRuleActionRecorder
 
         if (planned.Action.Mutation == MailboxMutation.Copy)
         {
-            return MailboxMutationRequest.Copy(storedEmailId, owner, occurrence, requester, destination.Path);
+            return MailboxMutationRequest.Copy(storedEmailId, user, occurrence, requester, destination.Path);
         }
 
         if (destination.IsMirrored)
         {
-            return MailboxMutationRequest.Relocate(storedEmailId, owner, occurrence, requester, destination.Path);
+            return MailboxMutationRequest.Relocate(storedEmailId, user, occurrence, requester, destination.Path);
         }
 
         return this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
-            ? MailboxMutationRequest.Relocate(storedEmailId, owner, occurrence, requester, destination.Path, disposition)
+            ? MailboxMutationRequest.Relocate(storedEmailId, user, occurrence, requester, destination.Path, disposition)
             : null;
     }
 
@@ -299,13 +299,13 @@ public sealed class MailRuleActionRecorder
     /// </remarks>
     private MailboxMutationRequest? BuildDeleteRequest(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         PlannedMailRuleAction planned,
         MailboxMutationRequester requester,
         List<MailRuleActionFailure> failures) =>
         this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
-            ? MailboxMutationRequest.Delete(storedEmailId, owner, occurrence, requester, disposition)
+            ? MailboxMutationRequest.Delete(storedEmailId, user, occurrence, requester, disposition)
             : null;
 
     /// <summary>Reads what becomes of the local copy, or records that the account deciding it is no longer declared.</summary>

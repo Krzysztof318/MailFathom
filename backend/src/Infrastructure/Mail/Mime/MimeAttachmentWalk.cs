@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// What differs is how many parts share it — all of them, which is the whole point.
 /// </para>
 /// <para>
-/// An attachment handed out is a view rather than an owner, so its own disposal releases nothing and this type releases
+/// An attachment handed out is a view rather than a user, so its own disposal releases nothing and this type releases
 /// the message and the stream once. That inversion is stated on <see cref="IOpenedEmailAttachment" /> as well, because
 /// it is the one thing a caller holding both could get wrong.
 /// </para>

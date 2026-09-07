@@ -8,7 +8,7 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-// One page of the owner's mail, keyset-paged in both directions. The route is the one a mail screen spends its time
+// One page of the user's mail, keyset-paged in both directions. The route is the one a mail screen spends its time
 // in, so what this package owes it is a request that says exactly which list is being read and a parser that refuses a
 // page rather than handing a screen a row with a hole in it.
 //
@@ -17,7 +17,7 @@ import { send, type MailFathomTransport } from './transport';
 // is why the filters and the order are part of the request rather than something the deployment recalls, because a
 // cursor presented under different ones is refused rather than silently reinterpreted.
 
-/** The route one page of the owner's mail is served at, relative to the client prefix. */
+/** The route one page of the user's mail is served at, relative to the client prefix. */
 export const mailTimelineRoute = '/emails';
 
 /** Which end of the received order leads. */
@@ -33,7 +33,7 @@ export type MailTimelinePageDirection = 'forward' | 'backward';
  * that left one out would be asking for a different list than the one the cursor names, which the deployment refuses.
  */
 export interface MailTimelineQuery {
-    /** The account to draw from, or `null` for every account the owner owns. */
+    /** The account to draw from, or `null` for every account the user owns. */
     readonly account: string | null;
 
     /** The folder to draw from, by its alias or as `role:Inbox`, or `null` for every folder. */
@@ -132,7 +132,7 @@ const longestText = 4_096;
 const mostRecipients = 256;
 
 /**
- * Reads one page of the signed-in owner's mail, answering an expected failure as a value rather than by throwing.
+ * Reads one page of the signed-in user's mail, answering an expected failure as a value rather than by throwing.
  *
  * @param session The address to reach and the finished header value to present.
  * @param transport How the request goes out.

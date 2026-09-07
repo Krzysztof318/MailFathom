@@ -23,7 +23,7 @@ namespace MailFathom.Host.UnitTests.Signals;
 /// </para>
 /// <para>
 /// Each arrangement then hands the composition the mail-shaped text a raise site has in hand where the kind has
-/// anywhere to put it, and reads the rendered JSON back for it. The owner is read for in the same pass, because the
+/// anywhere to put it, and reads the rendered JSON back for it. The user is read for in the same pass, because the
 /// connection already belongs to one and writing the identifier onto every message would be a value the client has no
 /// use for.
 /// </para>
@@ -39,7 +39,7 @@ public sealed class ClientSignalPayloadTests
     private const string AttachmentName = "figures-revised.xlsx";
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -57,7 +57,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(new ClientSignalPayload("mail.arrived", "work", Inbox.Value, 4, [], null, null, null), payload);
-        AssertNothingAboutMailOrTheOwnerCrossed(payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>A change names the rows to re-read as identities this deployment issued, never as anything about them.</summary>
@@ -83,7 +83,7 @@ public sealed class ClientSignalPayloadTests
                 null,
                 null),
             payload);
-        AssertNothingAboutMailOrTheOwnerCrossed(payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>A moved folder set names the account, and the client re-reads the tree it already reads.</summary>
@@ -98,7 +98,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(new ClientSignalPayload("folders.changed", "work", null, 0, [], null, null, null), payload);
-        AssertNothingAboutMailOrTheOwnerCrossed(payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>A raised notification carries the record's own two lines, and nothing else the record holds.</summary>
@@ -108,7 +108,7 @@ public sealed class ClientSignalPayloadTests
         // Arrange
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(Instant)),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             NotificationKind.Mail,
             title: "Mail arrived",
             body: "Four messages arrived in work.",
@@ -134,7 +134,7 @@ public sealed class ClientSignalPayloadTests
                 "Mail arrived",
                 "Four messages arrived in work."),
             payload);
-        AssertNothingAboutMailOrTheOwnerCrossed(payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>A finished run names the account, and the state it left it in is re-read rather than stated twice.</summary>
@@ -149,7 +149,7 @@ public sealed class ClientSignalPayloadTests
 
         // Assert
         AssertPayloadIs(new ClientSignalPayload("account.state", "work", null, 0, [], null, null, null), payload);
-        AssertNothingAboutMailOrTheOwnerCrossed(payload);
+        AssertNothingAboutMailOrTheUserCrossed(payload);
     }
 
     /// <summary>Asserts one payload against another as a whole, so a member added later is covered rather than skipped.</summary>
@@ -162,7 +162,7 @@ public sealed class ClientSignalPayloadTests
         Assert.Equal(expected with { Emails = [] }, actual with { Emails = [] });
     }
 
-    private static void AssertNothingAboutMailOrTheOwnerCrossed(ClientSignalPayload payload)
+    private static void AssertNothingAboutMailOrTheUserCrossed(ClientSignalPayload payload)
     {
         var rendered = JsonSerializer.Serialize(payload);
 
@@ -171,7 +171,7 @@ public sealed class ClientSignalPayloadTests
         Assert.DoesNotContain(BodyFragment, rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(AttachmentName, rendered, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
-            SyntheticMailOwner.Deployment.Value.ToString(),
+            SyntheticMailUser.Deployment.Value.ToString(),
             rendered,
             StringComparison.OrdinalIgnoreCase);
     }

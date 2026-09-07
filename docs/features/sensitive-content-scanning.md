@@ -45,15 +45,15 @@ The first row is what a message stores rather than what leaves, so what it cover
 configuration behind it, and what a late switch does to text already written are in [derived data](#derived-data-is-written-redacted-and-stamped)
 below.
 
-## Each owner's own posture
+## Each user's own posture
 
 A deployment serves people, and what one of them wants scanned over their own correspondence is not what the next one
-wants. So the two switches above are the deployment's floor rather than its whole answer: **an owner's record carries a
+wants. So the two switches above are the deployment's floor rather than its whole answer: **a user's record carries a
 scanning block of its own, and the posture their mail is read under is the stricter of the two.**
 
-The block is part of the owner document — the content of the record, not an overlay on the deployment's
+The block is part of the user document — the content of the record, not an overlay on the deployment's
 `SensitiveContent` section — and it is written under `Accounts:<index>:SensitiveContent` in the deployment's own file or
-in the owner's record.
+in the user's record.
 
 ```jsonc
 {
@@ -65,41 +65,41 @@ in the owner's record.
 }
 ```
 
-**One direction only.** An owner may switch on a scanner the deployment left off, and may add a scanner to what stops
+**One direction only.** A user may switch on a scanner the deployment left off, and may add a scanner to what stops
 their outgoing mail. They may not switch off a scanner the deployment requires, and may not name fewer scanners than the
 deployment screens for. The obligation belongs to whoever holds the mail, so a loosening is **refused where it is
 written** — at the record write, and at the start that reads a block declared in the deployment's own file — rather than
-accepted and then quietly overruled, which would leave an owner reading a record that describes something other than
+accepted and then quietly overruled, which would leave a user reading a record that describes something other than
 what is in force. Each refusal names the deployment setting behind it, and never repeats the text of the record.
 
 A record this deployment *already holds* is composed rather than refused, and that is deliberate rather than a gap. An
 operator who tightens the deployment afterwards turns every record accepted before into one that asks for less, and
-refusing those on the next start would refuse the start itself for every owner — over records their authors could no
+refusing those on the next start would refuse the start itself for every user — over records their authors could no
 longer reach to rewrite, the surface that would rewrite them being behind the gate that is failing. The composition
 takes the stricter of the two, so such a record loosens nothing.
 
 **Asking for a scanner the deployment cannot run is refused at the write too.** The personal-data scanner reaches an
-analyzer an operator deploys beside the service, so an owner switching it on where
+analyzer an operator deploys beside the service, so a user switching it on where
 `SensitiveContent:PersonalDataAnalyzer:Endpoint` names no address is told so immediately, with that key named. The
 alternative would be a record that reads as accepted and a mailbox that fails closed on its next message.
 
 **What stays the deployment's, wholly.** The analyzer's address, the analyzed ceiling, the per-scan timeout, the
 process-wide scan concurrency, and the rebuild switch below. They are the operator's costs rather than anybody's
-preference, and the concurrency in particular is **one budget shared across every owner**: a deployment's limit on
-scans running at once is a property of the process, and a per-owner share of it would let the number of people served
+preference, and the concurrency in particular is **one budget shared across every user**: a deployment's limit on
+scans running at once is a property of the process, and a per-user share of it would let the number of people served
 decide how much load the analyzer sees.
 
-**A deployment serving one owner whose record says nothing behaves exactly as it did before any of this existed** — the
+**A deployment serving one user whose record says nothing behaves exactly as it did before any of this existed** — the
 same scanners, the same screening, the same stamp, the same queries. Nothing here is reached by a record that says
 nothing.
 
-Two owners asking for the same thing share one composed posture, so a deployment holds one redaction and one stamp
+Two users asking for the same thing share one composed posture, so a deployment holds one redaction and one stamp
 however many people it serves, and the detectors behind them are constructed once for the scanners the deployment
-provides. An owner whose posture scans nothing constructs none at all.
+provides. A user whose posture scans nothing constructs none at all.
 
-Changing an owner's posture rewrites nothing already stored, for the reason a deployment-wide change rewrites nothing:
-the way back is the same rebuild, and it covers that owner's mail alone. [The stamp a derived row
-carries](#the-stamp-a-derived-row-carries) is judged against the posture of the owner who holds the row, so one person
+Changing a user's posture rewrites nothing already stored, for the reason a deployment-wide change rewrites nothing:
+the way back is the same rebuild, and it covers that user's mail alone. [The stamp a derived row
+carries](#the-stamp-a-derived-row-carries) is judged against the posture of the user who holds the row, so one person
 switching a scanner on leaves everybody else's rows exactly where they were.
 
 ## The guarded egress points
@@ -264,7 +264,7 @@ same screen sits on the two paths that hand an attachment's octets to somebody o
 [client's own attachment route](../operations/client-endpoint.md#the-attachment-route).
 
 - **The rule is the one above.** The file's text is extracted afresh — nothing here depends on what a derived pass
-  stored or on the message having been read yet — and judged by the owner's own posture. A finding refuses the
+  stored or on the message having been read yet — and judged by the user's own posture. A finding refuses the
   download; a document nothing could read refuses it; a file no reader recognizes as a document is served as it always
   was. What the read *is* bounded by is `Embeddings:AttachmentText:Formats`, the same set the search stage is
   configured with, so a format an operator excluded from it answers `FormatNotExtracted` and is refused rather than
@@ -280,7 +280,7 @@ same screen sits on the two paths that hand an attachment's octets to somebody o
   could not answer at all — and the answer says which of the four it was no more than it names a category. Telling them
   apart would say that this file holds a credential, or that this deployment's analyzer is down, to somebody the
   deployment has just decided may not have the file.
-- **An owner who screens nothing pays for none of it, and serves attachments unscreened.** The posture is read before
+- **A user who screens nothing pays for none of it, and serves attachments unscreened.** The posture is read before
   anything is opened, so a deployment this is inactive for serves a download at exactly the cost it did before. Which
   deployments those are is `SensitiveContent:ScreenOutgoingMailFor` and nothing else — the same key that decides
   whether a send is screened. A deployment that switched no scanner on is one of them; so is one running every scanner
@@ -307,9 +307,9 @@ is which findings matter, because a redaction and a refusal are not the same act
   what leaves through a model may be redacted but what a person sends is theirs.
 - **A scanner named here but switched off screens nothing**, because it detects nothing to screen with. Naming one is
   not how it is switched on.
-- **An owner may add to this list and never take from it.** The key names what stops every owner's outgoing mail; an
-  owner's own `ScreenOutgoingMailFor` is read as their whole answer, so one naming fewer scanners than this does is
-  refused where it is written. [Each owner's own posture](#each-owners-own-posture) is the rule.
+- **A user may add to this list and never take from it.** The key names what stops every user's outgoing mail; a
+  user's own `ScreenOutgoingMailFor` is read as their whole answer, so one naming fewer scanners than this does is
+  refused where it is written. [Each user's own posture](#each-users-own-posture) is the rule.
 
 With no scanner switched on, nothing is screened, no message is parsed, and no detector is constructed — the opt-in
 nobody took costs an enqueue and a draft save nothing at all.
@@ -439,8 +439,8 @@ stored derived text is never edited in place.** The way back is a rebuild, and t
 raw MIME byte-exact — an in-place edit of derived text would leave a chunk whose vector was built from something else,
 with nothing recording which half was which.
 
-So the deployment says so instead. At startup, a deployment where any owner has a scanner on counts what was written
-under something other than **its own owner's** configuration, and reports that on its own log as two figures: the
+So the deployment says so instead. At startup, a deployment where any user has a scanner on counts what was written
+under something other than **its own user's** configuration, and reports that on its own log as two figures: the
 messages whose derived body text is stale, and the readings of an attachment that are. They are reported side by side
 rather than added, because they cost different things to repair and neither contains the other — a message is
 re-derived from stored raw MIME, and a reading is taken again by a stage that re-parses a file and may call a
@@ -481,7 +481,7 @@ protection switch.
 
 With nothing switched on for anybody nothing here runs at all: no detector is constructed, no text is scanned on the way
 to storage, and no stamp is written — a derived row on such a deployment is byte-identical to one written before this
-existed. The same holds per person: an owner nobody scans has rows carrying no stamp, and nothing about them is ever
+existed. The same holds per person: a user nobody scans has rows carrying no stamp, and nothing about them is ever
 outstanding.
 
 ## A finding names a position, never a value

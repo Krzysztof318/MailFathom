@@ -41,8 +41,8 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// What the tests establish together is the operator's whole path in
 /// <see href="../../../docs/operations/database-schema.md">the schema documentation</see>: an installation that has
 /// never held the schema takes the complete chain and then satisfies the startup gate, one that already carries part of
-/// it takes only what it is missing without touching a row, and one that carries mail stored before the owner axis
-/// existed is brought onto the owner the same script provisions. The second is what makes the artifact safe to apply
+/// it takes only what it is missing without touching a row, and one that carries mail stored before the user axis
+/// existed is brought onto the user the same script provisions. The second is what makes the artifact safe to apply
 /// when nobody is certain which migrations a given database holds; the third is the only one of the three that cannot
 /// be written against the whole chain at once, because what it is about is the state between two of its migrations.
 /// </para>
@@ -50,8 +50,8 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixture orchestration)
 {
-    /// <summary>The migration that introduces the owner axis, which the carry-forward test applies across.</summary>
-    private const string OwnerMigrationName = "AddOwnerAccounts";
+    /// <summary>The migration that introduces the user axis, which the carry-forward test applies across.</summary>
+    private const string UserMigrationName = "AddUserAccounts";
 
     private const string CarriedAccount = "artifact-carry-forward";
 
@@ -80,10 +80,10 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         Assert.Empty(await inspector.ReadPendingMigrationIdentifiersAsync(cancellationToken));
 
         // The one row the chain writes rather than creates a table for: a deployment brought to this release by the
-        // artifact alone holds the owner every mailbox it goes on to synchronize is bound to.
+        // artifact alone holds the user every mailbox it goes on to synchronize is bound to.
         Assert.Single(await scope.ServiceProvider
             .GetRequiredService<MailFathomDbContext>()
-            .OwnerAccounts
+            .UserAccounts
             .AsNoTracking()
             .ToListAsync(cancellationToken));
         Assert.Equal(
@@ -145,7 +145,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await host.StopAsync(cancellationToken);
     }
 
-    /// <summary>Proves a mailbox stored before the owner axis existed is carried onto the owner the script writes.</summary>
+    /// <summary>Proves a mailbox stored before the user axis existed is carried onto the user the script writes.</summary>
     /// <remarks>
     /// The one claim in this class that a whole-chain apply cannot make: the migration adds a column, fills it, and then
     /// makes it required, and a database that never held a mailbox row while the column was still absent never exercises
@@ -154,7 +154,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
     /// catches is the generated shape, where the column arrives with a default and points at a row nothing inserted.
     /// </remarks>
     [Fact]
-    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheOwnerMigration_CarriesItOntoTheProvisionedOwner()
+    public async Task SchemaArtifact_AppliedOverAMailboxStoredBeforeTheUserMigration_CarriesItOntoTheProvisionedUser()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -166,26 +166,26 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
 
         using var scope = host.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<MailFathomDbContext>();
-        var releaseBeforeTheOwnerAxis = context.GetService<IMigrator>().GenerateScript(
-            toMigration: MigrationPrecedingTheOwnerAxis(context),
+        var releaseBeforeTheUserAxis = context.GetService<IMigrator>().GenerateScript(
+            toMigration: MigrationPrecedingTheUserAxis(context),
             options: MigrationsSqlGenerationOptions.Idempotent);
 
-        await ApplyAsync(connectionString, releaseBeforeTheOwnerAxis, cancellationToken);
+        await ApplyAsync(connectionString, releaseBeforeTheUserAxis, cancellationToken);
         await InsertUnattributedMailboxAsync(connectionString, cancellationToken);
 
         // Act
         await ApplyAsync(connectionString, GenerateSchemaArtifact(scope.ServiceProvider), cancellationToken);
 
         // Assert
-        var ownerId = await context.OwnerAccounts
+        var userId = await context.UserAccounts
             .AsNoTracking()
-            .Select(owner => owner.Id)
+            .Select(user => user.Id)
             .SingleAsync(cancellationToken);
         var carriedMailbox = await context.MailboxAccounts
             .AsNoTracking()
             .SingleAsync(account => account.Id == CarriedAccount, cancellationToken);
 
-        Assert.Equal(ownerId, carriedMailbox.OwnerId);
+        Assert.Equal(userId, carriedMailbox.UserId);
         Assert.Equal(
             context.Database.GetMigrations(),
             await ReadAppliedMigrationsAsync(connectionString, cancellationToken));
@@ -193,21 +193,21 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         await host.StopAsync(cancellationToken);
     }
 
-    /// <summary>Names the migration a database is left at so that the owner migration is the next one it takes.</summary>
-    private static string MigrationPrecedingTheOwnerAxis(MailFathomDbContext context)
+    /// <summary>Names the migration a database is left at so that the user migration is the next one it takes.</summary>
+    private static string MigrationPrecedingTheUserAxis(MailFathomDbContext context)
     {
         string[] definedMigrations = [.. context.Database.GetMigrations()];
-        var ownerAxis = Array.FindIndex(
+        var userAxis = Array.FindIndex(
             definedMigrations,
-            migration => migration.EndsWith(OwnerMigrationName, StringComparison.Ordinal));
+            migration => migration.EndsWith(UserMigrationName, StringComparison.Ordinal));
 
-        return ownerAxis > 0
-            ? definedMigrations[ownerAxis - 1]
+        return userAxis > 0
+            ? definedMigrations[userAxis - 1]
             : throw new InvalidOperationException(
-                $"The migration chain holds no {OwnerMigrationName} with a migration before it, so there is no state to carry a mailbox forward from.");
+                $"The migration chain holds no {UserMigrationName} with a migration before it, so there is no state to carry a mailbox forward from.");
     }
 
-    /// <summary>Writes the mailbox row a previous release would hold, while the owner column does not yet exist.</summary>
+    /// <summary>Writes the mailbox row a previous release would hold, while the user column does not yet exist.</summary>
     private static async Task InsertUnattributedMailboxAsync(
         string connectionString,
         CancellationToken cancellationToken)
@@ -315,13 +315,13 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         MailFathomDbContext context,
         CancellationToken cancellationToken)
     {
-        // The owner the artifact provisioned, rather than one written here: a mailbox belongs to somebody, and this
-        // database has held exactly one owner record since the script that created it ran.
-        var ownerId = await context.OwnerAccounts.Select(owner => owner.Id).SingleAsync(cancellationToken);
-        var account = new MailboxAccountEntity { Id = "artifact-upgrade", OwnerId = ownerId };
+        // The user the artifact provisioned, rather than one written here: a mailbox belongs to somebody, and this
+        // database has held exactly one user record since the script that created it ran.
+        var userId = await context.UserAccounts.Select(user => user.Id).SingleAsync(cancellationToken);
+        var account = new MailboxAccountEntity { Id = "artifact-upgrade", UserId = userId };
         var folder = new MailFolderEntity
         {
-            OwnerId = account.OwnerId,
+            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -330,7 +330,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            OwnerId = account.OwnerId,
+            UserId = account.UserId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,

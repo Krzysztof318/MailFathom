@@ -15,7 +15,7 @@ namespace MailFathom.Application.Rules.Actions;
 /// <param name="PermitsWriteKeywords">Whether a rule may add, remove, or replace the keywords of this account's mail.</param>
 /// <remarks>
 /// <para>
-/// What automation may do to a mailbox is the owner's decision rather than a rule's, so it is declared per account and
+/// What automation may do to a mailbox is the user's decision rather than a rule's, so it is declared per account and
 /// per action instead of as one switch: an installation can run every rule it has with deletion refused, which is the
 /// case this exists for. A rule declaring an action its account does not permit is refused when the configuration is
 /// read rather than skipped later, because a rule that silently does nothing is indistinguishable from one that never
@@ -28,7 +28,7 @@ namespace MailFathom.Application.Rules.Actions;
 /// </para>
 /// <para>
 /// The three keyword mutations share one switch, which is the one place the per-mutation shape is deliberately not
-/// followed. An owner deciding whether automation may label their mail is answering one question about one kind of
+/// followed. A user deciding whether automation may label their mail is answering one question about one kind of
 /// value, and splitting it in three would offer a combination — may add, may not remove — whose only effect is mail
 /// accumulating labels nothing is allowed to take off again.
 /// </para>

@@ -169,7 +169,7 @@ public sealed class ClientMailTimelineEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
     }
 
-    /// <summary>A request that names nothing draws the newest mail of every folder the owner owns, which is what a screen opens on.</summary>
+    /// <summary>A request that names nothing draws the newest mail of every folder the user owns, which is what a screen opens on.</summary>
     [Fact]
     public async Task ReadTimelineAsync_NoParameters_ReadsTheNewestMailFirstFromTheLeadingEnd()
     {
@@ -335,7 +335,7 @@ public sealed class ClientMailTimelineEndpointTests
         int attachmentCount = 0) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
+            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
             FolderAlias = MailFolderAlias.Create("INBOX"),
             Subject = subject,
             SentAt = FirstJuly,

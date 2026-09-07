@@ -12,12 +12,12 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Delivery.Governance;
 
-/// <summary>Answers how many of the addresses a caller wrote down neither the book nor the caller's owner's mailboxes vouch for.</summary>
+/// <summary>Answers how many of the addresses a caller wrote down neither the book nor the caller's user's mailboxes vouch for.</summary>
 /// <remarks>
 /// <para>
-/// Two things vouch for an address, and both are the owner's rather than any caller's. The contact book holds the
-/// people this mailbox corresponds with — whether the owner wrote them down or collection recorded them from mail that
-/// arrived — and the owner's own accounts hold the mailboxes this deployment reads on their behalf. An address in
+/// Two things vouch for an address, and both are the user's rather than any caller's. The contact book holds the
+/// people this mailbox corresponds with — whether the user wrote them down or collection recorded them from mail that
+/// arrived — and the user's own accounts hold the mailboxes this deployment reads on their behalf. An address in
 /// neither is one this installation has no trace of at all, which is what the address inside an injected instruction
 /// looks like: a message telling an agent to write to its author's accomplice is naming somebody the mailbox has never
 /// heard of.
@@ -39,8 +39,8 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads which of a set of addresses the book already holds.</param>
-/// <param name="ownership">Answers whose book that is, which is the owner the send is being authored for.</param>
-/// <param name="accounts">Says which accounts the caller's owner owns.</param>
+/// <param name="ownership">Answers whose book that is, which is the user the send is being authored for.</param>
+/// <param name="accounts">Says which accounts the caller's user owns.</param>
 /// <param name="senderIdentities">Says which address each of those accounts sends as.</param>
 public sealed class RecipientVouching(
     IContactDirectory contacts,
@@ -48,12 +48,12 @@ public sealed class RecipientVouching(
     ICallerMailAccountCatalog accounts,
     IOutgoingSenderIdentityReader senderIdentities)
 {
-    /// <summary>Counts the recipients a caller named itself that neither the book nor their owner's mailboxes vouch for.</summary>
+    /// <summary>Counts the recipients a caller named itself that neither the book nor their user's mailboxes vouch for.</summary>
     /// <param name="recipients">Everybody the message is addressed to, whoever put them there.</param>
     /// <param name="cancellationToken">Cancels the reads of the book.</param>
-    /// <returns>How many of the addresses the caller supplied are ones neither the book nor the caller's owner's mailboxes hold.</returns>
+    /// <returns>How many of the addresses the caller supplied are ones neither the book nor the caller's user's mailboxes hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipients" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner, since what vouches for an address is an owner's own.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user, since what vouches for an address is a user's own.</exception>
     /// <remarks>
     /// Text that names no mailbox at all is not counted here. Whether an address parses is the composition's question
     /// and it refuses one that does not, so counting unparsable text would refuse a send for a reason the caller is
@@ -82,12 +82,12 @@ public sealed class RecipientVouching(
 
         // Resolved once, so every group of one send is answered about one book by construction rather than by each
         // read happening to reach the same principal — and so the resolution is not repeated per chunk.
-        var owner = ownership.Owner;
+        var user = ownership.User;
         var count = 0;
 
         foreach (var group in unvouched.Chunk(Contact.MaximumAddressCount))
         {
-            var held = await contacts.FindHoldersOfAsync(owner, group, cancellationToken);
+            var held = await contacts.FindHoldersOfAsync(user, group, cancellationToken);
 
             count += group.Count(address => !held.ContainsKey(address));
         }
@@ -113,10 +113,10 @@ public sealed class RecipientVouching(
         }
     }
 
-    /// <summary>Reads the mailboxes this caller's owner sends as, which are their own and never a stranger's.</summary>
+    /// <summary>Reads the mailboxes this caller's user sends as, which are their own and never a stranger's.</summary>
     /// <remarks>
     /// Read from configuration rather than from the database, so an installation that has synchronized nothing still
-    /// vouches for its own addresses. It is the caller's owner's accounts rather than the deployment's, because an
+    /// vouches for its own addresses. It is the caller's user's accounts rather than the deployment's, because an
     /// address vouched for by a mailbox this caller may not read is an answer about somebody else's correspondents. An
     /// account without a sending identity contributes none, which is the honest answer: nothing here knows what a
     /// read-only account's own address is.

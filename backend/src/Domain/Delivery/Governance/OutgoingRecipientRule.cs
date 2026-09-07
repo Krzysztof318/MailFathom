@@ -23,7 +23,7 @@ namespace MailFathom.Domain.Delivery.Governance;
 /// organization down means, since a mailbox at a department's subdomain is that organization's mailbox.
 /// </para>
 /// <para>
-/// A recipient is somebody who is not this mailbox's owner, so an entry is personal data of theirs and reaches no log
+/// A recipient is somebody who is not this mailbox's user, so an entry is personal data of theirs and reaches no log
 /// line, metric dimension, span attribute, or exception message.
 /// </para>
 /// </remarks>

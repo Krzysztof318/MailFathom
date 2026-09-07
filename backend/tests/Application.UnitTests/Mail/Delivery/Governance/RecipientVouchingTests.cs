@@ -41,7 +41,7 @@ public sealed class RecipientVouchingTests
         Assert.Equal(1, unvouched);
     }
 
-    /// <summary>Somebody the book holds is vouched for, whether the owner wrote them down or collection recorded them.</summary>
+    /// <summary>Somebody the book holds is vouched for, whether the user wrote them down or collection recorded them.</summary>
     [Fact]
     public async Task CountUnvouchedAsync_AddressTheBookHolds_IsVouchedFor()
     {
@@ -59,16 +59,16 @@ public sealed class RecipientVouchingTests
         Assert.Equal(0, unvouched);
     }
 
-    /// <summary>A mailbox this deployment sends as is the owner's own, so writing to it is never an injected recipient.</summary>
+    /// <summary>A mailbox this deployment sends as is the user's own, so writing to it is never an injected recipient.</summary>
     [Fact]
     public async Task CountUnvouchedAsync_AddressThisDeploymentSendsAs_IsVouchedFor()
     {
         // Arrange
-        var vouching = Vouching(new InMemoryContactBookStore(), ownAddress: "owner@example.test");
+        var vouching = Vouching(new InMemoryContactBookStore(), ownAddress: "user@example.test");
 
         // Act
         var unvouched = await vouching.CountUnvouchedAsync(
-            [NamedByCaller("owner@example.test")],
+            [NamedByCaller("user@example.test")],
             CancellationToken.None);
 
         // Assert
@@ -76,21 +76,21 @@ public sealed class RecipientVouchingTests
     }
 
     /// <summary>
-    /// A mailbox another owner sends as vouches for nothing here, because what vouches for an address is the caller's
+    /// A mailbox another user sends as vouches for nothing here, because what vouches for an address is the caller's
     /// own accounts rather than every account this deployment happens to serve.
     /// </summary>
     [Fact]
-    public async Task CountUnvouchedAsync_AddressAnotherOwnersAccountSendsAs_IsCounted()
+    public async Task CountUnvouchedAsync_AddressAnotherUsersAccountSendsAs_IsCounted()
     {
         // Arrange
         var vouching = Vouching(
             new InMemoryContactBookStore(),
-            ownAddress: "owner@example.test",
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailSend));
+            ownAddress: "user@example.test",
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailSend));
 
         // Act
         var unvouched = await vouching.CountUnvouchedAsync(
-            [NamedByCaller("owner@example.test")],
+            [NamedByCaller("user@example.test")],
             CancellationToken.None);
 
         // Assert
@@ -158,24 +158,24 @@ public sealed class RecipientVouchingTests
         Assert.Equal(1, book.BatchedLookupCount);
     }
 
-    /// <summary>Another owner's book vouches for nobody here, because the vouching reads the book the send is authored for.</summary>
+    /// <summary>Another user's book vouches for nobody here, because the vouching reads the book the send is authored for.</summary>
     /// <remarks>
     /// This is the control that keeps every other assertion in the class honest. All of them arrange one book and one
-    /// caller under the same owner, so a scope lost anywhere between here and the directory would let one owner's
+    /// caller under the same user, so a scope lost anywhere between here and the directory would let one user's
     /// correspondents vouch for a send authored for another — and the refusal an operator switched on would stop
     /// refusing without a single test failing.
     /// </remarks>
     [Fact]
-    public async Task CountUnvouchedAsync_AddressOnlyAnotherOwnersBookHolds_IsCounted()
+    public async Task CountUnvouchedAsync_AddressOnlyAnotherUsersBookHolds_IsCounted()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
-        book.Hold(SyntheticMailOwner.Deployment, ContactOf("Anna", "anna@example.test"));
+        book.Hold(SyntheticMailUser.Deployment, ContactOf("Anna", "anna@example.test"));
 
         var vouching = Vouching(
             book,
-            authorization: AccessAuthorizations.ForOwnerGranted(
-                SyntheticMailOwner.Another,
+            authorization: AccessAuthorizations.ForUserGranted(
+                SyntheticMailUser.Another,
                 MailFathomPermission.MailSend));
 
         // Act
@@ -193,7 +193,7 @@ public sealed class RecipientVouchingTests
         AccessAuthorization? authorization = null)
     {
         // One authorization, because the catalog the vouching reads its own addresses from and the book it reads
-        // correspondents from have to answer for the same owner. Resolving the default twice would let the two axes
+        // correspondents from have to answer for the same user. Resolving the default twice would let the two axes
         // drift apart, and an empty book vouches for nobody — so a suite arranging a refusing posture would change
         // verdict with nothing able to say why.
         var caller = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);

@@ -16,7 +16,7 @@
 //
 // Each of those four and the fifth beside them is `async` for one reason: Tauri runs a synchronous command on the main
 // thread, and every one of them ends in a blocking call to something outside the process — a credential store, which
-// on Linux is a D-Bus round trip that waits while a locked keyring asks its owner to unlock it, or a file on a disk
+// on Linux is a D-Bus round trip that waits while a locked keyring asks its user to unlock it, or a file on a disk
 // that may be a network mount. Run there, that call freezes the window rather than the request; run on the async
 // runtime, it occupies a worker and the application keeps painting.
 //

@@ -15,13 +15,13 @@ namespace MailFathom.Host.Api;
 /// <remarks>
 /// <para>
 /// The first administrative route that changes anything, and the request body carries a long-lived credential for a
-/// named mailbox owner. That is what makes the endpoint's two startup warnings matter more here than they did for a
+/// named mailbox user. That is what makes the endpoint's two startup warnings matter more here than they did for a
 /// session probe: an endpoint served in clear text hands this token to anything on the path, and one with no
 /// authentication method turned on accepts it from anybody who can reach the address.
 /// </para>
 /// <para>
 /// <strong>The route is published under <c>mailfathom.admin.credentials.write</c>, and nothing else on this surface
-/// is.</strong> Placing a mailbox owner's long-lived credential is nothing like reading the deployment's state or
+/// is.</strong> Placing a mailbox user's long-lived credential is nothing like reading the deployment's state or
 /// retrying a job, so an operator who provisioned a credential for either of those has not thereby provisioned one that
 /// can do this. A caller whose grant omits the permission is refused with it named, and a caller whose entry narrows
 /// nothing holds it like every other permission the surface publishes.

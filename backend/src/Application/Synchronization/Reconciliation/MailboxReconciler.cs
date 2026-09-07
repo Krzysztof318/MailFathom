@@ -308,7 +308,7 @@ public sealed class MailboxReconciler
             observedAt);
     }
 
-    /// <summary>Separates the flag and keyword changes MailFathom made from the ones the mailbox owner made.</summary>
+    /// <summary>Separates the flag and keyword changes MailFathom made from the ones the mailbox user made.</summary>
     /// <remarks>
     /// <para>
     /// Only an occurrence where one of the three values actually stands somewhere new is asked about, so a window over a
@@ -324,7 +324,7 @@ public sealed class MailboxReconciler
     /// it was when only <c>\Seen</c> was written.
     /// </para>
     /// <para>
-    /// A change with no record is the mailbox owner's own act and is counted rather than suppressed, which is what keeps
+    /// A change with no record is the mailbox user's own act and is counted rather than suppressed, which is what keeps
     /// this about provenance instead of about which field moved. The counts are kept apart per value because they answer
     /// different questions about a mailbox: mail somebody read, mail somebody starred, and mail somebody labelled are
     /// three readings rather than one total.
@@ -333,7 +333,7 @@ public sealed class MailboxReconciler
     /// Nothing is written back to the record here, and it needs nothing: a store answers only for a reading taken before
     /// the occurrence was next observed, and applying this window's outcome is what moves that observation forward. The
     /// window's own transaction therefore ends the record's answer whether or not anything matched, which is the case a
-    /// mark on the row would miss — an owner who reverted the flag before the first reading would leave such a mark
+    /// mark on the row would miss — a user who reverted the flag before the first reading would leave such a mark
     /// unwritten and have their own later change silenced by it.
     /// </para>
     /// </remarks>
@@ -455,7 +455,7 @@ public sealed class MailboxReconciler
         }
     }
 
-    /// <summary>Counts the changes of one kind that no record accounted for, which are the mailbox owner's own.</summary>
+    /// <summary>Counts the changes of one kind that no record accounted for, which are the mailbox user's own.</summary>
     private static int ExternalCountOf(
         IReadOnlyList<AttributedFlagChange> attributions,
         MailboxChangeKind kind) =>
@@ -606,7 +606,7 @@ public sealed class MailboxReconciler
         MailboxMutationRecord? Record);
 
     /// <summary>What one window's moved flags and keywords split into once the mutation record has answered for them.</summary>
-    /// <param name="ExternalSeenStateCount">How many moved <c>\Seen</c> flags no record accounts for, which are the mailbox owner's own.</param>
+    /// <param name="ExternalSeenStateCount">How many moved <c>\Seen</c> flags no record accounts for, which are the mailbox user's own.</param>
     /// <param name="ExternalFlaggedStateCount">How many moved <c>\Flagged</c> flags no record accounts for.</param>
     /// <param name="ExternalKeywordsCount">How many changed keyword sets no record accounts for.</param>
     /// <param name="Suppressed">The ones MailFathom wrote itself, each named with the record that says so.</param>
@@ -630,21 +630,21 @@ public sealed class MailboxReconciler
 /// <param name="RemotelyDeletedEmailCount">How many stored occurrences the folder no longer holds and nothing MailFathom did accounts for.</param>
 /// <param name="OwnMutationCompletedEmailCount">
 /// How many stored occurrences left the folder because MailFathom relocated or deleted them. They are counted apart from
-/// the remotely deleted ones because they are the opposite finding: a change of the owner's own that has come back
+/// the remotely deleted ones because they are the opposite finding: a change of the user's own that has come back
 /// through synchronization, rather than one to react to.
 /// </param>
 /// <param name="SeenStateChangedEmailCount">
 /// How many stored emails the server reported a moved <c>\Seen</c> flag for that no mutation of MailFathom's accounts
-/// for. Those are the mailbox owner's own act — read in their client, or marked read there — and they stay a change to
+/// for. Those are the mailbox user's own act — read in their client, or marked read there — and they stay a change to
 /// react to, which is what keeps the suppression beside them about provenance rather than about the flag.
 /// </param>
 /// <param name="FlaggedStateChangedEmailCount">
 /// How many stored emails the server reported a moved <c>\Flagged</c> flag for that no mutation of MailFathom's
-/// accounts for, which is the owner starring or unstarring mail in their own client.
+/// accounts for, which is the user starring or unstarring mail in their own client.
 /// </param>
 /// <param name="KeywordsChangedEmailCount">
 /// How many stored emails the server reported different keywords for that no mutation of MailFathom's accounts for,
-/// which is the owner labelling mail in their own client. It counts emails rather than keywords, because a set is what
+/// which is the user labelling mail in their own client. It counts emails rather than keywords, because a set is what
 /// a server reports and what a comparison decides.
 /// </param>
 /// <param name="EmailsRemain">Whether occurrences still await reconciliation after this window.</param>

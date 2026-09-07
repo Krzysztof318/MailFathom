@@ -71,7 +71,7 @@ public sealed class ClientMailThreadEndpointTests
         Assert.Equal(["sender@example.test"], page.Participants.Select(participant => participant.Address));
     }
 
-    /// <summary>A conversation nobody holds and one this owner may not see answer identically, so neither discloses the other.</summary>
+    /// <summary>A conversation nobody holds and one this user may not see answer identically, so neither discloses the other.</summary>
     [Fact]
     public async Task ReadThreadAsync_AnIdentifierNamingNoConversationThisCallerMaySee_IsNotFound()
     {
@@ -234,7 +234,7 @@ public sealed class ClientMailThreadEndpointTests
     private static EmailSummary SyntheticListedEmail(Guid? storedEmailId = null) => new()
     {
         StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
+        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         ThreadId = Conversation,
         Subject = "a subject",

@@ -75,7 +75,7 @@ internal sealed class CreateContactTool(ContactBookWriter contactBookWriter)
         string displayName,
         [Description("Every mail address this person uses, at most 32 entries of at most 320 characters each. Two spellings of one address are stored once and the first spelling is the one kept, but both still count towards the 32. An address another contact already holds refuses the write.")]
         IReadOnlyList<string> addresses,
-        [Description("The address to use when addressing this person without naming which of theirs to use. Must be one of addresses; state it even where the record names a single address, because nothing picks one for the owner.")]
+        [Description("The address to use when addressing this person without naming which of theirs to use. Must be one of addresses; state it even where the record names a single address, because nothing picks one for the user.")]
         string preferredAddress,
         [Description("What to record about this person, up to 4000 characters, or omit for none. Line breaks and tabs are kept. This is free text about a third party: write only what the person you are acting for asked to be recorded.")]
         string? note = null,

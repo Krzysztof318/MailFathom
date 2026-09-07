@@ -19,32 +19,32 @@ public sealed class DiscoveryRunRegistryTests
 
     /// <summary>A run is addressed by its identifier the moment it is opened, which is what the asking request answers with.</summary>
     [Fact]
-    public void TryOpen_ARunForAnOwner_IsFoundBackByThatOwner()
+    public void TryOpen_ARunForAnUser_IsFoundBackByThatUser()
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
 
         // Act
-        var opened = registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        var opened = registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
 
         // Assert
         Assert.True(opened);
         Assert.NotNull(journal);
-        Assert.True(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out var found));
+        Assert.True(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out var found));
         Assert.Same(journal, found);
     }
 
     /// <summary>A run holds one person's mail, so an identifier alone is not what decides who is shown it.</summary>
     [Fact]
-    public void TryFind_ARunAnotherOwnerStarted_ReportsNoSuchRun()
+    public void TryFind_ARunAnotherUserStarted_ReportsNoSuchRun()
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
 
         // Act
-        var found = registry.TryFind(journal.Id, SyntheticMailOwner.Another, out var reachable);
+        var found = registry.TryFind(journal.Id, SyntheticMailUser.Another, out var reachable);
 
         // Assert
         Assert.False(found);
@@ -59,10 +59,10 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         Enumerable.Range(0, DiscoveryRunBounds.MaximumConcurrentRuns)
             .ToList()
-            .ForEach(run => registry.TryOpen(SyntheticMailOwner.Deployment, out _));
+            .ForEach(run => registry.TryOpen(SyntheticMailUser.Deployment, out _));
 
         // Act
-        var opened = registry.TryOpen(SyntheticMailOwner.Deployment, out var refused);
+        var opened = registry.TryOpen(SyntheticMailUser.Deployment, out var refused);
 
         // Assert
         Assert.False(opened);
@@ -76,7 +76,7 @@ public sealed class DiscoveryRunRegistryTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
@@ -85,7 +85,7 @@ public sealed class DiscoveryRunRegistryTests
         this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
 
         // Assert
-        Assert.False(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _));
+        Assert.False(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _));
     }
 
     /// <summary>A run still working is kept past the window an ended one is kept for, because a client reconnecting to it must not be told it never existed.</summary>
@@ -94,14 +94,14 @@ public sealed class DiscoveryRunRegistryTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
 
         // Act
         this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
 
         // Assert
-        Assert.True(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _));
+        Assert.True(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _));
     }
 
     /// <summary>
@@ -116,13 +116,13 @@ public sealed class DiscoveryRunRegistryTests
         var registry = new DiscoveryRunRegistry(this.timeProvider);
         Enumerable.Range(0, DiscoveryRunBounds.MaximumConcurrentRuns)
             .ToList()
-            .ForEach(run => registry.TryOpen(SyntheticMailOwner.Deployment, out _));
+            .ForEach(run => registry.TryOpen(SyntheticMailUser.Deployment, out _));
 
         // Act
         this.timeProvider.Advance(DiscoveryRunBounds.MaximumDuration + DiscoveryRunBounds.RetentionAfterLastUse);
 
         // Assert
-        Assert.True(registry.TryOpen(SyntheticMailOwner.Deployment, out _));
+        Assert.True(registry.TryOpen(SyntheticMailUser.Deployment, out _));
         Assert.Equal(1, registry.HeldCount);
     }
 
@@ -132,31 +132,31 @@ public sealed class DiscoveryRunRegistryTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
 
         // Act
         this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse - TimeSpan.FromSeconds(1));
-        registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _);
+        registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _);
         this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse - TimeSpan.FromSeconds(1));
 
         // Assert
-        Assert.True(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _));
+        Assert.True(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _));
     }
 
     /// <summary>Stopping a run signals the token the run composed its own cancellation from, which is what reaches the provider call.</summary>
     [Fact]
-    public void TryStop_ARunThisOwnerStarted_SignalsTheRunsOwnStoppingToken()
+    public void TryStop_ARunThisUserStarted_SignalsTheRunsOwnStoppingToken()
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
 
         // Act
-        var stopped = registry.TryStop(journal.Id, SyntheticMailOwner.Deployment);
+        var stopped = registry.TryStop(journal.Id, SyntheticMailUser.Deployment);
 
         // Assert
         Assert.True(stopped);
@@ -165,15 +165,15 @@ public sealed class DiscoveryRunRegistryTests
 
     /// <summary>A run belongs to whoever started it, so somebody else's is reported as no such run and goes on running.</summary>
     [Fact]
-    public void TryStop_ARunAnotherOwnerStarted_ReportsNoSuchRunAndLeavesItRunning()
+    public void TryStop_ARunAnotherUserStarted_ReportsNoSuchRunAndLeavesItRunning()
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Another, out var journal);
+        registry.TryOpen(SyntheticMailUser.Another, out var journal);
         Assert.NotNull(journal);
 
         // Act
-        var stopped = registry.TryStop(journal.Id, SyntheticMailOwner.Deployment);
+        var stopped = registry.TryStop(journal.Id, SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(stopped);
@@ -186,13 +186,13 @@ public sealed class DiscoveryRunRegistryTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
 
         // Act, Assert
-        Assert.True(registry.TryStop(journal.Id, SyntheticMailOwner.Deployment));
+        Assert.True(registry.TryStop(journal.Id, SyntheticMailUser.Deployment));
     }
 
     /// <summary>A run this process has forgotten is no such run, which is the same answer a read of it gets.</summary>
@@ -201,7 +201,7 @@ public sealed class DiscoveryRunRegistryTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.timeProvider);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
         registry.MarkEnded(journal.Id);
@@ -210,6 +210,6 @@ public sealed class DiscoveryRunRegistryTests
         this.timeProvider.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
 
         // Assert
-        Assert.False(registry.TryStop(journal.Id, SyntheticMailOwner.Deployment));
+        Assert.False(registry.TryStop(journal.Id, SyntheticMailUser.Deployment));
     }
 }

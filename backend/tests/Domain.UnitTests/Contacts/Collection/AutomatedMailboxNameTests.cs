@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Contacts.Collection;
 
-/// <summary>Covers the structural half of collection's bounds: what nobody corresponds with, whoever the owner is.</summary>
+/// <summary>Covers the structural half of collection's bounds: what nobody corresponds with, whoever the user is.</summary>
 public sealed class AutomatedMailboxNameTests
 {
     /// <summary>These are the names RFC 2142 publishes for a function rather than a person, plus the transport's own.</summary>

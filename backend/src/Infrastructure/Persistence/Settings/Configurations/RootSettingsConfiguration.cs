@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.Persistence.Settings.Configurations;
 /// <summary>Declares the one row the deployment's persisted configuration lives in.</summary>
 /// <remarks>
 /// The table is named for the configuration layer that owns it, beside <c>settings_accounts</c>, which holds the same
-/// shape per owner. The singleton is expressed in the schema rather than only in the code that reads it: a second row
+/// shape per user. The singleton is expressed in the schema rather than only in the code that reads it: a second row
 /// would make "the effective configuration" a question about ordering, and no reader would report which row it lost.
 /// </remarks>
 internal sealed class RootSettingsConfiguration : IEntityTypeConfiguration<RootSettingsEntity>

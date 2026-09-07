@@ -202,9 +202,9 @@ public sealed class ClientMailFoldersEndpointTests
         Assert.Equal(["ARCHIVE", "INBOX"], response.Accounts[1].Folders.Select(folder => folder.Alias));
     }
 
-    /// <summary>An owner with no account reads an empty tree, which is a state a client renders rather than an error.</summary>
+    /// <summary>A user with no account reads an empty tree, which is a state a client renders rather than an error.</summary>
     [Fact]
-    public void For_AnOwnerWithNoAccount_CarriesAnEmptyCollection()
+    public void For_AnUserWithNoAccount_CarriesAnEmptyCollection()
     {
         // Arrange
         var directory = new MailFolderDirectory(SynchronizationEnabled: true, []);

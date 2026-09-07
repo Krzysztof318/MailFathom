@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.Spam.History;
 public sealed class SpamClassificationHistoryQueryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly StoredEmailId Email =
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-0000000090a0"));
@@ -116,7 +116,7 @@ public sealed class SpamClassificationHistoryQueryTests
         var here = QueryOf().Query!;
 
         var elsewhere = SpamClassificationHistoryQuery.Create(
-            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-2")),
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-2")),
             storedEmailId: null,
             verdict: null,
             evaluatedFrom: null,

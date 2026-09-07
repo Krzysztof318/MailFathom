@@ -177,6 +177,6 @@ public sealed class StubEmailThreadReaderTests
 
         public IReadOnlyList<ServedMailAccount> OwnedAccounts => served;
 
-        public MailOwnerId Owner => served.Count is 0 ? SyntheticMailOwner.Deployment : served[0].Owner;
+        public MailUserId User => served.Count is 0 ? SyntheticMailUser.Deployment : served[0].User;
     }
 }

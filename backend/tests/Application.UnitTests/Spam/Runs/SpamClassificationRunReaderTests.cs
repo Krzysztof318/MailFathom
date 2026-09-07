@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Spam.Runs;
 public sealed class SpamClassificationRunReaderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private readonly ISpamClassificationRunStore runs = Substitute.For<ISpamClassificationRunStore>();
 

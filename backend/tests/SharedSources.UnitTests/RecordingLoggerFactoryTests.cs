@@ -17,7 +17,7 @@ public sealed class RecordingLoggerFactoryTests
     private const string Category = "MailFathom.Host.Startup";
 
     [Fact]
-    public void CreateLogger_Always_RemembersTheCategoryTheOwnerAskedFor()
+    public void CreateLogger_Always_RemembersTheCategoryTheUserAskedFor()
     {
         // Arrange
         using var loggerFactory = new RecordingLoggerFactory();
@@ -78,7 +78,7 @@ public sealed class RecordingLoggerFactoryTests
     }
 
     /// <summary>
-    /// An owner disposes the pipeline before the test asserts on it, so the records have to outlive the release that
+    /// A user disposes the pipeline before the test asserts on it, so the records have to outlive the release that
     /// the same test is checking for.
     /// </summary>
     [Fact]

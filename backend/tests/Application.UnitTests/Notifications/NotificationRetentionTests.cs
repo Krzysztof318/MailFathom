@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Notifications;
 /// <summary>Covers how far back a person's notification centre is allowed to reach.</summary>
 public sealed class NotificationRetentionTests
 {
-    private static readonly MailOwnerId Owner = SyntheticMailOwner.Deployment;
+    private static readonly MailUserId User = SyntheticMailUser.Deployment;
 
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
@@ -34,18 +34,18 @@ public sealed class NotificationRetentionTests
 
     /// <summary>The window is measured back from now and the pass is bounded, so a backlog clears over several runs.</summary>
     [Fact]
-    public async Task EraseExpiredAsync_AnyOwner_ErasesWhatHappenedBeforeTheWindowUpToTheBound()
+    public async Task EraseExpiredAsync_AnyUser_ErasesWhatHappenedBeforeTheWindowUpToTheBound()
     {
         // Arrange
         var store = Substitute.For<INotificationStore>();
         var retention = new NotificationRetention(store, new FakeTimeProvider(RunInstant));
 
         // Act
-        await retention.EraseExpiredAsync(Owner, TestContext.Current.CancellationToken);
+        await retention.EraseExpiredAsync(User, TestContext.Current.CancellationToken);
 
         // Assert
         await store.Received(1).EraseOccurredBeforeAsync(
-            Owner,
+            User,
             RunInstant - NotificationRetention.Window,
             NotificationRetention.MaximumNotificationsErasedPerPass,
             Arg.Any<CancellationToken>());
@@ -67,7 +67,7 @@ public sealed class NotificationRetentionTests
         var retention = new NotificationRetention(store, new FakeTimeProvider(RunInstant));
 
         // Act
-        var erasedCount = await retention.EraseExpiredAsync(Owner, TestContext.Current.CancellationToken);
+        var erasedCount = await retention.EraseExpiredAsync(User, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, erasedCount);
@@ -77,7 +77,7 @@ public sealed class NotificationRetentionTests
     private static Notification NotificationOccurredAt(DateTimeOffset occurredAt, string deduplicationKey) =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(occurredAt)),
-            Owner,
+            User,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",

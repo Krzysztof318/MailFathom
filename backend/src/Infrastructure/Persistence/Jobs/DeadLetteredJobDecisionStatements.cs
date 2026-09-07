@@ -38,7 +38,7 @@ internal static class DeadLetteredJobDecisionStatements
     /// <para>
     /// The turn moves to now with it, because the one the row is carrying belongs to a queue that no longer exists. A
     /// job that stopped last week holds a turn from last week, and a decision to run it again would otherwise put it —
-    /// and every other dead letter an operator returned in the same sitting — in front of every owner's due work. It
+    /// and every other dead letter an operator returned in the same sitting — in front of every user's due work. It
     /// keeps a later turn where it somehow has one, which is the same rule a scheduled retry follows.
     /// </para>
     /// </remarks>

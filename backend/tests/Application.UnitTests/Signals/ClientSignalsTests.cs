@@ -17,10 +17,10 @@ namespace MailFathom.Application.UnitTests.Signals;
 public sealed class ClientSignalsTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailAccountIdentity SomebodyElsesAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Another, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("work"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -76,9 +76,9 @@ public sealed class ClientSignalsTests
             [.. channel.Published.Select(signal => signal.Folder!.Value.Value).Order(StringComparer.Ordinal)]);
     }
 
-    /// <summary>Two owners synchronizing at once are two statements, each naming only its own owner.</summary>
+    /// <summary>Two users synchronizing at once are two statements, each naming only its own user.</summary>
     [Fact]
-    public async Task Publish_TheSameChangeForTwoOwners_KeepsEachOwnersSignalToThatOwner()
+    public async Task Publish_TheSameChangeForTwoUsers_KeepsEachUsersSignalToThatUser()
     {
         // Arrange
         var channel = new RecordingClientSignalChannel();
@@ -95,8 +95,8 @@ public sealed class ClientSignalsTests
         // Assert
         Assert.Equal(2, channel.Published.Count);
 
-        var mine = Assert.Single(channel.Published, signal => signal.Owner == SyntheticMailOwner.Deployment);
-        var theirs = Assert.Single(channel.Published, signal => signal.Owner == SyntheticMailOwner.Another);
+        var mine = Assert.Single(channel.Published, signal => signal.User == SyntheticMailUser.Deployment);
+        var theirs = Assert.Single(channel.Published, signal => signal.User == SyntheticMailUser.Another);
 
         Assert.Equal(1, mine.Count);
         Assert.Equal(7, theirs.Count);

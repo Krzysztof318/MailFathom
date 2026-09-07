@@ -529,11 +529,11 @@ public sealed class ConfigurationCommandTests : IDisposable
 
     /// <summary>
     /// The buffer is a complete description of what a deployment does, and it is written into the machine's temporary
-    /// directory — which on a shared host belongs to everybody. It is created readable by its owner alone, and the
+    /// directory — which on a shared host belongs to everybody. It is created readable by its user alone, and the
     /// command deliberately leaves it there when the delete fails, so the mode is the whole of what protects it.
     /// </summary>
     [Fact]
-    public async Task Edit_OnAPlatformWithFileModes_OpensABufferReadableByItsOwnerAlone()
+    public async Task Edit_OnAPlatformWithFileModes_OpensABufferReadableByItsUserAlone()
     {
         // Arrange
         if (OperatingSystem.IsWindows())
@@ -569,11 +569,11 @@ public sealed class ConfigurationCommandTests : IDisposable
     /// <summary>
     /// The mode on the file does not survive the operator's first save: an editor that writes a sibling and renames it
     /// over the target creates that sibling under the process umask. So the buffer sits in a directory of its own,
-    /// which the command creates readable by its owner alone and which keeps the protection whatever the editor left
+    /// which the command creates readable by its user alone and which keeps the protection whatever the editor left
     /// on the file inside it.
     /// </summary>
     [Fact]
-    public async Task Edit_OnAPlatformWithFileModes_HoldsTheBufferInADirectoryReadableByItsOwnerAlone()
+    public async Task Edit_OnAPlatformWithFileModes_HoldsTheBufferInADirectoryReadableByItsUserAlone()
     {
         // Arrange
         if (OperatingSystem.IsWindows())

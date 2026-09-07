@@ -20,9 +20,9 @@ namespace MailFathom.Host.Api;
 /// their laptop has not agreed to anything on the next machine either, which is the reason this is here at all.
 /// </para>
 /// <para>
-/// <b>Neither route names an owner.</b> The person is the one the credential authenticated, resolved from the request
+/// <b>Neither route names a user.</b> The person is the one the credential authenticated, resolved from the request
 /// exactly as the record routes resolve it, so a request reaching somebody else's preferences cannot be composed:
-/// there is no argument to put another owner's identifier in and no listing to discover one from.
+/// there is no argument to put another user's identifier in and no listing to discover one from.
 /// </para>
 /// <para>
 /// Both are <see cref="MailFathomPermission.MailRead" />, and neither adds a name to the published permission set. The
@@ -178,7 +178,7 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing.</param>
 /// <param name="Theme">What the client is painted in once a session exists.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
-/// <param name="MarkReadOnOpen">Whether opening a message marks it read on the owner's own mail server.</param>
+/// <param name="MarkReadOnOpen">Whether opening a message marks it read on the user's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn rather than at the one it was opened at.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
 /// <remarks>

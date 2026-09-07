@@ -22,8 +22,8 @@ internal sealed class OutgoingEmailEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the message is sent from.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the message is sent from.</summary>
+    public required Guid UserId { get; set; }
 
     public OutgoingEmailOrigin RequesterOrigin { get; set; }
 
@@ -117,7 +117,7 @@ internal sealed class OutgoingEmailEntity
     /// <summary>Gets or sets the code of the failure the last filing attempt ended in, and <see langword="null" /> while none has.</summary>
     /// <remarks>
     /// Separate from <see cref="LastFailureCode" /> because the two say different things to whoever reads the record: a
-    /// delivery failure means somebody did not receive the message, and this one means the owner cannot see it in their
+    /// delivery failure means somebody did not receive the message, and this one means the user cannot see it in their
     /// own mail client. Writing either over the other would lose whichever happened first.
     /// </remarks>
     public int? LastFilingFailureCode { get; set; }

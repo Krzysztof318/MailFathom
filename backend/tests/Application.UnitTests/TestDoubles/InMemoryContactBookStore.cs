@@ -15,14 +15,14 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <remarks>
 /// It is one class behind both ports because it is one book: a test arranging what the directory answers and then
 /// asserting what the store kept would otherwise be arranging two halves that could disagree. The rule reproduced is
-/// that one address belongs to one contact <em>within one owner's book</em>, which is what every outcome the book
-/// publishes turns on and is exactly what the unique index over the owner and the address holds; the session is
+/// that one address belongs to one contact <em>within one user's book</em>, which is what every outcome the book
+/// publishes turns on and is exactly what the unique index over the user and the address holds; the session is
 /// accepted and unused, because what it guarantees is a transaction and there is none here.
 /// </remarks>
 /// <remarks>
 /// The books are held in one dictionary keyed on the contact's identity alone, because that is the primary key
-/// <c>ContactConfiguration</c> declares: <c>(Id, OwnerId)</c> is only an alternate key, so that an address row's
-/// foreign key can carry the owner. Keying this double on the pair would let a test arrange one identity in two books
+/// <c>ContactConfiguration</c> declares: <c>(Id, UserId)</c> is only an alternate key, so that an address row's
+/// foreign key can carry the user. Keying this double on the pair would let a test arrange one identity in two books
 /// and pass, where PostgreSQL would refuse the second row.
 /// </remarks>
 internal sealed class InMemoryContactBookStore : IContactStore, IContactDirectory
@@ -43,28 +43,28 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// </remarks>
     internal int BatchedLookupCount { get; private set; }
 
-    /// <summary>Puts a contact into the deployment owner's book without going through a write, for arranging what was already held.</summary>
-    internal void Hold(Contact contact) => this.Hold(SyntheticMailOwner.Deployment, contact);
+    /// <summary>Puts a contact into the deployment user's book without going through a write, for arranging what was already held.</summary>
+    internal void Hold(Contact contact) => this.Hold(SyntheticMailUser.Deployment, contact);
 
-    /// <summary>Puts a contact into one owner's book without going through a write.</summary>
-    internal void Hold(MailOwnerId owner, Contact contact) => this.heldById[contact.Id] = new HeldContact(owner, contact);
+    /// <summary>Puts a contact into one user's book without going through a write.</summary>
+    internal void Hold(MailUserId user, Contact contact) => this.heldById[contact.Id] = new HeldContact(user, contact);
 
-    /// <summary>Gets every contact one owner's book holds, for a test asserting that a book is one person's.</summary>
-    internal IReadOnlyCollection<Contact> ContactsOf(MailOwnerId owner) => [.. this.BookOf(owner)];
+    /// <summary>Gets every contact one user's book holds, for a test asserting that a book is one person's.</summary>
+    internal IReadOnlyCollection<Contact> ContactsOf(MailUserId user) => [.. this.BookOf(user)];
 
     /// <inheritdoc />
     public Task AddAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken)
     {
-        if (this.HolderOf(owner, contact) is { } holder)
+        if (this.HolderOf(user, contact) is { } holder)
         {
             throw new InvalidOperationException($"The address is already held by contact {holder}.");
         }
 
-        this.heldById[contact.Id] = new HeldContact(owner, contact);
+        this.heldById[contact.Id] = new HeldContact(user, contact);
 
         return Task.CompletedTask;
     }
@@ -72,16 +72,16 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken)
     {
-        if (this.HeldIn(owner, contact.Id) is null)
+        if (this.HeldIn(user, contact.Id) is null)
         {
             return Task.FromResult(false);
         }
 
-        this.heldById[contact.Id] = new HeldContact(owner, contact);
+        this.heldById[contact.Id] = new HeldContact(user, contact);
 
         return Task.FromResult(true);
     }
@@ -89,11 +89,11 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<ContactErasure> EraseAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
-        if (this.HeldIn(owner, contactId) is not { } held)
+        if (this.HeldIn(user, contactId) is not { } held)
         {
             return Task.FromResult(new ContactErasure(contactId, WasHeld: false, AddressesErased: 0));
         }
@@ -106,10 +106,10 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <inheritdoc />
     public Task<CollectedContactErasure> EraseCollectedAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
-        var collected = this.BookOf(owner)
+        var collected = this.BookOf(user)
             .Where(contact => contact.Origin == ContactOrigin.Collected)
             .ToArray();
 
@@ -124,19 +124,19 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     }
 
     /// <inheritdoc />
-    public Task<Contact?> FindAsync(MailOwnerId owner, ContactId contactId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.HeldIn(owner, contactId));
+    public Task<Contact?> FindAsync(MailUserId user, ContactId contactId, CancellationToken cancellationToken) =>
+        Task.FromResult(this.HeldIn(user, contactId));
 
     /// <inheritdoc />
     public Task<Contact?> FindByAddressAsync(
-        MailOwnerId owner,
+        MailUserId user,
         EmailAddress address,
         CancellationToken cancellationToken) =>
-        Task.FromResult(this.BookOf(owner).FirstOrDefault(contact => contact.Holds(address)));
+        Task.FromResult(this.BookOf(user).FirstOrDefault(contact => contact.Holds(address)));
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken)
     {
@@ -150,15 +150,15 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         IReadOnlyDictionary<ContactId, Contact> held = contactIds
             .Distinct()
-            .Where(contactId => this.HeldIn(owner, contactId) is not null)
-            .ToDictionary(contactId => contactId, contactId => this.HeldIn(owner, contactId)!);
+            .Where(contactId => this.HeldIn(user, contactId) is not null)
+            .ToDictionary(contactId => contactId, contactId => this.HeldIn(user, contactId)!);
 
         return Task.FromResult(held);
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken)
     {
@@ -172,14 +172,14 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
 
         IReadOnlyDictionary<ContactDisplayName, ContactMatch> matches = displayNames
             .Distinct()
-            .ToDictionary(displayName => displayName, displayName => this.MatchOf(owner, displayName));
+            .ToDictionary(displayName => displayName, displayName => this.MatchOf(user, displayName));
 
         return Task.FromResult(matches);
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)
     {
@@ -192,22 +192,22 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         this.BatchedLookupCount++;
 
         IReadOnlyDictionary<EmailAddress, ContactId> holders = addresses
-            .Where(address => this.BookOf(owner).Any(contact => contact.Holds(address)))
+            .Where(address => this.BookOf(user).Any(contact => contact.Holds(address)))
             .Distinct()
             .ToDictionary(
                 address => address,
-                address => this.BookOf(owner).First(contact => contact.Holds(address)).Id);
+                address => this.BookOf(user).First(contact => contact.Holds(address)).Id);
 
         return Task.FromResult(holders);
     }
 
     /// <inheritdoc />
     public Task<ContactPage> ReadPageAsync(
-        MailOwnerId owner,
+        MailUserId user,
         ContactQuery query,
         CancellationToken cancellationToken)
     {
-        var ordered = this.BookOf(owner)
+        var ordered = this.BookOf(user)
             .Where(contact => query.Origin is not { } origin || contact.Origin == origin)
             .OrderBy(contact => contact.DisplayName.SortKey, StringComparer.Ordinal)
             .ThenBy(contact => contact.Id.Value)
@@ -231,23 +231,23 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         return byName > 0 || (byName == 0 && contact.Id.Value > cursor.ContactId.Value);
     }
 
-    /// <summary>Reads one owner's book, which is the whole of what any port method here may see.</summary>
-    private IEnumerable<Contact> BookOf(MailOwnerId owner) =>
+    /// <summary>Reads one user's book, which is the whole of what any port method here may see.</summary>
+    private IEnumerable<Contact> BookOf(MailUserId user) =>
         this.heldById.Values
-            .Where(held => held.Owner == owner)
+            .Where(held => held.User == user)
             .Select(held => held.Contact);
 
-    /// <summary>Reads one contact of one book, answering with nothing where the identity is filed under another owner.</summary>
-    private Contact? HeldIn(MailOwnerId owner, ContactId contactId) =>
-        this.heldById.TryGetValue(contactId, out var held) && held.Owner == owner ? held.Contact : null;
+    /// <summary>Reads one contact of one book, answering with nothing where the identity is filed under another user.</summary>
+    private Contact? HeldIn(MailUserId user, ContactId contactId) =>
+        this.heldById.TryGetValue(contactId, out var held) && held.User == user ? held.Contact : null;
 
     /// <summary>One person, and the book they are filed in.</summary>
-    private sealed record HeldContact(MailOwnerId Owner, Contact Contact);
+    private sealed record HeldContact(MailUserId User, Contact Contact);
 
     /// <summary>States who one name resolves to in one book, on the comparison form the listing index is built on.</summary>
-    private ContactMatch MatchOf(MailOwnerId owner, ContactDisplayName displayName)
+    private ContactMatch MatchOf(MailUserId user, ContactDisplayName displayName)
     {
-        var carrying = this.BookOf(owner)
+        var carrying = this.BookOf(user)
             .Where(contact => string.Equals(
                 contact.DisplayName.SortKey,
                 displayName.SortKey,
@@ -262,10 +262,10 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         };
     }
 
-    /// <summary>Names the other contact in this owner's book already holding one of this record's addresses, as the unique index would.</summary>
-    private ContactId? HolderOf(MailOwnerId owner, Contact contact)
+    /// <summary>Names the other contact in this user's book already holding one of this record's addresses, as the unique index would.</summary>
+    private ContactId? HolderOf(MailUserId user, Contact contact)
     {
-        var holders = this.BookOf(owner)
+        var holders = this.BookOf(user)
             .Where(held => held.Id != contact.Id && contact.Addresses.Any(held.Holds))
             .ToArray();
 

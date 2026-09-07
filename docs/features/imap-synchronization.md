@@ -12,7 +12,7 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 - How far back a run reaches is bounded per account by an optional earliest date, which travels into the IMAP search itself rather than filtering what came back. An account that names one pays no `FETCH`, no MIME read, no `bytea` write, and no search-vector computation for the mail it excludes, and the folder checkpoint still advances across the excluded range so a run ends instead of rescanning it every interval. [Bounding how far back a run reaches](#bounding-how-far-back-a-run-reaches) states which date the bound compares against and what widening one later does not do.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
 - An email that exceeds `MaxRawMimeBytes` is never silently dropped. Its occurrence metadata is committed with `ContentAvailability = ExceededSizeLimit` before the checkpoint moves past it, so the gap stays queryable and auditable instead of existing only as a counter in a log line. The same applies when the advertised size understated the payload and the bounded stream read abandons it mid-fetch: the session reports that as a `RemoteEmailContentFetchResult` outcome rather than as a failure, because the caller records the occurrence and continues, exactly as it does for MIME the reader cannot parse.
-- How much mail a run brings in is bounded in bytes as well as in messages, and how much of it may be kept is bounded too. A folder run fetches at most `MaxContentBytesPerRun` of raw MIME and then ends at a committed checkpoint; local content storage stops accepting payloads at `MaxStoredContentBytes`, and one owner's stops at `MaxStoredContentBytesPerOwner` while everybody else's keeps arriving, with the occurrences still recorded for a later run with room to fill in; and every folder work unit of the process shares `MaxInFlightRawMimeBytes` of buffer, so peak memory does not grow with the concurrency bounds. [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) describes all four, what each one does when it is reached, and what an operator sees.
+- How much mail a run brings in is bounded in bytes as well as in messages, and how much of it may be kept is bounded too. A folder run fetches at most `MaxContentBytesPerRun` of raw MIME and then ends at a committed checkpoint; local content storage stops accepting payloads at `MaxStoredContentBytes`, and one user's stops at `MaxStoredContentBytesPerUser` while everybody else's keeps arriving, with the occurrences still recorded for a later run with room to fill in; and every folder work unit of the process shares `MaxInFlightRawMimeBytes` of buffer, so peak memory does not grow with the concurrency bounds. [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) describes all four, what each one does when it is reached, and what an operator sees.
 - Committing occurrences before the window checkpoint means a process failure may cause a later run to fetch an already stored occurrence again. Content and metadata writes use the stable remote occurrence identity and are idempotent, so this retry does not create duplicate stored emails.
 - `Infrastructure` maps the pre-migration PostgreSQL model to `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and separate `synchronization_checkpoints`. A `mail_folders` row is one alias binding: it carries the alias, its resolution generation, the remote path, and the hierarchy delimiter the server advertised, and is unique on `(account, alias, generation)` rather than on `(account, alias)`. Each stored email has a local UUIDv7; its raw MIME row uses the same UUID as both primary key and foreign key and records byte length, SHA-256, and storage time. Each stored email also records a `ContentAvailability` value as text so a metadata-only occurrence is distinguishable from one whose raw MIME is present, alongside the normalized participants, thread identifiers, attachment summary, and remote flag snapshot that [Stored email schema](../architecture/stored-email-schema.md) describes in full. Persistence sessions clear tracked state after cleanup so one scoped context does not retain MIME arrays between per-email transactions, and re-synchronizing an occurrence that is already stored overwrites its payload with a set-based update rather than reading the existing `bytea` back into the change tracker.
 - A write repository takes its EF Core context from the `IPersistenceSession` it is handed, and injects none of its own. The write is therefore always issued on that session's own context, whichever scope the session came from, so "this write joined the caller's transaction" is structurally true instead of being an effect of both objects happening to resolve from the same DI scope. A session backed by a different persistence provider cannot supply a context at all and is rejected outright. Read methods take no session and use the scoped context, because a read joins no transaction.
@@ -50,7 +50,7 @@ the account's outbox there, which is what makes sending correct without anything
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
 The account set is a published snapshot rather than a query the coordinator repeats. A validated configuration reload
-or a committed owner document raises its change token, and that signal replaces every supervisor together. The account
+or a committed user document raises its change token, and that signal replaces every supervisor together. The account
 set in the new snapshot then decides which accounts start, resume scheduling, or remain stopped; each replacement begins
 with a new schedule and failure backoff. A rejected reload raises no token and leaves the last valid snapshot in force.
 This costs no database query per account or per tick.
@@ -98,7 +98,7 @@ per folder, which neither bound covers and [Push synchronization](#push-synchron
 
 ### One connection budget per mail server host
 
-`MaxConcurrentConnectionsPerHost` bounds every authenticated IMAP connection to the same host across all owners and
+`MaxConcurrentConnectionsPerHost` bounds every authenticated IMAP connection to the same host across all users and
 accounts: synchronization sessions, folder discovery, push waits, and the idle write connection all take one slot and
 hold it until the socket closes. Host names are compared without regard to DNS casing. A protocol session still belongs
 to exactly one mail account; the budget shares capacity, never a client or an authenticated session.
@@ -189,7 +189,7 @@ fails:
 | --- | --- |
 | in a folder whose role is the inbox | Mail the run brought into an archive, a sent folder, or a junk folder is mail it fetched rather than mail waiting for somebody. A server-side rule delivering into a custom folder is real mail arriving, and whether MailFathom says so is a question left open rather than answered here |
 | while the server had not marked it `\Seen` | The person read it somewhere else, so it is news to nobody. The flag is the one the server reported when it described the message, which rides the discovery fetch and costs no second round trip and no write |
-| and MailFathom did not put it there itself | Two of its own acts land a message in a folder like any other arrival: a copy it filed of the owner's own outgoing message, which the person wrote, and a copy a rule made into a folder mapped as the inbox, which carries the source's flags and would otherwise announce the message it was copied from. Each is recognized by the record of the act rather than by the folder or the flag, and the run already suppresses the appearance each of them raises |
+| and MailFathom did not put it there itself | Two of its own acts land a message in a folder like any other arrival: a copy it filed of the user's own outgoing message, which the person wrote, and a copy a rule made into a folder mapped as the inbox, which carries the source's flags and would otherwise announce the message it was copied from. Each is recognized by the record of the act rather than by the folder or the flag, and the run already suppresses the appearance each of them raises |
 
 Everything else a run stores is still stored, still indexed, and still searchable; it is only the sentence about
 arrival that it is left out of. A mailbox's first runs therefore backfill years of history without announcing it, which
@@ -268,12 +268,12 @@ Three settings bound the volume instead, and each answers a different question:
 | --- | --- | --- | --- | --- |
 | Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? | One folder run |
 | In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole process |
-| Per owner | `MaxStoredContentBytesPerOwner` | *(none)* | How much of that may one person hold? | One owner, process-wide |
+| Per user | `MaxStoredContentBytesPerUser` | *(none)* | How much of that may one person hold? | One user, process-wide |
 | At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | The whole process |
 
 Three of the four are process-wide, and that is the point of them rather than an implementation detail: each bounds a
 resource every concurrent folder run draws on at once, so a per-run version of any of them would be no bound at all. The
-per-owner one is process-wide in the same sense and is simply counted per person rather than once.
+per-user one is process-wide in the same sense and is simply counted per person rather than once.
 
 All four are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
 times rather than three rules: a bound smaller than a single message would not make that message rare, it would make it
@@ -345,31 +345,31 @@ rows. That is the quantity a disk fills with, and it is cheap enough to read onc
 follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage overhead is
 part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
 
-### One owner's share stops their mail and nobody else's
+### One user's share stops their mail and nobody else's
 
-`MaxStoredContentBytesPerOwner` asks the same question of one person that `MaxStoredContentBytes` asks of the instance,
+`MaxStoredContentBytesPerUser` asks the same question of one person that `MaxStoredContentBytes` asks of the instance,
 and a payload is fetched only where both have room. It exists because the instance ceiling is otherwise the only thing
-bounding storage: on a deployment serving several owners, one large mailbox fills it and every other owner's mail is
-then recorded without content until somebody frees space. Reaching an owner's share defers that owner's messages exactly
+bounding storage: on a deployment serving several users, one large mailbox fills it and every other user's mail is
+then recorded without content until somebody frees space. Reaching a user's share defers that user's messages exactly
 as the instance ceiling defers everybody's — `ContentAvailability = AwaitingStorageHeadroom`, the checkpoint still
-advancing, the refill pass fetching what was left as soon as there is room — and leaves every other owner's run storing
+advancing, the refill pass fetching what was left as soon as there is room — and leaves every other user's run storing
 content whole.
 
 The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
 different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
 that person to wait. A run that left messages for both reasons reports both, one measurement each, so neither remedy
 is hidden by the other. One message is deferred by one of them rather than by both, because the instance's room is
-claimed first and an owner is never charged for a payload the instance had no room for.
+claimed first and a user is never charged for a payload the instance had no room for.
 
 **The two ceilings are counted in different quantities, deliberately.** The instance's is what the disk fills with,
-which only PostgreSQL's catalog can report; an owner's is what their payloads hold, because a catalog answers for a
-table and never for a share of one. So an owner's figure excludes the indexes, the row overhead, and the space a
+which only PostgreSQL's catalog can report; a user's is what their payloads hold, because a catalog answers for a
+table and never for a share of one. So a user's figure excludes the indexes, the row overhead, and the space a
 deletion freed that the database has not reclaimed, and the two are not expected to agree. That figure is maintained as
 a counter moved inside the same transaction that stores or removes a payload, rather than summed over one person's whole
-mailbox before every message; an owner with no counter yet — a deployment upgraded before their first message, or an
-owner provisioned since — has it derived once and adopted.
+mailbox before every message; a user with no counter yet — a deployment upgraded before their first message, or a
+user provisioned since — has it derived once and adopted.
 
-There is deliberately **no default share**, and leaving it unset is right for a deployment serving one owner: the
+There is deliberately **no default share**, and leaving it unset is right for a deployment serving one user: the
 instance ceiling already bounds that person. What leaving it unset exposes on a deployment serving several is the fault
 above.
 
@@ -658,7 +658,7 @@ the route, and it also states the erasure path a data-subject request is answere
 is the shape of the guarantee rather than its strength: it is scoped to reading rather than to the whole process. A
 synchronization pass, a reconciliation pass, a content fetch, and every MCP tool hold a session type that has no
 operation capable of writing a flag, so none of them can mark mail read whatever a later change does inside them.
-Marking a message read or unread is not one of those paths at all: it is a change the mailbox owner authored, carried by
+Marking a message read or unread is not one of those paths at all: it is a change the mailbox user authored, carried by
 the write session above, which nothing on the read side can open, borrow, or reach.
 
 A caller can now author one, through
@@ -678,7 +678,7 @@ not write a flag says so and marks nothing.
 is the decision, including why it is the body having been drawn rather than the selection having moved.
 
 Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
-it is what stops mail MailFathom has already handled from sitting unread in the client the owner actually opens;
+it is what stops mail MailFathom has already handled from sitting unread in the client the user actually opens;
 clearing it is what lets automation put something back in front of them.
 
 `\Flagged` and a message's keywords are written the same way and under the same rules — an authored change, carried by
@@ -704,7 +704,7 @@ fired.
 
 **The stored value stays a mirror.** MailFathom does not write the local flag when it issues the command. The request is
 recorded and sent, and `is_remotely_seen` changes only when the reconciliation pass next reads that folder and finds the
-flag standing somewhere new — the same way it would change had the owner moved it in their own mail client. So a query
+flag standing somewhere new — the same way it would change had the user moved it in their own mail client. So a query
 run between the command and that window still reports the last value the server was seen to hold, which is a short lag
 rather than a disagreement: the column has exactly one writer, and there is never a local value to reconcile against a
 command nobody can prove landed. `is_remotely_flagged` and `RemoteKeywords` are mirrors in exactly the same sense.
@@ -713,7 +713,7 @@ command nobody can prove landed. `is_remotely_flagged` and `RemoteKeywords` are 
 A flag or keyword change also leaves the occurrence exactly where it was, which is what makes the
 suppression below unavoidable rather than tidy — and what makes asking twice mean something specific. The idempotency
 identity is the occurrence, the mutation, and who asked, so the same rule asking again about the same message is
-answered from its own record and issues nothing. That is deliberate: an owner who reverted the change by hand is not
+answered from its own record and issues nothing. That is deliberate: a user who reverted the change by hand is not
 overruled by the rule that made it. A different rule asking about the same message is a different act and is carried.
 
 ### A change nobody finished finishes by itself
@@ -1514,7 +1514,7 @@ is what tells the two apart, and both halves are joined to it by a recorded fact
   Keywords are matched by computing the set the store would have left on the message that was last read — the earlier
   keywords plus the ones an addition named, minus the ones a removal named, or exactly the ones a replacement stated —
   and comparing that whole set, folded, with what the server now reports. Anything else is somebody else's, which is
-  the direction this has to fail in: a message MailFathom labelled and the owner then labelled again reaches evaluation
+  the direction this has to fail in: a message MailFathom labelled and the user then labelled again reaches evaluation
   as their change, and so does a removal that would otherwise have been read as accounting for a label it never
   touched. The stored snapshot still follows the server in every case — what the match decides is whose act it was, not
   what is recorded.
@@ -1551,13 +1551,13 @@ The suppression is scoped to the one change the record describes and expires wit
 down as observed the first time synchronization meets the occurrence it placed, and answers for no discovery afterwards.
 A flag or keyword store moves no occurrence, so it expires against the message's own flag observation instead: it
 accounts for a reading only while the last one predates the moment the store completed, and every window advances that
-for every occurrence it asked about. So the mailbox owner setting by hand the same flag MailFathom set months earlier,
+for every occurrence it asked about. So the mailbox user setting by hand the same flag MailFathom set months earlier,
 starring a message it had starred, or moving the message back themselves, reaches rule evaluation as the change it is —
 including when they reverted the value before any window had seen MailFathom's own change at all.
 
 The three values are matched independently, because a folder reports them in one `FLAGS` response and any of them may
 have moved. One occurrence whose seen state, star, and keywords all changed is one read of the records and up to three
-attributions, so a run can withhold the star MailFathom set while raising the label the owner attached in the same
+attributions, so a run can withhold the star MailFathom set while raising the label the user attached in the same
 window.
 
 A withheld change is visible rather than silent, because a rule that appears not to have fired is otherwise
@@ -1599,11 +1599,11 @@ this one, and that includes the case where this window would have deleted the em
 
 ### What becomes of a message MailFathom deleted itself
 
-A deletion the mailbox owner authored is a different act from the one above, and it is answered by a different setting.
+A deletion the mailbox user authored is a different act from the one above, and it is answered by a different setting.
 `AuthoredDeleteEmailDisposition` decides it, per account, and **takes precedence over `RemotelyDeletedEmailDisposition`
 for every disappearance a mutation record accounts for** — which is to say the setting above is never consulted for one.
 That separation is the point of having two: without it, an account configured to erase what its server loses would also
-erase what MailFathom was just told to delete, and that is precisely where the owner is likeliest to have meant the
+erase what MailFathom was just told to delete, and that is precisely where the user is likeliest to have meant the
 opposite. Deleting on the server frees quota; the local archive is usually the reason to do it.
 
 | Value | What happens locally |
@@ -1645,7 +1645,7 @@ That is a decision rather than the absence of one, and
 [ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
 records why. The short of it: a stored row means one occurrence the server holds, `UID COPY` really does create a second
 message with its own UID, and a model that made the two one local email could only do so for the copies MailFathom
-itself performed — a copy the owner made in their own mail client is joined to no record, and identifying it by
+itself performed — a copy the user made in their own mail client is joined to no record, and identifying it by
 `Message-ID` or by a digest is the guess the join already refuses.
 
 What it costs an operator is worth knowing before a rule starts filing mail:
@@ -1861,7 +1861,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 
 `MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not. That check is explicit rather than left to the binder, because a bare number binds onto an enum whether or not any member carries it — strict binding rejects unknown keys and failed conversions, and this conversion succeeds.
 
-`AuthoredDeleteEmailDisposition` answers the same question for the opposite act — a deletion MailFathom performed on the owner's instruction rather than one it observed — and [takes precedence over the setting above](#what-becomes-of-a-message-mailfathom-deleted-itself) for every such deletion. It binds as `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy`, is validated the same way, fails startup the same way, and defaults to keeping the local copy readable.
+`AuthoredDeleteEmailDisposition` answers the same question for the opposite act — a deletion MailFathom performed on the user's instruction rather than one it observed — and [takes precedence over the setting above](#what-becomes-of-a-message-mailfathom-deleted-itself) for every such deletion. It binds as `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy`, is validated the same way, fails startup the same way, and defaults to keeping the local copy readable.
 
 Every configured account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so startup refuses a display name another account's identifier or display name already carries, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox.
 

@@ -10,7 +10,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <remarks>
 /// Read per message rather than captured once, so an operator switching collection off stops it at the next message
 /// instead of at the next restart. An account the configuration no longer names collects nothing, which is the honest
-/// answer as well as the safe one: an account nobody configured has no owner to have asked for a book.
+/// answer as well as the safe one: an account nobody configured has no user to have asked for a book.
 /// </remarks>
 public interface IContactCollectionSettingsReader
 {

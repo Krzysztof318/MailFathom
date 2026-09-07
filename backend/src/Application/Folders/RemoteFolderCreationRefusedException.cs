@@ -18,7 +18,7 @@ namespace MailFathom.Application.Folders;
 /// wrote correctly.
 /// </para>
 /// <para>
-/// The message names the alias alone. The remote path is the mailbox owner's own naming of their mail, which no message
+/// The message names the alias alone. The remote path is the mailbox user's own naming of their mail, which no message
 /// an operator reads may carry — it belongs to the mapping-change audit record and to the debug detail.
 /// </para>
 /// </remarks>

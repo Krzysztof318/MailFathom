@@ -20,7 +20,7 @@ namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 /// <para>
 /// No unique identity is declared over the author, deliberately, and that is the difference from the outgoing
 /// record's index rather than an omission. Two identical requests to save a draft are two drafts, because a draft
-/// that turned out to exist twice costs its owner a deletion while a send that did costs a recipient a message they
+/// that turned out to exist twice costs its user a deletion while a send that did costs a recipient a message they
 /// read as sent twice.
 /// </para>
 /// </remarks>
@@ -51,7 +51,7 @@ internal sealed class MailDraftConfiguration : IEntityTypeConfiguration<MailDraf
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(draft => draft.ConcurrencyVersion).IsRowVersion();
 
-        entity.HasIndex(draft => new { draft.OwnerId, draft.MailboxAccountId, draft.RevisedAt })
+        entity.HasIndex(draft => new { draft.UserId, draft.MailboxAccountId, draft.RevisedAt })
             .HasDatabaseName(PersistenceConstraintNames.MailDraftAccountIndexName);
 
         entity.HasIndex(draft => draft.PromotedToOutgoingEmailId)

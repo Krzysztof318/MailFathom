@@ -32,7 +32,7 @@ public sealed record OutgoingEmailClaimRequest
         this.Claimant = claimant;
     }
 
-    /// <summary>Gets the account whose queued sends this claim takes, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account whose queued sends this claim takes, named by its user and its identifier.</summary>
     public MailAccountIdentity Account { get; }
 
     /// <summary>Gets the greatest number of records the claim takes.</summary>

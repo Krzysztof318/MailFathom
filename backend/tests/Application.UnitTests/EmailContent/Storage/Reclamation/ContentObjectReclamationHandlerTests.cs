@@ -225,7 +225,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
             () => handler.RunAsync(
-                RederiveStoredMailJobPayload.For(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), folderAlias: null),
+                RederiveStoredMailJobPayload.For(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), folderAlias: null),
                 TestContext.Current.CancellationToken));
     }
 

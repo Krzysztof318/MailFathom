@@ -72,7 +72,7 @@ public sealed record OutgoingMailFilingRecord
 
     /// <summary>Gets whether the append went out and the server's answer to it never came back.</summary>
     /// <remarks>
-    /// A row here is never appended again. A second <c>APPEND</c> is a second message in the owner's folder rather than a
+    /// A row here is never appended again. A second <c>APPEND</c> is a second message in the user's folder rather than a
     /// repeat of the first, and nothing the folder shows afterwards distinguishes them, so the row stands as the visible
     /// statement that the copy may or may not be there.
     /// </remarks>

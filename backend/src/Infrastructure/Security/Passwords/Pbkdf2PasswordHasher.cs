@@ -27,7 +27,7 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// <para>
 /// Both operations are synchronous and read the password out of a span, so the plaintext is never copied into a string,
 /// never crosses an await, and is gone the moment the caller clears the buffer it owns. The salt is fresh per call, so
-/// two identical passwords store differently and a database dump answers nothing about which owners share one.
+/// two identical passwords store differently and a database dump answers nothing about which users share one.
 /// </para>
 /// </remarks>
 internal sealed class Pbkdf2PasswordHasher : IPasswordHasher
@@ -132,7 +132,7 @@ internal sealed class Pbkdf2PasswordHasher : IPasswordHasher
     /// <summary>Reports whether a record was written under weaker parameters than this release would write today.</summary>
     /// <remarks>
     /// Only a weaker record is replaced. One carrying more iterations than the current figure is left alone, because a
-    /// deployment rolled back to an earlier release would otherwise quietly weaken every password its owners signed in
+    /// deployment rolled back to an earlier release would otherwise quietly weaken every password its users signed in
     /// with.
     /// </remarks>
     private static bool IsBehindCurrentPolicy(PasswordHashRecord record) =>

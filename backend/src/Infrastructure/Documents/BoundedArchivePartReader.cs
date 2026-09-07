@@ -27,7 +27,7 @@ internal sealed class BoundedArchivePartReader(AttachmentTextExtractionOptions o
     /// leaves nothing able to fetch a resource even if one were.
     /// </para>
     /// <para>
-    /// <see cref="XmlReaderSettings.CloseInput" /> is what makes the reader the owner of the whole stack beneath it —
+    /// <see cref="XmlReaderSettings.CloseInput" /> is what makes the reader the user of the whole stack beneath it —
     /// the inflation guard and the archive's own deflate stream. Every call site holds the reader and nothing else, so
     /// leaving it off would keep one zlib inflater per part alive until finalization, and a package near the part
     /// ceiling opens a great many of them inside one extraction.

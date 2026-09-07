@@ -54,7 +54,7 @@ public sealed class SpamClassificationRunRequests
     }
 
     /// <summary>Asks for every message stored for the account to be classified on the terms given.</summary>
-    /// <param name="account">The account to walk, named by its owner and its identifier.</param>
+    /// <param name="account">The account to walk, named by its user and its identifier.</param>
     /// <param name="terms">What the run should do.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>

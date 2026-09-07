@@ -7,8 +7,8 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Spam;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -17,7 +17,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Spam;
 
-/// <summary>Covers how each owner's source becomes the settings a classification of their mail runs with.</summary>
+/// <summary>Covers how each user's source becomes the settings a classification of their mail runs with.</summary>
 public sealed class ConfiguredSpamClassificationSettingsReaderTests
 {
     /// <summary>An operator who wrote no folder asked for the default, which is whichever alias each account maps to its inbox.</summary>
@@ -30,7 +30,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("primary-mail", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.SettingsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.True(settings.IsEnabled);
@@ -81,7 +81,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.SettingsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.True(settings.IsEnabled);
@@ -103,7 +103,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.SettingsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.True(settings.UsesScanner);
@@ -124,20 +124,20 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             SynchronizationOptionsWith(AccountMapping("inbox", "Inbox")));
 
         // Act
-        var beforeReload = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var beforeReload = reader.SettingsFor(SyntheticMailUser.Deployment);
 
         options.ReportReload(new SpamClassificationOptions { Enabled = true });
 
-        var afterReload = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var afterReload = reader.SettingsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(beforeReload.IsEnabled);
         Assert.True(afterReload.IsEnabled);
     }
 
-    /// <summary>Nobody is served a posture by default, so an owner this deployment does not hold classifies nothing.</summary>
+    /// <summary>Nobody is served a posture by default, so a user this deployment does not hold classifies nothing.</summary>
     [Fact]
-    public void SettingsFor_AnOwnerThisDeploymentDoesNotServe_ClassifiesNothing()
+    public void SettingsFor_AnUserThisDeploymentDoesNotServe_ClassifiesNothing()
     {
         // Arrange
         var reader = ReaderFor(
@@ -145,7 +145,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Another);
+        var settings = reader.SettingsFor(SyntheticMailUser.Another);
 
         // Assert
         Assert.False(settings.IsEnabled);
@@ -153,7 +153,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
     }
 
     [Fact]
-    public void SettingsFor_NoOwner_Throws()
+    public void SettingsFor_NoUser_Throws()
     {
         // Arrange
         var reader = ReaderFor(new SpamClassificationOptions { Enabled = true }, AccountMapping("inbox", "Inbox"));
@@ -162,9 +162,9 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         Assert.Throws<ArgumentException>(() => reader.SettingsFor(default));
     }
 
-    /// <summary>An owner whose document has been written is read from it, and the deployment's section stops reaching them.</summary>
+    /// <summary>A user whose document has been written is read from it, and the deployment's section stops reaching them.</summary>
     [Fact]
-    public void SettingsFor_AnOwnerWhoseDocumentWasWritten_TakesTheBlockThatDocumentCarries()
+    public void SettingsFor_AnUserWhoseDocumentWasWritten_TakesTheBlockThatDocumentCarries()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
@@ -173,9 +173,9 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 Enabled = true,
                 ScannedFolders = ["inbox"],
             }),
-            RosterOf(DocumentOwner(
-                SyntheticMailOwner.Another,
-                new OwnerSpamClassificationOptions
+            RosterOf(DocumentUser(
+                SyntheticMailUser.Another,
+                new UserSpamClassificationOptions
                 {
                     Enabled = true,
                     UseScanner = true,
@@ -186,7 +186,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 AccountMapping("archive", "Archive"))));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Another);
+        var settings = reader.SettingsFor(SyntheticMailUser.Another);
 
         // Assert
         Assert.True(settings.UsesScanner);
@@ -196,27 +196,27 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>Switching classification off in a written record actually switches it off, rather than reverting to the file.</summary>
     [Fact]
-    public void SettingsFor_AnOwnerWhoseDocumentSwitchedClassificationOff_ClassifiesNothingWhileTheSectionStaysOn()
+    public void SettingsFor_AnUserWhoseDocumentSwitchedClassificationOff_ClassifiesNothingWhileTheSectionStaysOn()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions { Enabled = true }),
-            RosterOf(DocumentOwner(
-                SyntheticMailOwner.Another,
-                new OwnerSpamClassificationOptions { Enabled = false },
+            RosterOf(DocumentUser(
+                SyntheticMailUser.Another,
+                new UserSpamClassificationOptions { Enabled = false },
                 "second-account",
                 AccountMapping("inbox", "Inbox"))));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Another);
+        var settings = reader.SettingsFor(SyntheticMailUser.Another);
 
         // Assert
         Assert.False(settings.IsEnabled);
     }
 
-    /// <summary>The wait bounds how long the index may be held back, which is the process's cost rather than one owner's choice.</summary>
+    /// <summary>The wait bounds how long the index may be held back, which is the process's cost rather than one user's choice.</summary>
     [Fact]
-    public void ScopeInForce_EveryOwnerReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
+    public void ScopeInForce_EveryUserReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
@@ -224,9 +224,9 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             {
                 ClassificationWait = TimeSpan.FromHours(3),
             }),
-            RosterOf(DocumentOwner(
-                SyntheticMailOwner.Another,
-                new OwnerSpamClassificationOptions { Enabled = true },
+            RosterOf(DocumentUser(
+                SyntheticMailUser.Another,
+                new UserSpamClassificationOptions { Enabled = true },
                 "second-account",
                 AccountMapping("inbox", "Inbox"))));
 
@@ -237,23 +237,23 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         Assert.Equal(TimeSpan.FromHours(3), scope.MaximumClassificationWait);
     }
 
-    /// <summary>The scope a walk narrows by is composed per owner, so one owner's decision reaches a query spanning owners.</summary>
+    /// <summary>The scope a walk narrows by is composed per user, so one user's decision reaches a query spanning users.</summary>
     [Fact]
-    public void ScopeInForce_TwoOwnersWithDifferentPostures_NamesOnlyTheClassifyingOwnersAccounts()
+    public void ScopeInForce_TwoUsersWithDifferentPostures_NamesOnlyTheClassifyingUsersAccounts()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
             RosterOf(
-                DocumentOwner(
-                    SyntheticMailOwner.Deployment,
-                    new OwnerSpamClassificationOptions { Enabled = true, ScannedFolders = ["inbox"] },
+                DocumentUser(
+                    SyntheticMailUser.Deployment,
+                    new UserSpamClassificationOptions { Enabled = true, ScannedFolders = ["inbox"] },
                     "first-account",
                     AccountMapping("inbox", "Inbox"),
                     AccountMapping("archive", "Archive")),
-                DocumentOwner(
-                    SyntheticMailOwner.Another,
-                    new OwnerSpamClassificationOptions { Enabled = false },
+                DocumentUser(
+                    SyntheticMailUser.Another,
+                    new UserSpamClassificationOptions { Enabled = false },
                     "second-account",
                     AccountMapping("inbox", "Inbox"))));
 
@@ -299,27 +299,27 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     private static MailSynchronizationOptions SynchronizationOptionsWith(params MailFolderMappingOptions[] folders) =>
         new MailSynchronizationOptions { Accounts = [Account("primary", folders)] }
-            .WithServedOwners(
+            .WithServedUsers(
             [
-                new ServedMailOwner(
-                    SyntheticMailOwner.Deployment,
+                new ServedMailUser(
+                    SyntheticMailUser.Deployment,
                     "the deployment",
-                    MailOwnerAccountSource.DeploymentSection,
+                    MailUserAccountSource.DeploymentSection,
                     []),
             ]);
 
-    private static MailSynchronizationOptions RosterOf(params ServedMailOwner[] owners) =>
-        new MailSynchronizationOptions().WithServedOwners(owners);
+    private static MailSynchronizationOptions RosterOf(params ServedMailUser[] users) =>
+        new MailSynchronizationOptions().WithServedUsers(users);
 
-    private static ServedMailOwner DocumentOwner(
-        MailOwnerId owner,
-        OwnerSpamClassificationOptions classification,
+    private static ServedMailUser DocumentUser(
+        MailUserId user,
+        UserSpamClassificationOptions classification,
         string accountId,
         params MailFolderMappingOptions[] folders) =>
         new(
-            owner,
+            user,
             accountId,
-            MailOwnerAccountSource.OwnerDocument,
+            MailUserAccountSource.UserDocument,
             [Account(accountId, folders)],
             classification);
 

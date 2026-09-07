@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Owners/**, backend/src/Cli/Commands/Configuration/**, backend/src/Host/Hosting/Startup/ServedMailOwnersStartupGate.cs, backend/src/Application/Access/DeploymentMailOwnerUnresolvedException.cs -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Users/**, backend/src/Cli/Commands/Configuration/**, backend/src/Host/Hosting/Startup/ServedMailUsersStartupGate.cs, backend/src/Application/Access/DeploymentMailUserUnresolvedException.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -88,17 +88,17 @@ That is a property of the interpretation rather than of this layer. Under `Refer
 
 **Where each setting lives is decided in compiled code, one entry per store, and by nothing an operator or a caller supplies.** A path no entry names is persisted in `settings_root`, which is almost every setting. A path an entry names is persisted in that entry's own store, and is then **excluded** from `settings_root`, so no setting is described by two rows and no reader has to decide which of the two the deployment meant. There is no configuration key that adds an entry, and no argument that names a table: a store MailFathom could be asked for at run time would be a relation nobody reviewed and a document nothing knows how to read back, so adding one is a change to the catalog, the projection that reads its document, and the migration that creates its table, reviewed together.
 
-One entry exists in this release: the top-level `Accounts` collection of owner accounts, which is persisted per owner in the owner-accounts store rather than as a subtree of the deployment's document. It is **not** `MailSynchronization:Accounts` — the mailbox declarations carry the same word, are an ordinary deployment setting, and stay in `settings_root` with everything else.
+One entry exists in this release: the top-level `Accounts` collection of user accounts, which is persisted per user in the user-accounts store rather than as a subtree of the deployment's document. It is **not** `MailSynchronization:Accounts` — the mailbox declarations carry the same word, are an ordinary deployment setting, and stay in `settings_root` with everything else.
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
 
-**A row's document is bound at startup and after each accepted write through MailFathom, for an owner who has taken their record over and for no other.** Each row holds the declarations and the owner-level settings that are one person's own, and [the owners a deployment serves](#the-owners-a-deployment-serves) below is which of the two sources each owner is read from and how an owner moves between them. Until an owner is adopted their document is not read at all — their mail accounts come from configuration — so a `settings_accounts` row written by hand for an owner still read from their file changes nothing and is neither judged nor refused.
+**A row's document is bound at startup and after each accepted write through MailFathom, for a user who has taken their record over and for no other.** Each row holds the declarations and the user-level settings that are one person's own, and [the users a deployment serves](#the-users-a-deployment-serves) below is which of the two sources each user is read from and how a user moves between them. Until a user is adopted their document is not read at all — their mail accounts come from configuration — so a `settings_accounts` row written by hand for a user still read from their file changes nothing and is neither judged nor refused.
 
-Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it, and [the owners a deployment serves](#the-owners-a-deployment-serves) states it: no two owners this deployment serves may name a mail account alike, wherever each of them is read from. A write refuses a name another owner of the settled roster already answers to; a start refuses a roster in which one name reaches two owners, which is where a collision two writes made in one process run is first visible, because each of those writes was judged against a roster the other had not moved. So `work` under two owners is refused whether it was written into a file or into two records. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
+Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the user*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it, and [the users a deployment serves](#the-users-a-deployment-serves) states it: no two users this deployment serves may name a mail account alike, wherever each of them is read from. A write refuses a name another user of the settled roster already answers to; a start refuses a roster in which one name reaches two users, which is where a collision two writes made in one process run is first visible, because each of those writes was judged against a roster the other had not moved. So `work` under two users is refused whether it was written into a file or into two records. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
 What the read does enforce is size. The row is measured by PostgreSQL in the statement that reads it, and a document past what this build binds is refused under error code `12012` rather than transferred, so a row something else wrote too large stops that request instead of the process.
 
-MailFathom writes `settings_root` and no other store: a write naming a path the catalog routes to the owner-accounts store is **refused** under error code `12006`, naming the store, because that store's document is provisioned rather than written. The settings [`settings_root` may not carry](#what-it-may-not-carry) are refused under the same code and for the reason that section gives.
+MailFathom writes `settings_root` and no other store: a write naming a path the catalog routes to the user-accounts store is **refused** under error code `12006`, naming the store, because that store's document is provisioned rather than written. The settings [`settings_root` may not carry](#what-it-may-not-carry) are refused under the same code and for the reason that section gives.
 
 ### Startup, and a reload that fails
 
@@ -114,15 +114,15 @@ That number is the only record of which document the process actually read — t
 
 **A committed write republishes the layer, and a republish that fails changes nothing.** Republishing a later document to everything bound to it is what [a committed write](#changing-a-persisted-setting) ends with. What the path guarantees: a candidate that cannot be read leaves the deployment exactly as it was, one that reads but is not a configuration document — or carries a setting this layer may not or does not hold — is rejected *by version* with the record naming both the version that did not take and the version still serving, and a fall back to the files beneath this layer never happens — those never carried the persisted values, so reverting to them would quietly change settings the deployment had already adopted.
 
-## The owners a deployment serves
+## The users a deployment serves
 
-Every mail account, every stored message, and every job belongs to an **owner**, and `settings_accounts` holds one row per owner because the mail graph's foreign key is relational rather than a predicate over a document. What that row holds is a different question from whether it exists: the envelope — the identifier, the label, the version, the timestamps — is always the row's, and the *content* — the owner's mail accounts and the settings that are theirs — comes from configuration until that owner is explicitly handed over to their document.
+Every mail account, every stored message, and every job belongs to an **user**, and `settings_accounts` holds one row per user because the mail graph's foreign key is relational rather than a predicate over a document. What that row holds is a different question from whether it exists: the envelope — the identifier, the label, the version, the timestamps — is always the row's, and the *content* — the user's mail accounts and the settings that are theirs — comes from configuration until that user is explicitly handed over to their document.
 
-**A deployment may therefore keep its whole configuration outside the database, owners included.** The rows exist so the graph resolves; the file is still the truth about what is served.
+**A deployment may therefore keep its whole configuration outside the database, users included.** The rows exist so the graph resolves; the file is still the truth about what is served.
 
-### Declaring an owner
+### Declaring a user
 
-Owners are the top-level `Accounts` collection. It is **not** `MailSynchronization:Accounts`, which is the deployment's own mailbox section and is [described elsewhere](configuration-mail.md); the two carry the same word and are different collections.
+Users are the top-level `Accounts` collection. It is **not** `MailSynchronization:Accounts`, which is the deployment's own mailbox section and is [described elsewhere](configuration-mail.md); the two carry the same word and are different collections.
 
 ```json
 {
@@ -146,25 +146,25 @@ Owners are the top-level `Accounts` collection. It is **not** `MailSynchronizati
 
 | Key | Required | What it is |
 | --- | --- | --- |
-| `Accounts:<n>:Id` | Yes | The identifier every mail account, every stored message, and every job of this owner hangs on, written as a UUID |
-| `Accounts:<n>:DisplayName` | Yes | The label an administrator tells owners apart by, at most 128 characters and unique across the deployment |
-| `Accounts:<n>:MailAccounts` | No | The mail accounts this owner owns, each declared exactly as one in `MailSynchronization:Accounts` is |
-| `Accounts:<n>:SensitiveContent` | No | What this owner wants their own mail scanned for, on top of what the deployment requires — [below](#what-an-owner-may-say-about-scanning-their-own-mail) |
+| `Accounts:<n>:Id` | Yes | The identifier every mail account, every stored message, and every job of this user hangs on, written as a UUID |
+| `Accounts:<n>:DisplayName` | Yes | The label an administrator tells users apart by, at most 128 characters and unique across the deployment |
+| `Accounts:<n>:MailAccounts` | No | The mail accounts this user owns, each declared exactly as one in `MailSynchronization:Accounts` is |
+| `Accounts:<n>:SensitiveContent` | No | What this user wants their own mail scanned for, on top of what the deployment requires — [below](#what-a-user-may-say-about-scanning-their-own-mail) |
 
-A declared owner states no settings of their own beyond their mailboxes. Everything else about them — how their mail is
+A declared user states no settings of their own beyond their mailboxes. Everything else about them — how their mail is
 classified included — is read from the deployment's own sections until their document is written, which is what
 [the handover](#the-handover-and-what-it-costs) does.
 
-An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
+A user declaring no mailbox is an ordinary state rather than an unfinished one: a user exists before their first mailbox does, and one whose last mailbox is withdrawn is still a user. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
 
-At most **256** owners may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
+At most **256** users may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
 
-### What an owner may say about scanning their own mail
+### What a user may say about scanning their own mail
 
-`Accounts:<n>:SensitiveContent` is the owner's half of [sensitive-content
-scanning](../features/sensitive-content-scanning.md#each-owners-own-posture). It is content of the owner's record rather
+`Accounts:<n>:SensitiveContent` is the user's half of [sensitive-content
+scanning](../features/sensitive-content-scanning.md#each-users-own-posture). It is content of the user's record rather
 than an overlay on the deployment's `SensitiveContent` section: the two are composed, and what is in force over that
-owner's mail is the stricter of them.
+user's mail is the stricter of them.
 
 ```json
 {
@@ -183,39 +183,39 @@ owner's mail is the stricter of them.
 
 | Key | Required | What it is |
 | --- | --- | --- |
-| `Accounts:<n>:SensitiveContent:Secrets:Enabled` | No | Switches the secret scanner on over this owner's mail. Unset reads the deployment's answer |
+| `Accounts:<n>:SensitiveContent:Secrets:Enabled` | No | Switches the secret scanner on over this user's mail. Unset reads the deployment's answer |
 | `Accounts:<n>:SensitiveContent:Pii:Enabled` | No | The same for the personal-data scanner, which the deployment must have configured an analyzer address for |
-| `Accounts:<n>:SensitiveContent:ScreenOutgoingMailFor:<n>` | No | Which scanners' findings stop **this owner's** outgoing mail. Read as their whole answer rather than as an addition, so it names at least what the deployment screens for |
+| `Accounts:<n>:SensitiveContent:ScreenOutgoingMailFor:<n>` | No | Which scanners' findings stop **this user's** outgoing mail. Read as their whole answer rather than as an addition, so it names at least what the deployment screens for |
 
 **Only tightening is accepted, and a loosening is refused where it is written** — at this file's own start and at a
 record write alike, because the two are one block arriving by two routes. Three refusals, each naming the deployment
 setting behind it and never repeating the record's own text:
 
-- `false` against a scanner the deployment switched on. The obligation belongs to whoever holds the mail, so an owner
+- `false` against a scanner the deployment switched on. The obligation belongs to whoever holds the mail, so a user
   may switch a scanner on for their own and never off.
 - `true` for the personal-data scanner where `SensitiveContent:PersonalDataAnalyzer:Endpoint` names no address. Nothing
   could scan for it, and only an operator can state that key — so this is refused at the write rather than left to fail
-  closed on the owner's next message.
-- A `ScreenOutgoingMailFor` naming fewer scanners than `SensitiveContent:ScreenOutgoingMailFor` does. An owner may add
+  closed on the user's next message.
+- A `ScreenOutgoingMailFor` naming fewer scanners than `SensitiveContent:ScreenOutgoingMailFor` does. A user may add
   to that list and never take from it; removing the key altogether takes the deployment's list as it stands.
 
 **A record this deployment already holds is composed rather than refused.** The three refusals above are judged where a
 record is *written*; on the next start a stored record is read back and its block composed against the section as it
 stands. That is what keeps the tightening this feature exists for from being a trap: an operator who switches a scanner
 on deployment-wide, or widens `SensitiveContent:ScreenOutgoingMailFor`, turns every record accepted before that into one
-that now asks for less — and refusing those would refuse the start itself, for every owner, over records their authors
+that now asks for less — and refusing those would refuse the start itself, for every user, over records their authors
 could no longer reach to rewrite. What is in force is the stricter of the two either way, so nothing is loosened by
 accepting them.
 
 Everything else about scanning stays the deployment's: the analyzer's address, the analyzed ceiling, the per-scan
-timeout, the process-wide scan concurrency — one budget every owner shares — and the rebuild switch. A record naming one
+timeout, the process-wide scan concurrency — one budget every user shares — and the rebuild switch. A record naming one
 of them binds nothing and is refused as a property nothing binds, like any other.
 
 ### The identifier is yours to generate
 
-**MailFathom does not invent it for a *declared* owner.** Nothing in a file could derive an identifier that is the same across restarts and across replicas, and one invented per start would attach a deployment's stored mail to a person who existed for one process. So the operator states it, and it is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each owner was created and in what order.
+**MailFathom does not invent it for a *declared* user.** Nothing in a file could derive an identifier that is the same across restarts and across replicas, and one invented per start would attach a deployment's stored mail to a person who existed for one process. So the operator states it, and it is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because a user identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each user was created and in what order.
 
-[`mfctl owner add`](admin-endpoint.md#owners-and-their-records) mints one under exactly that rule, and reports it, because an owner recorded through the administrative endpoint is recorded once against a database that will keep it. An owner recorded that way is declared in no file and is read from their own record from the start; there is no identifier for an operator to state and none to keep in step.
+[`mfctl user add`](admin-endpoint.md#users-and-their-records) mints one under exactly that rule, and reports it, because a user recorded through the administrative endpoint is recorded once against a database that will keep it. A user recorded that way is declared in no file and is read from their own record from the start; there is no identifier for an operator to state and none to keep in step.
 
 Produce one with whatever is already on the machine:
 
@@ -225,77 +225,77 @@ python3 -c 'import uuid; print(uuid.uuid4())'
 cat /proc/sys/kernel/random/uuid          # Linux, no tools at all
 ```
 
-A value that is not a well-formed UUID stops the start, and so does the all-zero UUID, which is what a template emits for a field nobody filled in and which names nobody. Two owners declared under one identifier stop it too: an identifier names one person, and everything either of them owned would be recorded against the same row.
+A value that is not a well-formed UUID stops the start, and so does the all-zero UUID, which is what a template emits for a field nobody filled in and which names nobody. Two users declared under one identifier stop it too: an identifier names one person, and everything either of them owned would be recorded against the same row.
 
-**Never change it afterwards.** A declaration whose identifier has moved for an owner the database already holds under that label stops the start naming them, rather than orphaning every message that hangs on the old value. Restore the identifier the deployment holds, and rename the owner instead if the label is what you meant to change — a changed label is applied to the row and is not a refusal. [`mfctl owner rename`](admin-endpoint.md#owners-and-their-records) changes one over the endpoint, and is what renames an owner nothing declares; for a declared owner the file is still where the label is decided, because every start puts the declared one back.
+**Never change it afterwards.** A declaration whose identifier has moved for a user the database already holds under that label stops the start naming them, rather than orphaning every message that hangs on the old value. Restore the identifier the deployment holds, and rename the user instead if the label is what you meant to change — a changed label is applied to the row and is not a refusal. [`mfctl user rename`](admin-endpoint.md#users-and-their-records) changes one over the endpoint, and is what renames a user nothing declares; for a declared user the file is still where the label is decided, because every start puts the declared one back.
 
-A label is applied only where nobody else holds it. A label declared for one owner while another owner the deployment holds still carries it stops the start too, because a label names one owner and the column that stores it is unique. That makes two owners exchanging labels two starts rather than one: free the label in the first — relabel or remove whoever holds it — and declare it for its new owner in the second.
+A label is applied only where nobody else holds it. A label declared for one user while another user the deployment holds still carries it stops the start too, because a label names one user and the column that stores it is unique. That makes two users exchanging labels two starts rather than one: free the label in the first — relabel or remove whoever holds it — and declare it for its new user in the second.
 
-### A deployment that declares no owner
+### A deployment that declares no user
 
-Today's shape keeps working and **no file has to change**. A deployment that declares no owner at all serves exactly one: the row the release's migration provisioned, or — where the deployment holds none — one identifier generated once and recorded, reported at `Information`:
+Today's shape keeps working and **no file has to change**. A deployment that declares no user at all serves exactly one: the row the release's migration provisioned, or — where the deployment holds none — one identifier generated once and recorded, reported at `Information`:
 
 ```
-This deployment declared no owner and held none, so one has been recorded for the mail accounts it is configured with.
+This deployment declared no user and held none, so one has been recorded for the mail accounts it is configured with.
 ```
 
-Every account in `MailSynchronization:Accounts` belongs to that sole owner. Once owners *are* declared there is no sole owner for that section's accounts to belong to, so declaring both is **refused**: move each of those accounts under the owner who owns it, as an entry of that owner's `MailAccounts`.
+Every account in `MailSynchronization:Accounts` belongs to that sole user. Once users *are* declared there is no sole user for that section's accounts to belong to, so declaring both is **refused**: move each of those accounts under the user who owns it, as an entry of that user's `MailAccounts`.
 
-The same section is **refused** once nobody reads it. An adoption copies the accounts into the owner's own record and leaves the section where it was. The published owner document takes precedence in the replica that handled the write immediately; clear `MailSynchronization:Accounts` afterwards so the next start does not meet an account section that belongs to nobody. A start that meets it refuses and names the section.
+The same section is **refused** once nobody reads it. An adoption copies the accounts into the user's own record and leaves the section where it was. The published user document takes precedence in the replica that handled the write immediately; clear `MailSynchronization:Accounts` afterwards so the next start does not meet an account section that belongs to nobody. A start that meets it refuses and names the section.
 
-Two further bounds hold while owners are declared. Only one owner may be served whenever an **owner-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no owner, because such a caller is composed against whichever owner the deployment happens to hold, and a second owner would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the owner it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no owner and every owner-scoped route names the owner it is for, which is what makes recording a second owner something an operator can do at all. And no two owners this deployment serves may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two owners shared would reach whichever declaration the lookup met first. Give each mailbox a name no other owner uses. The bound holds over the whole roster rather than over the file: a start reads every served owner's mail accounts, from their declaration or from their own record, and refuses a start in which one name reaches two of them, naming the names to change.
+Two further bounds hold while users are declared. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all. And no two users this deployment serves may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two users shared would reach whichever declaration the lookup met first. Give each mailbox a name no other user uses. The bound holds over the whole roster rather than over the file: a start reads every served user's mail accounts, from their declaration or from their own record, and refuses a start in which one name reaches two of them, naming the names to change.
 
 ### What a start reports
 
 Every start records the roster, at `Information`:
 
 ```
-This deployment serves 3 owners: 2 read from configuration and 1 from their own document.
+This deployment serves 3 users: 2 read from configuration and 1 from their own document.
 ```
 
-and then one line per owner whose source is not their file:
+and then one line per user whose source is not their file:
 
 ```
-The owner labelled morgan is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.
+The user labelled morgan is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.
 ```
 
-An owner the database holds and no file declares is served from their own record where they have one, which is what an owner recorded through [`mfctl owner add`](admin-endpoint.md#owners-and-their-records) always has: nothing in a file reaches them, and a deployment that held a row it never served would be one where recording somebody did nothing. They are served after every owner a file names, because the roster's order is the operator's own reading of their configuration and an owner outside it has no place in that order to take.
+A user the database holds and no file declares is served from their own record where they have one, which is what a user recorded through [`mfctl user add`](admin-endpoint.md#users-and-their-records) always has: nothing in a file reaches them, and a deployment that held a row it never served would be one where recording somebody did nothing. They are served after every user a file names, because the roster's order is the operator's own reading of their configuration and a user outside it has no place in that order to take.
 
-An owner the database holds, no file declares, and who has **no record of their own** is **neither deleted nor stripped of their mail**. They stop being served — their mail is kept, and neither read nor refreshed — and the start says so at `Warning`:
+A user the database holds, no file declares, and who has **no record of their own** is **neither deleted nor stripped of their mail**. They stop being served — their mail is kept, and neither read nor refreshed — and the start says so at `Warning`:
 
 ```
-The owner labelled sam is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.
+The user labelled sam is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.
 ```
 
 ### The handover, and what it costs
 
-**The handover is per owner and never happens by itself.** A start reads each row's runtime-written marker and serves that owner from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing in a start sets it: no upgrade, no import, and no first start adopts anybody. What sets it is [`mfctl owner adopt`](admin-endpoint.md#owners-and-their-records), which an operator runs for one owner at a time, having been shown what it would move and having said yes. An owner recorded through `mfctl owner add` was never read from a file and is read from their own record from the start.
+**The handover is per user and never happens by itself.** A start reads each row's runtime-written marker and serves that user from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing in a start sets it: no upgrade, no import, and no first start adopts anybody. What sets it is [`mfctl user adopt`](admin-endpoint.md#users-and-their-records), which an operator runs for one user at a time, having been shown what it would move and having said yes. A user recorded through `mfctl user add` was never read from a file and is read from their own record from the start.
 
-**`mfctl config` never writes an owner's mail accounts, adopted or not.** They live in a store of their own rather than in the deployment's document, so a change naming one is **refused** there and the refusal names both ways they are actually changed:
+**`mfctl config` never writes a user's mail accounts, adopted or not.** They live in a store of their own rather than in the deployment's document, so a change naming one is **refused** there and the refusal names both ways they are actually changed:
 
 ```
-MailFathom persists Accounts:0:MailAccounts:0:Host in the owner-accounts store rather than in the deployment's own
-document, so this is not where it is changed. An owner still read from a configuration source is changed in the
-declaration that supplies them — the owner's own section of the top-level Accounts collection — and served from it at
-the next restart; an owner who has been adopted is changed with 'mfctl owner account add' and 'mfctl owner account
+MailFathom persists Accounts:0:MailAccounts:0:Host in the user-accounts store rather than in the deployment's own
+document, so this is not where it is changed. A user still read from a configuration source is changed in the
+declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at
+the next restart; a user who has been adopted is changed with 'mfctl user account add' and 'mfctl user account
 remove'.
 ```
 
-The owner routes are the ones that do write that store, and until an owner is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl owner adopt`, which is the one act that moves them.
+The user routes are the ones that do write that store, and until a user is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl user adopt`, which is the one act that moves them.
 
-**What adoption moves is the posture as well as the mailboxes.** An owner served from a configuration source has their
+**What adoption moves is the posture as well as the mailboxes.** A user served from a configuration source has their
 mail classified on the deployment's `SpamClassification` section's terms, so a handover that left it behind would switch
 their spam protection off on the strength of an administrative act about where their settings live. The section's own
-keys — and only those an owner may hold — are copied into the record with the accounts, and from the commit onwards the
+keys — and only those a user may hold — are copied into the record with the accounts, and from the commit onwards the
 record is what decides them.
 
-**Once an owner is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches an owner it used to.
+**Once a user is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches a user it used to.
 
-This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and adoption writes nothing into anybody's file. What it does is stop MailFathom reading one owner's section out of it, which the file itself cannot show; the startup line naming that owner is what says so, and it is worth reading after any adoption.
+This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and adoption writes nothing into anybody's file. What it does is stop MailFathom reading one user's section out of it, which the file itself cannot show; the startup line naming that user is what says so, and it is worth reading after any adoption.
 
-### One owner's own classification posture
+### One user's own classification posture
 
-An adopted owner's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
+An adopted user's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
 of their posture from the moment the document is written — the deployment's section reaches them no longer, and the two
 are never unioned. That is what makes switching classification off in a record actually switch it off.
 
@@ -315,20 +315,20 @@ are never unioned. That is what makes switching classification off in a record a
 Every key means exactly what the same-named key of
 [the deployment's section](configuration-ai.md#spamclassification) means, and the constraints are the same — including
 the `0.1` to `1000` range both thresholds are judged against, which stays the deployment's. A record stating none of it
-classifies that owner's mail not at all, which is the same answer a deployment that configured nothing gives.
+classifies that user's mail not at all, which is the same answer a deployment that configured nothing gives.
 
 **`UseScanner` is the one exception, and it asks rather than decides.** Whether a scanner exists at all is read from the
 deployment's own section when the host starts — that is what constructs the daemon conversation and what refuses to
-start without an address for it. An owner switching `UseScanner` on where the deployment registered no scanner is not
+start without an address for it. A user switching `UseScanner` on where the deployment registered no scanner is not
 refused and does not fail the start; their mail is classified by the deterministic stage alone, as it would be with the
-key off. What the key decides for an owner is whether a scanner the deployment *has* is consulted for their mail.
+key off. What the key decides for a user is whether a scanner the deployment *has* is consulted for their mail.
 
-**A record may hold only what is that owner's.** The daemon's address, the per-scan bounds, the scan concurrency, the
+**A record may hold only what is that user's.** The daemon's address, the per-scan bounds, the scan concurrency, the
 classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
 anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
 permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
 an action asked for with `Enabled` false; a junk destination that is neither a usable alias nor a role written as
-`role:<name>`; and, once filing is switched on, a junk destination **any** of that owner's accounts fails to map — every
+`role:<name>`; and, once filing is switched on, a junk destination **any** of that user's accounts fails to map — every
 one of them has to map it, exactly as every configured account has to map the deployment's own, because MailFathom
 creates a folder on nobody's server. A folder only somebody else's account carries is therefore refused exactly as one
 nobody maps. The destination's syntax is judged whatever the switches say; what filing being off leaves unjudged is only

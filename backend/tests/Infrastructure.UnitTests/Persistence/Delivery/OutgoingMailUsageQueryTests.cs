@@ -19,15 +19,15 @@ public sealed class OutgoingMailUsageQueryTests
         DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>
     /// The period is a range over the instant a record was written, which is what an epoch-anchored window means, and
-    /// the account it is narrowed to is the pair rather than the identifier — a spend ceiling read for one owner's
-    /// account may not count what another owner's account of the same name sent.
+    /// the account it is narrowed to is the pair rather than the identifier — a spend ceiling read for one user's
+    /// account may not count what another user's account of the same name sent.
     /// </summary>
     [Fact]
-    public void ComposeMessages_ForOneAccount_NarrowsToThatOwnersAccountInsideThePeriod()
+    public void ComposeMessages_ForOneAccount_NarrowsToThatUsersAccountInsideThePeriod()
     {
         // Arrange
         using var context = DesignTimeContext();
@@ -39,7 +39,7 @@ public sealed class OutgoingMailUsageQueryTests
 
         // Assert
         Assert.Contains("\"RecordedAt\" >=", sql, StringComparison.Ordinal);
-        Assert.Contains("\"OwnerId\" =", sql, StringComparison.Ordinal);
+        Assert.Contains("\"UserId\" =", sql, StringComparison.Ordinal);
         Assert.Contains("\"MailboxAccountId\" =", sql, StringComparison.Ordinal);
     }
 
@@ -57,7 +57,7 @@ public sealed class OutgoingMailUsageQueryTests
 
         // Assert
         Assert.Contains("\"RecordedAt\" >=", sql, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"OwnerId\" =", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"UserId\" =", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("\"MailboxAccountId\" =", sql, StringComparison.Ordinal);
     }
 

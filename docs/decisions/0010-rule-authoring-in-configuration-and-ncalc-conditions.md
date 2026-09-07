@@ -13,9 +13,9 @@ informed:
 
 ## Context and Problem Statement
 
-Issue 251 wants the owner of a mailbox to declare recurring handling of their own mail — file it, copy it, delete it, mark it read — without an agent session and without a prompt. Issue 453 is its gate, and it asks the one question that could not be scoped past: where a rule is kept. A rule is authored state. It is written, edited, disabled, and removed by a person, and it changes far more often than anything else in a deployment, which is what makes its home a contract rather than an implementation detail.
+Issue 251 wants the user of a mailbox to declare recurring handling of their own mail — file it, copy it, delete it, mark it read — without an agent session and without a prompt. Issue 453 is its gate, and it asks the one question that could not be scoped past: where a rule is kept. A rule is authored state. It is written, edited, disabled, and removed by a person, and it changes far more often than anything else in a deployment, which is what makes its home a contract rather than an implementation detail.
 
-The question does not stand alone. What an owner types is a condition, and the syntax they type it in is as visible a surface as the file they type it into. The two are read together, break together, and are versioned together, so deciding where a rule lives while leaving the syntax to whichever issue happens to implement it would leave the more visible half of one authoring contract with no durable record at all. This record therefore settles both.
+The question does not stand alone. What a user types is a condition, and the syntax they type it in is as visible a surface as the file they type it into. The two are read together, break together, and are versioned together, so deciding where a rule lives while leaving the syntax to whichever issue happens to implement it would leave the more visible half of one authoring contract with no durable record at all. This record therefore settles both.
 
 MailFathom already answers the storage question one way for everything else it holds: configuration is validated, bound, and reloaded through the layer [ADR 0002](0002-configuration-reading-mapping-and-reload-boundary.md) defines, while state is in PostgreSQL under one append-only migration chain. The decision here is whether rules join the first of those two or become a third category with its own storage, its own management surface, and its own lifecycle.
 
@@ -24,7 +24,7 @@ MailFathom already answers the storage question one way for everything else it h
 - **An instance should stay fully described by its configuration.** A deployment is provisioned from a chart, a unit file, and a configuration file, and what it will do to a mailbox is the most consequential thing it declares. Automation that lives somewhere else means a deployment can be reproduced exactly and still behave differently.
 - **A rule acting on real mail is worth reviewing before it runs.** Configuration is diffable, reviewable, and keepable in a repository; a row in a table edited through a command is none of those without machinery built for the purpose.
 - **Whatever holds a rule has to answer what a rule's version is.** An execution's idempotency identity is derived from the message occurrence, the rule version, the trigger generation, and the action, and issue 458 has to explain a past run afterwards. Both need a revision to name, so the identity of a revision is part of this decision rather than downstream of it.
-- **An edit has to take effect without a restart, and an invalid edit must not take effect at all.** The options infrastructure discards an invalid reloaded value silently, which for a rule set means an owner mistypes a fact name and gets an instance that keeps running the previous rules while their file says otherwise.
+- **An edit has to take effect without a restart, and an invalid edit must not take effect at all.** The options infrastructure discards an invalid reloaded value silently, which for a rule set means a user mistypes a fact name and gets an instance that keeps running the previous rules while their file says otherwise.
 - **The condition has to express a genuinely complex filter in a configuration file.** A sender domain, an attachment, an age, and a folder combined with `and`, `or`, and grouping is the ordinary case, and a predicate tree spelled out in YAML is the shape people avoid writing.
 - **Nothing may evaluate arbitrary authored code.** Mail is attacker-controlled input and a condition is authored text read at startup; an evaluator whose cost or reach is a property of what was typed is not acceptable at any licence.
 - **A dependency's obligations reach every operator, not only this repository.** MailFathom is self-hosted and redistributed as an image, and it has to stay distributable under commercial closed-source terms beside its own open-source ones, so a licence, a transitive graph, and a target framework are all part of the choice.
@@ -55,7 +55,7 @@ NCalc wins because the argument that ruled out a general expression language doe
 
 ### The rule set is a configuration section, validated on binding
 
-A rule set is bound like any other section and reaches the code that evaluates it as an immutable snapshot, published only once it has been proven usable — the rule the host's `ValidatedSettingsSnapshot` already applies to every reloadable group. There is no rule table, no rule entity, no migration, and no rule row for erasure or retention to reach: a rule is the owner's authored text, held where the rest of their authored text is held.
+A rule set is bound like any other section and reaches the code that evaluates it as an immutable snapshot, published only once it has been proven usable — the rule the host's `ValidatedSettingsSnapshot` already applies to every reloadable group. There is no rule table, no rule entity, no migration, and no rule row for erasure or retention to reach: a rule is the user's authored text, held where the rest of their authored text is held.
 
 Validation belongs to binding rather than to evaluation. A condition that does not parse, a fact that does not exist, an ill-typed comparison, an action combination that names two fates for one occurrence, and a destination folder that is not configured are each refused when the configuration is read, naming the rule and what was wrong. Issue 454 builds that pass; this record fixes when it runs, which is before any mail is seen.
 
@@ -67,7 +67,7 @@ Deriving the identity rather than declaring one is what makes it trustworthy: an
 
 The digest is taken over the rule set **after binding**, which is what keeps it from moving for the wrong reasons. A change to an unrelated configuration key does not produce a new rule revision, and neither does reformatting the file or reordering keys within one rule. Reordering the rules themselves does, because declared order is part of the contract.
 
-Two consequences follow from the identity being a digest rather than a version number. Ordering is not readable from it, so a record that has to say which of two revisions came first carries its own timestamp and does not infer it. And the identity carries none of the authored text: a condition can legitimately contain an address the owner typed, so a run record that names a revision holds no personal data that the rule itself contributed, which a stored copy of the matched condition would.
+Two consequences follow from the identity being a digest rather than a version number. Ordering is not readable from it, so a record that has to say which of two revisions came first carries its own timestamp and does not infer it. And the identity carries none of the authored text: a condition can legitimately contain an address the user typed, so a run record that names a revision holds no personal data that the rule itself contributed, which a stored copy of the matched condition would.
 
 ### An edit takes effect on reload, and a run is bound to the revision it started under
 
@@ -77,7 +77,7 @@ What this deliberately does not do is reprocess. A rule sees mail arriving after
 
 ### An invalid reload is reported, and the previous rule set stays in effect
 
-The default behavior of the options infrastructure is wrong here and is not used. A reloaded value that fails `IValidateOptions<T>` throws inside the change-token callback, on a thread pool thread with nowhere to report it, so the candidate disappears with no log line: the owner sees an edit that appears to take and nothing happens. For a rule set that is the worst available outcome, because the instance goes on acting on mail under rules the file no longer states.
+The default behavior of the options infrastructure is wrong here and is not used. A reloaded value that fails `IValidateOptions<T>` throws inside the change-token callback, on a thread pool thread with nowhere to report it, so the candidate disappears with no log line: the user sees an edit that appears to take and nothing happens. For a rule set that is the worst available outcome, because the instance goes on acting on mail under rules the file no longer states.
 
 A rule section therefore validates itself the way the reload path here already validates a candidate: an invalid candidate is refused with a message naming the rule and the defect, the last known good rule set stays in effect, and the refusal is logged rather than swallowed. A rule set that is invalid at startup is a startup failure instead, because there is no previous good set to fall back to. Issue 454 builds this; the behavior is fixed here.
 
@@ -85,11 +85,11 @@ A rule section therefore validates itself the way the reload path here already v
 
 Not `mfctl`, not MCP, not an administrative endpoint. `mfctl` runs the rules configuration declares and reports what happened, and that is the whole of its relationship to them.
 
-This is the price of the decision rather than a detail of it, and it is stated plainly: a user interface over rules is foreclosed by this record, not deferred by it, and so is any runtime rule management. An owner who wants to change what their instance does edits a file and the instance reloads it. Reversing that is a new ADR superseding this one, not a feature added under it.
+This is the price of the decision rather than a detail of it, and it is stated plainly: a user interface over rules is foreclosed by this record, not deferred by it, and so is any runtime rule management. A user who wants to change what their instance does edits a file and the instance reloads it. Reversing that is a new ADR superseding this one, not a feature added under it.
 
 ### The condition is one expression, and what NCalc does not provide MailFathom owns
 
-The condition is a single expression returning a boolean; a non-boolean result is a refusal when the rule is read rather than a truthiness rule. What the library gives is the part nobody should write again: infix boolean and comparison operators an owner already knows, grouping, a parser, a precedence table, and an error position.
+The condition is a single expression returning a boolean; a non-boolean result is a refusal when the rule is read rather than a truthiness rule. What the library gives is the part nobody should write again: infix boolean and comparison operators a user already knows, grouping, a parser, a precedence table, and an error position.
 
 Three guarantees the predicate design would have had from its own shape are now MailFathom's to build, and naming them is most of why this record exists:
 
@@ -107,18 +107,18 @@ It is not taken here. This record is documentation and adds no package: the chan
 
 ### Both surfaces are public, and a break is named
 
-The rule schema and the expression syntax are two of the surfaces [ADR 0004](0004-versioning-and-release-policy.md) governs. Below `1.0.0` a minor release may break either, and no deprecation window exists — so what a change to them decides is which shape is right, never whether the break may be taken. What it costs is the record: a break is named in the changelog against the surface it breaks, with the action the owner has to perform on their own file.
+The rule schema and the expression syntax are two of the surfaces [ADR 0004](0004-versioning-and-release-policy.md) governs. Below `1.0.0` a minor release may break either, and no deprecation window exists — so what a change to them decides is which shape is right, never whether the break may be taken. What it costs is the record: a break is named in the changelog against the surface it breaks, with the action the user has to perform on their own file.
 
 ### Consequences
 
 - Good, because an instance stays fully described by its configuration, and what it will do to a mailbox is reviewable in a diff before it runs and reproducible from a repository afterwards.
 - Good, because a rule's version needs no mechanism of its own. The revision is derived from the rule set that was bound, so it is identical on every replica, survives a restart, and cannot be left stale by an edit that forgot to bump it.
 - Good, because nothing is added to the database. There is no rule table, so no migration, no erasure path, no retention rule, and no second copy of authored text for the privacy review to reach.
-- Good, because the syntax is one an owner is likely to recognize, and the parser, the precedence table, and the error position are maintained by somebody else under MIT with one transitive package.
+- Good, because the syntax is one a user is likely to recognize, and the parser, the precedence table, and the error position are maintained by somebody else under MIT with one transitive package.
 - Neutral, because validation moves rather than disappears. A predicate schema would have been checked by the binder; an expression is checked by a pass MailFathom writes, which is more code for the same guarantee at the same moment.
 - Neutral, because reload semantics are the ones the repository already committed to. A rule set is reloadable for new operations, like every other group that reaches a running operation.
-- Bad, because runtime rule management is foreclosed. There is no interface an owner can click, no way to disable a rule from `mfctl` for an hour, and no path to multi-user rule authoring without superseding this record.
-- Bad, because a revision identified by a digest is not readable backwards. A history can say a run used a rule set that is no longer the current one; recovering what that rule set said is the configuration's own version control, and an owner who does not keep their configuration in one has no way back to it.
+- Bad, because runtime rule management is foreclosed. There is no interface a user can click, no way to disable a rule from `mfctl` for an hour, and no path to multi-user rule authoring without superseding this record.
+- Bad, because a revision identified by a digest is not readable backwards. A history can say a run used a rule set that is no longer the current one; recovering what that rule set said is the configuration's own version control, and a user who does not keep their configuration in one has no way back to it.
 - Bad, because an expression can fail at evaluation time in a way a predicate tree could not. Validation catches an unknown fact and an ill-typed comparison, but a null a fact legitimately produces on an unusual message is discovered on live mail, which is why the failure classification above is a requirement rather than a nicety.
 - Bad, because the authoring surface now has to be documented completely or it is unusable. Every fact with its type, every function, the operators, the limits, and worked examples are an obligation this choice creates, and issue 454 carries it.
 
@@ -137,7 +137,7 @@ The rule schema and the expression syntax are two of the surfaces [ADR 0004](000
 
 - Good, because it reuses binding, validation, the reload publication contract, and the operational diagnostics that already exist, and adds no storage.
 - Good, because a rule is diffable, reviewable, and reproducible, which is what makes automation over somebody's mailbox auditable without building an audit trail for it.
-- Neutral, because editing requires access to the deployment's configuration, which for a self-hosted single-owner product is the same person.
+- Neutral, because editing requires access to the deployment's configuration, which for a self-hosted single-user product is the same person.
 - Bad, because there is no runtime authoring, and no partial or temporary change short of editing the file.
 
 ### A rules table with a management surface
@@ -156,7 +156,7 @@ The rule schema and the expression syntax are two of the surfaces [ADR 0004](000
 
 ### One NCalc expression
 
-- Good, because a complex filter is writable in a configuration file with operators and grouping an owner already knows, and the parser, precedence, and error position are not MailFathom's to maintain.
+- Good, because a complex filter is writable in a configuration file with operators and grouping a user already knows, and the parser, precedence, and error position are not MailFathom's to maintain.
 - Good, because the grammar admits no loops, comprehensions, recursion, or assignment, and an expression reaches only the parameters and functions registered into its environment, so both cost and reach stay properties of what MailFathom declares rather than of what was typed.
 - Good, because the package is MIT, targets `net10.0`, and pulls exactly one transitive package, so nothing about it reaches an operator who runs the image.
 - Neutral, because its mathematical and string library is larger than a mail rule needs; the unneeded parts are removed from the environment rather than documented as available.
@@ -180,7 +180,7 @@ The rule schema and the expression syntax are two of the surfaces [ADR 0004](000
 
 ### A general scripting host
 
-- Good, because anything an owner might want to express is expressible.
+- Good, because anything a user might want to express is expressible.
 - Bad, because that is the objection. A scripting host evaluates authored code with a cost and a reach that are properties of what was typed, which is precisely what a configuration file read at startup must not contain.
 - Bad, because sandboxing one is a security commitment MailFathom would be making on every operator's behalf, permanently, for a filter.
 
@@ -192,4 +192,4 @@ The rule schema and the expression syntax are two of the surfaces [ADR 0004](000
 - NCalc's documentation is at <https://ncalc.github.io/ncalc/> and its repository at <https://github.com/ncalc/ncalc>; `NCalcException` and its derived evaluation exception are documented at <https://ncalc.github.io/ncalc/api/NCalc.Exceptions.NCalcException.html>. The package, its MIT licence, its `net10.0` target, and its single `NCalc.Core` dependency are at <https://www.nuget.org/packages/NCalc>.
 - The CEL specification is at <https://github.com/google/cel-spec>; the two .NET implementations weighed are <https://www.nuget.org/packages/Cel> and <https://www.nuget.org/packages/Cel.NET>.
 - The `describes:` marker names nothing because none of this code exists yet. It gains its paths when issue 454 lands the rule section and its validation, which is one of the two edits an accepted ADR is permitted.
-- Revisit when an owner genuinely needs to change a rule without changing their configuration — a temporary disablement during an incident is the plausible case — or when the fact surface grows past what a single expression reads clearly, or if a rule set ever has to be authored by somebody who is not the operator of the instance.
+- Revisit when a user genuinely needs to change a rule without changing their configuration — a temporary disablement during an incident is the plausible case — or when the fact surface grows past what a single expression reads clearly, or if a rule set ever has to be authored by somebody who is not the operator of the instance.

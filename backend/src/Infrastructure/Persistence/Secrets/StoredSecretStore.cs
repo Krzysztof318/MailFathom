@@ -31,7 +31,7 @@ internal sealed class StoredSecretStore(
     public async Task<DatabaseSecretReference> StoreAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailOwnerId owner,
+        MailUserId user,
         SecretName name,
         ResolvedSecret material,
         CancellationToken cancellationToken)
@@ -61,17 +61,17 @@ internal sealed class StoredSecretStore(
         var stored = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.StoredSecrets,
             writeContext.StoredSecrets,
-            secret => secret.OwnerId == owner.Value && secret.Name == name.Value,
+            secret => secret.UserId == user.Value && secret.Name == name.Value,
             cancellationToken);
         if (stored is null)
         {
             stored = await writeContext.StoredSecrets.FindAsync([reference.Id], cancellationToken);
         }
 
-        if (stored is not null && stored.OwnerId != owner.Value)
+        if (stored is not null && stored.UserId != user.Value)
         {
             throw new InvalidOperationException(
-                "The database secret reference already belongs to another owner and cannot be moved.");
+                "The database secret reference already belongs to another user and cannot be moved.");
         }
 
         var effectiveReference = stored is null
@@ -81,7 +81,7 @@ internal sealed class StoredSecretStore(
         SealedValue sealedValue;
         try
         {
-            sealedValue = key.Seal(StoredSecretBinding.Create(owner, effectiveReference, name), plaintext);
+            sealedValue = key.Seal(StoredSecretBinding.Create(user, effectiveReference, name), plaintext);
         }
         finally
         {
@@ -95,7 +95,7 @@ internal sealed class StoredSecretStore(
             stored = new StoredSecretEntity
             {
                 Id = reference.Id,
-                OwnerId = owner.Value,
+                UserId = user.Value,
                 Name = name.Value!,
                 SealedMaterial = sealedValue.Ciphertext.ToArray(),
                 DataEncryptionKeyId = sealedValue.KeyId,
@@ -119,7 +119,7 @@ internal sealed class StoredSecretStore(
     public async Task<bool> RemoveAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -129,14 +129,14 @@ internal sealed class StoredSecretStore(
             throw new ArgumentException("A stored secret removal requires a database reference.", nameof(reference));
         }
 
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
-            throw new ArgumentException("A stored secret removal requires an owner.", nameof(owner));
+            throw new ArgumentException("A stored secret removal requires a user.", nameof(user));
         }
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await writeContext.StoredSecrets.FindAsync([reference.Id], cancellationToken);
-        if (stored is null || stored.OwnerId != owner.Value)
+        if (stored is null || stored.UserId != user.Value)
         {
             return false;
         }
@@ -161,14 +161,14 @@ internal sealed class StoredSecretStore(
             .Where(secret => secret.DataEncryptionKeyId == keyId)
             .OrderBy(secret => secret.Id)
             .Take(limit)
-            .Select(secret => new { secret.Id, secret.OwnerId, secret.Name })
+            .Select(secret => new { secret.Id, secret.UserId, secret.Name })
             .ToArrayAsync(cancellationToken);
 
         return
         [
             .. stored.Select(secret => new StoredSecretKeyReference(
                 DatabaseSecretReference.Create(secret.Id),
-                MailOwnerId.Create(secret.OwnerId),
+                MailUserId.Create(secret.UserId),
                 SecretName.TryCreate(secret.Name, out var name)
                     ? name
                     : throw new InvalidOperationException("A stored secret carries a name the current schema refuses."))),

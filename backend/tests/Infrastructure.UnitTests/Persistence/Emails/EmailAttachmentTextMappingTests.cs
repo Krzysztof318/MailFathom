@@ -44,7 +44,7 @@ public sealed class EmailAttachmentTextMappingTests
 
     /// <summary>
     /// A lexical match has to name the file as well as the words, because the file name is frequently the only thing a
-    /// mailbox owner remembers about a contract.
+    /// mailbox user remembers about a contract.
     /// </summary>
     [Fact]
     public void SearchVector_TheGeneratedColumn_ReadsTheFileNameBesideTheText()

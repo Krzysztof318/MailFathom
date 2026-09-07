@@ -43,7 +43,7 @@ internal sealed class MailSynchronizationSettingsReaders(MailSynchronizationOpti
 
     // The account catalog is deliberately not here. Every other reader answers from configuration alone, and an account
     // cannot be described without naming whose it is — a fact the deployment establishes at startup rather than one a
-    // configuration snapshot holds. So ConfiguredMailAccountCatalog is composed where that owner is resolvable, and
+    // configuration snapshot holds. So ConfiguredMailAccountCatalog is composed where that user is resolvable, and
     // whatever needs the account set resolves the application port instead of reaching into a snapshot for it.
 
     /// <summary>Gets which authentication results an account believes.</summary>

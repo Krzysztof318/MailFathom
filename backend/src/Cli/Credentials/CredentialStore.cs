@@ -743,7 +743,7 @@ internal sealed class CredentialStore
     /// so a process that stopped in between would leave every profile in it unreadable — and the write is reached by
     /// <see cref="RenewAccessToken" /> from what an operator ran as a status check, which is not a command anybody
     /// would think to run twice. The renamed file carries the mode it was created with, so the store stays readable by
-    /// its owner alone without a second call to widen and re-tighten it.
+    /// its user alone without a second call to widen and re-tighten it.
     /// </remarks>
     private void Write(StoredCredentials credentials)
     {
@@ -751,9 +751,9 @@ internal sealed class CredentialStore
 
         try
         {
-            OwnerOnlyStorage.CreateDirectoryFor(this.storePath);
+            UserOnlyStorage.CreateDirectoryFor(this.storePath);
 
-            using (var contents = OwnerOnlyStorage.OpenForWriting(pending))
+            using (var contents = UserOnlyStorage.OpenForWriting(pending))
             {
                 JsonSerializer.Serialize(contents, credentials, CliJsonContext.Default.StoredCredentials);
             }

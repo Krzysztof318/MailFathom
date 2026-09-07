@@ -90,7 +90,7 @@ internal static partial class TransportSecurityExtensions
             apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
             publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
 
-            // No Basic scheme, whatever an entry states. A password names an owner, and the administrative endpoint —
+            // No Basic scheme, whatever an entry states. A password names a user, and the administrative endpoint —
             // the one surface still registered this way — answers for the deployment rather than for a person, so the
             // entry that would have selected the method is refused by that section's own validation instead of
             // reaching a registration here.
@@ -267,7 +267,7 @@ internal static partial class TransportSecurityExtensions
     /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
     /// <remarks>
     /// It is handed scheme names rather than the credentials behind them, which is what lets the configured axis and the
-    /// owner axis share one routing rule. Which handler judges a presented credential is decided by the shape of the
+    /// user axis share one routing rule. Which handler judges a presented credential is decided by the shape of the
     /// credential and never by where the material that answers it is kept, so a surface whose keys are rows routes
     /// exactly as one whose keys are configuration entries does.
     /// </remarks>
@@ -313,8 +313,8 @@ internal static partial class TransportSecurityExtensions
     /// </para>
     /// <para>
     /// What a validated token then becomes is the caller's, because it is the one part the two axes genuinely differ
-    /// on: a configured entry writes the grant it stated onto the identity, and an owner-facing entry resolves the
-    /// subject to a credential record and takes both the owner and the grant from it. Everything above that — the
+    /// on: a configured entry writes the grant it stated onto the identity, and a user-facing entry resolves the
+    /// subject to a credential record and takes both the user and the grant from it. Everything above that — the
     /// issuer, the audience, the metadata retrieval, the clear-text refusal — is the same question asked of the same
     /// server, so it is asked once here.
     /// </para>

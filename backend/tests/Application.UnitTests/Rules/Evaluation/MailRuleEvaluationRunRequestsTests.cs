@@ -21,7 +21,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
 {
     private static readonly DateTimeOffset RequestedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>What a scheduled occasion is dispatched under, which is what the deployment's own process reaches this with.</summary>
     private static readonly AccessAuthorization ProcessItself =

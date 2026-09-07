@@ -15,7 +15,7 @@ namespace MailFathom.Domain.UnitTests.Delivery.Scheduling;
 public sealed class RecurringSendRequestTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A declaration keeps what it was made with, and the schedule as written bar the space around it.</summary>
     [Fact]

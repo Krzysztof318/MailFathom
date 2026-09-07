@@ -15,7 +15,7 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// <para>
 /// The two bounds apply to each of the pass's two walks separately, because they answer the same question about
 /// different work: an account that has just been given its first rule set has a long arrival queue and no requested run,
-/// and an account whose owner asked for a re-run has the opposite. Sharing one budget between them would let either one
+/// and an account whose user asked for a re-run has the opposite. Sharing one budget between them would let either one
 /// starve the other for as many runs as it took to drain.
 /// </para>
 /// </remarks>

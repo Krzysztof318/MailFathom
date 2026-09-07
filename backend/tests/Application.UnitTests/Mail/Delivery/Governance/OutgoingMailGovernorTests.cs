@@ -19,7 +19,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Governance;
 public sealed class OutgoingMailGovernorTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A deployment that declared no ceiling counts nothing, so the ordinary posture costs no read at all.</summary>
     [Fact]

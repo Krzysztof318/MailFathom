@@ -42,7 +42,7 @@ public sealed class DerivedAttachmentTextTests
     }
 
     /// <summary>
-    /// An owner asking why their contract was never searched is owed the reason, so a refusal is a row rather than an
+    /// A user asking why their contract was never searched is owed the reason, so a refusal is a row rather than an
     /// absence — and a row carrying no words reaches neither index.
     /// </summary>
     [Fact]

@@ -85,7 +85,7 @@ public sealed record OutgoingEmailRequester
         return new OutgoingEmailRequester(OutgoingEmailOrigin.Rule, identity);
     }
 
-    /// <summary>Names one occasion of a recurring send the owner declared, which is the declaration and the occasion together.</summary>
+    /// <summary>Names one occasion of a recurring send the user declared, which is the declaration and the occasion together.</summary>
     /// <param name="declaration">The recurring send whose occasion came round.</param>
     /// <param name="occurrence">The occasion itself, which is what makes one Monday's message a different request from the next.</param>
     /// <returns>A requester naming that occasion of that declaration.</returns>

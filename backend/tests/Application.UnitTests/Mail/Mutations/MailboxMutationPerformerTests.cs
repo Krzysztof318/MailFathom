@@ -25,7 +25,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 public sealed class MailboxMutationPerformerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -341,7 +341,7 @@ public sealed class MailboxMutationPerformerTests
         // Act
         await context.Performer.PerformAsync(
             MailboxMutationRequest.Delete(
-                storedEmailId, SyntheticMailOwner.Deployment,
+                storedEmailId, SyntheticMailUser.Deployment,
                 occurrence,
                 requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -349,12 +349,12 @@ public sealed class MailboxMutationPerformerTests
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, isSeen: true),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.Copy(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
+            MailboxMutationRequest.Copy(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, ArchivePath),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
@@ -399,17 +399,17 @@ public sealed class MailboxMutationPerformerTests
 
         // Act
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, labels),
+            MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, labels),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, labels),
+            MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, labels),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, AuthoredMailKeywords.None),
+            MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, AuthoredMailKeywords.None),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
@@ -442,7 +442,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var occurrence = Occurrence(42U);
         var request = MailboxMutationRequest.SetFlagged(
-            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
             occurrence,
             MailboxMutationRequester.Rule("surface-invoices", "2"),
             isFlagged);
@@ -483,7 +483,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var occurrence = Occurrence(42U);
         var request = MailboxMutationRequest.SetSeen(
-            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
             occurrence,
             MailboxMutationRequester.Rule("surface-invoices", "2"),
             isSeen);
@@ -648,11 +648,11 @@ public sealed class MailboxMutationPerformerTests
 
         return mutationName switch
         {
-            "relocate" => MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
-            "copy" => MailboxMutationRequest.Copy(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
-            "set-seen" => MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, isSeen: true),
+            "relocate" => MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, ArchivePath),
+            "copy" => MailboxMutationRequest.Copy(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, ArchivePath),
+            "set-seen" => MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailUser.Deployment, occurrence, requester, isSeen: true),
             _ => MailboxMutationRequest.Delete(
-                storedEmailId, SyntheticMailOwner.Deployment,
+                storedEmailId, SyntheticMailUser.Deployment,
                 occurrence,
                 requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -666,7 +666,7 @@ public sealed class MailboxMutationPerformerTests
         ImapUid.Create(uid));
 
     private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
-        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
@@ -692,7 +692,7 @@ public sealed class MailboxMutationPerformerTests
         // Assert
         var signal = Assert.Single(channel.Published);
         Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
-        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(InboxFolder.Alias, signal.Folder);
         Assert.Equal([request.StoredEmailId], signal.Emails);
     }

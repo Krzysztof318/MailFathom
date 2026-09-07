@@ -31,19 +31,19 @@ public sealed class ClientSignalEndpointsTests
 
     /// <summary>A minted ticket is answered with the value to present and the moment presenting it stops working.</summary>
     [Fact]
-    public void MintTicket_ACallerActingForAnOwner_AnswersTheTicketAndWhenItExpires()
+    public void MintTicket_ACallerActingForAnUser_AnswersTheTicketAndWhenItExpires()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
 
         // Act
-        var result = ClientSignalEndpoints.MintTicket(AuthorizationFor(SyntheticMailOwner.Deployment), tickets);
+        var result = ClientSignalEndpoints.MintTicket(AuthorizationFor(SyntheticMailUser.Deployment), tickets);
 
         // Assert
         var answered = Assert.IsType<Ok<ClientSignalTicketResponse>>(result.Result);
         Assert.NotNull(answered.Value);
         Assert.Equal(Instant + ClientSignalTickets.Lifetime, answered.Value.ExpiresAt);
-        Assert.Equal(SyntheticMailOwner.Deployment, tickets.Redeem(answered.Value.Ticket));
+        Assert.Equal(SyntheticMailUser.Deployment, tickets.Redeem(answered.Value.Ticket));
     }
 
     /// <summary>A deployment already holding every ticket it will hold says so as a condition that passes, not as a fault.</summary>
@@ -52,11 +52,11 @@ public sealed class ClientSignalEndpointsTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var authorization = AuthorizationFor(SyntheticMailOwner.Deployment);
+        var authorization = AuthorizationFor(SyntheticMailUser.Deployment);
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            tickets.Mint(SyntheticMailOwner.Deployment);
+            tickets.Mint(SyntheticMailUser.Deployment);
         }
 
         // Act
@@ -67,11 +67,11 @@ public sealed class ClientSignalEndpointsTests
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
     }
 
-    private static AccessAuthorization AuthorizationFor(MailOwnerId owner)
+    private static AccessAuthorization AuthorizationFor(MailUserId user)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(
-            AuthorizedPrincipal.CallerActingFor(owner, "a-client", [MailFathomPermission.MailRead]));
+            AuthorizedPrincipal.CallerActingFor(user, "a-client", [MailFathomPermission.MailRead]));
 
         return new AccessAuthorization(principals);
     }

@@ -27,15 +27,15 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         CancellationToken cancellationToken)
     {
         var aliasValue = folderAlias.Value;
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         // Every generation of an alias is kept, because occurrences stay attributable to the folder they came from,
-        // so the current binding is the highest generation rather than the only row. The owner leads the narrowing, as
-        // it leads the index: an alias is MailFathom's own name within one owner's account.
+        // so the current binding is the highest generation rather than the only row. The user leads the narrowing, as
+        // it leads the index: an alias is MailFathom's own name within one user's account.
         var entity = await readContext.MailFolders
             .AsNoTracking()
-            .Where(folder => folder.OwnerId == ownerValue
+            .Where(folder => folder.UserId == userValue
                 && folder.MailboxAccountId == accountValue
                 && folder.Alias == aliasValue)
             .OrderByDescending(folder => folder.ResolutionGeneration)

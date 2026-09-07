@@ -12,7 +12,7 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 
 /// <summary>Covers the descriptor MailFathom advertises for <c>send_email</c>.</summary>
 /// <remarks>
-/// It is the one tool whose effect reaches somebody who is not this mailbox's owner and cannot be recalled, so the
+/// It is the one tool whose effect reaches somebody who is not this mailbox's user and cannot be recalled, so the
 /// descriptor is most of what makes the tool safe: a client decides whether to ask a person from the annotations, and a
 /// model decides whether to call at all from the description. Both are asserted here because both are the published
 /// contract rather than prose.

@@ -122,36 +122,36 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
     }
 
     /// <summary>
-    /// An owner at their own share is a different state of a deployment from an instance that is full, so it is
+    /// A user at their own share is a different state of a deployment from an instance that is full, so it is
     /// counted under a value of its own and says which setting admits more. An alert written against either would be
     /// wrong if the two shared a name, which is the whole reason the branch exists.
     /// </summary>
     [Fact]
-    public void Report_RunDeferredMessagesForTheOwnersShare_CountsTheOwnerCeilingLimitAndWarns()
+    public void Report_RunDeferredMessagesForTheUsersShare_CountsTheUserCeilingLimitAndWarns()
     {
         // Arrange
-        var account = MailAccountId.Create("owner-at-their-share");
+        var account = MailAccountId.Create("user-at-their-share");
         using var measurements = new RecordedMailFathomMeasurements(LimitsReachedInstrumentName);
 
         // Act
         this.telemetry.Report(
             account,
             "INBOX",
-            VolumeWith(fetchedBytes: 0, storedBytes: 0) with { DeferredForOwnerStorageEmailCount = 2 });
+            VolumeWith(fetchedBytes: 0, storedBytes: 0) with { DeferredForUserStorageEmailCount = 2 });
 
         // Assert
         var limit = Assert.Single(ReportedFor(measurements, LimitsReachedInstrumentName, account));
         Assert.Equal(1, limit.Value);
-        Assert.Equal("owner_storage_ceiling", limit.Tags[LimitTagName]);
+        Assert.Equal("user_storage_ceiling", limit.Tags[LimitTagName]);
         Assert.Contains(
             this.logs.Records,
             entry => entry.Level == LogLevel.Warning
-                && entry.Message.Contains("MaxStoredContentBytesPerOwner", StringComparison.Ordinal));
+                && entry.Message.Contains("MaxStoredContentBytesPerUser", StringComparison.Ordinal));
     }
 
     /// <summary>
     /// A run that met both ceilings reports both, one measurement each, because the two name different remedies and a
-    /// run reporting only the wider one would leave the owner's share invisible for as long as the instance was full.
+    /// run reporting only the wider one would leave the user's share invisible for as long as the instance was full.
     /// </summary>
     [Fact]
     public void Report_RunDeferredMessagesForBothCeilings_CountsEachOfThemOnce()
@@ -167,7 +167,7 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
             VolumeWith(fetchedBytes: 0, storedBytes: 0) with
             {
                 DeferredForStorageEmailCount = 3,
-                DeferredForOwnerStorageEmailCount = 2,
+                DeferredForUserStorageEmailCount = 2,
             });
 
         // Assert
@@ -176,7 +176,7 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
             .Order()
             .ToArray();
 
-        Assert.Equal(["owner_storage_ceiling", "storage_ceiling"], reportedLimits);
+        Assert.Equal(["storage_ceiling", "user_storage_ceiling"], reportedLimits);
     }
 
     /// <summary>A run that reached neither limit counts neither, so an ordinary interval adds nothing to read past.</summary>
@@ -247,7 +247,7 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
         storedBytes,
         StoredContentBytes: 1_000_000,
         DeferredForStorageEmailCount: 0,
-        DeferredForOwnerStorageEmailCount: 0,
+        DeferredForUserStorageEmailCount: 0,
         RefilledEmailCount: 0,
         StoppedForContentBudget: false);
 

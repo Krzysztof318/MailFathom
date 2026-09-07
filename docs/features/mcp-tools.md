@@ -5,7 +5,7 @@
 MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, one
 tool that changes the flags and keywords on mail this deployment holds, three that send mail from a mailbox it holds —
 a new message, a reply, and a forward — two over a send that was queued that way, four over a message written into the
-owner's own drafts folder, and the contact book. This page records the
+user's own drafts folder, and the contact book. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
@@ -62,9 +62,9 @@ Four properties hold for every tool and are proven by test rather than asserted 
   `set_mail_flags` reaches one no sooner than the rest: the call writes a durable record and the account's own
   synchronization run issues the `STORE`, so nothing in the request opens a session or holds a type that could. **The
   three draft tools that write a draft are the exception, and it is deliberate**: the record and the message commit
-  first, and the copy in the owner's drafts folder is then appended or removed inside the same call, so a `save_draft`,
+  first, and the copy in the user's drafts folder is then appended or removed inside the same call, so a `save_draft`,
   an `update_draft`, or a `delete_draft` does wait on one IMAP round trip. That is what puts the message in front of
-  the owner while whoever asked for it is still there, and what a caller loses if it fails is only the copy: the draft
+  the user while whoever asked for it is still there, and what a caller loses if it fails is only the copy: the draft
   is already durable, the result says the folder does not show it, and a later pass finishes the job.
   [§ The drafting surface](#the-drafting-surface) records what the two states mean. `send_draft` reaches nothing —
   a promotion writes a record like any other send. `ask_mail` reaches a chat
@@ -96,7 +96,7 @@ contact tools are within
 reach of every deployment, because local state is all they need — the sending tools included, since each writes a
 message down rather than sending one and an account configured for no delivery refuses the call rather than withdrawing
 the tool. A draft tool needs less than that: an account that maps no drafts folder keeps its drafts here and shows the
-owner none of them, which is a state the result reports rather than a reason to withhold a tool. `ask_mail`
+user none of them, which is a state the result reports rather than a reason to withhold a tool. `ask_mail`
 needs two AI providers an operator configures separately, so it is advertised only while both are configured and
 working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
 Whether any of the twenty-one is offered to a particular caller is a second question, which the next section answers.
@@ -112,7 +112,7 @@ credential, the permission, or what a different caller would have been served.
 tool, and the page around it is the model those names belong to: what each one reaches, and why no permission here
 implies another. `mailfathom.mail.send` is the one worth reading twice, because it is the only name whose effect leaves
 this deployment and cannot be recalled. Which grant a credential
-holds is recorded on the credential itself, beside the owner it resolves, and
+holds is recorded on the credential itself, beside the user it resolves, and
 [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is read; a deployment whose
 credentials were provisioned with no permission named serves every permission to every caller, which is what makes this
 invisible until an operator narrows something. An entry setting `PermissionsFromTokenScopes` is the one place a second
@@ -146,7 +146,7 @@ grant says *this caller may reach it*, and a category says *this endpoint offers
 | Category | Tools | What it is for |
 | --- | --- | --- |
 | `mailbox` | `list_accounts`, `list_emails`, `get_email_content`, `search_emails` | Reading the local mailbox copy |
-| `flags` | `set_mail_flags` | Marking mail on the owner's own mail server |
+| `flags` | `set_mail_flags` | Marking mail on the user's own mail server |
 | `sending` | `send_email`, `reply_to_email`, `forward_email`, `send_draft`, `get_outgoing_email`, `cancel_outgoing_email` | Mail this deployment was asked to send, and the queued sends it holds |
 | `drafts` | `save_draft`, `update_draft`, `delete_draft` | Composing a message that is never sent |
 | `answering` | `ask_mail` | Answering a question by sending mail content to a model provider |
@@ -223,7 +223,7 @@ it calls anything:
 | `description` | States what the tool reads or changes, that the call itself reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
-| `openWorldHint` | `false` for every tool but `set_mail_flags`, the three sending tools, and the four draft tools, whose effects leave this process — `set_mail_flags`, `save_draft`, `update_draft`, and `delete_draft` for the owner's own mailbox, the three sending tools and `send_draft` for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
+| `openWorldHint` | `false` for every tool but `set_mail_flags`, the three sending tools, and the four draft tools, whose effects leave this process — `set_mail_flags`, `save_draft`, `update_draft`, and `delete_draft` for the user's own mailbox, the three sending tools and `send_draft` for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
 
 The remaining three annotations are what a client reads before it decides whether a call needs a human, so they differ
 per tool rather than per surface:
@@ -258,7 +258,7 @@ second identical call asks for exactly what the first one asked for. It is destr
 gives that word — whether the tool performs only additive updates — and it does not: a keyword replacement states the
 whole set and so removes a label the caller never listed, a removal takes named labels off, and clearing `\Seen` or
 `\Flagged` takes a flag off the message. That every one of those is reversible with the gesture that would have made
-it, in MailFathom or in any mail client the owner opens, is true and is a separate fact: the annotation is what a
+it, in MailFathom or in any mail client the user opens, is true and is a separate fact: the annotation is what a
 client reads before deciding whether a call needs a person, so it answers what the call takes away rather than how
 easily it can be undone.
 
@@ -277,11 +277,11 @@ key would have made the value a statement about good behaviour — and the call 
 the one a client makes without thinking, a retry after a timeout, whose second message cannot be taken back.
 
 `set_mail_flags`, the three sending tools, and the four draft tools are what is marked `openWorld`, and what
-they reach is not the same thing. A flag change and a draft reach the owner's own mailbox on the owner's own server — a draft is
+they reach is not the same thing. A flag change and a draft reach the user's own mailbox on the user's own server — a draft is
 appended to their Drafts folder, edited by replacing that copy, and removed with it; a send, a reply, a forward, and the
 draft `send_draft` promotes reach a submission server this
 deployment does not own and a recipient nobody here controls, which is the first time anything on this surface leaves
-for somebody who is not this mailbox's owner. Every other tool, contact writes included, reaches MailFathom's own
+for somebody who is not this mailbox's user. Every other tool, contact writes included, reaches MailFathom's own
 database and no third party.
 
 The two tools over a queued send are what makes the four annotations readable as four separate facts rather than as one
@@ -299,14 +299,14 @@ call does rather than by the family it belongs to. `save_draft` is `false`, `fal
 takes nothing away, and mints an identity — so calling it twice leaves two drafts, exactly as `create_contact` leaves one
 record and then refuses. `update_draft` is idempotent because an edit states the whole message, and destructive for that
 same reason: a recipient the caller leaves out is no longer addressed and an `htmlBody` it omits is dropped. `delete_draft`
-is both for the plainest reading of either word — the message the owner wrote is gone, and asking twice leaves the state the
+is both for the plainest reading of either word — the message the user wrote is gone, and asking twice leaves the state the
 first call left. `send_draft` carries `send_email`'s three values for `send_email`'s reasons, because it is a send; what
 differs is only where the message came from, and the idempotency the annotation claims is the draft's own identity rather
 than a key a caller supplies.
 
 `openWorldHint` is what tells the first three apart from the fourth, and it is the whole reason the pair of annotations is
-worth reading together here. `update_draft` and `delete_draft` are `destructive` and closed for nobody but the owner:
-what they destroy is a message in the owner's own folder, which the owner can see and MailFathom can replace.
+worth reading together here. `update_draft` and `delete_draft` are `destructive` and closed for nobody but the user:
+what they destroy is a message in the user's own folder, which the user can see and MailFathom can replace.
 `send_draft` is `destructive` because what it does cannot be undone at all, and open-world because the message reaches
 somebody nobody here controls. A client that reads only `destructiveHint` cannot tell those apart; the deployment can,
 because they sit behind different permissions, which is the stronger half of the same separation.
@@ -381,7 +381,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `53005` | The call named no email this deployment can answer | `reply_to_email` or `forward_email` naming an identifier nothing is held under, an email of an account this deployment no longer serves, an email in a folder the calling grant does not read, or one whose stored content is no longer readable — four situations and deliberately one answer, so a caller cannot learn from a refusal which of them it met |
 | `53006` | The call named a recipient this deployment's recipient policy does not admit | Any of the three sending tools, or `send_draft` promoting a draft, naming somebody a denied entry of `MailDelivery:RecipientPolicy` covers, or somebody outside the allowed entries where an operator wrote any; the whole message is refused rather than sent to the remaining recipients, and the answer names which half of the policy refused and never the address |
 | `53007` | The call named no queued send this caller may be told about | `get_outgoing_email` or `cancel_outgoing_email` naming an identifier nothing is held under, or one held for a send some other caller queued — two situations and deliberately one answer, so an identifier alone never establishes that this mailbox sent something |
-| `53008` | The call named no draft this deployment holds | Any of the four draft tools naming an identifier nothing is held under, one already given up, one already sent with `send_draft`, one another account holds, or text that is no identifier at all — five situations and deliberately one answer, so nothing is learnt about which drafts exist by asking about identifiers one at a time. A draft the owner wrote in their own mail client is in that set by construction rather than by a check, because MailFathom holds it under no identifier |
+| `53008` | The call named no draft this deployment holds | Any of the four draft tools naming an identifier nothing is held under, one already given up, one already sent with `send_draft`, one another account holds, or text that is no identifier at all — five situations and deliberately one answer, so nothing is learnt about which drafts exist by asking about identifiers one at a time. A draft the user wrote in their own mail client is in that set by construction rather than by a check, because MailFathom holds it under no identifier |
 | `53009` | The call named a recipient this deployment holds no record of | Any of the three sending tools naming an address the caller wrote out itself, on a deployment whose `MailDelivery:UnvouchedRecipients` is `Refuse` and whose contact book and own sending addresses hold none of it; a recipient this deployment derived — whoever a reply answers, whoever a reply-to-all keeps — is never judged by it, and the answer names neither the address nor how many were refused. `send_draft` reaches it as well, judged by what the draft recorded about each of its addresses when it was written and against the contact book as it stands at the promotion |
 | `53010` | A draft asked to be sent names nobody to send it to | `send_draft` on a draft addressed by neither `to`, `cc`, nor `bcc`. It is the one draft refusal that is about the draft rather than about the deployment, and the remedy is `update_draft` rather than a second save — a draft addressed to nobody is an ordinary draft, so `save_draft` never refuses one |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
@@ -440,7 +440,7 @@ outcome they distinguish.
 
 ## `list_accounts`
 
-Returns the mail accounts the caller's owner owns, with the names a request may use for each and how current the local
+Returns the mail accounts the caller's user owns, with the names a request may use for each and how current the local
 copy of each of their folders is.
 
 It is the tool a client calls first. Every other tool takes an account filter, and a caller that cannot see the accounts
@@ -455,28 +455,28 @@ get wrong and nothing to bound.
 
 ### Result
 
-`accounts` carries one entry per account the caller's owner owns, ordered by account identifier, and
+`accounts` carries one entry per account the caller's user owns, ordered by account identifier, and
 `synchronizationEnabled` says whether the deployment is refreshing its local copy at all.
 
 | Field | Meaning |
 |---|---|
-| `accountId` | The configured identifier, unique within the account's owner. It is what every other result reports as `accountId`, and it is stable across a change of the display name |
-| `displayName` | The readable name the operator gave the account, unique within that owner in the same way |
+| `accountId` | The configured identifier, unique within the account's user. It is what every other result reports as `accountId`, and it is stable across a change of the display name |
+| `displayName` | The readable name the operator gave the account, unique within that user in the same way |
 | `synchronizationMode` | `polling` or `push`, stating what the operator asked to start the account's next pass |
 | `folders` | One entry per folder this deployment maps and lets tools read, in the same shape `folderFreshness` takes elsewhere: the alias, when synchronization last committed progress for it, and whether it ever has |
 
 **Either name may be used to select the account.** The identifier is matched exactly and the display name without regard
-to case, and configuration refuses a display name that another of the same owner's accounts already carries as an
+to case, and configuration refuses a display name that another of the same user's accounts already carries as an
 identifier or as a display name, so a name always names one mailbox for the caller who reads it here. Both spellings
 resolve to one identity before a query runs, which is why a continuation cursor issued for one stays valid for the
 other.
 
-**Both names belong to the account's owner and are unique within it rather than across the deployment.** That is what
-a client storing one may assume and no more: two owners may each call an account `work`, so a name read here is this
-owner's name for the mailbox and never a value that identifies it beside a name that arrived from somebody else or from
-a second deployment. Nothing about that other owner is published — not the account, not its names, and not that it
+**Both names belong to the account's user and are unique within it rather than across the deployment.** That is what
+a client storing one may assume and no more: two users may each call an account `work`, so a name read here is this
+user's name for the mailbox and never a value that identifies it beside a name that arrived from somebody else or from
+a second deployment. Nothing about that other user is published — not the account, not its names, and not that it
 exists — which is why naming one is refused rather than answered. Keep either name if a client needs to remember which
-mailbox a person meant; keep it against the owner it was read for.
+mailbox a person meant; keep it against the user it was read for.
 
 **`synchronizationMode` states what was asked for, not what a folder is getting.** Whether push is served is decided per
 folder against what the mail server advertises and how recent attempts went, which is an observation about a run rather
@@ -500,8 +500,8 @@ cannot arrive unnoticed. The display name is what makes a mailbox recognizable t
 operator's, and an assistant choosing which mailbox to ask about needs none of it.
 
 An account this deployment stopped serving is absent as well, because the read is scoped to the accounts the caller's
-owner owns exactly as every other read is. Local state still holds its folders, and that is not a reason to name it in
-the one answer that lists what exists. An account belonging to another owner is absent for the same reason and reads the
+user owns exactly as every other read is. Local state still holds its folders, and that is not a reason to name it in
+the one answer that lists what exists. An account belonging to another user is absent for the same reason and reads the
 same way: this answer says what the caller may name, never what the deployment holds.
 
 ## `list_emails`
@@ -514,7 +514,7 @@ Every argument is optional.
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `accounts` | `string[]` | Accounts to read, each named by its configured account identifier or by the display name it is published under, both unique within the account's owner. Omitted reads every account the caller's owner owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts to read, each named by its configured account identifier or by the display name it is published under, both unique within the account's user. Omitted reads every account the caller's user owns; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders to read, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry. `Reply-To` is stored and filterable through the use case but not searched here |
@@ -636,9 +636,9 @@ but no run has ever reached is reported with no timestamp rather than omitted.
 
 The use case resolves the accounts the caller owns and refuses anything outside them before it reads, so a second
 entrypoint cannot reach the query without the same check. That resolution runs through the `ICallerMailAccountCatalog`
-application port, and every caller a mail-serving surface admits is admitted to act for one named owner; the
+application port, and every caller a mail-serving surface admits is admitted to act for one named user; the
 deployment-wide catalog beside it is what the workers and the administrative operations read, and no tool can reach it.
-A deployment holds one owner while its accounts are declared in configuration, so today every admitted caller resolves
+A deployment holds one user while its accounts are declared in configuration, so today every admitted caller resolves
 every configured account — what has moved is where that answer comes from, not yet what it says. OAuth 2.1 decides *who*
 reaches a tool at all, a token having to name a subject the deployment authorized, and leaves that port unchanged.
 
@@ -884,7 +884,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 | Argument | Type | Meaning |
 |---|---|---|
 | `queryText` | `string` | **Required.** The text to search for, up to 512 characters, worded in the language the mail was written in. Blank is refused with `51002`, because a search with no text is a listing |
-| `accounts` | `string[]` | Accounts to search, each named by its configured account identifier or by the display name it is published under, both unique within the account's owner. Omitted searches every account the caller's owner owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts to search, each named by its configured account identifier or by the display name it is published under, both unique within the account's user. Omitted searches every account the caller's user owns; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders to search, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted searches every folder of the accounts in scope; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
@@ -1042,7 +1042,7 @@ than the value.
 ## `set_mail_flags`
 
 Marks one email read or unread, stars or unstars it, and adds, removes, or replaces its keywords — the labels a mail
-client shows as tags. It is the one tool that changes the owner's mailbox rather than MailFathom's copy of it, and the
+client shows as tags. It is the one tool that changes the user's mailbox rather than MailFathom's copy of it, and the
 three values are one tool because they are one act: a caller triaging a message decides what to do with it once, and a
 mail server writes all three with the same command against the same UID.
 
@@ -1054,7 +1054,7 @@ Three things follow, and the tool's description states each of them:
 
 - A protocol request never waits on IMAP and never opens a connection against an account's budget.
 - The result reports records rather than a mailbox that has already changed, each with the lifecycle it has reached.
-  A value the owner cannot see in their own client after a few minutes is followed up by calling again with the same
+  A value the user cannot see in their own client after a few minutes is followed up by calling again with the same
   `requestId`, which answers with the same records and their current lifecycle.
 - A crash between the record and the command leaves a change that converges, rather than a stored value that quietly
   disagrees with the mailbox.
@@ -1092,7 +1092,7 @@ touch only what they name.
 
 The change and the state are published under the names MailFathom's own log lines and counters use, so a caller quoting
 one to an operator is quoting the word they will find. Nothing derived from the message appears, and the keywords the
-caller sent are not repeated back: a label is text the owner chose and can name a person or a case, and the caller
+caller sent are not repeated back: a label is text the user chose and can name a person or a case, and the caller
 already holds what it wrote.
 
 ### Asking twice
@@ -1148,8 +1148,8 @@ states the rules every authored flag change obeys, whichever requester asked for
 ## `send_email`
 
 Sends one message from a mailbox this deployment holds to the people the call addresses it to. It is the first tool on
-this surface whose effect reaches somebody who is not this mailbox's owner, and the only one that cannot be undone by
-another call: a wrong `set_mail_flags` is a star the owner takes off again, and a wrong send is in a stranger's mailbox.
+this surface whose effect reaches somebody who is not this mailbox's user, and the only one that cannot be undone by
+another call: a wrong `set_mail_flags` is a star the user takes off again, and a wrong send is in a stranger's mailbox.
 
 **The call transmits nothing, and no configuration makes it.** It writes the composed message and a durable outgoing
 record in one transaction and answers with that record; the account's delivery pass offers the message to a submission
@@ -1174,7 +1174,7 @@ bound is checked against the stored length by the delivery pass, so nothing is l
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `account` | `string` | **Required.** The account to send as, named by the `accountId` or the display name `list_accounts` returned, both unique within the account's owner. Blank, over 256 characters, or carrying a control character is refused with `51013`; a name reaching none of the caller's own accounts is `53001`; one of theirs carrying no `Delivery` block is `56002` |
+| `account` | `string` | **Required.** The account to send as, named by the `accountId` or the display name `list_accounts` returned, both unique within the account's user. Blank, over 256 characters, or carrying a control character is refused with `51013`; a name reaching none of the caller's own accounts is `53001`; one of theirs carrying no `Delivery` block is `56002` |
 | `to` | `string[]` | **Required.** The addresses the message is addressed to, one entry per person, each a plain address without a display name |
 | `cc` | `string[]` | The addresses to copy. Everybody the message reaches can see them. Omitted copies nobody |
 | `bcc` | `string[]` | The addresses to copy without naming them to anybody else. They receive the message and no other recipient sees that they did. Omitted blind-copies nobody |
@@ -1274,7 +1274,7 @@ only for a message that is actually new. What the record guarantees is that one 
 
 `mailfathom.mail.send` is what reaches this tool, and it follows from nothing: holding `mailfathom.mail.read` or
 `mailfathom.mail.flags.write` is not holding it, because reading a mailbox is not writing from it and marking mail
-reaches the owner's own server rather than a stranger's. The tool is absent from `tools/list` for a caller without it
+reaches the user's own server rather than a stranger's. The tool is absent from `tools/list` for a caller without it
 and a call is answered as a call naming a tool that does not exist, exactly as
 [§ What a caller is offered](#what-a-caller-is-offered) describes. The use case asks for the same grant on its own, and
 the outbox beneath it asks a third time with no transport in the picture, so an entrypoint added later reaches the same
@@ -1528,7 +1528,7 @@ carries. It is never produced for a send that was already cancelled: that one su
 
 ## The drafting surface
 
-Four tools cover a message the owner writes and nobody receives: `save_draft` writes one, `update_draft` replaces what
+Four tools cover a message the user writes and nobody receives: `save_draft` writes one, `update_draft` replaces what
 it holds, `delete_draft` gives it up, and `send_draft` is the one that queues it as a real message.
 [A message that is written and not sent](mail-delivery.md#a-message-that-is-written-and-not-sent) is what they act on —
 a draft this deployment holds, whose copy stands in the folder the account maps to the **drafts** role — and this
@@ -1564,14 +1564,14 @@ to notice it first.
 
 **A draft is not idempotent and takes no idempotency key.** Calling `save_draft` twice writes two drafts, and the tool
 is advertised `idempotentHint` `false` because that is what it does. The reason is the one the record itself gives: a
-duplicate draft costs the owner a deletion, where a duplicate send costs a recipient a second message that nothing can
+duplicate draft costs the user a deletion, where a duplicate send costs a recipient a second message that nothing can
 withdraw. So a retry after a timeout leaves a second draft to remove with `delete_draft` rather than a message sent
 twice, and the way to change a draft is `update_draft` with the identifier the first call answered.
 
 ## `save_draft`
 
 Writes one message into the drafts folder of an account this deployment holds, and sends nothing. Nobody receives it,
-no submission server is offered it, and the only person who ever sees it is the mailbox's owner, in their own mail
+no submission server is offered it, and the only person who ever sees it is the mailbox's user, in their own mail
 client.
 
 **The call reaches a mail server, and no submission server.** The draft and its message are written in one transaction
@@ -1579,7 +1579,7 @@ and the account's drafts folder is brought into step with them inside the same c
 whose request waits on an IMAP round trip — one append, and the removal of the copy a revision replaced. The order is
 what makes that safe: the draft is durable before a command goes out, so a server that refuses or never answers costs
 the copy rather than the message, `state` says `held`, and the account's own pass finishes it. That is also why
-`openWorldHint` is `true` — the copy is appended to the owner's own server — and why it means something different here
+`openWorldHint` is `true` — the copy is appended to the user's own server — and why it means something different here
 from what it means on `send_email`.
 
 ### Arguments
@@ -1616,7 +1616,7 @@ deciding who reads it is what drafting is for; `send_draft` is where the absence
 |---|---|
 | `draftId` | The draft's stable identifier, which `update_draft`, `delete_draft`, and `send_draft` name it by and which an edit does not change |
 | `accountId` | The account the draft belongs to, as MailFathom's configuration names it |
-| `state` | `held` or `filed` — whether the owner's own drafts folder shows this version of the draft yet |
+| `state` | `held` or `filed` — whether the user's own drafts folder shows this version of the draft yet |
 | `revision` | Which version of the draft this is, counted from one. Every accepted `update_draft` adds one |
 | `recipientCount` | How many people the draft is addressed to across the three headers, after addresses named twice were reduced to one. Nobody is named |
 | `savedAt` | When this version was written down |
@@ -1624,7 +1624,7 @@ deciding who reads it is what drafting is for; `send_draft` is where the absence
 `state` says which of two facts has happened, because they are not one fact. MailFathom holds the draft the instant the
 call answers — it can be edited, deleted, and sent from then — while the copy in the mailbox is appended over a network
 round trip afterwards, and **an account that maps no folder to the drafts role never gets one at all**: it keeps its
-drafts here and shows the owner none of them. `held` is what a caller reads before telling somebody to look in a
+drafts here and shows the user none of them. `held` is what a caller reads before telling somebody to look in a
 folder that does not show the message yet.
 
 Nothing about the message appears — no address, no subject, no body, no `Message-ID`, and no MIME — for the reason
@@ -1633,7 +1633,7 @@ Nothing about the message appears — no address, no subject, no body, no `Messa
 ## `update_draft`
 
 Replaces the whole message of a draft this deployment holds, and sends nothing. The draft keeps its identifier, its
-`revision` goes up by one, and the owner's folder ends up showing one message rather than one per edit — the copy of
+`revision` goes up by one, and the user's folder ends up showing one message rather than one per edit — the copy of
 the previous version is removed after the new one is appended,
 [in that order and for that reason](mail-delivery.md#a-message-that-is-written-and-not-sent).
 
@@ -1661,8 +1661,8 @@ not hold, so editing is never a way to move a message into a different mailbox.
 
 ## `delete_draft`
 
-Gives up one draft this deployment holds and takes the copy of it back out of the owner's drafts folder. The message
-the owner wrote is gone and no call here brings it back, which is `destructiveHint` in its plainest sense. Nothing is
+Gives up one draft this deployment holds and takes the copy of it back out of the user's drafts folder. The message
+the user wrote is gone and no call here brings it back, which is `destructiveHint` in its plainest sense. Nothing is
 sent by this call and nothing was ever sent by the draft.
 
 ### Arguments
@@ -1678,10 +1678,10 @@ sent by this call and nothing was ever sent by the draft.
 | `draftId` | The identifier of the draft that was given up. It names no draft afterwards |
 | `state` | `deleted`, `copyLeftBehind`, or `pending` |
 
-The draft is gone from this deployment in all three, and what they differ in is whether the owner will still see a
+The draft is gone from this deployment in all three, and what they differ in is whether the user will still see a
 message in their drafts folder. `deleted` is the ordinary ending. `copyLeftBehind` says one copy could not be taken out
 — the mail server refused it, or the folder it was appended to is no longer the one the account means by drafts — so
-the owner may still see that message and can remove it in their own client, and **nothing here will touch it again**.
+the user may still see that message and can remove it in their own client, and **nothing here will touch it again**.
 `pending` says the record is marked and the mailbox could not be reached, which a later pass finishes.
 
 **Asking twice is safe**, and the second call is refused as a draft this deployment does not hold, because that is what
@@ -1735,14 +1735,14 @@ draft composed a month before an operator tightened one of them is refused by th
 promotion that fails leaves the draft exactly as it was**.
 
 **The draft is not deleted when this answers.** The message is queued rather than sent, so the copy stands in the
-owner's folder until the message has actually been delivered and is taken out in the same pass that files the sent
-copy — which is what leaves an owner whose message did not go out with the message they wrote.
+user's folder until the message has actually been delivered and is taken out in the same pass that files the sent
+copy — which is what leaves a user whose message did not go out with the message they wrote.
 
 ## What the draft tools refuse, and what they do not reveal
 
 **Every way of naming a draft that cannot be acted on is one answer.** An identifier nothing is held under, a draft
 another account holds, a draft already given up, a draft already sent with `send_draft`, and text that is no identifier
-at all all produce `53008` `MailDraftNotFound`, with the same message. A draft the owner wrote in their own mail client
+at all all produce `53008` `MailDraftNotFound`, with the same message. A draft the user wrote in their own mail client
 is in that set too, and is there by construction rather than by a check: it is held under no identifier of
 MailFathom's, so there is nothing here that could name it. Telling the cases apart would let a caller discover which
 drafts this deployment holds by asking about identifiers one at a time.
@@ -1784,7 +1784,7 @@ messages, search when the messages themselves are what is wanted.
 | Argument | Type | Meaning |
 |---|---|---|
 | `question` | `string` | **Required.** The question to answer, up to 1000 characters. It is not a search query: its words are not matched against the mail, and the lookups are written by the model |
-| `accounts` | `string[]` | Accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under, both unique within the account's owner. Omitted draws on every account the caller's owner owns; a name reaching none of them is refused with `53001` |
+| `accounts` | `string[]` | Accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under, both unique within the account's user. Omitted draws on every account the caller's user owns; a name reaching none of them is refused with `53001` |
 | `folders` | `string[]` | Folders the answer may be drawn from, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 
 There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range
@@ -1901,9 +1901,9 @@ Six tools reach MailFathom's own contact book: `list_contacts` and `get_contact`
 a writer of it obeys — what identifies a person, when two addresses are the same address, who may amend what, and what
 an erasure removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
 
-**A caller reads and writes the book of the owner it was admitted to act for**, and no argument of any of the six names
-another. A person another owner wrote down is answered as somebody this book does not hold, and an address another
-owner's contact holds is free for this one.
+**A caller reads and writes the book of the user it was admitted to act for**, and no argument of any of the six names
+another. A person another user wrote down is answered as somebody this book does not hold, and an address another
+user's contact holds is free for this one.
 
 The book is why an agent can answer "who is this from" without being handed a list in a prompt, and the reason the write
 half exists rather than only the read half is that a book nobody can add to is one that stays empty. A caller writes as
@@ -2008,7 +2008,7 @@ Records a person the book does not yet hold, and returns the record as written.
 | `note` | What to record about this person, at most 4000 characters, or omitted for none |
 
 Nothing picks a preferred address for the caller, including where the record names a single address: which address is
-preferred is the owner's choice rather than an ordering accident, and a record naming one the contact does not hold is
+preferred is the user's choice rather than an ordering accident, and a record naming one the contact does not hold is
 `51011`.
 
 ### Result
@@ -2080,11 +2080,11 @@ error would only say whether somebody had already erased that person.
 
 ## `promote_contact`
 
-Takes on one person MailFathom collected from arriving mail, so the record becomes one the owner asserted.
+Takes on one person MailFathom collected from arriving mail, so the record becomes one the user asserted.
 
 It is the only path between the two origins and it runs one way. It is also what unlocks `update_contact` on a record
 that answered `contactWasCollected`: an agent that read the book and found somebody the deployment picked up takes the
-record on for the same owner an operator at a terminal would, and a promotion reachable from only one of the two
+record on for the same user an operator at a terminal would, and a promotion reachable from only one of the two
 surfaces would leave an amendment permanently refused here for every record collection produced. Nothing about the
 person is rewritten, and no mail server is contacted.
 

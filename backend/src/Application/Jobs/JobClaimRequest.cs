@@ -23,12 +23,12 @@ public sealed record JobClaimRequest
         IReadOnlyList<JobType> handledTypes,
         int batchSize,
         TimeSpan leaseDuration,
-        JobLeaseOwner owner)
+        JobLeaseOwner user)
     {
         this.HandledTypes = handledTypes;
         this.BatchSize = batchSize;
         this.LeaseDuration = leaseDuration;
-        this.Owner = owner;
+        this.User = user;
     }
 
     /// <summary>Gets the job types this process has a handler for.</summary>
@@ -41,25 +41,25 @@ public sealed record JobClaimRequest
     public TimeSpan LeaseDuration { get; }
 
     /// <summary>Gets the attempt the claimed jobs are stamped with.</summary>
-    public JobLeaseOwner Owner { get; }
+    public JobLeaseOwner User { get; }
 
     /// <summary>States what this process can run and how long it would hold it for.</summary>
     /// <param name="handledTypes">The job types this process has a handler for.</param>
     /// <param name="batchSize">The greatest number of jobs to take.</param>
     /// <param name="leaseDuration">How long each claimed job is held.</param>
-    /// <param name="owner">The attempt the claimed jobs are stamped with.</param>
+    /// <param name="user">The attempt the claimed jobs are stamped with.</param>
     /// <returns>The validated claim.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="handledTypes" /> or <paramref name="owner" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="handledTypes" /> or <paramref name="user" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="handledTypes" /> is empty, repeats a type, or holds the unspecified default.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize" /> is not positive or <paramref name="leaseDuration" /> is not positive.</exception>
     public static JobClaimRequest Create(
         IReadOnlyList<JobType> handledTypes,
         int batchSize,
         TimeSpan leaseDuration,
-        JobLeaseOwner owner)
+        JobLeaseOwner user)
     {
         ArgumentNullException.ThrowIfNull(handledTypes);
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
 
@@ -82,6 +82,6 @@ public sealed record JobClaimRequest
             throw new ArgumentException("A claim names each job type once.", nameof(handledTypes));
         }
 
-        return new JobClaimRequest([.. handledTypes], batchSize, leaseDuration, owner);
+        return new JobClaimRequest([.. handledTypes], batchSize, leaseDuration, user);
     }
 }

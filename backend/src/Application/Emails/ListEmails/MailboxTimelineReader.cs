@@ -102,7 +102,7 @@ public sealed class MailboxTimelineReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
 
         var filter = this.ReadableFilter(request);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);

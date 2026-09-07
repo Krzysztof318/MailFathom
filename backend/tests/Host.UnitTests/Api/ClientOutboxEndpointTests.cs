@@ -19,13 +19,13 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
 
-/// <summary>Covers what the owner's outbox routes decide about a request, and what they refuse to answer at all.</summary>
+/// <summary>Covers what the user's outbox routes decide about a request, and what they refuse to answer at all.</summary>
 /// <remarks>
 /// <para>
 /// The narrowing is the claim worth asserting here. A page of an outbox names the account it reads and a request that
-/// names none is refused rather than defaulted, because an unnarrowed reading on an owner-facing surface would page
+/// names none is refused rather than defaulted, because an unnarrowed reading on a user-facing surface would page
 /// through every account this deployment serves — which is the deployment-wide catalog the administrative surface is
-/// for. Everything about whose sends are answered is <c>OwnerOutbox</c>'s and is covered there.
+/// for. Everything about whose sends are answered is <c>UserOutbox</c>'s and is covered there.
 /// </para>
 /// <para>
 /// A decision reports what became of the send it named rather than refusing, because the caller asked a question this
@@ -49,7 +49,7 @@ public sealed class ClientOutboxEndpointTests
         Assert.Equal("/outbox/requeue", ClientOutboxEndpoints.OutboxRequeueRoute);
     }
 
-    /// <summary>The regression this exists for: a page that narrowed to nothing would answer every owner's outgoing mail.</summary>
+    /// <summary>The regression this exists for: a page that narrowed to nothing would answer every user's outgoing mail.</summary>
     [Fact]
     public async Task ReadPageAsync_ARequestNamingNoAccount_IsRefusedWithoutReading()
     {
@@ -115,9 +115,9 @@ public sealed class ClientOutboxEndpointTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>An account another owner owns is refused exactly as one this deployment does not serve.</summary>
+    /// <summary>An account another user owns is refused exactly as one this deployment does not serve.</summary>
     [Fact]
-    public async Task ReadPageAsync_AnAccountThisOwnerDoesNotOwn_IsRefusedWithoutReading()
+    public async Task ReadPageAsync_AnAccountThisUserDoesNotOwn_IsRefusedWithoutReading()
     {
         // Arrange
         var operations = Substitute.For<IOutboxOperationStore>();
@@ -137,9 +137,9 @@ public sealed class ClientOutboxEndpointTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>An identifier naming nothing answers as a send this owner did not make, which is what one nobody made answers.</summary>
+    /// <summary>An identifier naming nothing answers as a send this user did not make, which is what one nobody made answers.</summary>
     [Fact]
-    public async Task ReadSendAsync_AnIdentifierNamingNoSend_AnswersAsOneThisOwnerDidNotMake()
+    public async Task ReadSendAsync_AnIdentifierNamingNoSend_AnswersAsOneThisUserDidNotMake()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
@@ -154,13 +154,13 @@ public sealed class ClientOutboxEndpointTests
         Assert.IsType<NotFound>(result.Result);
     }
 
-    /// <summary>A send this owner made is read back with what the record carries.</summary>
+    /// <summary>A send this user made is read back with what the record carries.</summary>
     [Fact]
-    public async Task ReadSendAsync_ASendThisOwnerMade_AnswersWithTheRecord()
+    public async Task ReadSendAsync_ASendThisUserMade_AnswersWithTheRecord()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var mine = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Work));
+        var mine = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work));
 
         // Act
         var result = await ClientOutboxEndpoints.ReadSendAsync(
@@ -173,13 +173,13 @@ public sealed class ClientOutboxEndpointTests
         Assert.Equal(mine.Value, read.Value!.OutgoingEmail);
     }
 
-    /// <summary>A send another owner made answers as one nobody made, so nothing here reports that it exists.</summary>
+    /// <summary>A send another user made answers as one nobody made, so nothing here reports that it exists.</summary>
     [Fact]
-    public async Task ReadSendAsync_ASendAnotherOwnerMade_AnswersAsOneNobodyMade()
+    public async Task ReadSendAsync_ASendAnotherUserMade_AnswersAsOneNobodyMade()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
-        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailOwner.Another, Work));
+        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Another, Work));
 
         // Act
         var result = await ClientOutboxEndpoints.ReadSendAsync(
@@ -210,14 +210,14 @@ public sealed class ClientOutboxEndpointTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>A send another owner made is an outcome rather than a refusal, and the decision is never reached.</summary>
+    /// <summary>A send another user made is an outcome rather than a refusal, and the decision is never reached.</summary>
     [Fact]
-    public async Task CancelAsync_ASendAnotherOwnerMade_ReportsItUnknownWithoutDeciding()
+    public async Task CancelAsync_ASendAnotherUserMade_ReportsItUnknownWithoutDeciding()
     {
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var operations = Substitute.For<IOutboxOperationStore>();
-        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailOwner.Another, Work));
+        var theirs = await QueueAsync(outgoingEmails, MailAccountIdentity.Create(SyntheticMailUser.Another, Work));
 
         // Act
         var result = await ClientOutboxEndpoints.CancelAsync(
@@ -250,14 +250,14 @@ public sealed class ClientOutboxEndpointTests
         Assert.Empty(operations.ReceivedCalls());
     }
 
-    /// <summary>Builds the owner-facing outbox the routes reach, for a caller acting for the deployment's owner.</summary>
-    private static OwnerOutbox OutboxOver(
+    /// <summary>Builds the user-facing outbox the routes reach, for a caller acting for the deployment's user.</summary>
+    private static UserOutbox OutboxOver(
         InMemoryOutgoingEmailStore outgoingEmails,
         IOutboxOperationStore operations)
     {
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
 
-        return new OwnerOutbox(
+        return new UserOutbox(
             OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(Work)),
             outgoingEmails,
             operations,
@@ -275,7 +275,7 @@ public sealed class ClientOutboxEndpointTests
             Substitute.For<IPersistenceSession>(),
             OutgoingEmailRequest.Create(
                 account,
-                OutgoingEmailRequester.Command($"mfctl-{account.Owner.Value:N}"),
+                OutgoingEmailRequester.Command($"mfctl-{account.User.Value:N}"),
                 [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]),
             OutgoingEmailPrincipal.Of("test-caller"),
             Encoding.ASCII.GetBytes("Subject: a send\r\n\r\nHello.").Length,

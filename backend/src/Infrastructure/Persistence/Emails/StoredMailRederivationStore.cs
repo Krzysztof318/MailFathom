@@ -38,13 +38,13 @@ internal sealed class StoredMailRederivationStore(
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var owner = scope.Account.Owner.Value;
+        var user = scope.Account.User.Value;
         var account = scope.Account.Id.Value;
         var folder = KeyedFolderOf(scope);
 
         var recorded = await dbContext.MailRederivationPositions
             .AsNoTracking()
-            .Where(position => position.OwnerId == owner
+            .Where(position => position.UserId == user
                 && position.MailboxAccountId == account
                 && position.FolderAlias == folder)
             .Select(position => (Guid?)position.LastProcessedStoredEmailId)
@@ -112,7 +112,7 @@ internal sealed class StoredMailRederivationStore(
         await threadAssembly.AssembleAsync(
             session,
             MailAccountIdentity.Create(
-                MailOwnerId.Create(storedEmail.OwnerId),
+                MailUserId.Create(storedEmail.UserId),
                 MailAccountId.Create(storedEmail.MailboxAccountId)),
             ThreadedEmails.Of(storedEmail),
             storedEmail.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
@@ -136,7 +136,7 @@ internal sealed class StoredMailRederivationStore(
         // FindAsync resolves a row this session already staged from the change tracker, so a pass that commits several
         // batches through one session updates one row rather than inserting a second under the same key.
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
-            [scope.Account.Owner.Value, account, folder],
+            [scope.Account.User.Value, account, folder],
             cancellationToken);
 
         if (recorded is null)
@@ -145,8 +145,8 @@ internal sealed class StoredMailRederivationStore(
             {
                 MailboxAccountId = account,
 
-                // Written from the scope the request resolved, which named the owner beside the identifier.
-                OwnerId = scope.Account.Owner.Value,
+                // Written from the scope the request resolved, which named the user beside the identifier.
+                UserId = scope.Account.User.Value,
                 FolderAlias = folder,
                 LastProcessedStoredEmailId = position.Value,
                 UpdatedAt = timeProvider.GetUtcNow(),
@@ -170,7 +170,7 @@ internal sealed class StoredMailRederivationStore(
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
-            [scope.Account.Owner.Value, scope.Account.Id.Value, KeyedFolderOf(scope)],
+            [scope.Account.User.Value, scope.Account.Id.Value, KeyedFolderOf(scope)],
             cancellationToken);
 
         // A scope whose walk finished in one invocation never recorded a position, and clearing one that is not there

@@ -21,17 +21,17 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// the protocol gives that word: a recipient the caller leaves out is left out of the new version, and so is a body it
 /// does not restate. It is idempotent on <c>update_contact</c>'s reading — a second identical call leaves the draft
 /// saying what the first one made it say — and a caller that meant to add a person rather than to replace everybody
-/// finds out from the descriptor rather than from the owner.
+/// finds out from the descriptor rather than from the user.
 /// </para>
 /// <para>
 /// <b>One draft, not two.</b> The revision is written down before anything reaches the mail server, so an edit is an
 /// append of the new version followed by the removal of the old one and a process that dies between them leaves the
-/// owner one message rather than two or none. The identifier does not change and the version count does, which is what
+/// user one message rather than two or none. The identifier does not change and the version count does, which is what
 /// the result publishes.
 /// </para>
 /// <para>
 /// A draft this system did not create cannot be reached: the identifier names a record MailFathom wrote, so a message
-/// the owner drafted in their own mail client is not refused by a check but by there being nothing here that names it.
+/// the user drafted in their own mail client is not refused by a check but by there being nothing here that names it.
 /// A draft already promoted is refused the same way, because what stops that message is cancelling the send.
 /// </para>
 /// </remarks>
@@ -44,7 +44,7 @@ internal sealed class UpdateDraftTool(DraftedMailWriting drafts)
     public const string ToolName = "update_draft";
 
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use cases behind it.</summary>
-    /// <remarks>The drafting grant, which is the same one <c>save_draft</c> asks for: editing a draft is writing one, and a caller that may write a message into the owner's folder may write the next version of it.</remarks>
+    /// <remarks>The drafting grant, which is the same one <c>save_draft</c> asks for: editing a draft is writing one, and a caller that may write a message into the user's folder may write the next version of it.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailDraftsWrite;
 
     /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
@@ -80,7 +80,7 @@ internal sealed class UpdateDraftTool(DraftedMailWriting drafts)
         UseStructuredContent = true)]
     [Description(
         "Replaces the whole message of a draft this deployment holds, and SENDS NOTHING. The draft keeps its "
-        + "identifier, its version count goes up by one, and the owner's Drafts folder ends up showing one message "
+        + "identifier, its version count goes up by one, and the user's Drafts folder ends up showing one message "
         + "rather than one per edit. "
         + "It states the WHOLE message rather than the part that changed: a recipient you leave out is no longer "
         + "addressed, a body you do not restate is gone, and htmlBody you omit is dropped. Read the draft you are "
@@ -96,7 +96,7 @@ internal sealed class UpdateDraftTool(DraftedMailWriting drafts)
         + "Nothing leaves here, but a draft is what send_draft sends, so an address that arrived that way is one "
         + "somebody has to notice before it does. "
         + "Only a draft this deployment created can be updated, named by the draftId save_draft answered. A draft the "
-        + "owner wrote in their own mail client is not one of them, and neither is a draft that has already been sent "
+        + "user wrote in their own mail client is not one of them, and neither is a draft that has already been sent "
         + "with send_draft: both are refused as a draft this deployment does not hold, and what stops a message that "
         + "was already sent is cancel_outgoing_email.")]
     public async Task<SaveDraftToolResult> UpdateDraftAsync(

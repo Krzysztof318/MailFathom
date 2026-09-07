@@ -142,7 +142,7 @@ Until every one of those exists, what this repository produces for Android is a 
 
 ## Validation
 
-- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the owner authoring the change that carries it.
+- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the user authoring the change that carries it.
 - The `describes:` marker names the shell, the seam, the credential store, and the nightly workflow, which is what tells a later pull request under any of them that it is read against this decision. `scripts/review-obligations.sh` and `Fathom review` both resolve it.
 - The absence of a signing key is enforced by [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615)'s acceptance, which requires the artifact to be debug-signed and requires the workflow to state why — a reviewable assertion in a file rather than a claim in this one. Its acceptance speaks to the signing certificate and not to the build type, which is why the build type is decided in this record instead of left to the job that produces the artifact.
 - The no-platform-branch rule is enforced where it already is: `frontend/src/AGENTS.md` states it, [#1612](https://github.com/Krzysztof318/MailFathom/issues/1612)'s acceptance requires no component, hook, or screen to branch on the head, and review is what checks it. No script decides it, which is why it is stated in both places rather than assumed.

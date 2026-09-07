@@ -154,7 +154,7 @@ internal static class RouteAuthorization
 
             return Refused(refusal.RequiredPermission);
         }
-        catch (DeploymentMailOwnerUnresolvedException refusal)
+        catch (DeploymentMailUserUnresolvedException refusal)
         {
             return Unattributable(refusal);
         }
@@ -210,10 +210,10 @@ internal static class RouteAuthorization
             ? new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name }
             : null);
 
-    /// <summary>Writes the answer an act reached by a credential naming no owner receives where the deployment serves several.</summary>
+    /// <summary>Writes the answer an act reached by a credential naming no user receives where the deployment serves several.</summary>
     /// <remarks>
     /// <para>
-    /// Answered here rather than route by route for the reason the permission is: which acts resolve the owner a
+    /// Answered here rather than route by route for the reason the permission is: which acts resolve the user a
     /// caller acts for is a property of the use cases behind the group rather than of any one mapping, so a route
     /// added later that resolves one cannot forget to answer this. It is the second failure this filter turns into an
     /// answer, and both are the same shape of thing — a use case refusing a request the filter admitted, over who the
@@ -227,12 +227,12 @@ internal static class RouteAuthorization
     /// </para>
     /// <para>
     /// It is reachable from outside this filter for the one route mapped outside every group — the attachment
-    /// download, whose capability is a signed ticket rather than a credential and which therefore resolves the owner
+    /// download, whose capability is a signed ticket rather than a credential and which therefore resolves the user
     /// itself. Composing that answer here rather than there is what keeps the two the same status, the same message,
     /// and the same code.
     /// </para>
     /// </remarks>
-    internal static ProblemHttpResult Unattributable(DeploymentMailOwnerUnresolvedException refusal) =>
+    internal static ProblemHttpResult Unattributable(DeploymentMailUserUnresolvedException refusal) =>
         TypedResults.Problem(
             refusal.Message,
             statusCode: StatusCodes.Status409Conflict,

@@ -25,7 +25,7 @@ public sealed class GetContactToolTests
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
         book.Directory
-            .FindByAddressAsync(Arg.Any<MailOwnerId>(), Arg.Any<EmailAddress>(), Arg.Any<CancellationToken>())
+            .FindByAddressAsync(Arg.Any<MailUserId>(), Arg.Any<EmailAddress>(), Arg.Any<CancellationToken>())
             .Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
@@ -48,7 +48,7 @@ public sealed class GetContactToolTests
         // Arrange
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailOwnerId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 
@@ -76,7 +76,7 @@ public sealed class GetContactToolTests
         // Arrange
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailOwnerId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 
@@ -190,7 +190,7 @@ public sealed class GetContactToolTests
         var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
         book.Directory
-            .FindByAddressAsync(Arg.Any<MailOwnerId>(), StubContactBook.Address("anna@example.test"), Arg.Any<CancellationToken>())
+            .FindByAddressAsync(Arg.Any<MailUserId>(), StubContactBook.Address("anna@example.test"), Arg.Any<CancellationToken>())
             .Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
@@ -204,7 +204,7 @@ public sealed class GetContactToolTests
         Assert.Equal(contact.Id.ToString(), result.Contact?.ContactId);
     }
 
-    /// <summary>The note travels with the person, because withholding it would decide for an owner which of their own words an agent may read.</summary>
+    /// <summary>The note travels with the person, because withholding it would decide for a user which of their own words an agent may read.</summary>
     [Fact]
     public async Task GetContactAsync_AContactCarryingANote_PublishesItWithTheRecord()
     {
@@ -220,7 +220,7 @@ public sealed class GetContactToolTests
             StubContactBook.Now);
 
         var book = new StubContactBook();
-        book.Directory.FindAsync(Arg.Any<MailOwnerId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+        book.Directory.FindAsync(Arg.Any<MailUserId>(), contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
 
         var tool = new GetContactTool(book.Reader);
 

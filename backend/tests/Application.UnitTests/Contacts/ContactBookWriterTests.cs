@@ -82,11 +82,11 @@ public sealed class ContactBookWriterTests
 
         // Assert
         Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
-        var untouched = await book.FindAsync(SyntheticMailOwner.Deployment, held.Id, TestContext.Current.CancellationToken);
+        var untouched = await book.FindAsync(SyntheticMailUser.Deployment, held.Id, TestContext.Current.CancellationToken);
         Assert.Equal("Anna Kowalska", untouched?.DisplayName.Value);
     }
 
-    /// <summary>A caller granted the book writes for the owner, so what it records is a person somebody wrote down.</summary>
+    /// <summary>A caller granted the book writes for the user, so what it records is a person somebody wrote down.</summary>
     [Fact]
     public async Task RecordAsync_AGrantedCaller_RecordsThePersonAsAsserted()
     {
@@ -340,7 +340,7 @@ public sealed class ContactBookWriterTests
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.ForTheServedOwner(),
+                ContactBookOwnerships.ForTheServedUser(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
                 new AccessAuthorization(principals)),

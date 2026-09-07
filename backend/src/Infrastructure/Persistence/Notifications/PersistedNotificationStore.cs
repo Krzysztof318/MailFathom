@@ -50,21 +50,21 @@ internal sealed class PersistedNotificationStore(
     /// <inheritdoc />
     /// <remarks>
     /// A read joins no transaction and takes no session, so it runs on the scoped context. The predicate walks the
-    /// timeline index the model declares — one owner's rows, newest first, with the identifier breaking a tie — which
+    /// timeline index the model declares — one user's rows, newest first, with the identifier breaking a tie — which
     /// is what makes page four hundred cost what page one costs.
     /// </remarks>
     public async Task<IReadOnlyList<Notification>> ReadPageAsync(
-        MailOwnerId owner,
+        MailUserId user,
         NotificationCursor? after,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var rows = readContext.Notifications
             .AsNoTracking()
-            .Where(notification => notification.OwnerId == ownerValue);
+            .Where(notification => notification.UserId == userValue);
 
         if (after is { } boundary)
         {
@@ -87,15 +87,15 @@ internal sealed class PersistedNotificationStore(
     /// <inheritdoc />
     /// <remarks>
     /// It is answered from the partial unique index the deduplication rule already declares, whose rows are exactly one
-    /// owner's unread notifications, so the badge a client polls for costs an index-only count rather than a scan.
+    /// user's unread notifications, so the badge a client polls for costs an index-only count rather than a scan.
     /// </remarks>
-    public Task<int> CountUnreadAsync(MailOwnerId owner, CancellationToken cancellationToken)
+    public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken)
     {
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         return readContext.Notifications
             .AsNoTracking()
-            .CountAsync(notification => notification.OwnerId == ownerValue && !notification.IsRead, cancellationToken);
+            .CountAsync(notification => notification.UserId == userValue && !notification.IsRead, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -109,17 +109,17 @@ internal sealed class PersistedNotificationStore(
     /// first is seen by the replay rather than by the index.
     /// </para>
     /// <para>
-    /// The owner is part of the lookup rather than a check after it, which is what makes another owner's notification
+    /// The user is part of the lookup rather than a check after it, which is what makes another user's notification
     /// answer as one that does not exist.
     /// </para>
     /// </remarks>
     public Task<NotificationReadOutcome> SetReadAsync(
-        MailOwnerId owner,
+        MailUserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken) =>
         commitPolicy.CommitAsync(
-            (session, token) => StageReadStateAsync(session, owner, notification, isRead, token),
+            (session, token) => StageReadStateAsync(session, user, notification, isRead, token),
             cancellationToken);
 
     /// <inheritdoc />
@@ -127,12 +127,12 @@ internal sealed class PersistedNotificationStore(
     /// A set-based update that composes with nothing a caller is holding, exactly as the erasure below is, and one that
     /// cannot collide with the deduplication rule: every row it touches leaves the partial index rather than joining it.
     /// </remarks>
-    public Task<int> MarkAllReadAsync(MailOwnerId owner, CancellationToken cancellationToken)
+    public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken)
     {
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         return readContext.Notifications
-            .Where(notification => notification.OwnerId == ownerValue && !notification.IsRead)
+            .Where(notification => notification.UserId == userValue && !notification.IsRead)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(notification => notification.IsRead, true),
                 cancellationToken);
@@ -145,18 +145,18 @@ internal sealed class PersistedNotificationStore(
     /// delete either fails to translate or becomes a subquery whose shape depends on the provider.
     /// </remarks>
     public async Task<int> EraseOccurredBeforeAsync(
-        MailOwnerId owner,
+        MailUserId user,
         DateTimeOffset occurredBefore,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var expiringIds = await readContext.Notifications
             .AsNoTracking()
-            .Where(notification => notification.OwnerId == ownerValue && notification.OccurredAt < occurredBefore)
+            .Where(notification => notification.UserId == userValue && notification.OccurredAt < occurredBefore)
             .OrderBy(notification => notification.OccurredAt)
             .ThenBy(notification => notification.Id)
             .Take(limit)
@@ -175,17 +175,17 @@ internal sealed class PersistedNotificationStore(
 
     private static async Task<NotificationReadOutcome> StageReadStateAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         NotificationId notification,
         bool isRead,
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var identifier = notification.Value;
 
         var stored = await writeContext.Notifications.FirstOrDefaultAsync(
-            candidate => candidate.OwnerId == ownerValue && candidate.Id == identifier,
+            candidate => candidate.UserId == userValue && candidate.Id == identifier,
             cancellationToken);
 
         if (stored is null)
@@ -202,7 +202,7 @@ internal sealed class PersistedNotificationStore(
         {
             var condition = stored.DeduplicationKey;
             var alreadyStanding = await writeContext.Notifications.AnyAsync(
-                candidate => candidate.OwnerId == ownerValue
+                candidate => candidate.UserId == userValue
                     && candidate.DeduplicationKey == condition
                     && !candidate.IsRead,
                 cancellationToken);
@@ -224,7 +224,7 @@ internal sealed class PersistedNotificationStore(
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var ownerValue = notification.Owner.Value;
+        var userValue = notification.User.Value;
         var deduplicationKey = notification.DeduplicationKey.Value;
 
         // The change-tracker pass is explicit for the reason every alternate-key lookup here makes it explicit: a raise
@@ -232,7 +232,7 @@ internal sealed class PersistedNotificationStore(
         var standing = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.Notifications,
             writeContext.Notifications,
-            candidate => candidate.OwnerId == ownerValue
+            candidate => candidate.UserId == userValue
                 && candidate.DeduplicationKey == deduplicationKey
                 && !candidate.IsRead,
             cancellationToken);

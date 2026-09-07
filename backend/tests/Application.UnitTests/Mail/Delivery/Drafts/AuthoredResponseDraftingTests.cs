@@ -280,7 +280,7 @@ public sealed class AuthoredResponseDraftingTests
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         senderIdentities
             .FindSenderIdentity(Arg.Any<MailAccountId>())
-            .Returns(OutgoingSenderIdentity.Create(Account, Address("owner@example.test")));
+            .Returns(OutgoingSenderIdentity.Create(Account, Address("user@example.test")));
 
         var attachmentContents = Substitute.For<IEmailAttachmentContentReader>();
         attachmentContents

@@ -20,7 +20,7 @@ namespace MailFathom.Application.UnitTests.Folders;
 public sealed class UnmirroredMailFolderEraserTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("JUNK");
 
     /// <summary>The pass runs inside one transaction, so what it removed is either all committed or not removed at all.</summary>

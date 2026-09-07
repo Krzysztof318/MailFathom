@@ -7,11 +7,11 @@ using MailFathom.CodeCoverage;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
-/// <summary>What one person set about their own client: one row per owner, holding one sparse preferences document.</summary>
+/// <summary>What one person set about their own client: one row per user, holding one sparse preferences document.</summary>
 /// <remarks>
 /// <para>
-/// It hangs off the owner row and holds a document beside a relational envelope, which is the arrangement the owner
-/// record and the deployment's own settings row already use. Being keyed onto that row is what makes erasing an owner
+/// It hangs off the user row and holds a document beside a relational envelope, which is the arrangement the user
+/// record and the deployment's own settings row already use. Being keyed onto that row is what makes erasing a user
 /// take their preferences with everything else derived from them, without an erasure naming this table.
 /// </para>
 /// <para>
@@ -28,8 +28,8 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 [RequiresIntegrationCoverage]
 internal sealed class ClientPreferencesEntity
 {
-    /// <summary>The owner whose preferences these are, which is the key and the foreign key at once.</summary>
-    public Guid OwnerId { get; set; }
+    /// <summary>The user whose preferences these are, which is the key and the foreign key at once.</summary>
+    public Guid UserId { get; set; }
 
     /// <summary>The preferences, as one sparse <c>jsonb</c> document.</summary>
     /// <remarks>

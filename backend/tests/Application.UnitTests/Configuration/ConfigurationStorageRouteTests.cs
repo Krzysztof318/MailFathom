@@ -35,11 +35,11 @@ public sealed class ConfigurationStorageRouteTests
 
     /// <summary>The two stores this build persists into are the whole of the set, and a third one is a reviewed change to it.</summary>
     [Fact]
-    public void All_Routes_AreTheRootDocumentAndTheOwnerAccountsStore()
+    public void All_Routes_AreTheRootDocumentAndTheUserAccountsStore()
     {
         // Assert
         Assert.Equal(
-            [ConfigurationStorageRoute.RootDocument, ConfigurationStorageRoute.OwnerAccounts],
+            [ConfigurationStorageRoute.RootDocument, ConfigurationStorageRoute.UserAccounts],
             ConfigurationStorageRoute.All);
     }
 
@@ -48,7 +48,7 @@ public sealed class ConfigurationStorageRouteTests
     public void ToString_DeclaredRoute_IsItsName()
     {
         // Assert
-        Assert.Equal("owner-accounts", ConfigurationStorageRoute.OwnerAccounts.ToString());
+        Assert.Equal("user-accounts", ConfigurationStorageRoute.UserAccounts.ToString());
     }
 
     /// <summary>The struct default is reachable and is not a store; it reports itself rather than pretending to be one.</summary>

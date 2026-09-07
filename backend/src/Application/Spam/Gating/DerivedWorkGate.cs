@@ -22,14 +22,14 @@ namespace MailFathom.Application.Spam.Gating;
 /// and counted as released; only a message genuinely still waiting is held, and only for as long as the wait permits.
 /// </para>
 /// <para>
-/// It reads and never writes. No flag records that a message was withheld, which is what makes mail the owner drags out
+/// It reads and never writes. No flag records that a message was withheld, which is what makes mail the user drags out
 /// of the junk folder ordinary mail from that moment: the next reading of the same four facts admits it, and the
 /// ordinary backfill picks it up.
 /// </para>
 /// <para>
-/// Whether it reaches a message at all is that message's owner's decision. The terms name the accounts of the owners
-/// who classify, so an owner who switched classification off has every one of their messages admitted while another
-/// owner's mail goes on waiting on its verdict — and a walk that spans both applies each answer to the mail it is about.
+/// Whether it reaches a message at all is that message's user's decision. The terms name the accounts of the users
+/// who classify, so a user who switched classification off has every one of their messages admitted while another
+/// user's mail goes on waiting on its verdict — and a walk that spans both applies each answer to the mail it is about.
 /// </para>
 /// </remarks>
 public sealed class DerivedWorkGate
@@ -39,7 +39,7 @@ public sealed class DerivedWorkGate
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the gate from the decisions it obeys.</summary>
-    /// <param name="settingsReader">Answers which owners classify, over which of their folders, and how long a verdict may take.</param>
+    /// <param name="settingsReader">Answers which users classify, over which of their folders, and how long a verdict may take.</param>
     /// <param name="junkFolders">Answers which folder of an account its server files junk into.</param>
     /// <param name="timeProvider">Reads the moment a wait is measured against.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -58,11 +58,11 @@ public sealed class DerivedWorkGate
     }
 
     /// <summary>Reads the terms in force now, as one snapshot a whole walk is decided under.</summary>
-    /// <returns>The terms, which admit everything belonging to an owner who classifies nothing.</returns>
+    /// <returns>The terms, which admit everything belonging to a user who classifies nothing.</returns>
     /// <remarks>
-    /// The junk folders are narrowed to the accounts of owners who classify, which is what keeps the withholding an
-    /// ordering behind classification rather than a rule of its own: an owner who switched classification off has
-    /// mail in their junk folder derived from like any other, exactly as every owner did before the gate existed.
+    /// The junk folders are narrowed to the accounts of users who classify, which is what keeps the withholding an
+    /// ordering behind classification rather than a rule of its own: a user who switched classification off has
+    /// mail in their junk folder derived from like any other, exactly as every user did before the gate existed.
     /// </remarks>
     public DerivedWorkAdmissionTerms ReadTerms()
     {

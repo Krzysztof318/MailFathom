@@ -30,12 +30,12 @@ beforeEach(() => {
 
 afterEach(() => {
     for (const [name, descriptor] of Object.entries(measured)) {
-        const owner = name === 'offsetWidth' ? HTMLElement.prototype : Element.prototype;
+        const user = name === 'offsetWidth' ? HTMLElement.prototype : Element.prototype;
 
         if (descriptor === undefined) {
-            Reflect.deleteProperty(owner, name);
+            Reflect.deleteProperty(user, name);
         } else {
-            Object.defineProperty(owner, name, descriptor);
+            Object.defineProperty(user, name, descriptor);
         }
     }
 });

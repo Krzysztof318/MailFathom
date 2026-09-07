@@ -25,7 +25,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 public sealed class MailFlagChangeRecorderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -140,18 +140,18 @@ public sealed class MailFlagChangeRecorderTests
     }
 
     /// <summary>
-    /// An email in an account another owner owns answers as one no row carries, so a flag cannot be written onto
+    /// An email in an account another user owns answers as one no row carries, so a flag cannot be written onto
     /// somebody else's mail and the refusal says nothing about it existing.
     /// </summary>
     [Fact]
-    public async Task RecordAsync_AnEmailInAnAccountTheCallersOwnerDoesNotOwn_IsRefusedAsNotFound()
+    public async Task RecordAsync_AnEmailInAnAccountTheCallersUserDoesNotOwn_IsRefusedAsNotFound()
     {
         // Arrange
         var records = new InMemoryMailboxMutationRecordStore();
         var recorder = RecorderOver(
             records,
             TargetIn(Inbox),
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailFlagsWrite));
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailFlagsWrite));
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act
@@ -348,7 +348,7 @@ public sealed class MailFlagChangeRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            Account.Owner,
+            Account.User,
             EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }

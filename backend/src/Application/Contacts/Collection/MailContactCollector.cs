@@ -19,24 +19,24 @@ namespace MailFathom.Application.Contacts.Collection;
 /// </para>
 /// <para>
 /// <b>Which addresses are considered is decided by the folder the message arrived in.</b> A message in an ordinary
-/// folder is somebody writing to the owner, so its author — the <c>From</c> header — is the candidate. A message in the
-/// folder mapped as <see cref="MailFolderSpecialUse.Sent" /> is the owner writing to somebody, so its primary
+/// folder is somebody writing to the user, so its author — the <c>From</c> header — is the candidate. A message in the
+/// folder mapped as <see cref="MailFolderSpecialUse.Sent" /> is the user writing to somebody, so its primary
 /// recipients — the <c>To</c> header — are. Drafts are unsent and say nothing about correspondence; junk and trash say
 /// the opposite of what a book is for. No other header is ever read: <c>Cc</c> and <c>Bcc</c> are the copied recipients
 /// of somebody else's thread, and <c>Sender</c> and <c>Reply-To</c> name where a message was submitted from and where a
 /// reply is to go rather than who the correspondent is.
 /// </para>
 /// <para>
-/// <b>The two directions are held to different evidence, deliberately.</b> An address that wrote to the owner is
+/// <b>The two directions are held to different evidence, deliberately.</b> An address that wrote to the user is
 /// recorded once it has written <see cref="ContactCollectionSettings.MinimumMessagesFromSender" /> times, because one
-/// message from a stranger is not correspondence. An address the owner wrote to is recorded at once, because the owner
+/// message from a stranger is not correspondence. An address the user wrote to is recorded at once, because the user
 /// having addressed somebody is exactly the evidence a count of their messages is standing in for.
 /// </para>
 /// <para>
 /// <b>An address the book already holds is left alone</b> — under either origin and without collection ever reading the
 /// record. That is the collision rule the issue behind this feature asked for, and it is a refusal rather than a merge:
-/// an address that turns out to belong to somebody the owner asserted is already answered for by that record, and
-/// adding it there would be collection editing what an owner wrote down. An owner who wants the address on that person
+/// an address that turns out to belong to somebody the user asserted is already answered for by that record, and
+/// adding it there would be collection editing what a user wrote down. A user who wants the address on that person
 /// puts it there themselves, which is one amendment rather than a rule guessing on their behalf.
 /// </para>
 /// <para>
@@ -46,7 +46,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// </remarks>
 public sealed class MailContactCollector
 {
-    /// <summary>How many primary recipients a message the owner sent may name and still be read as correspondence.</summary>
+    /// <summary>How many primary recipients a message the user sent may name and still be read as correspondence.</summary>
     /// <remarks>
     /// A letter is addressed to the few people it concerns and an announcement to everybody, and the count is what tells
     /// them apart without reading a word of either. The bound is also what keeps one message from deciding how much work
@@ -253,7 +253,7 @@ public sealed class MailContactCollector
     /// <summary>Reads the name a collected contact carries, which is what the message wrote or else the address itself.</summary>
     /// <remarks>
     /// A collected record is named by the one thing the message offered, and a sender's spelling of somebody's name is
-    /// exactly what a collected claim is: weaker than a name the owner wrote down, and replaced by one the moment they
+    /// exactly what a collected claim is: weaker than a name the user wrote down, and replaced by one the moment they
     /// promote the record. Where the message wrote nothing usable the address stands in, so a contact always carries a
     /// name a reader can tell people apart by. An address too long to be a name and carrying none is not collected at
     /// all, because a record the book cannot name is one nobody could read.
@@ -275,7 +275,7 @@ public sealed class MailContactCollector
             }
             catch (ArgumentException)
             {
-                // What one sender wrote as a name is not a value an owner typed, so a name this deployment refuses is
+                // What one sender wrote as a name is not a value a user typed, so a name this deployment refuses is
                 // stepped over rather than reported: the address below it names the person just as well.
             }
         }

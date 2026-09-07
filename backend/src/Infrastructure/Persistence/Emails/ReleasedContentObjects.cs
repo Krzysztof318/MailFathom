@@ -87,32 +87,32 @@ internal static class ReleasedContentObjects
             cancellationToken);
     }
 
-    /// <summary>States every object holding mail one owner's erasure removes, across all four payload kinds.</summary>
+    /// <summary>States every object holding mail one user's erasure removes, across all four payload kinds.</summary>
     /// <param name="session">The session the erasure runs in.</param>
-    /// <param name="ownerId">The owner being erased.</param>
+    /// <param name="userId">The user being erased.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
     /// <returns>A task that completes once the session holds every key the erasure frees.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The four kinds are read as four queries because they hang off four different things, and all four are read whole
-    /// rather than in pages: an owner's erasure removes an owner's whole mailbox, so what is held here is one string per
+    /// rather than in pages: a user's erasure removes a user's whole mailbox, so what is held here is one string per
     /// stored payload for the length of one transaction. That is the price of answering a data subject truthfully about
     /// both stores, and it is paid once per erasure rather than per message.
     /// </remarks>
-    public static async Task ReleaseForOwnerAsync(
+    public static async Task ReleaseForUserAsync(
         IPersistenceSession session,
-        Guid ownerId,
+        Guid userId,
         CancellationToken cancellationToken)
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        // Narrowed on the owner each payload's own row carries rather than on the identifiers of the accounts that
-        // owner holds. An identifier names one mailbox within its owner and another within the next, so a membership
-        // test on it would release a second owner's objects whenever the two had named an account alike.
+        // Narrowed on the user each payload's own row carries rather than on the identifiers of the accounts that
+        // user holds. An identifier names one mailbox within its user and another within the next, so a membership
+        // test on it would release a second user's objects whenever the two had named an account alike.
         await ReleaseAsync(
             session,
             sessionContext.EmailMessageContents
-                .Where(content => content.StoredEmail.OwnerId == ownerId
+                .Where(content => content.StoredEmail.UserId == userId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -120,7 +120,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.OutgoingEmailContents
-                .Where(content => content.OutgoingEmail.OwnerId == ownerId
+                .Where(content => content.OutgoingEmail.UserId == userId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -128,7 +128,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.MailDraftContents
-                .Where(content => content.MailDraft.OwnerId == ownerId
+                .Where(content => content.MailDraft.UserId == userId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -136,7 +136,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.RecurringSendDrafts
-                .Where(draft => draft.RecurringSend.OwnerId == ownerId
+                .Where(draft => draft.RecurringSend.UserId == userId
                     && draft.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(draft => draft.ObjectLocator!),
             cancellationToken);

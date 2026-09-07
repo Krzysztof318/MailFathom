@@ -32,14 +32,14 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// </para>
 /// <para>
 /// The walk is one walk over the deployment's mail and its resume position is one cursor, deliberately, on a system
-/// that bounds embedding spend per owner. A cursor per owner would be the shape to reach for if a sweep served one
-/// owner at a time; it serves all of them at once, in identifier order, so a per-owner cursor would record the same
+/// that bounds embedding spend per user. A cursor per user would be the shape to reach for if a sweep served one
+/// user at a time; it serves all of them at once, in identifier order, so a per-user cursor would record the same
 /// walk several times over and the run would still have to visit every message to decide which cursor to move. What an
-/// owner's ceiling costs is that owner's messages being stepped over for the rest of the period, which the walk above
+/// user's ceiling costs is that user's messages being stepped over for the rest of the period, which the walk above
 /// already does without remembering anything. The embedding profile is deployment-wide for the same kind of reason and
 /// a different one:
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
-/// makes a profile the meaning of a stored vector, and two owners' vectors sharing an index have to mean the same
+/// makes a profile the meaning of a stored vector, and two users' vectors sharing an index have to mean the same
 /// thing. Neither is an omission left for a later change to fill in.
 /// </para>
 /// <para>
@@ -156,11 +156,11 @@ public sealed class StoredEmailEmbeddingBackfill
                         reachedSpendBound: turn.ReachedSpendBound);
                 }
 
-                // One owner's ceiling stops that owner and nobody else, so the walk steps past the message rather than
-                // ending: the identifier order interleaves owners, so ending here would leave every other owner's mail
-                // unembedded until the period rolled over — which is the harm a per-owner ceiling exists to prevent.
+                // One user's ceiling stops that user and nobody else, so the walk steps past the message rather than
+                // ending: the identifier order interleaves users, so ending here would leave every other user's mail
+                // unembedded until the period rolled over — which is the harm a per-user ceiling exists to prevent.
                 // The message keeps its outstanding passages, which is what the next sweep selects on.
-                if (turn.ReachedSpendBound is EmbeddingSpendBound.Owner)
+                if (turn.ReachedSpendBound is EmbeddingSpendBound.User)
                 {
                     position = email.StoredEmailId;
                     await this.CommitPositionAsync(position, cancellationToken);
@@ -247,8 +247,8 @@ public sealed class StoredEmailEmbeddingBackfill
             progress.EmbeddedEmailCount,
             progress.EmbeddedChunkCount,
             progress.CallBudgetExhaustedEmailCount,
-            progress.OwnerSpendCeilingEmailCount,
-            progress.OwnerSpendPeriodEndsAt,
+            progress.UserSpendCeilingEmailCount,
+            progress.UserSpendPeriodEndsAt,
             outstandingAtSweepStart,
             failure,
             spendPeriodEndsAt,
@@ -259,7 +259,7 @@ public sealed class StoredEmailEmbeddingBackfill
     /// A message counts as embedded only when its turn reported the message whole. One that spent every call a turn is
     /// allowed keeps the passages it did get — which the passage count carries — and is deliberately not counted as a
     /// message brought up to date, because a later sweep still has to reach it. The same holds for one the walk stepped
-    /// past because its owner had spent their period: it is counted where an operator can see it and nowhere else, and
+    /// past because its user had spent their period: it is counted where an operator can see it and nowhere else, and
     /// the period it was refused in is carried beside the count so the worker can report it once rather than per pass.
     /// </remarks>
     private sealed record RunProgress(
@@ -267,16 +267,16 @@ public sealed class StoredEmailEmbeddingBackfill
         int EmbeddedEmailCount,
         int EmbeddedChunkCount,
         int CallBudgetExhaustedEmailCount,
-        int OwnerSpendCeilingEmailCount,
-        DateTimeOffset? OwnerSpendPeriodEndsAt)
+        int UserSpendCeilingEmailCount,
+        DateTimeOffset? UserSpendPeriodEndsAt)
     {
         public static RunProgress Empty { get; } = new(
             ChunkedEmailCount: 0,
             EmbeddedEmailCount: 0,
             EmbeddedChunkCount: 0,
             CallBudgetExhaustedEmailCount: 0,
-            OwnerSpendCeilingEmailCount: 0,
-            OwnerSpendPeriodEndsAt: null);
+            UserSpendCeilingEmailCount: 0,
+            UserSpendPeriodEndsAt: null);
 
         public RunProgress Add(StoredEmailAwaitingEmbedding email, StoredEmailEmbeddingRun turn) => this with
         {
@@ -286,14 +286,14 @@ public sealed class StoredEmailEmbeddingBackfill
             EmbeddedChunkCount = this.EmbeddedChunkCount + turn.EmbeddedChunkCount,
             CallBudgetExhaustedEmailCount = this.CallBudgetExhaustedEmailCount
                 + (turn.Outcome == StoredEmailEmbeddingOutcome.CallBudgetExhausted ? 1 : 0),
-            OwnerSpendCeilingEmailCount = this.OwnerSpendCeilingEmailCount
-                + (turn.ReachedSpendBound == EmbeddingSpendBound.Owner ? 1 : 0),
+            UserSpendCeilingEmailCount = this.UserSpendCeilingEmailCount
+                + (turn.ReachedSpendBound == EmbeddingSpendBound.User ? 1 : 0),
 
-            // The latest one wins rather than the first, because a sweep can outlive a rollover: two owners refused on
+            // The latest one wins rather than the first, because a sweep can outlive a rollover: two users refused on
             // either side of it are one count, and the period a reader acts on is the one still in force.
-            OwnerSpendPeriodEndsAt = turn.ReachedSpendBound == EmbeddingSpendBound.Owner
+            UserSpendPeriodEndsAt = turn.ReachedSpendBound == EmbeddingSpendBound.User
                 ? turn.SpendPeriodEndsAt
-                : this.OwnerSpendPeriodEndsAt,
+                : this.UserSpendPeriodEndsAt,
         };
     }
 }

@@ -411,7 +411,7 @@ public sealed class SyntheticMailRunnerTests
                 createCorpus: _ => new UnclosedStream(written),
                 discardCorpus: discarded.Add),
             [
-                "owner@example.test",
+                "user@example.test",
                 "--conversation",
                 "--sensitive-percentage",
                 "0",
@@ -450,7 +450,7 @@ public sealed class SyntheticMailRunnerTests
                 createCorpus: path => throw new SyntheticMailFailure($"'{path}' already exists."),
                 discardCorpus: discarded.Add),
             [
-                "owner@example.test",
+                "user@example.test",
                 "--conversation",
                 "--sensitive-percentage",
                 "0",
@@ -487,7 +487,7 @@ public sealed class SyntheticMailRunnerTests
         var exitCode = await SyntheticMailRunner.RunAsync(
             Context(console, transport, mailbox: mailbox, createCorpus: _ => new UnclosedStream(written)),
             [
-                "owner@example.test",
+                "user@example.test",
                 "--conversation",
                 "--sensitive-percentage",
                 "0",

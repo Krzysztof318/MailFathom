@@ -44,7 +44,7 @@ public sealed record MutationAttributedDisappearance(
 /// reached, because that setting answers what becomes of mail somebody else deleted and these are not that. A relocation
 /// into a mirrored folder moves the queue timestamp and nothing else, leaving the row for the placement to carry across;
 /// a delete, and a relocation into a folder MailFathom does not mirror, additionally apply the disposition their own
-/// record carries, which is the one the owner authored the change under.
+/// record carries, which is the one the user authored the change under.
 /// </param>
 /// <param name="Disposition">
 /// What becomes of the local copy of each email in <paramref name="Disappeared" />. It never reaches

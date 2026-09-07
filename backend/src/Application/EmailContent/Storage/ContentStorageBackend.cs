@@ -7,7 +7,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// <summary>Names where the raw MIME of one message is held.</summary>
 /// <remarks>
 /// <para>
-/// One value for the whole deployment rather than one per mail account or per owner, which
+/// One value for the whole deployment rather than one per mail account or per user, which
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 1
 /// decided: the process-wide ceilings on stored content bound one thing, the readiness probe reports one bucket, and a
 /// second axis of storage tenancy is what ADR 0014 already closed.

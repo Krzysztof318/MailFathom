@@ -88,22 +88,22 @@ public sealed class EmbeddingImageDescriptionOptionsTests
         Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxDescriptionsPerPeriod), StringComparison.Ordinal));
     }
 
-    /// <summary>A per-owner ceiling above the deployment's own bounds nothing, so it is refused rather than ignored.</summary>
+    /// <summary>A per-user ceiling above the deployment's own bounds nothing, so it is refused rather than ignored.</summary>
     [Fact]
-    public void FindDeclarationErrors_APerOwnerCeilingAboveTheDeploymentCeiling_IsRefused()
+    public void FindDeclarationErrors_APerUserCeilingAboveTheDeploymentCeiling_IsRefused()
     {
         // Arrange
         EmbeddingImageDescriptionOptions settings = new()
         {
             MaxDescriptionsPerPeriod = 100,
-            MaxDescriptionsPerPeriodPerOwner = 200,
+            MaxDescriptionsPerPeriodPerUser = 200,
         };
 
         // Act
         var errors = settings.FindDeclarationErrors();
 
         // Assert
-        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxDescriptionsPerPeriodPerOwner), StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxDescriptionsPerPeriodPerUser), StringComparison.Ordinal));
     }
 
     /// <summary>Zero declares no ceiling and no pacing at all, which is the default a deployment starts on.</summary>
@@ -118,7 +118,7 @@ public sealed class EmbeddingImageDescriptionOptionsTests
 
         // Assert
         Assert.Equal(0, settings.MaxDescriptionsPerPeriod);
-        Assert.Equal(0, settings.MaxDescriptionsPerPeriodPerOwner);
+        Assert.Equal(0, settings.MaxDescriptionsPerPeriodPerUser);
         Assert.Equal(0, settings.MaxRequestsPerMinute);
         Assert.Empty(errors);
     }

@@ -35,7 +35,7 @@ public sealed class NCalcMailRuleConditionCompiler : IMailRuleConditionCompiler
     /// <summary>The settings every condition of every rule set is parsed and evaluated under.</summary>
     /// <remarks>
     /// <para>
-    /// Text comparison is ordinal and ignores case. Ignoring case is what an owner means when they compare a sender
+    /// Text comparison is ordinal and ignores case. Ignoring case is what a user means when they compare a sender
     /// domain, and ordinal rather than culture-aware is what makes two instances of one deployment agree whatever
     /// locale their hosts are set to.
     /// </para>

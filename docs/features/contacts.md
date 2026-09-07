@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Domain/Contacts/**, backend/src/Application/Contacts/**, backend/src/Infrastructure/Persistence/Contacts/**, backend/src/Infrastructure/Persistence/Entities/ContactEntity.cs, backend/src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, backend/src/Host/Api/Contact*.cs, backend/src/Cli/Commands/Contacts/**, backend/src/Cli/Administration/Contacts/**, backend/src/Mcp/Tools/Contacts/**, backend/src/Host/Configuration/Mail/ContactCollection*.cs, backend/src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
 
-MailFathom holds a contact book of its own: people, the addresses they use, and what an owner recorded about them, in
+MailFathom holds a contact book of its own: people, the addresses they use, and what a user recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
 what identifies a person, when two addresses are the same address, who may change what, and what erasing somebody
 removes.
@@ -12,7 +12,7 @@ removes.
 full. An agent reads and writes it over the MCP endpoint, under two grants of its own; [MCP tools §
 `list_contacts`](mcp-tools.md#list_contacts) holds those six tools and what each of them answers. A third writer is the
 deployment itself: [§ Collecting contacts from arriving mail](#collecting-contacts-from-arriving-mail) describes what an
-account records on its own, and it is off until an owner switches it on, so an instance nobody has written to and nobody
+account records on its own, and it is off until a user switches it on, so an instance nobody has written to and nobody
 switched collection on for holds no contacts at all.
 
 **One reader is not a surface at all.** A message may be addressed by naming somebody in the book rather than by writing
@@ -21,20 +21,20 @@ Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-
 becomes an address, which name refuses to, and what the record then keeps. Nothing about that writes the book: addressing
 somebody is not a fact about them, so no contact is created, amended, or promoted by being written to.
 
-## A book belongs to one owner
+## A book belongs to one user
 
-Every contact is written in one owner's book and read out of it. The owner is a column on the record rather than a
+Every contact is written in one user's book and read out of it. The user is a column on the record rather than a
 question the surface reading it answers, so which book a caller reaches is settled where the mail beside it is settled —
 by whom the caller was admitted to act for — and no request of theirs can name another. A caller on a mail-serving
-surface reads the book of the owner they act for; the deployment administrator and MailFathom's own work act for nobody
-and reach the book of the owner this deployment serves, which is exactly one while mail accounts are declared in
+surface reads the book of the user they act for; the deployment administrator and MailFathom's own work act for nobody
+and reach the book of the user this deployment serves, which is exactly one while mail accounts are declared in
 configuration. [Single-tenant multi-user ownership](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
-is the decision, and the day an owner is named on a request rather than derived is the day that resolution changes and
+is the decision, and the day a user is named on a request rather than derived is the day that resolution changes and
 nothing else here does.
 
 Two things follow, and both are the schema's rather than a predicate somebody remembered to write. Every read of the
-book leads with the owner, down to the index a listing and an address lookup are served from. And erasing an owner takes
-their book with them — the people they wrote down and every address row beneath — because `contacts` keys onto the owner
+book leads with the user, down to the index a listing and an address lookup are served from. And erasing a user takes
+their book with them — the people they wrote down and every address row beneath — because `contacts` keys onto the user
 record and `contact_addresses` keys onto `contacts`, so the cascade reaches an address through the person holding it.
 
 ## A contact is a person, not an address
@@ -46,7 +46,7 @@ person and the addresses hang off them.
 | Part | What it holds |
 | --- | --- |
 | Identity | MailFathom's own UUID, minted when the contact is recorded and never derived from an address |
-| Name | What the owner wrote, kept in their casing, at most 256 characters and carrying no character that renders as nothing |
+| Name | What the user wrote, kept in their casing, at most 256 characters and carrying no character that renders as nothing |
 | Addresses | At least one and at most 32, each at most 320 characters |
 | Preferred address | Which of them to use when something addresses the person without naming which |
 | Note | Optional free text, at most 4000 characters, in which line breaks and tabs are kept and every other character that renders as nothing is refused |
@@ -58,7 +58,7 @@ they are: they give one up, gain another, and stay the same person. It is also t
 appear in a log line, a metric, or a failure message, beside the origin, which is MailFathom's own classification of how
 a record arrived rather than anything the person supplied. Everything else is personal data about a third party.
 
-Which address is preferred is the owner's choice rather than an ordering accident. Nothing picks one, and a record
+Which address is preferred is the user's choice rather than an ordering accident. Nothing picks one, and a record
 naming a preferred address the contact does not hold is refused rather than repaired.
 
 A name and a note are published into listings of the other contacts, into an answer an agent reads, and into an export,
@@ -86,19 +86,19 @@ The written form is kept beside the comparison form, so what a reader is shown i
 the comparison form is matched, grouped, or indexed on. It is the same rule and the same value the mail beside it is
 matched by, defined once in the domain rather than per writer.
 
-**One address belongs to one contact, within one owner's book.** Adding an address a different contact in the same book
+**One address belongs to one contact, within one user's book.** Adding an address a different contact in the same book
 already holds is refused with an answer naming which contact holds it, so the caller can look at that person rather than
 guess. The rule is a unique index in PostgreSQL rather than a check before the write: two callers claiming one address at
 once both read that nobody holds it, and only the database closes that window. Losing that race is a conflict the write
 retries from a fresh read, and the second caller is then told who holds the address.
 
-It stops at the book's edge deliberately. Two owners who correspond with the same person each hold their own record of
-them, with their own name for them and their own note, because a rule across the table would make what one owner may
+It stops at the book's edge deliberately. Two users who correspond with the same person each hold their own record of
+them, with their own name for them and their own note, because a rule across the table would make what one user may
 write down depend on what another already had — and would let one of them find out that the other corresponds with
 somebody by being refused.
 
 Inside one record, two spellings of one address are merged rather than refused. They name the same mailbox of the same
-person, and refusing would ask an owner to resolve a difference nothing else makes.
+person, and refusing would ask a user to resolve a difference nothing else makes.
 
 ## Two origins, and who may write which
 
@@ -106,17 +106,17 @@ A contact is either **asserted** — somebody wrote this person down — or **co
 that arrived. Both live in one book, because searching for somebody should not require knowing which half they are in.
 What the difference decides is who may change the record without anybody asking:
 
-- A writer amends the contacts of its own origin and no others. Collection never touches what an owner wrote down, and
-  an owner does not amend a collected record in place either.
+- A writer amends the contacts of its own origin and no others. Collection never touches what a user wrote down, and
+  a user does not amend a collected record in place either.
 - **Promotion** is the one crossing, and it runs one way: a collected contact becomes asserted, which is the act of the
-  owner taking responsibility for it. It names its writer for the same reason an amendment does, so collection is refused
+  user taking responsibility for it. It names its writer for the same reason an amendment does, so collection is refused
   the promotion of the record it just created rather than being able to award itself the authority that comes with it.
   Nothing turns an asserted contact back into a collected one, because nothing can unsay that somebody wrote a person
   down. Promoting a contact that is already asserted is answered as such rather than written again.
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
 Both surfaces a caller reaches the book through write as **asserted**, because both are somebody writing a person down:
-`mfctl` is the owner at a terminal, and an agent over MCP is acting for them. What follows is that neither amends a
+`mfctl` is the user at a terminal, and an agent over MCP is acting for them. What follows is that neither amends a
 collected record in place — an agent's call is answered `contactWasCollected` rather than refused — and what either does
 instead is promote it. Both reach that act: `mfctl contact promote` and the `promote_contact` tool, under the same
 writing grant each surface already holds. A promotion reachable from only one of the two would leave an amendment
@@ -127,7 +127,7 @@ book is not answered with which half of the book they happen to be in.
 
 ## Collecting contacts from arriving mail
 
-An account can record the people it corresponds with as its mail is synchronized. It is **off unless an owner switched
+An account can record the people it corresponds with as its mail is synchronized. It is **off unless a user switched
 it on, and switched on per account**, because what it produces is derived personal data about people who never dealt
 with MailFathom: an instance nobody asked never accumulates one, and a deployment reading a work mailbox and a personal
 one decides separately for each. [Configuration §
@@ -135,8 +135,8 @@ one decides separately for each. [Configuration §
 the keys and their bounds.
 
 Collection runs inside the synchronization pass that stored the message, after the transaction that stored it committed.
-What it writes goes into the book of the owner this deployment serves, because MailFathom's own work acts for nobody in
-particular; the day an account names its own owner is the day it writes into that owner's book instead.
+What it writes goes into the book of the user this deployment serves, because MailFathom's own work acts for nobody in
+particular; the day an account names its own user is the day it writes into that user's book instead.
 It owns no worker, no timer, and no queue, and it reaches the mail server for nothing at all: the headers it reads were
 already read to store the message, so what one message costs is a bounded number of indexed reads and, rarely, one
 insert.
@@ -145,22 +145,22 @@ insert.
 
 | Folder | What it contributes |
 | --- | --- |
-| The folder mapped as `Sent` | The primary recipients — the `To` header. The owner writing to somebody. |
+| The folder mapped as `Sent` | The primary recipients — the `To` header. The user writing to somebody. |
 | `Drafts`, `Junk`, `Trash` | Nothing. A draft is unsent, and the other two say the opposite of what a book is for. |
-| Every other folder | The author — the `From` header. Somebody writing to the owner. |
+| Every other folder | The author — the `From` header. Somebody writing to the user. |
 
 `Cc` and `Bcc` are the copied recipients of somebody else's thread; `Sender` and `Reply-To` name where a message was
 submitted from and where a reply is to go rather than who the correspondent is. None of the four is read.
 
-**The two directions are held to different evidence.** An address that wrote to the owner is recorded once it has
+**The two directions are held to different evidence.** An address that wrote to the user is recorded once it has
 written `MinimumMessagesFromSender` messages to that account — two by default, because one message from a stranger is
-not correspondence. An address the owner wrote to is recorded on first sight, because the owner having addressed
+not correspondence. An address the user wrote to is recorded on first sight, because the user having addressed
 somebody is exactly the evidence a count of their messages stands in for. The count is answered from the mail the
 account has already stored, on the same indexed sender column a mailbox query uses, and it stops counting at the
 threshold rather than counting the whole mailbox. Nothing is written down to answer it, so collection derives no record
 of its own beside the contacts it produces.
 
-**A message the owner sent to more than 16 primary recipients contributes none of them.** A letter is addressed to the
+**A message the user sent to more than 16 primary recipients contributes none of them.** A letter is addressed to the
 few people it concerns and an announcement to everybody, and the count tells them apart without reading a word of
 either. Past the bound the message contributes nothing rather than its first few recipients, because a truncation would
 record whoever the sender happened to write first.
@@ -174,18 +174,18 @@ Four things are never collected, and none of them can be switched off:
   matters most for a mailing list: a list posting carries the real address of the person who wrote it, and no rule about
   mailbox names could tell one from ordinary correspondence.
 - **A role mailbox**, by the names RFC 2142 reserves — `postmaster`, `abuse`, `info`, `support`, `sales`, and the rest —
-  together with the `no-reply` family and the `-request`, `-bounces`, `-owner`, `-admin`, `-subscribe`, and
+  together with the `no-reply` family and the `-request`, `-bounces`, `-user`, `-admin`, `-subscribe`, and
   `-unsubscribe` list-administration suffixes.
-- **The account's own mailboxes**, derived from every configured account's user name, so an owner writing from one of
+- **The account's own mailboxes**, derived from every configured account's user name, so a user writing from one of
   their mailboxes to another is not recorded as a correspondent of themselves.
 - **An address the book already holds**, under either origin. That is a refusal rather than a merge: an address that
-  belongs to somebody the owner asserted is already answered for by that record, and adding it there would be collection
-  editing what an owner wrote down. An owner who wants the address on that person puts it there themselves.
+  belongs to somebody the user asserted is already answered for by that record, and adding it there would be collection
+  editing what a user wrote down. A user who wants the address on that person puts it there themselves.
 
-On top of those an owner writes their own exclusions per account, each naming either a domain — optionally reaching the
+On top of those a user writes their own exclusions per account, each naming either a domain — optionally reaching the
 names beneath it — or a pattern over the whole address, where `*` stands for any run of characters and `?` for exactly
 one. An entry that names both, or neither, or a pattern whose only characters are the two wildcards and the at-sign —
-which takes every address or none of them, `*@*` being the shape that reaches an owner — is refused at startup rather than
+which takes every address or none of them, `*@*` being the shape that reaches a user — is refused at startup rather than
 silently excluding nobody.
 
 **One folder run records at most `MaxContactsPerRun` contacts**, 50 by default. The bound is per folder rather than per
@@ -199,22 +199,22 @@ a policy would do without writing anything.
 
 **A collected record is named by what the message offered** — the display name the header wrote, or else the address
 itself where the header wrote nothing usable. A sender's spelling of somebody's name is exactly what a collected claim
-is: weaker than a name the owner wrote down, and replaced by one the moment they promote the record.
+is: weaker than a name the user wrote down, and replaced by one the moment they promote the record.
 
 What collection reports is one measurement per address considered, tagged with which of six conclusions was reached, so
 a book filling too fast, a policy excluding everything, and a run repeatedly stopping at its bound are readable apart
 from each other. No address, name, folder, or message identity reaches an instrument; [telemetry §
 `mailfathom.contacts.collection.decisions`](../operations/telemetry.md#contact-collection) holds the counter.
 
-**An owner who changes their mind takes the whole of it back.** Everything collection built is a contact of its own
-origin, so `mfctl contact delete-collected` erases exactly that and leaves every record the owner entered. It cannot be
+**A user who changes their mind takes the whole of it back.** Everything collection built is a contact of its own
+origin, so `mfctl contact delete-collected` erases exactly that and leaves every record the user entered. It cannot be
 undone: switching collection on again rebuilds the book from the mail that arrives afterwards rather than restoring what
 went. Switching it off is a separate act in configuration, and one worth making — with it still on, the book fills again
 from the next message.
 
 ## Amending a contact states the whole record
 
-An amendment carries the record the owner wants the contact to have — the name, every address, which one is preferred,
+An amendment carries the record the user wants the contact to have — the name, every address, which one is preferred,
 and the note — rather than the difference from the one held. Adding an address, dropping one, choosing a different
 default, and correcting a name are then one operation whose result is checked against the invariants above, instead of
 four that could each leave a contact without an address or with a default it does not hold.
@@ -234,11 +234,11 @@ Three lookups and one listing:
 
 - **By identity**, which is what every other part of the system names a person by.
 - **By address**, which answers "who is this from" and is served from the unique index rather than from a scan. The index
-  leads with the owner, so the lookup reads one book rather than the table. At most one contact can answer, which is the
+  leads with the user, so the lookup reads one book rather than the table. At most one contact can answer, which is the
   uniqueness rule above rather than a property of the lookup.
 - **By the whole name**, which answers "who did they mean" and is what addressing a message to somebody reads. It matches
   the name's comparison form exactly rather than looking for text inside it, so it is served from the listing index the
-  owner and the name's key lead, and it answers with the one contact in that book carrying the name or with how many
+  user and the name's key lead, and it answers with the one contact in that book carrying the name or with how many
   carry it. A namesake in somebody else's book is not one of them. More than one is not
   a result to choose from: nothing here ranks people, and [mail delivery §
   Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) is where refusing
@@ -247,7 +247,7 @@ Three lookups and one listing:
   A name resolving to one person answers with that person and with the count that decided it read together, so the answer
   can never be one of two people a namesake written down meanwhile made ambiguous.
 - **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
-  identity, within the owner the page is of, which makes it total: two people with one name are still served in a fixed
+  identity, within the user the page is of, which makes it total: two people with one name are still served in a fixed
   order, so a walk of the book serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
@@ -276,7 +276,7 @@ filters, so continuing a walk with a different search or a different origin is d
 
 The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
 is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
-than whichever collation the database was created with. The index it is served from leads with the owner and ends with
+than whichever collation the database was created with. The index it is served from leads with the user and ends with
 the identity, which is what makes a page a page of one book and the walk over it terminate.
 
 ## Erasing and exporting a person
@@ -288,16 +288,16 @@ than as a later addition, and both are proven by test rather than described.
 **Erasing a contact removes them and everything derived from them.** The schema's own foreign key is what guarantees no
 address outlives its person, rather than a second statement somebody remembers to write; the erasure takes those rows
 first inside the same transaction so it can answer with what it removed — the contact and how many addresses went with
-it — and an owner asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
-a failure: the state the owner asked for is the state the book is in.
+it — and a user asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
+a failure: the state the user asked for is the state the book is in.
 
-**Erasing an owner erases their whole book.** It is the cascade rather than an erasure of its own, and it runs in two
-hops: `contacts` keys onto the owner record and `contact_addresses` keys onto `contacts` through `(ContactId, OwnerId)`.
-So a data-subject request against the owner discharges the people they wrote down and every address beneath them along
+**Erasing a user erases their whole book.** It is the cascade rather than an erasure of its own, and it runs in two
+hops: `contacts` keys onto the user record and `contact_addresses` keys onto `contacts` through `(ContactId, UserId)`.
+So a data-subject request against the user discharges the people they wrote down and every address beneath them along
 with the mail.
 
 **Exporting a contact produces everything held about them** as of the instant it was taken: the name, every address,
-which is preferred, the note, the origin, and both timestamps. What an owner reads is left to the surface that asks for
+which is preferred, the note, the origin, and both timestamps. What a user reads is left to the surface that asks for
 it, so no surface can choose which parts of a person to hand back.
 
 Both are commands rather than seams something else is expected to reach: `mfctl contact delete` erases and
@@ -306,7 +306,7 @@ day somebody asks for it. The erasure asks before it runs and answers with what 
 addresses — and never with the person.
 
 Erasure is also a tool, `delete_contact`, and it answers the same counts. Export is not: the document is the answer to a
-request a person made of the deployment's owner, and the surface that produces it is the one the owner is identified at.
+request a person made of the deployment's user, and the surface that produces it is the one the user is identified at.
 An agent that needs what an export holds reads the contact, which is the same record without the framing of a
 data-subject reply.
 

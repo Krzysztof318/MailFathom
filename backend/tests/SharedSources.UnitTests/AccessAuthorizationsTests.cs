@@ -71,46 +71,46 @@ public sealed class AccessAuthorizationsTests
     }
 
     /// <summary>
-    /// An ordinary caller acts for the deployment's owner, and asserting it here is what the owner-scoped suites are
-    /// entitled to assume. A helper that stopped stating an owner would turn every "a caller reads their own accounts"
+    /// An ordinary caller acts for the deployment's user, and asserting it here is what the user-scoped suites are
+    /// entitled to assume. A helper that stopped stating a user would turn every "a caller reads their own accounts"
     /// test into a refusal that still passed for the wrong reason.
     /// </summary>
     [Fact]
-    public void ForCallerGranted_ActsForTheDeploymentsOwner()
+    public void ForCallerGranted_ActsForTheDeploymentsUser()
     {
         // Act
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Deployment, authorization.RequireOwner());
+        Assert.Equal(SyntheticMailUser.Deployment, authorization.RequireUser());
     }
 
-    /// <summary>The owner a test names is the owner the use case is told about, which is what an isolation test asserts against.</summary>
+    /// <summary>The user a test names is the user the use case is told about, which is what an isolation test asserts against.</summary>
     [Fact]
-    public void ForOwnerGranted_TheOwnerNamed_IsTheOwnerTheWorkActsFor()
+    public void ForUserGranted_TheUserNamed_IsTheUserTheWorkActsFor()
     {
         // Act
-        var authorization = AccessAuthorizations.ForOwnerGranted(
-            SyntheticMailOwner.Another,
+        var authorization = AccessAuthorizations.ForUserGranted(
+            SyntheticMailUser.Another,
             MailFathomPermission.MailRead);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Another, authorization.RequireOwner());
+        Assert.Equal(SyntheticMailUser.Another, authorization.RequireUser());
     }
 
     /// <summary>
     /// The deployment administrator acts for nobody however broad the grant, and that is the whole of what separates it
-    /// from a caller here. A helper routed through the owner-carrying factory would make every "the administrative
+    /// from a caller here. A helper routed through the user-carrying factory would make every "the administrative
     /// surface cannot read a mailbox" test pass by reading one.
     /// </summary>
     [Fact]
-    public void ForAdministratorGranted_HoldsTheGrantAndActsForNoOwner()
+    public void ForAdministratorGranted_HoldsTheGrantAndActsForNoUser()
     {
         // Act
         var authorization = AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminCredentialsWrite);
 
         // Assert
         Assert.True(authorization.Permits(MailFathomPermission.AdminCredentialsWrite));
-        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireOwner());
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireUser());
     }
 }

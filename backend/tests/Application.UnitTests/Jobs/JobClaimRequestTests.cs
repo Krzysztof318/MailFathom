@@ -18,16 +18,16 @@ public sealed class JobClaimRequestTests
     public void Create_ADeclaredTypeAndPositiveBounds_KeepsWhatTheClaimWillSelectOn()
     {
         // Arrange
-        var owner = JobLeaseOwner.Create("attempt-a");
+        var user = JobLeaseOwner.Create("attempt-a");
 
         // Act
-        var request = JobClaimRequest.Create([JobType.ClassifyEmailSpam], 5, TimeSpan.FromMinutes(2), owner);
+        var request = JobClaimRequest.Create([JobType.ClassifyEmailSpam], 5, TimeSpan.FromMinutes(2), user);
 
         // Assert
         Assert.Equal([JobType.ClassifyEmailSpam], request.HandledTypes);
         Assert.Equal(5, request.BatchSize);
         Assert.Equal(TimeSpan.FromMinutes(2), request.LeaseDuration);
-        Assert.Equal(owner, request.Owner);
+        Assert.Equal(user, request.User);
     }
 
     /// <summary>A caller keeping its own list must not be able to widen a claim that has already been composed.</summary>

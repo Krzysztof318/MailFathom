@@ -11,7 +11,7 @@ namespace MailFathom.Application.Rules.Facts;
 /// <remarks>
 /// <para>
 /// The type is a closed enumeration rather than a C# <see langword="enum" />, because a fact is inseparable from the
-/// name an owner writes in a condition: that name is a published authoring surface, it has to survive any rename of the
+/// name a user writes in a condition: that name is a published authoring surface, it has to survive any rename of the
 /// member here, and the value shape the type checker judges a comparison against travels with it. A separate mapping
 /// table from member to name and type is exactly the pair that drifts apart.
 /// </para>

@@ -52,7 +52,7 @@ internal static class SyntheticEmail
     /// <returns>The occurrence identity.</returns>
     /// <remarks>
     /// The account is stated rather than taken from the deployment for a test whose subject is which account, and
-    /// therefore which owner, a row belongs to. Every other test names the one account this deployment serves and uses
+    /// therefore which user, a row belongs to. Every other test names the one account this deployment serves and uses
     /// the overload above.
     /// </remarks>
     internal static EmailOccurrenceId OccurrenceIn(MailAccountId accountId, MailFolderResolution binding, uint uid) =>

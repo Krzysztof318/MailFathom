@@ -102,7 +102,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         await this.AppendAsync(folderPath, message, MessageFlags.None, cancellationToken);
     }
 
-    /// <summary>Appends one synthetic message as a draft, the way the mailbox owner's own mail client saves one.</summary>
+    /// <summary>Appends one synthetic message as a draft, the way the mailbox user's own mail client saves one.</summary>
     /// <param name="folderPath">The folder to append to, which is the one playing the drafts role.</param>
     /// <param name="subject">The subject the appended message carries.</param>
     /// <param name="cancellationToken">Cancels the append.</param>
@@ -232,10 +232,10 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// <param name="cancellationToken">Cancels the move.</param>
     /// <returns>The UID the destination folder reports for the message, where the server named one.</returns>
     /// <remarks>
-    /// This is the mailbox owner doing by hand exactly what a rule would ask MailFathom to do, and it is the control the
+    /// This is the mailbox user doing by hand exactly what a rule would ask MailFathom to do, and it is the control the
     /// suppression is only meaningful against: the two produce the same two events in the same two folders, and the only
     /// thing that separates them is whether MailFathom wrote a record before the command went out. A suppression that
-    /// silenced this one would silence the owner's own mailbox.
+    /// silenced this one would silence the user's own mailbox.
     /// </remarks>
     internal async Task<ImapUid?> MoveAsync(
         string sourceFolderPath,

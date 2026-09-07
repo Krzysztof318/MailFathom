@@ -107,7 +107,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         }
 
         this.signals.Publish(ClientSignal.MailChanged(
-            MailAccountIdentity.Create(request.Owner, request.Occurrence.AccountId),
+            MailAccountIdentity.Create(request.User, request.Occurrence.AccountId),
             folder.Alias,
             [request.StoredEmailId]));
     }

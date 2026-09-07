@@ -19,9 +19,9 @@ namespace MailFathom.Mcp.Tools;
 /// <param name="submission">Queues the message, and refuses it where it cannot be queued.</param>
 /// <remarks>
 /// <para>
-/// It is the first tool on this surface whose effect reaches somebody who is not this mailbox's owner, and the whole of
+/// It is the first tool on this surface whose effect reaches somebody who is not this mailbox's user, and the whole of
 /// what that changes is in the annotations and the description rather than in what this class does. A wrong
-/// <c>set_mail_flags</c> is a star the owner takes off again; a wrong send is in a stranger's mailbox and cannot be
+/// <c>set_mail_flags</c> is a star the user takes off again; a wrong send is in a stranger's mailbox and cannot be
 /// recalled. So <c>destructiveHint</c> is <see langword="true" /> for irreversibility rather than for destruction, and
 /// <c>openWorldHint</c> points for the first time at a server this deployment does not own — both as
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
@@ -109,7 +109,7 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         + "Once the message has been transmitted nothing "
         + "undoes it; while it is still waiting, cancel_outgoing_email is the one call that does.")]
     public async Task<SendEmailToolResult> SendEmailAsync(
-        [Description("The account to send as, named by the accountId or the display name list_accounts returned; both are unique within the account's owner rather than across the deployment. Its configuration decides the From address, which you never supply. A name that resolves to none of the accounts you may send as refuses the call, as does one that resolves to an account carrying no sending configuration.")]
+        [Description("The account to send as, named by the accountId or the display name list_accounts returned; both are unique within the account's user rather than across the deployment. Its configuration decides the From address, which you never supply. A name that resolves to none of the accounts you may send as refuses the call, as does one that resolves to an account carrying no sending configuration.")]
         string account,
         [Description("The addresses the message is addressed to, one entry per person, each a plain mail address such as person@example.com without a display name. At least one recipient is required across to, cc, and bcc.")]
         IReadOnlyList<string> to,

@@ -6,7 +6,7 @@ using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Domain.Delivery.Scheduling;
 
-/// <summary>States one message an owner wrote once and asked to be sent again on every occasion a schedule names.</summary>
+/// <summary>States one message a user wrote once and asked to be sent again on every occasion a schedule names.</summary>
 /// <remarks>
 /// <para>
 /// It is a declaration rather than a queue: nothing here is due, and nothing here is transmitted. Each occasion the
@@ -28,7 +28,7 @@ namespace MailFathom.Domain.Delivery.Scheduling;
 /// </para>
 /// <para>
 /// It is derived personal data of the same kind an outgoing record is, and inherits the same retention, deletion, and
-/// export obligations: it says who this mailbox's owner writes to, and how often.
+/// export obligations: it says who this mailbox's user writes to, and how often.
 /// </para>
 /// </remarks>
 public sealed record RecurringSend
@@ -40,17 +40,17 @@ public sealed record RecurringSend
     /// <summary>Gets what every occurrence and every later act refers to this declaration by.</summary>
     public required RecurringSendId Id { get; init; }
 
-    /// <summary>Gets the account each occurrence is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account each occurrence is submitted through and sent as, named by its user and its identifier.</summary>
     /// <remarks>
     /// The pair, read back from the declaration's own row: every occasion becomes an outgoing record about this
-    /// account, and the owner that record carries is the one the declaration was made under.
+    /// account, and the user that record carries is the one the declaration was made under.
     /// </remarks>
     public required MailAccountIdentity Account { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
     /// <remarks>
     /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
     /// alone there says what the code means.
     /// </remarks>
     public MailAccountId AccountId => this.Account.Id;

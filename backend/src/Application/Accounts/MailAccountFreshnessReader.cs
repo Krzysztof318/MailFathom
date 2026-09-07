@@ -19,7 +19,7 @@ namespace MailFathom.Application.Accounts;
 /// mailbox needs that reduced to one instant and one word per folder, and to one of each for the account above them.
 /// </para>
 /// <para>
-/// Composed over that use case rather than beside it, so the two cannot come to disagree about which accounts an owner
+/// Composed over that use case rather than beside it, so the two cannot come to disagree about which accounts a user
 /// has. Whose accounts these are, which folders count, the grant that is required, and the read that is recorded are all
 /// decided there, once; what is added here is the reading none of those sources holds on its own.
 /// </para>
@@ -47,7 +47,7 @@ public sealed class MailAccountFreshnessReader
     private readonly MailSynchronizationRunLedger runLedger;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="directoryReader">Reads which accounts the caller's owner owns and how current each of their folders is.</param>
+    /// <param name="directoryReader">Reads which accounts the caller's user owns and how current each of their folders is.</param>
     /// <param name="runLedger">Reports how this process's most recent run of each account and each folder ended.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAccountFreshnessReader(
@@ -63,11 +63,11 @@ public sealed class MailAccountFreshnessReader
 
     /// <summary>Reads the caller's accounts and how current each one and each of its folders is.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>One entry per account the caller's owner owns, and whether the deployment refreshes them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for an owner.</exception>
+    /// <returns>One entry per account the caller's user owns, and whether the deployment refreshes them.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for a user.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// An owner who owns no account is answered with an empty list rather than a refusal, because owning nothing is a
+    /// A user who owns no account is answered with an empty list rather than a refusal, because owning nothing is a
     /// state a client renders and not a failure. A caller whose grant does not carry the permission is refused instead,
     /// which is what keeps the two answers from arriving as the same empty collection.
     /// </remarks>

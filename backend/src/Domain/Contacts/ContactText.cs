@@ -14,7 +14,7 @@ namespace MailFathom.Domain.Contacts;
 /// A name and a note are published into listings of the other contacts, into an answer an agent reads, and into an
 /// export. A character that renders as nothing, ends the line it is on, or reverses the direction of what follows it can
 /// therefore make one record say something about the ones around it, which is why the rule is a refusal rather than a
-/// silent strip: an owner typed the value and is told it was not accepted.
+/// silent strip: a user typed the value and is told it was not accepted.
 /// </para>
 /// <para>
 /// The text is examined as Unicode scalars rather than as UTF-16 code units, because the formatting characters outside
@@ -56,7 +56,7 @@ internal static class ContactText
     /// An unpaired surrogate is not a character and has no category, so enumerating scalars substitutes U+FFFD for it —
     /// which is a printable symbol and passes every rule above while the ill-formed code unit stays in the stored value.
     /// It is refused here instead, because the first thing to reject it otherwise would be the UTF-8 encoder inside
-    /// Npgsql or the JSON writer, and a value an owner typed would come back as an encoding failure rather than as a
+    /// Npgsql or the JSON writer, and a value a user typed would come back as an encoding failure rather than as a
     /// value that was not accepted.
     /// </remarks>
     internal static bool IsWellFormed(string value)

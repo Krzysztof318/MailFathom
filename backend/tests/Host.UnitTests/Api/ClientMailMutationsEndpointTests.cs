@@ -461,7 +461,7 @@ public sealed class ClientMailMutationsEndpointTests
         var folder = MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create(Inbox.Value));
 
         return new AuthoredMailboxTarget(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             EmailOccurrenceId.Create(ServedAccount, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }

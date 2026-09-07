@@ -136,7 +136,7 @@ internal static class PersistenceConcurrencyConflicts
     /// read before it writes, so two passes reading the same record before either commits both find nothing and both
     /// insert; the loser violates the key. Recognizing it is what makes that guard sound rather than decorative — the
     /// retry re-reads, finds the row the winner issued, and files nothing — and leaving it unrecognized would put a
-    /// second copy of the owner's own send in front of them, which is the one duplication no local correction can
+    /// second copy of the user's own send in front of them, which is the one duplication no local correction can
     /// withdraw.
     /// </para>
     /// <para>
@@ -144,7 +144,7 @@ internal static class PersistenceConcurrencyConflicts
     /// sending. Recording the append guards the revision with a read before it writes, and two passes settling one
     /// account — a worker's interval and that account's own run — read the same draft before either commits. The retry
     /// re-reads, finds the row the winner issued for that revision, and appends nothing, which is what keeps the guard
-    /// sound; unrecognized, the loser would report a filing that failed while the owner's drafts folder is exactly
+    /// sound; unrecognized, the loser would report a filing that failed while the user's drafts folder is exactly
     /// right.
     /// </para>
     /// <para>
@@ -155,8 +155,8 @@ internal static class PersistenceConcurrencyConflicts
     /// second operator with a provider failure while the move they asked for is in fact under way.
     /// </para>
     /// <para>
-    /// The next is one owner's named stored secret created by two administrative requests. Both requests read that the
-    /// identity is absent and propose a different generated reference; the loser violates the owner-and-name index.
+    /// The next is one user's named stored secret created by two administrative requests. Both requests read that the
+    /// identity is absent and propose a different generated reference; the loser violates the user-and-name index.
     /// The retry reads the winner's row, seals the submitted material against that row's reference, and returns it, so
     /// both answers name one rotatable secret rather than exposing a persistence constraint.
     /// </para>
@@ -203,7 +203,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.OutgoingEmailFilingPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName
                 or PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName
-                or PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName
+                or PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName
                 or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName,
         };

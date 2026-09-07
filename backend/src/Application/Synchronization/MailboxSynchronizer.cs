@@ -40,7 +40,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IStoredEmailContentInventory contentInventory;
-    private readonly IOwnerStoredContentLedger ownerContentLedger;
+    private readonly IUserStoredContentLedger userContentLedger;
     private readonly IMailOwnership ownership;
     private readonly StoredContentCeiling storedContentCeiling;
     private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
@@ -68,7 +68,7 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IStoredEmailContentInventory contentInventory,
-        IOwnerStoredContentLedger ownerContentLedger,
+        IUserStoredContentLedger userContentLedger,
         IMailOwnership ownership,
         StoredContentCeiling storedContentCeiling,
         RawMimeMemoryBudget rawMimeMemoryBudget,
@@ -94,7 +94,7 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.contentInventory = contentInventory;
-        this.ownerContentLedger = ownerContentLedger;
+        this.userContentLedger = userContentLedger;
         this.ownership = ownership;
         this.storedContentCeiling = storedContentCeiling;
         this.rawMimeMemoryBudget = rawMimeMemoryBudget;
@@ -113,7 +113,7 @@ public sealed class MailboxSynchronizer
     }
 
     /// <summary>Synchronizes one configured folder alias without mutating remote mailbox flags.</summary>
-    /// <param name="account">The account to synchronize, named by its owner and its identifier.</param>
+    /// <param name="account">The account to synchronize, named by its user and its identifier.</param>
     /// <param name="folderMapping">What configuration says the alias names.</param>
     /// <param name="cancellationToken">Cancels the run between remote reads and local writes.</param>
     /// <returns>The bounded progress this run committed, or the reason the alias named no remote folder.</returns>
@@ -140,9 +140,9 @@ public sealed class MailboxSynchronizer
     /// from a path they mistyped.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when no owner can be established for the account, which is what the stored-content bound is measured and
-    /// charged against. An account never synchronized falls back to the deployment's owner record, so this reports a
-    /// deployment holding no owner record or more than one — a state provisioning is supposed to make impossible, and
+    /// Thrown when no user can be established for the account, which is what the stored-content bound is measured and
+    /// charged against. An account never synchronized falls back to the deployment's user record, so this reports a
+    /// deployment holding no user record or more than one — a state provisioning is supposed to make impossible, and
     /// therefore a defect rather than a condition a caller recovers from.
     /// </exception>
     /// <remarks>
@@ -212,20 +212,20 @@ public sealed class MailboxSynchronizer
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
 
-        // Whose mail this run is bringing in. A worker acts for nobody, so the owner arrives with the account the
+        // Whose mail this run is bringing in. A worker acts for nobody, so the user arrives with the account the
         // supervisor resolved rather than being read off the account table again — and it cannot change while a run is
         // in flight, which is what let the previous read be one per run.
-        var owner = account.Owner;
+        var user = account.User;
 
         // The mark is captured before the measurements, so bytes another run claims while these queries are in flight
         // are carried onto the readings rather than being overwritten by them. Both levels are measured here because
         // both bound this run, and neither figure answers for the other: the deployment's is what the disk fills with
-        // and the owner's is what their payloads hold.
-        var measurementMark = this.storedContentCeiling.MarkBefore(owner);
+        // and the user's is what their payloads hold.
+        var measurementMark = this.storedContentCeiling.MarkBefore(user);
         this.storedContentCeiling.Observe(
-            owner,
+            user,
             await this.contentInventory.GetStoredContentBytesAsync(cancellationToken),
-            await this.ownerContentLedger.ReadStoredContentBytesAsync(owner, cancellationToken),
+            await this.userContentLedger.ReadStoredContentBytesAsync(user, cancellationToken),
             measurementMark);
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
@@ -244,7 +244,7 @@ public sealed class MailboxSynchronizer
         var storesArrivingMail = folderRole == MailFolderSpecialUse.Inbox;
         var skippedOversizedCount = 0;
         var deferredForStorageCount = 0;
-        var deferredForOwnerStorageCount = 0;
+        var deferredForUserStorageCount = 0;
         var unreadableMimeCount = 0;
         var relocatedCount = 0;
         var hasMore = true;
@@ -320,7 +320,7 @@ public sealed class MailboxSynchronizer
                     // A copy MailFathom filed of its own outgoing message arrives here as ordinary new mail, and the
                     // filing row is the only thing that says otherwise. It is stored like any other message and marked
                     // as this deployment's own, which is what keeps a rule that reacts to arriving mail from reacting
-                    // to what the owner just sent.
+                    // to what the user just sent.
                     var filing = FindFilingOf(filings, folder, metadata);
 
                     var occurrence = await this.StoreOccurrenceAsync(
@@ -329,7 +329,7 @@ public sealed class MailboxSynchronizer
                         copy,
                         filing,
                         isFiledCopy: filing is not null,
-                        owner,
+                        user,
                         budget,
                         collection,
                         cancellationToken);
@@ -348,7 +348,7 @@ public sealed class MailboxSynchronizer
                             storedCount++;
 
                             // Nothing MailFathom itself put here is arrival, whichever of the two acts put it there:
-                            // a copy filed of the owner's own outgoing message, which the person wrote, and a copy a
+                            // a copy filed of the user's own outgoing message, which the person wrote, and a copy a
                             // rule made into a folder mapped as the inbox, which carries the source's flags and would
                             // otherwise announce as new mail the message it was copied from. Both are already
                             // recognized as this deployment's own act, and the run suppresses the appearance each of
@@ -363,8 +363,8 @@ public sealed class MailboxSynchronizer
                         // Counted apart by which ceiling deferred it, because the two ask an operator for different
                         // things: one for more room on the instance, the other for a larger share for one person.
                         case StoredEmailContentAvailability.AwaitingStorageHeadroom
-                            when occurrence.ReachedStorageBound is StoredContentBound.Owner:
-                            deferredForOwnerStorageCount++;
+                            when occurrence.ReachedStorageBound is StoredContentBound.User:
+                            deferredForUserStorageCount++;
 
                             break;
 
@@ -459,7 +459,7 @@ public sealed class MailboxSynchronizer
                 account,
                 folder,
                 uidValidity,
-                owner,
+                user,
                 budget,
                 collection,
                 cancellationToken);
@@ -483,7 +483,7 @@ public sealed class MailboxSynchronizer
                 budget.StoredBytes,
                 this.storedContentCeiling.OccupiedBytes,
                 deferredForStorageCount,
-                deferredForOwnerStorageCount,
+                deferredForUserStorageCount,
                 refill.RefilledEmailCount,
                 stoppedForContentBudget || refill.StoppedForContentBudget));
     }
@@ -610,7 +610,7 @@ public sealed class MailboxSynchronizer
     /// <para>
     /// A row this pass completes may be a copy this deployment filed, and the inventory reports that beside the
     /// metadata so this pass does not have to assume a message which waited for storage headroom is somebody else's.
-    /// What the answer decides is whether a spam verdict is asked for, and asking for one about the owner's own
+    /// What the answer decides is whether a spam verdict is asked for, and asking for one about the user's own
     /// outgoing message is exactly what the join exists to prevent. The filing itself is not re-read here: the
     /// discovery that recorded this occurrence already met it and settled it, so the durable join on the stored email
     /// is what is left to read and what this pass carries forward.
@@ -621,7 +621,7 @@ public sealed class MailboxSynchronizer
         MailAccountIdentity account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
-        MailOwnerId owner,
+        MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -652,7 +652,7 @@ public sealed class MailboxSynchronizer
                 placement: null,
                 filing: null,
                 isFiledCopy,
-                owner,
+                user,
                 budget,
                 collection,
                 cancellationToken);
@@ -796,7 +796,7 @@ public sealed class MailboxSynchronizer
             {
                 carried = await this.metadataRepository.TryCarryToOccurrenceAsync(
                     persistenceSession,
-                    record.Owner,
+                    record.User,
                     record.Request.StoredEmailId,
                     occurrenceId,
                     attemptCancellationToken);
@@ -861,7 +861,7 @@ public sealed class MailboxSynchronizer
     /// <para>
     /// What this transaction deliberately does not contain is the cut. Redaction has already happened — it is part of
     /// the extraction above, so the text committed here is the text every enabled scanner has seen — but classification
-    /// and the owner's rules have not, and both may still decide that this message is not derived from or that it
+    /// and the user's rules have not, and both may still decide that this message is not derived from or that it
     /// belongs in a folder mapped differently. <see cref="Emails.Chunking.MailChunkingPass" /> is where the passages are
     /// cut, after those two stages, and the same pass is what offers the message for embedding.
     /// </para>
@@ -878,7 +878,7 @@ public sealed class MailboxSynchronizer
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
         bool isFiledCopy,
-        MailOwnerId owner,
+        MailUserId user,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -886,7 +886,7 @@ public sealed class MailboxSynchronizer
         if (!this.WouldFetchContentOf(metadata))
         {
             return await this.RecordOccurrenceWithoutContentAsync(
-                owner,
+                user,
                 metadata,
                 placement,
                 filing,
@@ -900,13 +900,13 @@ public sealed class MailboxSynchronizer
         // concurrent run made against the same reading would let each of them believe it had the room the others were
         // taking. The occurrence is still recorded, so the gap is queryable and a later run with room fetches exactly
         // what this one left.
-        var storageAttempt = this.storedContentCeiling.TryClaim(owner, this.AssumedContentCostOf(metadata));
+        var storageAttempt = this.storedContentCeiling.TryClaim(user, this.AssumedContentCostOf(metadata));
         using var storageClaim = storageAttempt.Claim;
 
         if (storageClaim is null)
         {
             return await this.RecordOccurrenceWithoutContentAsync(
-                owner,
+                user,
                 metadata,
                 placement,
                 filing,
@@ -938,7 +938,7 @@ public sealed class MailboxSynchronizer
             budget.RecordFetched(this.options.MaxRawMimeBytes);
 
             return await this.RecordOccurrenceWithoutContentAsync(
-                owner,
+                user,
                 metadata,
                 placement,
                 filing,
@@ -952,7 +952,7 @@ public sealed class MailboxSynchronizer
         // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
         // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored with
         // only what the server's envelope reported, and the folder checkpoint still advances past it.
-        var extraction = await this.mimeReader.ReadMetadataAsync(content, owner, cancellationToken);
+        var extraction = await this.mimeReader.ReadMetadataAsync(content, user, cancellationToken);
 
         // Recorded where the message arrives, although nothing is derived from it here. The gate's answer about a
         // message nobody has scored yet is the only place the two withholding answers are ever reached — a later stage
@@ -980,7 +980,7 @@ public sealed class MailboxSynchronizer
             {
                 storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
-                    owner,
+                    user,
                     metadata,
                     extraction.Metadata,
                     StoredEmailContentAvailability.Available,
@@ -1008,7 +1008,7 @@ public sealed class MailboxSynchronizer
         // A copy MailFathom filed of this deployment's own outgoing message is skipped too, which is the one place
         // scoring is decided by where a message came from rather than by what it holds: nothing this system composed
         // and sent needs a verdict about whether somebody sent it unsolicited, and a spam verdict on it would withhold
-        // everything derived from a message the owner wrote and could file their own send into their junk folder. The
+        // everything derived from a message the user wrote and could file their own send into their junk folder. The
         // answer comes from the caller rather than from the filing beside it, because a run completing an occurrence a
         // previous one deferred meets no filing to settle and still stores the same copy.
         if (!isFiledCopy)
@@ -1016,14 +1016,14 @@ public sealed class MailboxSynchronizer
             await this.classificationArrivals.ScheduleAsync(
                 storedEmailId,
                 metadata.OccurrenceId,
-                owner,
+                user,
                 cancellationToken);
         }
 
         // The second hand-off, and the one that stays inside this pass rather than reaching a queue: the headers it
         // reads are the ones the extraction above already produced, so a contact costs a bounded number of indexed
         // reads and no round trip to the mail server. It follows the commit for the reason the enqueue does, and it is
-        // skipped outright on an account whose owner never switched collection on.
+        // skipped outright on an account whose user never switched collection on.
         if (extraction.Metadata is { } extracted)
         {
             await this.contactCollection.CollectFromAsync(extracted, collection, cancellationToken);
@@ -1037,7 +1037,7 @@ public sealed class MailboxSynchronizer
 
     /// <summary>Records one occurrence from its envelope alone, with the reason its payload is not stored beside it.</summary>
     private async Task<OccurrenceSynchronizationOutcome> RecordOccurrenceWithoutContentAsync(
-        MailOwnerId owner,
+        MailUserId user,
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
@@ -1052,7 +1052,7 @@ public sealed class MailboxSynchronizer
             {
                 storedEmailId = await this.metadataRepository.UpsertMetadataAsync(
                     persistenceSession,
-                    owner,
+                    user,
                     metadata,
                     extractedMetadata: null,
                     availability,
@@ -1093,7 +1093,7 @@ public sealed class MailboxSynchronizer
     /// <summary>Writes down that a copy MailFathom filed has been met, and joins the stored email to the send it is of.</summary>
     /// <remarks>
     /// Both writes belong in the transaction that stores the email. The join is what keeps everything reacting to newly
-    /// synchronized mail from reacting to the owner's own outgoing message, and recording it apart from the row it is
+    /// synchronized mail from reacting to the user's own outgoing message, and recording it apart from the row it is
     /// about would let a rolled-back store leave a filing claiming to have been met by an email nothing holds.
     /// </remarks>
     private async Task ObserveFilingAsync(
@@ -1200,7 +1200,7 @@ public enum MailboxSynchronizationOutcome
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
 /// <param name="ArrivedEmailCount">
 /// How many of the stored occurrences were mail arriving for the person: stored in the inbox, unread on the server when
-/// the run stored them, and placed there by neither of MailFathom's own two acts — filing a copy of the owner's
+/// the run stored them, and placed there by neither of MailFathom's own two acts — filing a copy of the user's
 /// outgoing message, and a rule copying a message into a folder mapped as the inbox. It is a subset of
 /// <paramref name="StoredEmailCount" /> and is what a run reports as arrived mail, so no consumer has to rebuild the
 /// rule from a count that means something wider.

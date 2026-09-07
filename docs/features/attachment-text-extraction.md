@@ -64,7 +64,7 @@ restraint is what keeps the reader clear of the parsing surface an HTML attachme
 The octets still get no benefit of the doubt, a sender having written both the media type and the file name. The
 reader decodes strictly: a byte-order mark decides the encoding — UTF-8, either UTF-16, or either UTF-32 — and
 everything without one is read as UTF-8, so octets that are not text answer `Malformed` rather than arriving as a
-page of replacement characters an owner would then be told matched. A NUL is refused on the same rule and is
+page of replacement characters a user would then be told matched. A NUL is refused on the same rule and is
 worth stating separately, because it decodes cleanly: it is the one shape of binary a strict decoder would
 otherwise admit, so a photograph renamed `notes.txt` ends as a stated reason instead of as indexed noise. Nothing
 else about the file is guessed — not its language, not a legacy code page, and not its line-ending convention.
@@ -74,7 +74,7 @@ everywhere else.
 
 The three legacy binary formats are recognized deliberately rather than left unknown. They are OLE compound files, and
 no permissively licensed .NET parser reads all three — so an attachment carrying one is reported as a format MailFathom
-does not extract, which tells a mailbox owner their file was skipped instead of leaving them to conclude it was searched
+does not extract, which tells a mailbox user their file was skipped instead of leaving them to conclude it was searched
 and empty. Recognizing them is what makes that sentence possible.
 
 Both office families are read as the zip archives of XML they are, rather than through a document model. That is not
@@ -106,7 +106,7 @@ Office Open XML writes the same names for something else inside a paragraph's pr
 
 Every outcome is one of a closed set, and each is distinguishable from every other.
 
-| Outcome | What it means | What an operator or owner does |
+| Outcome | What it means | What an operator or user does |
 | --- | --- | --- |
 | `Extracted` | The attachment was read. Its text is present, with the page count and the pages that carried no text | Nothing |
 | `FormatNotRecognized` | Neither the media type nor the file name names a document format | Nothing; the attachment is not a document |
@@ -123,7 +123,7 @@ not an archive at all — the package is encrypted whole and wrapped in an OLE c
 the check recognizes. A legacy `.doc`, `.xls`, or `.ppt` is a compound file too, so one that arrived under a package
 format's name, which happens when the media type says nothing and the file name carries the package extension, is
 reported as `Encrypted` rather than as the format nothing here reads. Both answers already mean the text was not read,
-so what is wrong is the reason the owner is given; #1685 is where telling the two apart is tracked.
+so what is wrong is the reason the user is given; #1685 is where telling the two apart is tracked.
 
 `Extracted` with an empty text and every page named as carrying none is a scan, and it is deliberately not a failure. A
 page with no text layer is the exact target an optical-character-recognition pass would be given, which is why the pages
@@ -154,7 +154,7 @@ A picture is not read by a parser, so it carries a set of its own: `Described` w
 nine refusals where none did. The stored row names whichever word applies beside the word `Document` or
 `ImageDescription`, so the two sets never have to be told apart by guessing which one a value came from.
 
-| Outcome | What it means | What an operator or owner does |
+| Outcome | What it means | What an operator or user does |
 | --- | --- | --- |
 | `Described` | The provider answered, and the words it produced are the attachment's text | Nothing |
 | `NotActivated` | `Embeddings:ImageDescription:Enabled` is off, so no octets left this deployment | Turn it on, having read what it sends and to whom |
@@ -177,7 +177,7 @@ already stored.
 **A message's own octet ceiling reports `MessageBudgetExhausted`,** which belongs to neither set above and is written
 for an attachment nothing was offered at all. `Embeddings:AttachmentText:MaxInputOctetsPerEmail` bounds what one
 message may cost to read, and an attachment past it is recorded as having yielded nothing rather than left absent —
-so an owner asking why their contract was not searched is given the ceiling as the answer. The row carries no text
+so a user asking why their contract was not searched is given the ceiling as the answer. The row carries no text
 and no pages, and neither index holds anything for it.
 
 `MaxAttachmentsPerEmail` is the ceiling that writes nothing at all, because it bounds the walk rather than what the
@@ -242,14 +242,14 @@ and memory. **Description** sends a picture to a chat provider, which costs one 
 provider charges. Chunking and the lexical index cost neither: they reach no provider, and what they cost is disk.
 
 Each of the two is bounded independently, over the same fixed window `Embeddings:SpendPeriod` names and in its own
-unit, and each carries a per-owner share beside the deployment's own — the shape
+unit, and each carries a per-user share beside the deployment's own — the shape
 [`Embeddings:MaxInputCharactersPerPeriod`](../operations/configuration-ai.md#embeddings) already has. All four default
 to `0`, which declares no ceiling and still counts, so an operator sees the figures before choosing a number.
 
-| Step | Unit | Deployment | Per owner |
+| Step | Unit | Deployment | Per user |
 | --- | --- | --- | --- |
-| Extraction | octets handed to a document parser | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` |
-| Description | calls a chat provider answered | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerOwner` |
+| Extraction | octets handed to a document parser | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerUser` |
+| Description | calls a chat provider answered | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerUser` |
 
 **An attachment a parser never saw is charged no octets.** Extraction counts what was handed to a parser rather than
 what the walk stepped over, so a picture, a format this deployment does not parse, and an attachment whose declared
@@ -277,12 +277,12 @@ different endpoints with different published quotas.
 **Reaching a ceiling waits rather than fails.** Both are read before a message is opened, so the account run ends where
 it is with that message untouched and unstamped. The surrounding synchronization run succeeds, nothing is dropped — a
 message with no attachment reading is exactly what the next pass selects on — and the first run after the period rolls
-over reaches it. A per-owner ceiling stops that owner's mail alone. It is the same degradation an exhausted embedding
+over reaches it. A per-user ceiling stops that user's mail alone. It is the same degradation an exhausted embedding
 budget produces, which is what makes the two readable together.
 
 The run says which one it met, at information level and naming both halves: the step, which is the key to raise, and
-whether it was the deployment's ceiling or that owner's share of it. The two have different remedies — raising an
-owner's share achieves nothing while the deployment itself has stopped spending — so reporting only that *a* ceiling
+whether it was the deployment's ceiling or that user's share of it. The two have different remedies — raising a
+user's share achieves nothing while the deployment itself has stopped spending — so reporting only that *a* ceiling
 was met would send an operator to the wrong key.
 
 ## What a mailbox reports about how far reading has come

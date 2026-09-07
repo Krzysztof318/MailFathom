@@ -494,7 +494,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
@@ -603,7 +603,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, placement.ByteLength),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
@@ -640,7 +640,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
                 var record = new OutgoingEmailEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    OwnerId = SyntheticMailAccount.Owner.Value,
+                    UserId = SyntheticMailAccount.User.Value,
                     MailboxAccountId = SyntheticMailAccount.AccountId.Value,
                     RequesterIdentity = RequesterIdentity,
                     MimeByteLength = mimeByteLength,
@@ -667,7 +667,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
                 var declaration = new RecurringSendEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    OwnerId = SyntheticMailAccount.Owner.Value,
+                    UserId = SyntheticMailAccount.User.Value,
                     MailboxAccountId = SyntheticMailAccount.AccountId.Value,
                     RequesterIdentity = RequesterIdentity,
                     Schedule = "0 9 * * 1",
@@ -694,7 +694,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
                 var draft = new MailDraftEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    OwnerId = SyntheticMailAccount.Owner.Value,
+                    UserId = SyntheticMailAccount.User.Value,
                     MailboxAccountId = SyntheticMailAccount.AccountId.Value,
                     RequesterIdentity = RequesterIdentity,
                     Subject = string.Empty,

@@ -265,7 +265,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(3));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailOwner.Deployment, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticMailUser.Deployment, inputCharacterCount: 500);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
         var generator = CreateGenerator(
             store,
@@ -365,36 +365,36 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
     /// <summary>A refusal names which ceiling it met, because the two need different actions from an operator.</summary>
     [Fact]
-    public async Task EmbedAsync_ThisOwnerHasSpentTheirShare_SaysTheOwnerReachedTheirCeilingRatherThanTheDeployment()
+    public async Task EmbedAsync_ThisUserHasSpentTheirShare_SaysTheUserReachedTheirCeilingRatherThanTheDeployment()
     {
         // Arrange
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(3));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
         var generator = CreateGenerator(
             store,
             textEmbeddingGenerator,
             CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
-            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.SpendCeilingReached, run.Outcome);
-        Assert.Equal(EmbeddingSpendBound.Owner, run.ReachedSpendBound);
+        Assert.Equal(EmbeddingSpendBound.User, run.ReachedSpendBound);
         Assert.Empty(textEmbeddingGenerator.RequestedBatches);
     }
 
-    /// <summary>An owner at their share stops that owner's mail, and somebody else's message is embedded whole.</summary>
+    /// <summary>A user at their share stops that user's mail, and somebody else's message is embedded whole.</summary>
     /// <remarks>
     /// The two runs share one ledger and one budget, which is what makes the claim about the ceiling rather than about
     /// two generators that happened to be configured differently.
     /// </remarks>
     [Fact]
-    public async Task EmbedAsync_OneOwnerIsAtTheirShare_StillEmbedsAnotherOwnersMessage()
+    public async Task EmbedAsync_OneUserIsAtTheirShare_StillEmbedsAnotherUsersMessage()
     {
         // Arrange
         var store = new InMemoryEmailEmbeddingStore();
@@ -402,12 +402,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         store.AddPassages(Message, CreatePassages(2));
         store.AddPassages(otherMessage, CreatePassages(2));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticMailUser.Another, inputCharacterCount: 500);
         var generator = CreateGenerator(
             store,
             new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
             CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
-            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
 
         // Act
         var refused = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -421,7 +421,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
     /// <summary>What a turn spent is charged to whoever the message belongs to, not to whoever ran the worker.</summary>
     [Fact]
-    public async Task EmbedAsync_AMessageOfAnotherOwner_ChargesThatOwnersRowRatherThanTheDefault()
+    public async Task EmbedAsync_AMessageOfAnotherUser_ChargesThatUsersRowRatherThanTheDefault()
     {
         // Arrange
         var store = new InMemoryEmailEmbeddingStore();
@@ -431,29 +431,29 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             store,
             new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
             CreateSpendGate(ledger, EmbeddingSpendBudget.Unbounded),
-            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+            new StubMailOwnership().Owns(Message, SyntheticMailUser.Another));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndOwner[(PeriodStart, SyntheticMailOwner.Another)]);
-        Assert.False(ledger.ConsumedByPeriodAndOwner.ContainsKey((PeriodStart, SyntheticMailOwner.Deployment)));
+        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndUser[(PeriodStart, SyntheticMailUser.Another)]);
+        Assert.False(ledger.ConsumedByPeriodAndUser.ContainsKey((PeriodStart, SyntheticMailUser.Deployment)));
     }
 
     /// <summary>
-    /// The passages leaving for a hosted provider are scanned under the posture of the owner whose message they were
+    /// The passages leaving for a hosted provider are scanned under the posture of the user whose message they were
     /// cut from rather than the deployment's. Nothing else says so: the generator opens its scope from the ownership it
-    /// read, and one naming the wrong owner would publish one person's body text judged by another person's answer,
+    /// read, and one naming the wrong user would publish one person's body text judged by another person's answer,
     /// while one naming nobody would fail only on a deployment that scans somebody.
     /// </summary>
     [Fact]
-    public async Task EmbedAsync_TwoOwnersScannedDifferently_SendsEachOwnersPassagesUnderTheirOwnPosture()
+    public async Task EmbedAsync_TwoUsersScannedDifferently_SendsEachUsersPassagesUnderTheirOwnPosture()
     {
         // Arrange
         const string marker = "AKIAEXAMPLEKEY";
 
-        var scannedOwnersMessage = StoredEmailId.Create(Guid.CreateVersion7());
+        var scannedUsersMessage = StoredEmailId.Create(Guid.CreateVersion7());
         var scanner = new MarkerSensitiveContentScanner(
             marker,
             SensitiveContentScannerKind.Secrets,
@@ -470,7 +470,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
         var postures = FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SyntheticMailOwner.Another, SensitiveContentPosture.Scanning(
+            (SyntheticMailUser.Another, SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
                 SensitiveContentScreeningPolicy.ScreeningNothing(),
@@ -478,7 +478,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, PassageCarrying(marker));
-        store.AddPassages(scannedOwnersMessage, PassageCarrying(marker));
+        store.AddPassages(scannedUsersMessage, PassageCarrying(marker));
 
         var egressGuard = new SensitiveContentEgressGuard(
             postures,
@@ -491,12 +491,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var generator = CreateGenerator(
             store,
             provider,
-            ownership: new StubMailOwnership().Owns(scannedOwnersMessage, SyntheticMailOwner.Another),
+            ownership: new StubMailOwnership().Owns(scannedUsersMessage, SyntheticMailUser.Another),
             egressGuard: egressGuard);
 
         // Act
         await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
-        await generator.EmbedAsync(scannedOwnersMessage, CreateProfile(), TestContext.Current.CancellationToken);
+        await generator.EmbedAsync(scannedUsersMessage, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Contains(marker, Assert.Single(provider.RequestedBatches[0]), StringComparison.Ordinal);

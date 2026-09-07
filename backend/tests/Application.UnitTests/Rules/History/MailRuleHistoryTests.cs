@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 public sealed class MailRuleHistoryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailRuleExecutionStore executions = Substitute.For<IMailRuleExecutionStore>();
 

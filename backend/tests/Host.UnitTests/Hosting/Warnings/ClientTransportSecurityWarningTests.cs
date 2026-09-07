@@ -82,7 +82,7 @@ public sealed class ClientTransportSecurityWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = TlsTerminating();
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
         var warning = WarningFor(settings, logs);
 
         // Act
@@ -135,7 +135,7 @@ public sealed class ClientTransportSecurityWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = TlsTerminating();
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
         settings.Application.Enabled = true;
         var warning = WarningFor(settings, logs);
 
@@ -165,7 +165,7 @@ public sealed class ClientTransportSecurityWarningTests
     {
         var settings = new ClientEndpointOptions { Enabled = true };
 
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
 
         return settings;
     }

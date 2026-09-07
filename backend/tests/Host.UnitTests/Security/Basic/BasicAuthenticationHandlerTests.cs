@@ -26,7 +26,7 @@ namespace MailFathom.Host.UnitTests.Security.Basic;
 
 /// <summary>Covers what the handler decides for itself at the request boundary, and the one thing it deliberately does not.</summary>
 /// <remarks>
-/// Judging the credential is <see cref="OwnerPasswordAuthenticator" />'s and is covered there. What only exists here is
+/// Judging the credential is <see cref="UserPasswordAuthenticator" />'s and is covered there. What only exists here is
 /// which source an attempt is bounded by, which claims a success carries — and that the transport a request arrived
 /// over decides nothing: a password is read, and the challenge offered, on a clear-text hop exactly as on an encrypted
 /// one, because this process can read the scheme of its own socket and nothing beyond it.
@@ -41,10 +41,10 @@ public sealed class BasicAuthenticationHandlerTests
 
     private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000001");
 
-    /// <summary>The owner the provisioned credential names, deliberately not the one a deployment is configured with.</summary>
-    /// <remarks>A principal that carried the deployment's owner instead would be indistinguishable from one carrying none, which is the widening the success branch exists to prevent.</remarks>
-    private static readonly MailOwnerId CredentialOwner =
-        MailOwnerId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
+    /// <summary>The user the provisioned credential names, deliberately not the one a deployment is configured with.</summary>
+    /// <remarks>A principal that carried the deployment's user instead would be indistinguishable from one carrying none, which is the widening the success branch exists to prevent.</remarks>
+    private static readonly MailUserId CredentialUser =
+        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     /// <summary>
     /// The deployment this endpoint is served in is the administrator's to decide, and a Compose or loopback
@@ -57,15 +57,15 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness();
-        harness.HoldsTheOwnersCredential();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: false);
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: false);
 
         // Act
         var result = await handler.AuthenticateAsync();
 
         // Assert
         Assert.True(result.Succeeded);
-        Assert.Equal(CredentialOwner, TransportCallerOwner.CarriedBy(result.Principal!));
+        Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
             .FindAsync(default, default, TestContext.Current.CancellationToken);
@@ -77,8 +77,8 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness();
-        harness.HoldsTheOwnersCredential();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
         var result = await handler.AuthenticateAsync();
@@ -92,23 +92,23 @@ public sealed class BasicAuthenticationHandlerTests
 
     /// <summary>
     /// The credential named a person, so the principal carries them. Without that claim
-    /// <c>TransportAuthorizedPrincipalSource</c> falls back to the deployment's own owner, and every request a password
+    /// <c>TransportAuthorizedPrincipalSource</c> falls back to the deployment's own user, and every request a password
     /// authenticated would act for the wrong person's mail on both mail-serving surfaces.
     /// </summary>
     [Fact]
-    public async Task AuthenticateAsync_AProvisionedCredential_CarriesItsOwnersClaimRatherThanTheDeployments()
+    public async Task AuthenticateAsync_AProvisionedCredential_CarriesItsUsersClaimRatherThanTheDeployments()
     {
         // Arrange
         using var harness = new HandlerHarness();
-        harness.HoldsTheOwnersCredential();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
         var result = await handler.AuthenticateAsync();
 
         // Assert
         Assert.True(result.Succeeded);
-        Assert.Equal(CredentialOwner, TransportCallerOwner.CarriedBy(result.Principal!));
+        Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
     }
 
     /// <summary>The grant is the row's rather than the endpoint's, so what a request may do travels with the credential.</summary>
@@ -117,8 +117,8 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness();
-        harness.HoldsTheOwnersCredential();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
         var result = await handler.AuthenticateAsync();
@@ -135,8 +135,8 @@ public sealed class BasicAuthenticationHandlerTests
     {
         // Arrange
         using var harness = new HandlerHarness();
-        harness.HoldsTheOwnersCredential();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
 
         // Act
         var result = await handler.AuthenticateAsync();
@@ -183,7 +183,7 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
     }
 
-    /// <summary>Nothing was declared in front, so the peer is the caller and one host guessing at many owners spends the allowance it is bounded by.</summary>
+    /// <summary>Nothing was declared in front, so the peer is the caller and one host guessing at many users spends the allowance it is bounded by.</summary>
     [Fact]
     public async Task AuthenticateAsync_TwoUsernamesFromOnePeerWithNoProxyDeclared_SpendsThatPeersAllowance()
     {
@@ -191,7 +191,7 @@ public sealed class BasicAuthenticationHandlerTests
         using var harness = new HandlerHarness();
 
         // Act
-        await harness.JudgeAsync("owner", peer: "203.0.113.7", reverseProxy: null);
+        await harness.JudgeAsync("user", peer: "203.0.113.7", reverseProxy: null);
         await harness.JudgeAsync("other", peer: "203.0.113.7", reverseProxy: null);
 
         // Assert
@@ -201,8 +201,8 @@ public sealed class BasicAuthenticationHandlerTests
 
     /// <summary>
     /// Behind a declared proxy every request reports the proxy's own address, so bounding by it would be one bound for
-    /// the whole world — and one guesser filling it would close password sign-in for every owner at once. The username
-    /// is the whole bound there, which is why a second owner's request is judged rather than refused.
+    /// the whole world — and one guesser filling it would close password sign-in for every user at once. The username
+    /// is the whole bound there, which is why a second user's request is judged rather than refused.
     /// </summary>
     [Fact]
     public async Task AuthenticateAsync_TwoUsernamesArrivingThroughOneDeclaredProxy_AreBoundedApart()
@@ -212,7 +212,7 @@ public sealed class BasicAuthenticationHandlerTests
         var behindAProxy = new ReverseProxyOptions { TrustedProxies = { "10.0.0.1" } };
 
         // Act
-        await harness.JudgeAsync("owner", peer: "10.0.0.1", behindAProxy);
+        await harness.JudgeAsync("user", peer: "10.0.0.1", behindAProxy);
         await harness.JudgeAsync("other", peer: "10.0.0.1", behindAProxy);
 
         // Assert
@@ -233,7 +233,7 @@ public sealed class BasicAuthenticationHandlerTests
         var behindAProxy = new ReverseProxyOptions { TrustedProxies = { "10.0.0.1" } };
 
         // Act
-        await harness.JudgeAsync("owner", peer: "203.0.113.7", behindAProxy);
+        await harness.JudgeAsync("user", peer: "203.0.113.7", behindAProxy);
         await harness.JudgeAsync("other", peer: "203.0.113.7", behindAProxy);
 
         // Assert
@@ -245,7 +245,7 @@ public sealed class BasicAuthenticationHandlerTests
     /// A dual-stack listener reports an IPv4 proxy in its mapped form while the operator wrote the plain address, and
     /// neither comparison matches across address families. Reading the peer any other way would leave the proxy
     /// unrecognized as one, put every request in the deployment into a single per-source partition, and let ten wrong
-    /// passwords a minute from anybody behind it close password sign-in for every owner.
+    /// passwords a minute from anybody behind it close password sign-in for every user.
     /// </summary>
     [Fact]
     public async Task AuthenticateAsync_TwoUsernamesArrivingThroughADeclaredProxyReportedAsIPv4Mapped_AreBoundedApart()
@@ -255,7 +255,7 @@ public sealed class BasicAuthenticationHandlerTests
         var behindAProxy = new ReverseProxyOptions { TrustedProxies = { "10.0.0.1" } };
 
         // Act
-        await harness.JudgeAsync("owner", peer: "::ffff:10.0.0.1", behindAProxy);
+        await harness.JudgeAsync("user", peer: "::ffff:10.0.0.1", behindAProxy);
         await harness.JudgeAsync("other", peer: "::ffff:10.0.0.1", behindAProxy);
 
         // Assert
@@ -276,40 +276,40 @@ public sealed class BasicAuthenticationHandlerTests
 
         internal HandlerHarness()
         {
-            this.Credentials = Substitute.For<IOwnerCredentialStore>();
+            this.Credentials = Substitute.For<IUserCredentialStore>();
             this.Credentials.FindAsync(
-                    Arg.Any<OwnerCredentialMethod>(),
-                    Arg.Any<OwnerCredentialLookup>(),
+                    Arg.Any<UserCredentialMethod>(),
+                    Arg.Any<UserCredentialLookup>(),
                     Arg.Any<CancellationToken>())
-                .Returns((ResolvedOwnerCredential?)null);
+                .Returns((ResolvedUserCredential?)null);
 
             var passwordHasher = new UnreachablePasswordHasher();
 
-            this.Authenticator = new OwnerPasswordAuthenticator(
+            this.Authenticator = new UserPasswordAuthenticator(
                 this.Credentials,
                 passwordHasher,
                 this.attemptLimiter,
                 new DecoyPasswordHash(passwordHasher),
-                NullLogger<OwnerPasswordAuthenticator>.Instance);
+                NullLogger<UserPasswordAuthenticator>.Instance);
         }
 
-        internal IOwnerCredentialStore Credentials { get; }
+        internal IUserCredentialStore Credentials { get; }
 
-        /// <summary>Holds one enabled credential for <see cref="CredentialOwner" />, whose password the hasher recognizes.</summary>
-        internal void HoldsTheOwnersCredential() =>
+        /// <summary>Holds one enabled credential for <see cref="CredentialUser" />, whose password the hasher recognizes.</summary>
+        internal void HoldsTheUsersCredential() =>
             this.Credentials.FindAsync(
-                    OwnerCredentialMethod.Password,
-                    Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == "owner"),
+                    UserCredentialMethod.Password,
+                    Arg.Is<UserCredentialLookup>(lookup => lookup.Value == "user"),
                     Arg.Any<CancellationToken>())
-                .Returns(new ResolvedOwnerCredential(
+                .Returns(new ResolvedUserCredential(
                     CredentialId,
-                    CredentialOwner,
-                    OwnerCredentialMethod.Password,
+                    CredentialUser,
+                    UserCredentialMethod.Password,
                     Grant,
                     Enabled: true,
                     StoredHash));
 
-        private OwnerPasswordAuthenticator Authenticator { get; }
+        private UserPasswordAuthenticator Authenticator { get; }
 
         public void Dispose() => this.attemptLimiter.Dispose();
 

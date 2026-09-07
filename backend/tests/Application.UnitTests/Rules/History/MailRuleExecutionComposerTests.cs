@@ -22,7 +22,7 @@ public sealed class MailRuleExecutionComposerTests
 {
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 4, 2, 9, 30, 0, TimeSpan.Zero);
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly StoredEmailId Email = StoredEmailId.Create(Guid.CreateVersion7());
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");

@@ -17,7 +17,7 @@ namespace MailFathom.Application.Mail.Mutations.Authoring.Failures;
 /// separate sentences rather than one, since each names a different thing for the caller to correct.
 /// </para>
 /// <para>
-/// <strong>No keyword the caller wrote reaches this message.</strong> A label is text the owner or their client chose
+/// <strong>No keyword the caller wrote reaches this message.</strong> A label is text the user or their client chose
 /// and can name a person, a case, or a diagnosis, so an unusable one is reported as unusable and described by the rule
 /// it broke. Every limit named here is MailFathom's own or IMAP's.
 /// </para>

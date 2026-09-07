@@ -67,7 +67,7 @@ public sealed class ContactBookTests
         Assert.Equal(1, book.ContactCount);
     }
 
-    /// <summary>Collection never edits what an owner wrote down, and an owner never edits a collected record in place.</summary>
+    /// <summary>Collection never edits what a user wrote down, and a user never edits a collected record in place.</summary>
     [Theory]
     [InlineData(ContactOrigin.Asserted, ContactOrigin.Collected)]
     [InlineData(ContactOrigin.Collected, ContactOrigin.Asserted)]
@@ -155,7 +155,7 @@ public sealed class ContactBookTests
         Assert.Equal(0, book.ContactCount);
     }
 
-    /// <summary>Promotion is the act that makes a collected record the owner's, and it keeps everything else.</summary>
+    /// <summary>Promotion is the act that makes a collected record the user's, and it keeps everything else.</summary>
     [Fact]
     public async Task PromoteAsync_ACollectedContact_BecomesAsserted()
     {
@@ -196,7 +196,7 @@ public sealed class ContactBookTests
         Assert.Equal(contact.Id, result.Contact?.Id);
     }
 
-    /// <summary>Collection cannot award itself the authority promotion confers; only a writer acting for the owner promotes.</summary>
+    /// <summary>Collection cannot award itself the authority promotion confers; only a writer acting for the user promotes.</summary>
     [Fact]
     public async Task PromoteAsync_AWriterCollectingMail_IsRefusedTheContactItCollected()
     {
@@ -212,7 +212,7 @@ public sealed class ContactBookTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        var stillHeld = await book.FindAsync(SyntheticMailOwner.Deployment, contact.Id, TestContext.Current.CancellationToken);
+        var stillHeld = await book.FindAsync(SyntheticMailUser.Deployment, contact.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
         Assert.Equal(ContactOrigin.Collected, stillHeld?.Origin);
@@ -242,7 +242,7 @@ public sealed class ContactBookTests
         Assert.Equal(0, book.ContactCount);
     }
 
-    /// <summary>Erasing somebody the book never held is the state the owner asked for rather than a failure.</summary>
+    /// <summary>Erasing somebody the book never held is the state the user asked for rather than a failure.</summary>
     [Fact]
     public async Task EraseAsync_AContactTheBookDoesNotHold_IsAnAnswerRatherThanAFailure()
     {
@@ -488,7 +488,7 @@ public sealed class ContactBookTests
             TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The one writer that could award itself an owner's authority must not be able to do it on the way in.</summary>
+    /// <summary>The one writer that could award itself a user's authority must not be able to do it on the way in.</summary>
     [Fact]
     public async Task CollectAsync_ARecordNamingTheAssertedOrigin_IsRefused()
     {
@@ -518,7 +518,7 @@ public sealed class ContactBookTests
         Assert.False(await book.HoldsAddressAsync(Address("marek@example.test"), TestContext.Current.CancellationToken));
     }
 
-    /// <summary>Everything collection built is a contact of its own origin, so an owner reversing their mind takes exactly that out.</summary>
+    /// <summary>Everything collection built is a contact of its own origin, so a user reversing their mind takes exactly that out.</summary>
     [Fact]
     public async Task EraseCollectedAsync_ABookOfBothOrigins_RemovesOnlyWhatWasCollected()
     {
@@ -539,7 +539,7 @@ public sealed class ContactBookTests
         Assert.Equal(ContactOrigin.Asserted, Assert.Single(store.Contacts).Origin);
     }
 
-    /// <summary>Erasing a book that had collected nobody is the state the owner asked for rather than a failure.</summary>
+    /// <summary>Erasing a book that had collected nobody is the state the user asked for rather than a failure.</summary>
     [Fact]
     public async Task EraseCollectedAsync_ABookThatCollectedNobody_ReportsNothingRemoved()
     {
@@ -586,7 +586,7 @@ public sealed class ContactBookTests
         return new ContactBook(
             book,
             book,
-            ContactBookOwnerships.ForTheServedOwner(),
+            ContactBookOwnerships.ForTheServedUser(),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
             timeProvider,
             authorization ?? AccessAuthorizations.ForCallerGranted(

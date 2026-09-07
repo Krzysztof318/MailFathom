@@ -143,23 +143,23 @@ internal sealed class JobStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// The condition is the owner and the state rather than the expiry, so an attempt whose lease has run out but which
+    /// The condition is the user and the state rather than the expiry, so an attempt whose lease has run out but which
     /// nothing has reclaimed yet renews it and goes on working. That is safe because it still holds the row exclusively:
     /// what makes two attempts impossible is the claim, and this attempt is still the one the claim stamped. Refusing on
     /// the expiry instead would abandon work nobody else had taken.
     /// </remarks>
     public async Task<JobLease?> RenewLeaseAsync(
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
 
         var leaseExpiresAt = timeProvider.GetUtcNow() + leaseDuration;
         var jobIdValue = jobId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var claimed = nameof(JobState.Claimed);
 
         var renewedRows = await dbContext.Database.ExecuteSqlAsync(
@@ -168,11 +168,11 @@ internal sealed class JobStore(
              SET "LeaseExpiresAt" = {leaseExpiresAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
-               AND "LeaseOwner" = {ownerValue}
+               AND "LeaseOwner" = {userValue}
              """,
             cancellationToken);
 
-        return renewedRows == 1 ? new JobLease(owner, leaseExpiresAt) : null;
+        return renewedRows == 1 ? new JobLease(user, leaseExpiresAt) : null;
     }
 
     /// <inheritdoc />
@@ -180,13 +180,13 @@ internal sealed class JobStore(
     /// The lease is cleared with the state, so a terminal row names no holder. What it keeps is its key, which is what
     /// stops the same trigger enqueuing the same work again.
     /// </remarks>
-    public async Task<bool> CompleteAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken)
+    public async Task<bool> CompleteAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
 
         var stateChangedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var claimed = nameof(JobState.Claimed);
         var succeeded = nameof(JobState.Succeeded);
 
@@ -199,7 +199,7 @@ internal sealed class JobStore(
                  "StateChangedAt" = {stateChangedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
-               AND "LeaseOwner" = {ownerValue}
+               AND "LeaseOwner" = {userValue}
              """,
             cancellationToken);
 
@@ -216,23 +216,23 @@ internal sealed class JobStore(
     /// <para>
     /// The turn moves with it, but only forward: a job cannot hold a turn earlier than the instant it becomes claimable
     /// again, or the backoff would end with it in front of everything that waited through it. It keeps a later turn
-    /// where it has one, because the place the enqueue gave it among its owner's work is not something a transient
+    /// where it has one, because the place the enqueue gave it among its user's work is not something a transient
     /// failure should improve on.
     /// </para>
     /// </remarks>
     public async Task<bool> ScheduleRetryAsync(
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         JobFailureRecord failure,
         DateTimeOffset availableAt,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(failure);
 
         var stateChangedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var claimed = nameof(JobState.Claimed);
         var pending = nameof(JobState.Pending);
         var classification = failure.Classification.ToString();
@@ -251,7 +251,7 @@ internal sealed class JobStore(
                  "StateChangedAt" = {stateChangedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
-               AND "LeaseOwner" = {ownerValue}
+               AND "LeaseOwner" = {userValue}
              """,
             cancellationToken);
 
@@ -266,16 +266,16 @@ internal sealed class JobStore(
     /// </remarks>
     public async Task<bool> DeadLetterAsync(
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         JobFailureRecord failure,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(failure);
 
         var stateChangedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var claimed = nameof(JobState.Claimed);
         var deadLettered = nameof(JobState.DeadLettered);
         var classification = failure.Classification.ToString();
@@ -292,7 +292,7 @@ internal sealed class JobStore(
                  "StateChangedAt" = {stateChangedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
-               AND "LeaseOwner" = {ownerValue}
+               AND "LeaseOwner" = {userValue}
              """,
             cancellationToken);
 
@@ -307,13 +307,13 @@ internal sealed class JobStore(
     /// rather than the work's failure, and a long job met by a few rolling restarts would otherwise reach the attempt
     /// bound and be dead-lettered without ever having failed.
     /// </remarks>
-    public async Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken)
+    public async Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner user, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
 
         var releasedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var claimed = nameof(JobState.Claimed);
         var pending = nameof(JobState.Pending);
 
@@ -328,7 +328,7 @@ internal sealed class JobStore(
                  "StateChangedAt" = {releasedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
-               AND "LeaseOwner" = {ownerValue}
+               AND "LeaseOwner" = {userValue}
              """,
             cancellationToken);
 

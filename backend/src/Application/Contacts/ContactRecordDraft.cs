@@ -35,11 +35,11 @@ public sealed record ContactRecordDraft
     /// <summary>Gets the address to use by default, which must be one of <see cref="Addresses" />.</summary>
     /// <remarks>
     /// Stated rather than inferred, even where the record names one address, because which address is preferred is the
-    /// owner's choice and nothing in the book picks one for them.
+    /// user's choice and nothing in the book picks one for them.
     /// </remarks>
     public string? PreferredAddress { get; init; }
 
-    /// <summary>Gets what the owner wrote about this person, or <see langword="null" /> for none.</summary>
+    /// <summary>Gets what the user wrote about this person, or <see langword="null" /> for none.</summary>
     /// <remarks>Blank text is the absence of a note rather than an empty one, so a caller clearing a note sends the field empty instead of reaching for a second verb.</remarks>
     public string? Note { get; init; }
 }

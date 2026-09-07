@@ -27,7 +27,7 @@ public sealed class StreamedDiscoveryRunTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
+        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []));
 
     private readonly FakeTimeProvider clock = new(DiscoveryRuns.Now);
 
@@ -492,10 +492,10 @@ public sealed class StreamedDiscoveryRunTests
             Endpoint);
 
     private static DiscoveryRunJournal NewJournal() =>
-        new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment);
+        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment);
 
     private static DiscoveryRunJournal NewJournalStoppedBy(CancellationTokenSource stopping) =>
-        new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment, stopping.Token);
+        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment, stopping.Token);
 
     private static DiscoveryRunFailure Failure(DiscoveryRunJournal journal) =>
         Assert.IsType<DiscoveryRunFailed>(Published(journal)[^1]).Failure;

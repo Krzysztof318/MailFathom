@@ -26,14 +26,14 @@ namespace MailFathom.Host.UnitTests.Api;
 /// <summary>Covers what the OTLP routes accept, what they refuse, and what leaves under whose name.</summary>
 /// <remarks>
 /// The forwarder is real here rather than substituted, over the suite's HTTP double, because the claim worth asserting
-/// is what arrived at the collector: that the batch carries the owner this deployment authenticated and not the one the
+/// is what arrived at the collector: that the batch carries the user this deployment authenticated and not the one the
 /// client claimed. A substitute between the handler and the wire would let the attribution be asserted against the
 /// argument the test itself arranged.
 /// </remarks>
 public sealed class ClientTelemetryEndpointTests
 {
-    private static readonly MailOwnerId AuthenticatedOwner =
-        MailOwnerId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
+    private static readonly MailUserId AuthenticatedUser =
+        MailUserId.Create(new Guid("9f2a1c64-0000-4000-8000-000000000001"));
 
     /// <summary>A deployment that named no collector serves nothing, which is what "the endpoint is off" looks like here.</summary>
     [Fact]
@@ -76,12 +76,12 @@ public sealed class ClientTelemetryEndpointTests
 
     /// <summary>The claim the whole feature rests on, asserted at the wire rather than at the argument.</summary>
     [Fact]
-    public async Task AcceptAsync_ABatchClaimingAnOwnerOfItsOwn_ForwardsItNamingTheAuthenticatedOne()
+    public async Task AcceptAsync_ABatchClaimingAnUserOfItsOwn_ForwardsItNamingTheAuthenticatedOne()
     {
         // Arrange
         using var collector = AcceptingCollector();
         var request = Requesting(OtlpExportRequests.Batch(
-            [new KeyValuePair<string, string>(ClientTelemetryEndpoint.OwnerTagName, "somebody-else")],
+            [new KeyValuePair<string, string>(ClientTelemetryEndpoint.UserTagName, "somebody-else")],
             records: 3));
 
         // Act
@@ -91,7 +91,7 @@ public sealed class ClientTelemetryEndpointTests
         Assert.Equal(StatusCodes.Status200OK, answered);
         var forwarded = Assert.Single(collector.RecordedRequests).Content.ToArray();
         Assert.Equal(
-            [new KeyValuePair<string, string>(ClientTelemetryEndpoint.OwnerTagName, AuthenticatedOwner.ToString())],
+            [new KeyValuePair<string, string>(ClientTelemetryEndpoint.UserTagName, AuthenticatedUser.ToString())],
             OtlpExportRequests.ResourceAttributes(forwarded));
     }
 
@@ -191,7 +191,7 @@ public sealed class ClientTelemetryEndpointTests
 
     /// <summary>The rate bound, and the answer that tells a client to hold rather than to stop.</summary>
     [Fact]
-    public async Task AcceptAsync_PastTheOwnersRate_RefusesWithTooManyRequestsAndSaysHowLongToHold()
+    public async Task AcceptAsync_PastTheUsersRate_RefusesWithTooManyRequestsAndSaysHowLongToHold()
     {
         // Arrange
         using var collector = AcceptingCollector();
@@ -199,7 +199,7 @@ public sealed class ClientTelemetryEndpointTests
 
         foreach (var _ in Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity))
         {
-            quota.TryAdmit(AuthenticatedOwner.ToString());
+            quota.TryAdmit(AuthenticatedUser.ToString());
         }
 
         var request = Requesting(OtlpExportRequests.Batch([], records: 1));
@@ -294,7 +294,7 @@ public sealed class ClientTelemetryEndpointTests
 
     /// <summary>Nobody exports on somebody's behalf without a person to attribute it to.</summary>
     [Fact]
-    public async Task AcceptAsync_ACallerActingForNoOwner_RefusesBeforeReadingTheBody()
+    public async Task AcceptAsync_ACallerActingForNoUser_RefusesBeforeReadingTheBody()
     {
         // Arrange
         using var collector = AcceptingCollector();
@@ -323,7 +323,7 @@ public sealed class ClientTelemetryEndpointTests
         var answered = await ClientTelemetryEndpoint.AcceptAsync(
             ClientTelemetrySignal.Traces,
             request,
-            authorization ?? AccessAuthorizations.ForOwnerGranted(AuthenticatedOwner),
+            authorization ?? AccessAuthorizations.ForUserGranted(AuthenticatedUser),
             quota ?? owned!,
             ForwarderOver(collector),
             new ClientTelemetryProxyTelemetry(

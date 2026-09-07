@@ -73,7 +73,7 @@ internal sealed class MailRuleExecutionConfiguration : IEntityTypeConfiguration<
         // through, which is why the account leads it and the instant follows.
         entity.HasIndex(execution => new
         {
-            execution.OwnerId,
+            execution.UserId,
             execution.MailboxAccountId,
             execution.EvaluatedAt,
             execution.Id,
@@ -81,7 +81,7 @@ internal sealed class MailRuleExecutionConfiguration : IEntityTypeConfiguration<
             .HasDatabaseName(PersistenceConstraintNames.MailRuleExecutionTimelineIndexName);
         entity.HasIndex(execution => new
         {
-            execution.OwnerId,
+            execution.UserId,
             execution.MailboxAccountId,
             execution.RuleName,
             execution.EvaluatedAt,

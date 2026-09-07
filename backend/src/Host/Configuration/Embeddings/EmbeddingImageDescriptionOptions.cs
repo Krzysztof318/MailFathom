@@ -87,12 +87,12 @@ internal sealed class EmbeddingImageDescriptionOptions
     /// </remarks>
     public long MaxDescriptionsPerPeriod { get; set; }
 
-    /// <summary>Gets or sets the descriptions one budget period may ask for on behalf of any one owner, or zero to bound no owner.</summary>
+    /// <summary>Gets or sets the descriptions one budget period may ask for on behalf of any one user, or zero to bound no user.</summary>
     /// <remarks>
     /// The same ceiling asked of one person, so a mailbox full of photographs cannot exhaust the window everybody else
     /// is working in.
     /// </remarks>
-    public long MaxDescriptionsPerPeriodPerOwner { get; set; }
+    public long MaxDescriptionsPerPeriodPerUser { get; set; }
 
     /// <summary>Gets or sets how many description requests one minute may carry, or zero to pace none.</summary>
     /// <remarks>
@@ -128,14 +128,14 @@ internal sealed class EmbeddingImageDescriptionOptions
             yield return $"{Key(nameof(this.MaxDescriptionsPerPeriod))} — a period ceiling is zero or positive. Zero declares none at all, which is a supported deployment; a negative one describes no budget.";
         }
 
-        if (this.MaxDescriptionsPerPeriodPerOwner < 0)
+        if (this.MaxDescriptionsPerPeriodPerUser < 0)
         {
-            yield return $"{Key(nameof(this.MaxDescriptionsPerPeriodPerOwner))} — a per-owner ceiling is zero or positive. Zero declares no per-owner ceiling, which is what a deployment serving one owner wants; a negative one describes no budget.";
+            yield return $"{Key(nameof(this.MaxDescriptionsPerPeriodPerUser))} — a per-user ceiling is zero or positive. Zero declares no per-user ceiling, which is what a deployment serving one user wants; a negative one describes no budget.";
         }
 
-        if (this.MaxDescriptionsPerPeriod != 0 && this.MaxDescriptionsPerPeriodPerOwner > this.MaxDescriptionsPerPeriod)
+        if (this.MaxDescriptionsPerPeriod != 0 && this.MaxDescriptionsPerPeriodPerUser > this.MaxDescriptionsPerPeriod)
         {
-            yield return $"{Key(nameof(this.MaxDescriptionsPerPeriodPerOwner))} — a per-owner ceiling is at most {nameof(this.MaxDescriptionsPerPeriod)}. Above it, it bounds nothing the deployment's own ceiling has not already bound, which reads as a limit somebody chose and refuses nothing.";
+            yield return $"{Key(nameof(this.MaxDescriptionsPerPeriodPerUser))} — a per-user ceiling is at most {nameof(this.MaxDescriptionsPerPeriod)}. Above it, it bounds nothing the deployment's own ceiling has not already bound, which reads as a limit somebody chose and refuses nothing.";
         }
 
         if (this.MaxRequestsPerMinute is < 0 or > GreatestRequestsPerMinute)

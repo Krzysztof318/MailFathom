@@ -6860,7 +6860,7 @@ quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise() {
   assert_excludes 'mcp-workstation-key' "$guarded_root/deploy/compose/config/10-mailfathom.json"
 
   if [[ -e "$guarded_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
-    printf 'A key an owner presents was written into the deployment that mints it.\n' >&2
+    printf 'A key a user presents was written into the deployment that mints it.\n' >&2
     return 1
   fi
 
@@ -7026,7 +7026,7 @@ quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs() {
   assert_excludes 'OPENSSL_CONF' "$strict_root/deploy/compose/compose.override.yaml"
 }
 
-# What a client presents to the MCP endpoint is a record beside an owner, minted over the administrative endpoint. So
+# What a client presents to the MCP endpoint is a record beside a user, minted over the administrative endpoint. So
 # switching that endpoint off while a key is wanted describes a deployment nothing can ever be provisioned for. The
 # default arrives at the combination without anybody choosing it and is corrected; an operator who asked for it by name
 # is refused, because correcting a stated answer is the worse failure.

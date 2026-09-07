@@ -187,7 +187,7 @@ public sealed class DeclaredMailAccountsTests
         Assert.Equal(["primary", "work"], Identifiers(fromSettings));
     }
 
-    /// <summary>One owner's own declarations are read exactly as the deployment's are, which is what a claim in their record is judged by.</summary>
+    /// <summary>One user's own declarations are read exactly as the deployment's are, which is what a claim in their record is judged by.</summary>
     /// <remarks>
     /// The overload exists so that a scanned folder or a junk destination in somebody's record resolves within their own
     /// accounts and nowhere else. Reading it differently from the deployment's would let a record be accepted for a
@@ -195,7 +195,7 @@ public sealed class DeclaredMailAccountsTests
     /// is a separate implementation, rather than against the bound overload this one is what implements.
     /// </remarks>
     [Fact]
-    public void ReadFrom_OneOwnersOwnDeclarations_AnswersAsTheDeploymentsAreRead()
+    public void ReadFrom_OneUsersOwnDeclarations_AnswersAsTheDeploymentsAreRead()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
@@ -218,12 +218,12 @@ public sealed class DeclaredMailAccountsTests
         ];
 
         // Act
-        var fromOwner = DeclaredMailAccounts.ReadFrom(accounts);
+        var fromUser = DeclaredMailAccounts.ReadFrom(accounts);
         var fromConfiguration = DeclaredMailAccounts.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(Describe(fromConfiguration), Describe(fromOwner));
-        Assert.Equal(["alex-work"], Identifiers(fromOwner));
+        Assert.Equal(Describe(fromConfiguration), Describe(fromUser));
+        Assert.Equal(["alex-work"], Identifiers(fromUser));
     }
 
     [Fact]

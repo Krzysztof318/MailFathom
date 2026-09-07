@@ -33,7 +33,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 public sealed class MailRelocationRecorderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -118,7 +118,7 @@ public sealed class MailRelocationRecorderTests
 
     /// <summary>
     /// Mail moved into a folder nothing mirrors leaves the mirror for good, so what becomes of the local copy is the
-    /// account's own answer and is written onto the record while the owner's configuration still says it.
+    /// account's own answer and is written onto the record while the user's configuration still says it.
     /// </summary>
     [Fact]
     public async Task RecordAsync_AMoveIntoAnUnmirroredFolder_RecordsWhatBecomesOfTheLocalCopy()
@@ -146,7 +146,7 @@ public sealed class MailRelocationRecorderTests
 
     /// <summary>
     /// Moving mail is its own grant, so a caller holding the one that writes flags is refused. A flag misdescribes mail
-    /// the owner can still find; a move puts the mail somewhere else.
+    /// the user can still find; a move puts the mail somewhere else.
     /// </summary>
     [Fact]
     public async Task RecordAsync_ACallerHoldingOnlyTheFlagGrant_IsRefusedWithoutWritingAnything()
@@ -414,7 +414,7 @@ public sealed class MailRelocationRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            Account.Owner,
+            Account.User,
             EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }

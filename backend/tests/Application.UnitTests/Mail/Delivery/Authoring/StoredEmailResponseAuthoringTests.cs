@@ -521,17 +521,17 @@ public sealed class StoredEmailResponseAuthoringTests
     }
 
     /// <summary>
-    /// Mail in an account another owner owns is refused identically, so answering it is not a way to read what is in
+    /// Mail in an account another user owns is refused identically, so answering it is not a way to read what is in
     /// it: the quotation a reply would carry is the message itself.
     /// </summary>
     [Fact]
-    public async Task AuthorAsync_EmailOfAnAccountTheCallersOwnerDoesNotOwn_IsRefusedAsNoSuchEmail()
+    public async Task AuthorAsync_EmailOfAnAccountTheCallersUserDoesNotOwn_IsRefusedAsNoSuchEmail()
     {
         // Arrange
         var authoring = AuthoringOver(
             Rendering(),
-            authorization: AccessAuthorizations.ForOwnerGranted(
-                SyntheticMailOwner.Another,
+            authorization: AccessAuthorizations.ForUserGranted(
+                SyntheticMailUser.Another,
                 MailFathomPermission.MailRead));
 
         // Act

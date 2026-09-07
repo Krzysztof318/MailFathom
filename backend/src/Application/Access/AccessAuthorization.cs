@@ -25,16 +25,16 @@ namespace MailFathom.Application.Access;
 /// it fails rather than defaulting to permitted.
 /// </para>
 /// <para>
-/// <see cref="RequireOwner" /> is the one method about whose mail rather than about what may be done to it. It is asked
-/// beside a permission rather than instead of one, because the two axes are independent: no permission names an owner,
-/// and a grant however broad still reaches the mail of the one owner the work was admitted for.
+/// <see cref="RequireUser" /> is the one method about whose mail rather than about what may be done to it. It is asked
+/// beside a permission rather than instead of one, because the two axes are independent: no permission names a user,
+/// and a grant however broad still reaches the mail of the one user the work was admitted for.
 /// </para>
 /// <para>
 /// Two members report instead of refusing, one per axis, for a boundary composing an answer per caller rather than
 /// performing an operation for one. Neither decides anything of its own: <see cref="Permits" /> answers exactly what
 /// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
-/// what holding a permission means, and <see cref="ActingOwner" /> answers what <see cref="RequireOwner" /> would —
-/// with the owner, or with nothing where the principal acts for none.
+/// what holding a permission means, and <see cref="ActingUser" /> answers what <see cref="RequireUser" /> would —
+/// with the user, or with nothing where the principal acts for none.
 /// </para>
 /// </remarks>
 public sealed class AccessAuthorization
@@ -68,24 +68,24 @@ public sealed class AccessAuthorization
     /// </remarks>
     public string? PrincipalIdentity => this.principals.Current?.Identity;
 
-    /// <summary>Gets the owner the work in hand is acting for, or <see langword="null" /> where it acts for nobody's mail.</summary>
+    /// <summary>Gets the user the work in hand is acting for, or <see langword="null" /> where it acts for nobody's mail.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, which is an entrypoint that never stated what admitted it rather than one acting for nobody.</exception>
     /// <remarks>
     /// <para>
-    /// This reports where <see cref="RequireOwner" /> refuses, and the two are for different questions. A use case that
-    /// reads or writes one owner's mail asks <see cref="RequireOwner" />, because "acting for nobody" there has to be a
-    /// refusal rather than an unbounded read. What this is for is the record that belongs to an owner and is reached by
-    /// principals that carry none — the deployment administrator, and this process's own identity — where which owner it
+    /// This reports where <see cref="RequireUser" /> refuses, and the two are for different questions. A use case that
+    /// reads or writes one user's mail asks <see cref="RequireUser" />, because "acting for nobody" there has to be a
+    /// refusal rather than an unbounded read. What this is for is the record that belongs to a user and is reached by
+    /// principals that carry none — the deployment administrator, and this process's own identity — where which user it
     /// is has an answer the deployment can state rather than one the principal carried.
     /// </para>
     /// <para>
     /// Reaching for it is therefore a decision to be justified where it is made, and the caller states what it resolves
-    /// the absent owner to. <see cref="Contacts.ContactBookOwnership" /> is the one such reader
+    /// the absent user to. <see cref="Contacts.ContactBookOwnership" /> is the one such reader
     /// today. Work reached under no principal at all is still refused, so an entrypoint that stated nothing cannot be
     /// read as one acting for nobody.
     /// </para>
     /// </remarks>
-    public MailOwnerId? ActingOwner => this.RequirePrincipal().Owner;
+    public MailUserId? ActingUser => this.RequirePrincipal().User;
 
     /// <summary>Requires that an admitted caller holding one named capability is what reached this use case.</summary>
     /// <param name="permission">The capability the operation is published under.</param>
@@ -183,9 +183,9 @@ public sealed class AccessAuthorization
         && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
         && caller.Holds(permission);
 
-    /// <summary>Requires that the work in hand is being done for one owner, and answers which.</summary>
-    /// <returns>The owner whose mail this unit of work may act on.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one acting for no owner.</exception>
+    /// <summary>Requires that the work in hand is being done for one user, and answers which.</summary>
+    /// <returns>The user whose mail this unit of work may act on.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one acting for no user.</exception>
     /// <remarks>
     /// <para>
     /// This is the second axis of an access decision and it is asked separately from the first, because the two answer
@@ -194,14 +194,14 @@ public sealed class AccessAuthorization
     /// refusal rather than into an unbounded read.
     /// </para>
     /// <para>
-    /// It admits every kind of principal that carries an owner rather than naming one kind, because a capability
-    /// redeemed for an owner's own attachment is acting for that owner exactly as the caller who minted it was. What is
-    /// refused is a principal with no owner at all: this process's own identity, and the deployment administrator whose
+    /// It admits every kind of principal that carries a user rather than naming one kind, because a capability
+    /// redeemed for a user's own attachment is acting for that user exactly as the caller who minted it was. What is
+    /// refused is a principal with no user at all: this process's own identity, and the deployment administrator whose
     /// acts are the deployment's rather than one person's.
     /// </para>
     /// </remarks>
-    public MailOwnerId RequireOwner() =>
-        this.RequirePrincipal().Owner ?? throw PrincipalNotAuthorizedException.NoOwner();
+    public MailUserId RequireUser() =>
+        this.RequirePrincipal().User ?? throw PrincipalNotAuthorizedException.NoUser();
 
     /// <summary>Requires that this use case was reached as work no caller requested.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one that is not MailFathom's own identity.</exception>

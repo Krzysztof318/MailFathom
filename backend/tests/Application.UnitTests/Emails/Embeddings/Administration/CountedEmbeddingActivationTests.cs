@@ -140,7 +140,7 @@ public sealed class CountedEmbeddingActivationTests
         var world = CreateWorld(maxInputCharactersPerPeriod: 100_000);
         var declared = CreateIdentity("a-model");
         world.WorkloadReader.Set(declared, new EmbeddingWorkload(500, 500, 2_000, 90_000));
-        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), SyntheticMailOwner.Deployment, 80_000);
+        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), SyntheticMailUser.Deployment, 80_000);
 
         // Act
         var result = await world.Activation.ActivateAsync(declared, TestContext.Current.CancellationToken);
@@ -341,13 +341,13 @@ public sealed class CountedEmbeddingActivationTests
         Assert.False(assessment.IsRefused);
     }
 
-    /// <summary>The two deployment-wide attachment ceilings, the per-owner pair being no part of an activation's question.</summary>
+    /// <summary>The two deployment-wide attachment ceilings, the per-user pair being no part of an activation's question.</summary>
     private static AttachmentDerivationBudget Ceilings(long maxInputOctetsPerPeriod, long maxDescriptionsPerPeriod) =>
         AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod,
-            maxInputOctetsPerPeriodPerOwner: 0,
+            maxInputOctetsPerPeriodPerUser: 0,
             maxDescriptionsPerPeriod,
-            maxDescriptionsPerPeriodPerOwner: 0,
+            maxDescriptionsPerPeriodPerUser: 0,
             TimeSpan.FromDays(1));
 
     /// <summary>Coverage reporting mail still to be read, which is what an attachment ceiling is weighed against.</summary>

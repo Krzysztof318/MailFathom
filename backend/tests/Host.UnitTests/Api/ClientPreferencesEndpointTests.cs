@@ -17,7 +17,7 @@ namespace MailFathom.Host.UnitTests.Api;
 
 /// <summary>
 /// Covers the two routes a person reads and writes their own client preferences over. What separates them from the
-/// record routes is that nothing here is configuration: no request names an owner, the write is admitted under the
+/// record routes is that nothing here is configuration: no request names a user, the write is admitted under the
 /// grant a signed-in person already holds, and a preference the body omits is stored as its unset answer rather than
 /// left at whatever the row held.
 /// </summary>
@@ -30,7 +30,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>()).Returns(Chosen);
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Chosen);
 
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
@@ -54,7 +54,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
 
         // Act
         var result = await ClientPreferencesEndpoint.ReadAsync(
@@ -78,7 +78,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns<ClientPreferences?>(_ => throw new JsonException("theme: 'solarized' at $.theme"));
 
         // Act
@@ -98,7 +98,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -111,7 +111,7 @@ public sealed class ClientPreferencesEndpointTests
         var preferences = Assert.IsType<Ok<ClientPreferencesResponse>>(result.Result).Value!;
 
         Assert.Equal("dark", preferences.Theme);
-        await store.Received(1).SaveAsync(SyntheticMailOwner.Deployment, Chosen, Arg.Any<CancellationToken>());
+        await store.Received(1).SaveAsync(SyntheticMailUser.Deployment, Chosen, Arg.Any<CancellationToken>());
     }
 
     /// <summary>The document is closed rather than patched, so an omitted preference is stored as its unset answer instead of leaving the row half changed.</summary>
@@ -120,7 +120,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         // Act
@@ -131,18 +131,18 @@ public sealed class ClientPreferencesEndpointTests
 
         // Assert
         await store.Received(1).SaveAsync(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false),
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Reached where the row behind an authenticated caller has gone, which is an owner erased under a credential that has not yet been withdrawn.</summary>
+    /// <summary>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task SaveAsync_ACallerWhoseRowHasGone_AnswersThatThereIsNoRecord()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -177,7 +177,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Contains("system, light, dark", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -245,6 +245,6 @@ public sealed class ClientPreferencesEndpointTests
     private static JsonSerializerOptions WebFormat => new(JsonSerializerDefaults.Web);
 
     private static OwnClientPreferences SignedIn(IClientPreferencesStore store) => new(
-        AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Deployment, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, MailFathomPermission.MailRead),
         store);
 }

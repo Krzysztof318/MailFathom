@@ -172,7 +172,7 @@ public sealed class AuthoredMailFlagChangeTests
         Assert.Equal(MailFathomErrorCode.MailFlagChangeInvalid, refusal.ErrorCode);
     }
 
-    /// <summary>The refusal names the rule and never the keyword, which is text the owner or their client chose.</summary>
+    /// <summary>The refusal names the rule and never the keyword, which is text the user or their client chose.</summary>
     [Fact]
     public void Create_AnUnusableKeyword_ReportsTheRuleWithoutRepeatingTheKeyword()
     {

@@ -62,7 +62,7 @@ public interface IMailboxMutationReconciliationStore
     /// it has to guarantee. A budget spent across the window would let a message an agent starred and unstarred a
     /// dozen times take every slot from the message beside it; a budget spent across one occurrence's values would let
     /// the same pile of stars take the room that occurrence's own <c>\Seen</c> store needs. Either way the record that
-    /// explains a value is dropped, that value is credited to the mailbox owner, and the rule that wrote it re-fires on
+    /// explains a value is dropped, that value is credited to the mailbox user, and the rule that wrote it re-fires on
     /// the mail it just acted on. So the read ranks within each UID and mutation rather than across the answer.
     /// </para>
     /// <para>

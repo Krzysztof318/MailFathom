@@ -18,7 +18,7 @@ namespace MailFathom.Application.UnitTests.Folders;
 public sealed class MailFolderResolverTests
 {
     private static readonly MailAccountIdentity PrimaryAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,

@@ -38,7 +38,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -66,7 +66,7 @@ public sealed class OutgoingMailScreeningTests
         // Act
         var refusal = await Assert.ThrowsAsync<ArgumentException>(
             () => screening.FindRefusalAsync(
-                ScanningSensitiveContentEgress.Owner,
+                ScanningSensitiveContentEgress.User,
                 ReadOnlyMemory<byte>.Empty,
                 TestContext.Current.CancellationToken));
 
@@ -90,7 +90,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -120,7 +120,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -148,7 +148,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -177,7 +177,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -208,7 +208,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 
@@ -238,7 +238,7 @@ public sealed class OutgoingMailScreeningTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             RawMime,
             TestContext.Current.CancellationToken);
 

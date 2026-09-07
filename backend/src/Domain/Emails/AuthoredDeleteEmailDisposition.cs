@@ -9,9 +9,9 @@ namespace MailFathom.Domain.Emails;
 /// <para>
 /// It is a separate decision from <see cref="RemotelyDeletedEmailDisposition" /> because the two answer for different
 /// acts. That one governs a disappearance somebody else caused and MailFathom observed afterwards; this one governs a
-/// deletion the mailbox owner authored through MailFathom. Inheriting one value for both would make an account
+/// deletion the mailbox user authored through MailFathom. Inheriting one value for both would make an account
 /// configured to erase what its server loses also erase what MailFathom was just told to delete — which is precisely the
-/// case where the owner may have wanted the opposite, because deleting on the server is how mail is kept while quota is
+/// case where the user may have wanted the opposite, because deleting on the server is how mail is kept while quota is
 /// freed.
 /// </para>
 /// <para>

@@ -41,7 +41,7 @@ public sealed class StoredMailRederivationHandlerTests
 
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
 
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private readonly IJobStore jobs = Substitute.For<IJobStore>();
@@ -338,7 +338,7 @@ public sealed class StoredMailRederivationHandlerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
                 MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
 

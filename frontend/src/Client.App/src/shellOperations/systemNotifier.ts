@@ -41,7 +41,7 @@ import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notif
 // **A refusal and an absent operation are not the same answer**, which is what makes the answer three values rather
 // than two. A refusal was given by somebody and is kept; an operation this head never carried was decided by nobody
 // and is kept nowhere. Conflating them is how a head with no notification plugin — the Android one until #1616 — would
-// write *off* on a machine whose owner was never asked anything.
+// write *off* on a machine whose user was never asked anything.
 //
 // **Raising one and being permitted to are two different bridges, and the split is not arbitrary.** Permission is the
 // plugin's, because it is the half whose answer differs between heads and the half the phone will need. Raising is

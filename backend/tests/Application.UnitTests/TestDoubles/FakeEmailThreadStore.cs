@@ -33,7 +33,7 @@ internal sealed class FakeEmailThreadStore
     public IEmailThreadStore Store => new Adapter(this);
 
     /// <summary>Records one stored email, as the write path would have before it assembled anything.</summary>
-    /// <param name="account">The account the mail belongs to, named as the owner and the identifier together.</param>
+    /// <param name="account">The account the mail belongs to, named as the user and the identifier together.</param>
     /// <param name="storedEmailId">The identity to store it under.</param>
     /// <param name="internetMessageId">The message's own identifier, or <see langword="null" /> when it carried none.</param>
     /// <param name="answeredInternetMessageId">The identifier it answers, or <see langword="null" /> when it answers none.</param>

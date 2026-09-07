@@ -3,7 +3,7 @@
 <!-- describes: backend/src/Application/Rules/**, backend/src/Infrastructure/Rules/**, backend/src/Infrastructure/Persistence/Rules/**, backend/src/Host/Configuration/Rules/** -->
 
 A mail rule selects mail and changes it. It is a name, a condition, the accounts it applies to, the occasions that run
-it, what a match leads to, and whether a match ends the pass, and an owner writes it in the configuration their
+it, what a match leads to, and whether a match ends the pass, and a user writes it in the configuration their
 deployment already carries. This
 page documents both halves: every fact a condition can read, every function and operator available to it, the limits it
 is read and run under, the order a set of rules is evaluated in, and every change a matching rule can ask for.
@@ -11,7 +11,7 @@ is read and run under, the order a set of rules is evaluated in, and every chang
 Rules live in configuration rather than in a table, and a condition is one expression rather than a nested structure of
 predicates. [ADR 0010](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
 records both decisions and what each one costs. Nothing creates, edits, or deletes a rule at run time: not `mfctl`, not
-MCP, not the administrative endpoint. An owner who wants to change what their instance selects edits a file.
+MCP, not the administrative endpoint. A user who wants to change what their instance selects edits a file.
 
 ## Writing a rule
 
@@ -52,7 +52,7 @@ below](#which-triggers-run-a-rule) states what each way of writing it means, and
 `Schedule` is when a rule declaring the `Schedule` trigger runs, written as `Every <interval>` or
 `Daily at <HH:mm> [<zone>]`. The key and the trigger are one declaration: neither is written without the other, and
 [running a rule on a schedule](#running-a-rule-on-a-schedule) states the syntax, what happens to an occasion that
-passed while nothing was running, and how such a run differs from one an owner asks for.
+passed while nothing was running, and how such a run differs from one a user asks for.
 
 ## Which accounts a rule applies to
 
@@ -68,8 +68,8 @@ matches it.
 
 An account is named exactly as `MailSynchronization:Accounts:<n>:AccountId` declares it, and the comparison is
 case-sensitive, because two identifiers differing only in case are two accounts there. A deployment that declares its
-owners has no entries in that section at all — declaring any owner refuses a non-empty one — and its mailboxes are
-named by the same key of the owner's own entry, `Accounts:<n>:MailAccounts:<m>:AccountId`; everything below holds of
+users has no entries in that section at all — declaring any user refuses a non-empty one — and its mailboxes are
+named by the same key of the user's own entry, `Accounts:<n>:MailAccounts:<m>:AccountId`; everything below holds of
 either declaration. **An account nobody declared is
 refused when the configuration is read**, naming the rule and the identifier: a rule scoped to a mistyped account would
 otherwise reach no mail and say nothing about why.
@@ -105,7 +105,7 @@ without naming it.
 
 **Such a rule is one you run rather than one that runs**, which is what housekeeping wants — file everything
 older than a quarter, delete what a mailing list left behind — where firing on each arriving message is either useless
-or exactly what the owner is afraid of. [A whole-mailbox
+or exactly what the user is afraid of. [A whole-mailbox
 run](#running-the-rules-over-mail-you-already-have) is what applies it, and [a
 schedule](#running-a-rule-on-a-schedule) is how the same rule gets applied without anybody asking each time.
 
@@ -140,7 +140,7 @@ whole mailbox rather than anything about one message:
 }
 ```
 
-**The syntax is MailFathom's own, and it accepts exactly two forms.** It is deliberately not cron: an owner writing
+**The syntax is MailFathom's own, and it accepts exactly two forms.** It is deliberately not cron: a user writing
 when their own mailbox is tidied needs an interval or a time of day, and the four fields cron would add are ones nothing
 here would honour to the minute anyway.
 
@@ -156,7 +156,7 @@ here would honour to the minute anyway.
   more often than the queue is polled; a longer one is a date rather than a recurrence.
 - **A time of day is written as `HH:mm` on a 24-hour clock**, zero-padded — `03:00`, not `3:00`.
 - **The zone is a time-zone identifier the host recognizes**, so a deployment writing one gets that zone's wall clock
-  including its daylight-saving changes. Leaving it out means UTC, which is what an owner reads off the declaration
+  including its daylight-saving changes. Leaving it out means UTC, which is what a user reads off the declaration
   without knowing where the container runs.
 - **Anything else is refused when the configuration is read**, naming the rule and what could not be read — a cron
   expression, an unpadded time, a zone nothing knows. A schedule silently dropped would leave a rule that never runs,
@@ -184,11 +184,11 @@ skipped. It follows that a schedule shorter than the walk it asks for does not p
 allows.
 
 **A scheduled walk reaches the rules that declared a schedule, and no others.** That is the one place it differs from a
-whole-mailbox run an owner asks for, which applies the entire rule set including the rules declaring no trigger at all.
+whole-mailbox run a user asks for, which applies the entire rule set including the rules declaring no trigger at all.
 Both walk the same mail, are bounded by the same two settings, run as a step of the account's synchronization run, and
 are bound to the rule-set revision they started under.
 
-**An owner's request replaces an outstanding scheduled run** rather than being answered with it, because the request
+**A user's request replaces an outstanding scheduled run** rather than being answered with it, because the request
 reaches every rule and the scheduled run reaches only some of them. A schedule's occasion arriving while any run is
 outstanding stands down, whichever started it.
 
@@ -213,7 +213,7 @@ The two keys sound alike and are not:
 | Validated when the configuration is read | Yes | Yes, apart from its condition |
 | Run when mail arrives | No | No |
 | Run by a whole-mailbox run | Yes | No |
-| What it is for | A rule an owner applies deliberately | A rule taken out of service without deleting the condition |
+| What it is for | A rule a user applies deliberately | A rule taken out of service without deleting the condition |
 
 ## What a matching rule does
 
@@ -243,7 +243,7 @@ element whose value it cannot read — which would leave a rule quietly doing le
 pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
 
 A destination is a **folder alias** — one an account declares under `MailSynchronization:Accounts:<n>:Folders`, or
-under `Accounts:<n>:MailAccounts:<m>:Folders` where an owner declares the mailbox — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
+under `Accounts:<n>:MailAccounts:<m>:Folders` where a user declares the mailbox — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
 working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
 including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
 [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
@@ -365,7 +365,7 @@ each is the point of the arrangement:
 - **Asking twice asks once.** The record's identity is the email occurrence, the mutation, and who asked — and for a
   rule, *who asked* is the rule's name together with the revision of the rule set that matched. So a whole-mailbox run
   over mail a rule has already acted on issues nothing, while an edit to the rule set is a new revision and therefore a
-  fresh request. An owner who moved the message back by hand is not overruled by the rule that filed it.
+  fresh request. A user who moved the message back by hand is not overruled by the rule that filed it.
 
 **A change MailFathom made does not come back as something to act on.** A rule filing a message would otherwise meet it
 in its new folder, match again, and file it again for as long as the folder is watched;
@@ -380,7 +380,7 @@ states the three answers.
 ### What an account permits a rule to do
 
 Each account states, under `MailSynchronization:Accounts:<n>:RuleActions` — or under
-`Accounts:<n>:MailAccounts:<m>:RuleActions` where an owner declares the mailbox — which changes a rule may make to its
+`Accounts:<n>:MailAccounts:<m>:RuleActions` where a user declares the mailbox — which changes a rule may make to its
 mailbox:
 
 | Key | Default | What it permits |
@@ -610,7 +610,7 @@ started with — the reload contract [ADR 0002](https://github.com/Krzysztof318/
 defines for every group that reaches a running operation.
 
 **An edit that does not validate is refused and logged, and the previous rule set stays in effect.** That is deliberately
-not the options framework's own behaviour, which would discard the candidate silently: an owner who mistypes a fact name
+not the options framework's own behaviour, which would discard the candidate silently: a user who mistypes a fact name
 would otherwise get an instance still acting under the rules their file no longer states.
 
 ## Order, and stopping
@@ -671,7 +671,7 @@ states what each of the two is and what makes both unreachable everywhere else t
 [filed](mail-delivery.md#the-copy-in-the-accounts-own-folders) into the account's own sent or outbox folder comes back
 through the next synchronization like anything else, and it is recognized as this system's own and joined to the send
 it is a copy of. Neither pass ever offers it to a rule: a rule conditioned on mail arriving would otherwise fire on
-what the owner just sent, and a rule that files or deletes would act on the copy of a message the record above it still
+what the user just sent, and a rule that files or deletes would act on the copy of a message the record above it still
 governs. The exclusion is a column on the row, applied where the candidates are read and repeated in the queue's own
 partial index, so such a message leaves the queue rather than sitting at the head of it — and it is never stamped as
 evaluated, because it was not.
@@ -719,7 +719,7 @@ to do with it. The next section lists the two reasons.
 
 **Nothing scans on a timer of its own.** The account run recurs already, so anything a scan would find on arrival is
 found by the `Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some
-age — is applied by a whole-mailbox run, which the owner asks for or a rule's own
+age — is applied by a whole-mailbox run, which the user asks for or a rule's own
 [schedule](#running-a-rule-on-a-schedule) asks for on its behalf. A schedule adds no loop and no second worker either:
 its occasions are dispatched as ordinary jobs by the queue's worker, under the same capacity bounds as every other job,
 and the walk still happens as a step of the account's synchronization run.
@@ -886,7 +886,7 @@ Mail addressed to a particular domain that carries no readable text yet:
 contains(recipientDomains, 'example.test') and not hasExtractedContent
 ```
 
-Size measured in a unit an owner thinks in:
+Size measured in a unit a user thinks in:
 
 ```text
 sizeInBytes / 1048576 > 25
@@ -1002,7 +1002,7 @@ Deleting mail nobody needs — which the account has to permit under
 }
 ```
 
-Quarterly housekeeping nothing fires by itself, which the owner applies by asking for a whole-mailbox run:
+Quarterly housekeeping nothing fires by itself, which the user applies by asking for a whole-mailbox run:
 
 ```json
 {
@@ -1013,7 +1013,7 @@ Quarterly housekeeping nothing fires by itself, which the owner applies by askin
 }
 ```
 
-The same housekeeping without anybody asking, run once a night in the owner's own time zone:
+The same housekeeping without anybody asking, run once a night in the user's own time zone:
 
 ```json
 {

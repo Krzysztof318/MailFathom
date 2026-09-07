@@ -46,12 +46,12 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
 
         if (account is { } named)
         {
-            var ownerValue = named.Owner.Value;
+            var userValue = named.User.Value;
             var accountValue = named.Id.Value;
 
-            // The owner leads, as it does in the index: a count narrowed to an identifier alone would count another
-            // owner's account of the same name into this answer.
-            sends = sends.Where(message => message.OwnerId == ownerValue
+            // The user leads, as it does in the index: a count narrowed to an identifier alone would count another
+            // user's account of the same name into this answer.
+            sends = sends.Where(message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue);
         }
 
@@ -175,10 +175,10 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
 
         if (query.Account is { } account)
         {
-            var ownerValue = account.Owner.Value;
+            var userValue = account.User.Value;
             var accountValue = account.Id.Value;
 
-            sends = sends.Where(message => message.OwnerId == ownerValue
+            sends = sends.Where(message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue);
         }
 

@@ -19,7 +19,7 @@ using Xunit;
 
 namespace MailFathom.IntegrationTests.Hosting;
 
-/// <summary>Proves what a started host does with an owner's username and password on the surfaces that accept one.</summary>
+/// <summary>Proves what a started host does with a user's username and password on the surfaces that accept one.</summary>
 /// <remarks>
 /// <para>
 /// Which passwords verify, how a rejection is collapsed, and how the header is decoded are unit covered and none of it
@@ -65,7 +65,7 @@ public sealed class ComposedPasswordAuthenticationTests
 
     private const string AdminKey = "not-a-real-admin-key";
 
-    private const string Username = "owner";
+    private const string Username = "user";
 
     private const string Password = "correcthorsebatterystaple";
 
@@ -73,15 +73,15 @@ public sealed class ComposedPasswordAuthenticationTests
 
     private static readonly Guid CredentialId = new("55555555-5555-5555-5555-555555555555");
 
-    private static readonly MailOwnerId Owner =
-        MailOwnerId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
+    private static readonly MailUserId User =
+        MailUserId.Create(new Guid("11111111-1111-1111-1111-111111111111"));
 
     /// <summary>A password authenticates through the assembled pipeline and the route answers, which is what says the method is wired rather than merely registered.</summary>
     [Fact]
     public async Task ClientEndpoint_ARequestPresentingAProvisionedPassword_ReachesTheSessionHandler()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         var response = await host.SendAsync(
@@ -100,7 +100,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task ClientEndpoint_ARequestNamingTheBasicScheme_ReachesThatSurfacesPasswordHandler()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         await host.SendAsync(
@@ -119,7 +119,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task ClientEndpoint_ARequestOnItsOwnListener_ReachesNoOtherSurfacesPasswordHandler()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         await host.SendAsync(
@@ -138,7 +138,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task McpEndpoint_ARequestNamingTheBasicScheme_ReachesItsOwnPasswordHandler()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         await host.SendAsync(
@@ -162,7 +162,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task ClientEndpoint_ARequestPresentingAWrongPassword_IsRefusedWithBothChallenges()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         var response = await host.SendAsync(
@@ -184,7 +184,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task ClientEndpoint_ARequestPresentingAnUnknownUsername_IsRefusedIndistinguishably()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         var unknown = await host.SendAsync(
@@ -210,7 +210,7 @@ public sealed class ComposedPasswordAuthenticationTests
 
     /// <summary>
     /// The administrative surface answers for the deployment rather than for a person, so a password admitted there
-    /// would carry an owner it has no use for. Refusing the shape at startup is what makes that unreachable rather than
+    /// would carry a user it has no use for. Refusing the shape at startup is what makes that unreachable rather than
     /// merely unintended, and what a deployment meets is a start that stopped.
     /// </summary>
     [Fact]
@@ -234,7 +234,7 @@ public sealed class ComposedPasswordAuthenticationTests
     public async Task AdminEndpoint_ARequestPresentingAPassword_ReachesNoPasswordHandlerAtAll()
     {
         // Arrange
-        await using var host = await StartAsync(BothOwnerSurfacesAcceptingAPassword());
+        await using var host = await StartAsync(BothUserSurfacesAcceptingAPassword());
 
         // Act
         var response = await host.SendAsync(
@@ -258,26 +258,26 @@ public sealed class ComposedPasswordAuthenticationTests
             TestContext.Current.CancellationToken,
             static builder =>
             {
-                builder.Services.RemoveAll<IOwnerCredentialStore>();
+                builder.Services.RemoveAll<IUserCredentialStore>();
                 builder.Services.AddScoped(static _ => OneProvisionedCredential());
                 builder.Services.AddSingleton<IPasswordHasher>(new OneKnownPasswordHasher());
             });
 
     /// <summary>The store as a deployment holding exactly one enabled credential answers.</summary>
-    private static IOwnerCredentialStore OneProvisionedCredential()
+    private static IUserCredentialStore OneProvisionedCredential()
     {
-        var credentials = Substitute.For<IOwnerCredentialStore>();
-        var provisioned = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create(Username));
+        var credentials = Substitute.For<IUserCredentialStore>();
+        var provisioned = UserCredentialLookup.ForUsername(UserCredentialUsername.Create(Username));
 
         credentials.FindAsync(
-                Arg.Any<OwnerCredentialMethod>(),
-                Arg.Any<OwnerCredentialLookup>(),
+                Arg.Any<UserCredentialMethod>(),
+                Arg.Any<UserCredentialLookup>(),
                 Arg.Any<CancellationToken>())
-            .Returns(callInfo => callInfo.Arg<OwnerCredentialLookup>() == provisioned
-                ? new ResolvedOwnerCredential(
+            .Returns(callInfo => callInfo.Arg<UserCredentialLookup>() == provisioned
+                ? new ResolvedUserCredential(
                     CredentialId,
-                    Owner,
-                    OwnerCredentialMethod.Password,
+                    User,
+                    UserCredentialMethod.Password,
                     MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
                     Enabled: true,
                     StoredHash)
@@ -290,9 +290,9 @@ public sealed class ComposedPasswordAuthenticationTests
     private static string Credential(string userId, string password) =>
         $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userId}:{password}"))}";
 
-    /// <summary>Both surfaces an owner signs in to, each accepting a password, behind a proxy the deployment named.</summary>
+    /// <summary>Both surfaces a user signs in to, each accepting a password, behind a proxy the deployment named.</summary>
     /// <remarks>Naming the proxy is what lets this shape carry no certificate and still be a deployment somebody would run: the hop a request arrives over is the one that proxy forwarded. It permits nothing — a password crosses an unnamed clear-text hop just as readily, and is reported at startup rather than refused.</remarks>
-    private static IReadOnlyList<KeyValuePair<string, string?>> BothOwnerSurfacesAcceptingAPassword() =>
+    private static IReadOnlyList<KeyValuePair<string, string?>> BothUserSurfacesAcceptingAPassword() =>
     [
         new("McpEndpoint:Enabled", "true"),
         new("McpEndpoint:Authentication:0:Method", "password"),

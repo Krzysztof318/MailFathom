@@ -31,7 +31,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </remarks>
 public sealed class StoredEmailAttachmentTextSelectionTests
 {
-    private static readonly Guid Owner = SyntheticMailOwner.Deployment.Value;
+    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
 
     private static readonly DateTimeOffset Now = new(2026, 9, 6, 10, 0, 0, TimeSpan.Zero);
 
@@ -286,7 +286,7 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         {
             StoredEmailId = email.Id,
             StoredEmail = email,
-            OwnerId = email.OwnerId,
+            UserId = email.UserId,
             MailboxAccountId = email.MailboxAccountId,
             MailFolder = email.MailFolder,
             Mutation = mutation.Name,
@@ -303,7 +303,7 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         DerivedWorkAdmissionTerms terms) =>
         [.. StoredEmailAttachmentTextStore.Selecting(
             new[] { email }.AsQueryable(),
-            Owner,
+            User,
             "work",
             embeddedFolders,
             terms)];
@@ -325,15 +325,15 @@ public sealed class StoredEmailAttachmentTextSelectionTests
     {
         var email = new StoredEmailEntity
         {
-            OwnerId = Owner,
+            UserId = User,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                OwnerId = Owner,
+                UserId = User,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { OwnerId = Owner, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { UserId = User, Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,

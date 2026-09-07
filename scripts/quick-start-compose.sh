@@ -370,7 +370,7 @@ The MCP endpoint is what a chat client connects to. It is served over plain HTTP
 way — MailFathom terminates no TLS of its own — so what this decides is whether a client also has to
 present a key.
 
-  api-key  The endpoint accepts a key the running deployment mints for the owner, and the client
+  api-key  The endpoint accepts a key the running deployment mints for the user, and the client
            sends it as a bearer credential. Minting it is one mfctl command against the
            administrative endpoint, which this script then turns on for you. Two popular chat
            clients offer no field for a key, and cannot connect to an endpoint configured this way.
@@ -421,7 +421,7 @@ TEXT
   cat << TEXT
 
 The administrative endpoint is what mfctl talks to: synchronization state, what was changed, what a
-question read, the credentials an owner's clients present, and the operations that erase a folder. It
+question read, the credentials a user's clients present, and the operations that erase a folder. It
 is served on its own port ($admin_port), also on 127.0.0.1 and also over plain HTTP.
 
 An entry that writes no grant reaches every administrative operation, so a key here is as sensitive
@@ -429,7 +429,7 @@ as the mail it can dispose of.
 
 TEXT
 
-  # An authenticated MCP endpoint has nowhere else to get its key from: it is a record beside the owner, minted with
+  # An authenticated MCP endpoint has nowhere else to get its key from: it is a record beside the user, minted with
   # `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather than an extra. The validation
   # above has already turned it on; this is where the operator is told why.
   if [[ "$mcp_authentication" == 'api-key' ]]; then
@@ -560,7 +560,7 @@ write_secret 'secrets/mailfathom-database-password' "$(openssl rand -base64 33 |
 write_secret "secrets/mailfathom/$imap_password_name" "$mailbox_password"
 
 # The list names the methods this endpoint accepts and holds no credential: what a client presents resolves a record
-# beside the owner whose mail it reaches, and that record is minted over the administrative endpoint below.
+# beside the user whose mail it reaches, and that record is minted over the administrative endpoint below.
 mcp_authentication_block='[]'
 if [[ "$mcp_authentication" == 'api-key' ]]; then
   mcp_authentication_block=$(
@@ -573,7 +573,7 @@ JSON
 fi
 
 # The client's own surface, which is where the page a browser downloads is served from and what it will call back to. It
-# accepts one method and nothing else: an owner's username and password is the one credential a person can present from
+# accepts one method and nothing else: a user's username and password is the one credential a person can present from
 # a browser without an authorization server behind it, and an evaluation has none. The entry names the method and holds
 # no credential — a record is minted over the administrative endpoint, and this script mints none, because the page does
 # not sign in yet. No port is stated, because the endpoints share the container's 8080 and that is the socket
@@ -760,7 +760,7 @@ report_connection() {
     "$published_port" >&2
 
   if [[ "$mcp_authentication" == 'api-key' ]]; then
-    printf 'It accepts a key, and the deployment mints one for the owner once it is running:\n\n' >&2
+    printf 'It accepts a key, and the deployment mints one for the user once it is running:\n\n' >&2
     printf '  mfctl credential create --method api-key\n\n' >&2
     printf 'That prints the key once and keeps only a digest of it. Give the client an Authorization\n' >&2
     printf 'header of `Bearer <key>` with what it printed.\n' >&2
@@ -916,7 +916,7 @@ fi
 
 printf 'Applying the schema as the role MailFathom connects as.\n' >&2
 
-# As `mailfathom`, never as `postgres`: PostgreSQL makes the role that ran the DDL the owner of what it created, and a
+# As `mailfathom`, never as `postgres`: PostgreSQL makes the role that ran the DDL the user of what it created, and a
 # schema applied by the superuser leaves MailFathom refusing to start against a schema that plainly exists.
 psql_in_container '' < "$work_directory/$schema_asset" > /dev/null
 

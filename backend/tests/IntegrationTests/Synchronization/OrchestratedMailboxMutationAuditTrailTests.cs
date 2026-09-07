@@ -132,7 +132,7 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
             subject,
             cancellationToken);
         var unauditedRequester = MailboxMutationRequester.Command($"trail-off-{Guid.NewGuid():N}");
-        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, unauditedRequester, isSeen: true);
+        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.User, occurrence, unauditedRequester, isSeen: true);
 
         // Act
         var outcome = await PerformAsync(services, request, cancellationToken);
@@ -186,18 +186,18 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
     {
         if (mutation == MailboxMutation.Relocate)
         {
-            return MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
+            return MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, ArchivePath);
         }
 
         if (mutation == MailboxMutation.Copy)
         {
-            return MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
+            return MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, ArchivePath);
         }
 
         if (mutation == MailboxMutation.Delete)
         {
             return MailboxMutationRequest.Delete(
-                storedEmailId, SyntheticMailAccount.Owner,
+                storedEmailId, SyntheticMailAccount.User,
                 occurrence,
                 Requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy);
@@ -205,27 +205,27 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
 
         if (mutation == MailboxMutation.SetSeen)
         {
-            return MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isSeen: true);
+            return MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, isSeen: true);
         }
 
         if (mutation == MailboxMutation.SetFlagged)
         {
-            return MailboxMutationRequest.SetFlagged(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isFlagged: true);
+            return MailboxMutationRequest.SetFlagged(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, isFlagged: true);
         }
 
         if (mutation == MailboxMutation.AddKeywords)
         {
-            return MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, AuditedKeywords);
         }
 
         if (mutation == MailboxMutation.RemoveKeywords)
         {
-            return MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, AuditedKeywords);
         }
 
         if (mutation == MailboxMutation.SetKeywords)
         {
-            return MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, AuditedKeywords);
         }
 
         throw new NotSupportedException(

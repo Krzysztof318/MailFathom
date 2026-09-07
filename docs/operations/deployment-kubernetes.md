@@ -302,7 +302,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 
 | To turn on | Configure | Reference |
 | --- | --- | --- |
-| API keys | `McpEndpoint:Authentication`, which names the method; each owner's key is minted with [`mfctl credential create`](admin-endpoint.md#owner-credentials) rather than mounted as a Secret | [Authentication](mcp-endpoint.md#authentication) |
+| API keys | `McpEndpoint:Authentication`, which names the method; each user's key is minted with [`mfctl credential create`](admin-endpoint.md#user-credentials) rather than mounted as a Secret | [Authentication](mcp-endpoint.md#authentication) |
 | An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
 | Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
@@ -500,7 +500,7 @@ pod in the release that reads mail content in the clear.
 > `deploy: false` pointing at it.
 
 **Rule updates and DNS.** `DNS_CHECKS` is off, so the daemon runs local rules and sends nothing derived from the
-owner's mail to a third-party blocklist. Whether it can fetch rule updates is your cluster's egress policy rather than a
+user's mail to a third-party blocklist. Whether it can fetch rule updates is your cluster's egress policy rather than a
 chart value; a corpus frozen at the image's build scores today's mail worse than a fresh one, and the feature page states
 that trade.
 

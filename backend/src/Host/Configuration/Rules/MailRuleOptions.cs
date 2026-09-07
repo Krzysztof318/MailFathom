@@ -88,7 +88,7 @@ internal sealed class MailRuleOptions
     /// Written as <c>Every &lt;hh:mm:ss&gt;</c>, or <c>Every &lt;d.hh:mm:ss&gt;</c> for an interval of a day or more —
     /// <c>Every 7.00:00:00</c> — or as <c>Daily at &lt;HH:mm&gt;</c> with an optional IANA time zone —
     /// <c>Daily at 03:30 Europe/Warsaw</c>. <strong>A time with no zone is UTC</strong>, which is worth reading twice: a
-    /// housekeeping rule an owner believes runs at night is the one place that answer is noticed.
+    /// housekeeping rule a user believes runs at night is the one place that answer is noticed.
     /// </para>
     /// <para>
     /// Required by and only by the <c>Schedule</c> trigger. A schedule without the trigger names occasions nothing acts

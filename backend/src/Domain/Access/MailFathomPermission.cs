@@ -82,7 +82,7 @@ public readonly record struct MailFathomPermission
     /// <para>
     /// It is the first grant on this surface that reaches somebody's mail server rather than the local copy, which is
     /// why it is its own and does not follow from <see cref="MailRead" />: a deployment that lets an agent read the
-    /// mailbox has not thereby let it change what the owner sees in their own client. Nothing about it widens what may
+    /// mailbox has not thereby let it change what the user sees in their own client. Nothing about it widens what may
     /// be read, either, since no permission implies another.
     /// </para>
     /// <para>
@@ -98,10 +98,10 @@ public readonly record struct MailFathomPermission
     /// <remarks>
     /// <para>
     /// It is apart from <see cref="MailFlagsWrite" /> because the two risk different things. A flag is one bit of a
-    /// message that stays where it was, and the worst a wrong one does is misdescribe mail the owner can still find;
+    /// message that stays where it was, and the worst a wrong one does is misdescribe mail the user can still find;
     /// a move displaces the message, and on a server without <c>MOVE</c> the sequence is a copy and a delete, so a
     /// failure between them is the one mailbox change that can lose mail rather than misstate it. A deployment that
-    /// lets a caller mark and label mail has not thereby let it file that mail somewhere the owner does not look.
+    /// lets a caller mark and label mail has not thereby let it file that mail somewhere the user does not look.
     /// </para>
     /// <para>
     /// It is not a grant over folders. Creating, renaming, and deleting a folder are refused outright by
@@ -117,7 +117,7 @@ public readonly record struct MailFathomPermission
     /// <remarks>
     /// <para>
     /// It is the safe half of authoring mail, and it is its own name because that half is worth granting on its own. A
-    /// draft is delivered to nobody, can be withdrawn by deleting it, and lands in a folder the owner already reads —
+    /// draft is delivered to nobody, can be withdrawn by deleting it, and lands in a folder the user already reads —
     /// so an agent holding this and nothing else can prepare mail whose worst failure is a message in Drafts, which is
     /// the arrangement <see cref="MailSend" /> is too strong to describe.
     /// </para>
@@ -129,7 +129,7 @@ public readonly record struct MailFathomPermission
     /// </para>
     /// <para>
     /// Its effect does leave the deployment, unlike every other grant that is not <see cref="MailSend" />: a draft is
-    /// appended to the owner's own drafts folder on their own mail server, which is <see cref="MailFlagsWrite" />'s
+    /// appended to the user's own drafts folder on their own mail server, which is <see cref="MailFlagsWrite" />'s
     /// reach rather than a send's.
     /// </para>
     /// </remarks>
@@ -141,7 +141,7 @@ public readonly record struct MailFathomPermission
     /// It is the one grant on this surface whose effect leaves the deployment and cannot be withdrawn: a message that
     /// reached somebody else's mailbox is not recallable by any act available here. That is why it is its own name and
     /// follows from nothing — reading a mailbox is not writing from it, and <see cref="MailFlagsWrite" /> reaches the
-    /// owner's own mail server rather than a stranger's.
+    /// user's own mail server rather than a stranger's.
     /// </para>
     /// <para>
     /// It permits asking rather than sending: what it reaches writes a send down durably, and a delivery pass is what
@@ -151,7 +151,7 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailSend { get; } = new("mailfathom.mail.send", ProtectedSurface.Mail);
 
-    /// <summary>Gets the permission covering an owner maintaining the mail accounts their own record declares.</summary>
+    /// <summary>Gets the permission covering a user maintaining the mail accounts their own record declares.</summary>
     /// <remarks>
     /// <para>
     /// The one grant on this surface that changes what the deployment does rather than what it holds: withdrawing a
@@ -161,14 +161,14 @@ public readonly record struct MailFathomPermission
     /// mailboxes are read at all.
     /// </para>
     /// <para>
-    /// It reaches one owner's own record and cannot reach another's. Whose record it is comes from the principal
+    /// It reaches one user's own record and cannot reach another's. Whose record it is comes from the principal
     /// rather than from the request, so the grant says what may be done and never to whom, exactly as every other name
     /// on this surface does.
     /// </para>
     /// <para>
     /// It is deliberately not the administrative <see cref="AdminConfigurationWrite" /> under another name. That one
     /// decides what the deployment is — the endpoints it opens, the grants it honours, the model it bills — and an
-    /// owner holds none of it; this one decides which mailboxes are that person's, which is the only configuration
+    /// user holds none of it; this one decides which mailboxes are that person's, which is the only configuration
     /// that is theirs at all.
     /// </para>
     /// </remarks>
@@ -194,9 +194,9 @@ public readonly record struct MailFathomPermission
     /// <summary>Gets the permission covering the one operation that starts a provider bill, which is activating the declared embedding model.</summary>
     public static MailFathomPermission AdminSpend { get; } = new("mailfathom.admin.spend", ProtectedSurface.Administration);
 
-    /// <summary>Gets the permission covering disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and what the contact book derived from them, and an owner together with every message, folder, attachment, and derived index held for them.</summary>
+    /// <summary>Gets the permission covering disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and what the contact book derived from them, and a user together with every message, folder, attachment, and derived index held for them.</summary>
     /// <remarks>
-    /// Erasing an owner is here rather than under <see cref="AdminConfigurationWrite" /> because the two decide
+    /// Erasing a user is here rather than under <see cref="AdminConfigurationWrite" /> because the two decide
     /// different things: recording somebody decides what the deployment reads next, and removing them destroys what it
     /// already read. An operator granting this is granting the reach to delete a person and all of their mail, which is
     /// why the reach is stated rather than left to the routes that publish it.

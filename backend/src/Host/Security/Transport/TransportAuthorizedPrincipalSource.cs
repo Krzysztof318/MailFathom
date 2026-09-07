@@ -58,32 +58,32 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// Whose mail a caller is acting on is decided here too, and it is decided by the surface rather than by the credential.
-/// The MCP and client surfaces serve one person their own mail, so a caller either reaches them acting for the owner
+/// The MCP and client surfaces serve one person their own mail, so a caller either reaches them acting for the user
 /// this deployment serves or is not admitted; the administrative surface serves the deployment rather than a person, so
-/// a caller there acts for no owner and every owner-scoped use case refuses it. That is the whole of the distinction
+/// a caller there acts for no user and every user-scoped use case refuses it. That is the whole of the distinction
 /// between an ordinary caller and the deployment administrator, and it holds on both postures, because it is the path
 /// that decides it rather than what the request carried.
 /// </para>
 /// <para>
-/// One credential answers that question for itself. A username and password are a record of one owner's own, so a
-/// principal carrying <see cref="TransportCallerOwner" />'s claim acts for the owner the credential named rather than
+/// One credential answers that question for itself. A username and password are a record of one user's own, so a
+/// principal carrying <see cref="TransportCallerUser" />'s claim acts for the user the credential named rather than
 /// for whoever the deployment serves. Every other credential is something the deployment configured or an
-/// authorization server issued and names nobody, so the surface decides as above and the owner comes from the startup
-/// gate. The two are read apart rather than merged, because widening a credential that does name an owner to the
-/// deployment's owner would be the one mistake this distinction exists to prevent.
+/// authorization server issued and names nobody, so the surface decides as above and the user comes from the startup
+/// gate. The two are read apart rather than merged, because widening a credential that does name a user to the
+/// deployment's user would be the one mistake this distinction exists to prevent.
 /// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
 {
     private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly IDeploymentMailOwnerSource deploymentOwner;
+    private readonly IDeploymentMailUserSource deploymentUser;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
 
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
-    /// <param name="deploymentOwner">Names the owner a caller on a mail-serving surface is admitted to act for.</param>
+    /// <param name="deploymentUser">Names the user a caller on a mail-serving surface is admitted to act for.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
@@ -91,19 +91,19 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
-        IDeploymentMailOwnerSource deploymentOwner,
+        IDeploymentMailUserSource deploymentUser,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
-        ArgumentNullException.ThrowIfNull(deploymentOwner);
+        ArgumentNullException.ThrowIfNull(deploymentUser);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
-        this.deploymentOwner = deploymentOwner;
+        this.deploymentUser = deploymentUser;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
@@ -137,33 +137,33 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
                 path,
                 identity,
                 TransportGrant.PermissionsCarriedBy(context.User),
-                TransportCallerOwner.CarriedBy(context.User))
+                TransportCallerUser.CarriedBy(context.User))
             : this.UnnarrowedCallerOn(path);
     }
 
-    /// <summary>Describes a caller a scheme validated, acting for the owner its credential named or the one the surface it reached serves.</summary>
+    /// <summary>Describes a caller a scheme validated, acting for the user its credential named or the one the surface it reached serves.</summary>
     /// <remarks>
     /// The two mail-serving surfaces answer one person about their own mail, so a caller admitted there is admitted for
-    /// an owner: the one their credential named where it named one, and otherwise the one this deployment serves. The
-    /// administrative surface answers for the deployment, so a caller admitted there acts for no owner and is refused
+    /// a user: the one their credential named where it named one, and otherwise the one this deployment serves. The
+    /// administrative surface answers for the deployment, so a caller admitted there acts for no user and is refused
     /// by every use case scoped to one — which is what makes the deployment administrator a principal rather than a
-    /// grant, and why a credential naming an owner does not turn one into an owner's caller there. A path neither
+    /// grant, and why a credential naming a user does not turn one into a user's caller there. A path neither
     /// surface serves is neither, and a caller cannot reach one: the routes this host maps all belong to a surface.
     /// </remarks>
     private AuthorizedPrincipal AdmittedCallerOn(
         PathString path,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions,
-        MailOwnerId? credentialOwner) =>
-        ServesOneOwnersMail(path)
+        MailUserId? credentialUser) =>
+        ServesOneUsersMail(path)
             ? AuthorizedPrincipal.CallerActingFor(
-                credentialOwner ?? this.deploymentOwner.Owner,
+                credentialUser ?? this.deploymentUser.User,
                 identity,
                 grantedPermissions)
             : AuthorizedPrincipal.Caller(identity, grantedPermissions);
 
     /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>
-    private static bool ServesOneOwnersMail(PathString path) =>
+    private static bool ServesOneUsersMail(PathString path) =>
         TransportSurface.Client.Serves(path) || TransportSurface.Mcp.Serves(path);
 
     /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
@@ -216,14 +216,14 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
     /// <summary>Describes the caller a surface configuring no credential admits, acting for whoever that surface serves.</summary>
     /// <remarks>
-    /// This is the unauthenticated posture, and the owner reaches it by the same rule as an authenticated caller rather
+    /// This is the unauthenticated posture, and the user reaches it by the same rule as an authenticated caller rather
     /// than by one written for it: the surface decides. A deployment that authenticates nobody therefore constructs the
-    /// same owner principal for every request on the two mail-serving surfaces, which is exactly what an installation
-    /// serving one person expects, and the startup gate is what guarantees there is one owner for that to mean.
+    /// same user principal for every request on the two mail-serving surfaces, which is exactly what an installation
+    /// serving one person expects, and the startup gate is what guarantees there is one user for that to mean.
     /// </remarks>
     private AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface, PathString path) => this.AdmittedCallerOn(
         path,
         TransportCallerIdentity.AnonymousCaller,
         MailFathomPermission.PublishedFor(surface.GrantedSurface),
-        credentialOwner: null);
+        credentialUser: null);
 }

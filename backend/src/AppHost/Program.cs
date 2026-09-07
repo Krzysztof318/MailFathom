@@ -191,7 +191,7 @@ if (runsIntegrationTests)
     // path-style addressing against a custom endpoint, the conditional write §2 of ADR 0017 rests on, the digest the
     // endpoint agrees it received, the listing reclamation pages through, and the bytes.
     //
-    // It is AGPL-3.0-or-later, which the acceptance policy in `THIRD_PARTY_LICENSES.md` places behind the owner's
+    // It is AGPL-3.0-or-later, which the acceptance policy in `THIRD_PARTY_LICENSES.md` places behind the user's
     // explicit approval; issue #1131 is that approval, and the register carries the reading it was granted under — a
     // separate process reached over the network, pulled from its own registry, with nothing vendored, linked, or
     // redistributed here.

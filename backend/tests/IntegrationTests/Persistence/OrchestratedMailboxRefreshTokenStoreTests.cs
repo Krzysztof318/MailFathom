@@ -34,7 +34,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
 
     private const string OtherAccount = "refresh-token-binding-other";
 
-    /// <summary>The one identifier two owners each hold an account under, which is what the composite key permits.</summary>
+    /// <summary>The one identifier two users each hold an account under, which is what the composite key permits.</summary>
     private const string SharedNameAccount = "refresh-token-shared-name";
 
     /// <summary>One test covers the whole write path, because storing twice is the same operation as storing once.</summary>
@@ -45,7 +45,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.Owner,
+            SyntheticMailAccount.User,
             MailAccountId.Create(RoundTrippedAccount));
 
         // Act
@@ -84,7 +84,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.Owner,
+            SyntheticMailAccount.User,
             MailAccountId.Create(StragglerWriteAccount));
         await SaveAsync(services, account, "the-current-refresh-token", cancellationToken);
 
@@ -110,7 +110,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         Assert.Equal("the-current-refresh-token", readBack.RevealAsString());
     }
 
-    /// <summary>A row moved between accounts fails to open rather than opening as the wrong owner's credential.</summary>
+    /// <summary>A row moved between accounts fails to open rather than opening as the wrong user's credential.</summary>
     [Fact]
     public async Task FindTokenAsync_ARowMovedToAnotherAccount_RefusesToOpenIt()
     {
@@ -118,12 +118,12 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var account = MailAccountIdentity.Create(
-            SyntheticMailAccount.Owner,
+            SyntheticMailAccount.User,
             MailAccountId.Create(MovedRowAccount));
         await SaveAsync(services, account, "a-refresh-token", cancellationToken);
 
         // Act — what a restored dump, a mistaken repair, or a stolen row copied into another tenant's account looks
-        // like from the database's side: the same ciphertext under a different owner.
+        // like from the database's side: the same ciphertext under a different user.
         await services.InScopeAsync(
             async (scope, token) =>
             {
@@ -132,8 +132,8 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                 return await dbContext.Database.ExecuteSqlAsync(
                     $"""
                      INSERT INTO mailbox_refresh_tokens
-                         ("OwnerId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
-                     SELECT "OwnerId", {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
+                         ("UserId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
+                     SELECT "UserId", {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
                      FROM mailbox_refresh_tokens
                      WHERE "MailboxAccountId" = {MovedRowAccount}
                      """,
@@ -145,21 +145,21 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         await Assert.ThrowsAnyAsync<CryptographicException>(() => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>()
                 .FindTokenAsync(
-                    MailAccountIdentity.Create(SyntheticMailAccount.Owner, MailAccountId.Create(OtherAccount)),
+                    MailAccountIdentity.Create(SyntheticMailAccount.User, MailAccountId.Create(OtherAccount)),
                     token),
             cancellationToken));
     }
 
     /// <summary>
-    /// Two owners each holding a token for an account of one name keep two rows, each opens only its own, and a row
+    /// Two users each holding a token for an account of one name keep two rows, each opens only its own, and a row
     /// copied between them refuses to open.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Both halves are new with the composite key. The two rows exist because the table is keyed by the owner and the
-    /// identifier together — under the single-column key the second save would have overwritten the first owner's
+    /// Both halves are new with the composite key. The two rows exist because the table is keyed by the user and the
+    /// identifier together — under the single-column key the second save would have overwritten the first user's
     /// credential — and the refusal is what keeps the binding meaningful once one identifier no longer names one
-    /// account: bound to the identifier alone, both owners' tokens would carry the same associated data and each
+    /// account: bound to the identifier alone, both users' tokens would carry the same associated data and each
     /// would open as the other's.
     /// </para>
     /// <para>
@@ -168,21 +168,21 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task FindTokenAsync_TwoOwnersHoldingOneAccountName_EachOpensOnlyTheirOwnToken()
+    public async Task FindTokenAsync_TwoUsersHoldingOneAccountName_EachOpensOnlyTheirOwnToken()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var foreignOwnerId = Guid.CreateVersion7();
+        var foreignUserId = Guid.CreateVersion7();
         var accountId = MailAccountId.Create(SharedNameAccount);
-        var ours = MailAccountIdentity.Create(SyntheticMailAccount.Owner, accountId);
-        var theirs = MailAccountIdentity.Create(MailOwnerId.Create(foreignOwnerId), accountId);
+        var ours = MailAccountIdentity.Create(SyntheticMailAccount.User, accountId);
+        var theirs = MailAccountIdentity.Create(MailUserId.Create(foreignUserId), accountId);
 
         try
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
+                await OrchestratedForeignUser.ProvisionAsync(services, foreignUserId, cancellationToken));
 
             // Act
             await SaveAsync(services, ours, "our-refresh-token", cancellationToken);
@@ -203,7 +203,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
             Assert.Equal("our-refresh-token", ourToken.RevealAsString());
             Assert.Equal("their-refresh-token", theirToken.RevealAsString());
 
-            // The other owner's ciphertext put under ours: bound to the identifier alone it would open as ours.
+            // The other user's ciphertext put under ours: bound to the identifier alone it would open as ours.
             await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
                     $"""
@@ -212,9 +212,9 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                          "DataEncryptionKeyId" = theirs."DataEncryptionKeyId"
                      FROM mailbox_refresh_tokens AS theirs
                      WHERE ours."MailboxAccountId" = {SharedNameAccount}
-                       AND ours."OwnerId" = {SyntheticMailAccount.Owner.Value}
+                       AND ours."UserId" = {SyntheticMailAccount.User.Value}
                        AND theirs."MailboxAccountId" = {SharedNameAccount}
-                       AND theirs."OwnerId" = {foreignOwnerId}
+                       AND theirs."UserId" = {foreignUserId}
                      """,
                     token),
                 cancellationToken);
@@ -225,7 +225,7 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         }
         finally
         {
-            await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
+            await OrchestratedForeignUser.EraseAsync(services, foreignUserId);
         }
     }
 

@@ -57,7 +57,7 @@ public sealed class DeadLetteredJobDecisionStatementsTests
     /// <summary>
     /// The turn comes forward with the available instant, because the one the row is carrying was decided against a
     /// queue that has since drained. Left where it was, a job dead-lettered last week would be claimed before every
-    /// owner's due work the moment an operator offered it again — and a sitting spent returning a dozen of them would
+    /// user's due work the moment an operator offered it again — and a sitting spent returning a dozen of them would
     /// put the whole dozen there.
     /// </summary>
     [Fact]

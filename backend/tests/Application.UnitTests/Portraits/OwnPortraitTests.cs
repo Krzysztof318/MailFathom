@@ -13,7 +13,7 @@ namespace MailFathom.Application.UnitTests.Portraits;
 
 /// <summary>
 /// Covers the use case a person reads, replaces, and removes their own portrait through. What it has to hold is that
-/// the owner acted on is the one the credential authenticated rather than one a caller could name, that the grant
+/// the user acted on is the one the credential authenticated rather than one a caller could name, that the grant
 /// required is the one a signed-in person already holds rather than the grant over their mail configuration, and that
 /// having no picture is answered as such rather than as a failure.
 /// </summary>
@@ -41,8 +41,8 @@ public sealed class OwnPortraitTests
     public async Task ReadAsync_APersonWhoSuppliedNone_AnswersNothing()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns((ReadOnlyMemory<byte>?)null);
 
         var portraits = ReachedBy(store, MailFathomPermission.MailRead);
@@ -62,27 +62,27 @@ public sealed class OwnPortraitTests
         Assert.Null(await portraits.ReadAsync(TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The owner is resolved from the principal, so a deployment serving two people reads the caller's own row and never the other.</summary>
+    /// <summary>The user is resolved from the principal, so a deployment serving two people reads the caller's own row and never the other.</summary>
     [Fact]
-    public async Task ReadAsync_ADeploymentServingSeveralPeople_ReadsTheRowOfTheOwnerTheCredentialAuthenticated()
+    public async Task ReadAsync_ADeploymentServingSeveralPeople_ReadsTheRowOfTheUserTheCredentialAuthenticated()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        var portraits = ReachedBy(store, SyntheticMailOwner.Another, MailFathomPermission.MailRead);
+        var store = Substitute.For<IUserPortraitStore>();
+        var portraits = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await portraits.ReadAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        await store.Received(1).ReadAsync(SyntheticMailOwner.Another, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().ReadAsync(SyntheticMailOwner.Deployment, Arg.Any<CancellationToken>());
+        await store.Received(1).ReadAsync(SyntheticMailUser.Another, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().ReadAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ReadAsync_ACallerGrantedNothing_IsRefused()
     {
         // Arrange
-        var portraits = ReachedBy(Substitute.For<IOwnerPortraitStore>());
+        var portraits = ReachedBy(Substitute.For<IUserPortraitStore>());
 
         // Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -91,12 +91,12 @@ public sealed class OwnPortraitTests
 
     /// <summary>An administrator acts for nobody's mail, so there is no picture of theirs to read here.</summary>
     [Fact]
-    public async Task ReadAsync_ACallerActingForNoOwner_IsRefused()
+    public async Task ReadAsync_ACallerActingForNoUser_IsRefused()
     {
         // Arrange
         var portraits = new OwnPortrait(
             AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.MailRead),
-            Substitute.For<IOwnerPortraitStore>());
+            Substitute.For<IUserPortraitStore>());
 
         // Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
@@ -104,15 +104,15 @@ public sealed class OwnPortraitTests
     }
 
     [Fact]
-    public async Task ReplaceAsync_APersonSupplyingAPicture_WritesItForTheOwnerTheCredentialAuthenticated()
+    public async Task ReplaceAsync_APersonSupplyingAPicture_WritesItForTheUserTheCredentialAuthenticated()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         var portraits = ReachedBy(store, MailFathomPermission.MailRead);
-        var portrait = OwnerPortrait.Of(Png)!;
+        var portrait = UserPortrait.Of(Png)!;
 
         // Act
         var written = await portraits.ReplaceAsync(portrait, TestContext.Current.CancellationToken);
@@ -120,22 +120,22 @@ public sealed class OwnPortraitTests
         // Assert
         Assert.True(written);
         await store.Received(1)
-            .SaveAsync(SyntheticMailOwner.Deployment, portrait, Arg.Any<CancellationToken>());
+            .SaveAsync(SyntheticMailUser.Deployment, portrait, Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The row behind an authenticated caller can be gone, which is an owner erased under a credential that has not yet been withdrawn.</summary>
+    /// <summary>The row behind an authenticated caller can be gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task ReplaceAsync_ACallerWhoseRowHasGone_ReportsThatThereWasNobodyToWriteFor()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var portraits = ReachedBy(store, MailFathomPermission.MailRead);
 
         // Act
-        var written = await portraits.ReplaceAsync(OwnerPortrait.Of(Png)!, TestContext.Current.CancellationToken);
+        var written = await portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(written);
@@ -146,22 +146,22 @@ public sealed class OwnPortraitTests
     public async Task ReplaceAsync_ACallerGrantedOnlyTheirMailConfiguration_IsRefused()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
         var portraits = ReachedBy(store, MailFathomPermission.MailAccountsWrite);
 
         // Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => portraits.ReplaceAsync(OwnerPortrait.Of(Png)!, TestContext.Current.CancellationToken));
+            () => portraits.ReplaceAsync(UserPortrait.Of(Png)!, TestContext.Current.CancellationToken));
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ReplaceAsync_NoPictureAtAll_IsRefusedBeforeAnythingIsWritten()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
         var portraits = ReachedBy(store, MailFathomPermission.MailRead);
 
         // Assert
@@ -169,53 +169,53 @@ public sealed class OwnPortraitTests
             () => portraits.ReplaceAsync(null!, TestContext.Current.CancellationToken));
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<UserPortrait>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task RemoveAsync_APersonTakingTheirPictureDown_RemovesTheirOwnAndNobodyElses()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
-        var portraits = ReachedBy(store, SyntheticMailOwner.Another, MailFathomPermission.MailRead);
+        var store = Substitute.For<IUserPortraitStore>();
+        var portraits = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await portraits.RemoveAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        await store.Received(1).RemoveAsync(SyntheticMailOwner.Another, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().RemoveAsync(SyntheticMailOwner.Deployment, Arg.Any<CancellationToken>());
+        await store.Received(1).RemoveAsync(SyntheticMailUser.Another, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().RemoveAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task RemoveAsync_ACallerGrantedNothing_IsRefused()
     {
         // Arrange
-        var store = Substitute.For<IOwnerPortraitStore>();
+        var store = Substitute.For<IUserPortraitStore>();
         var portraits = ReachedBy(store);
 
         // Assert
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
             () => portraits.RemoveAsync(TestContext.Current.CancellationToken));
 
-        await store.DidNotReceive().RemoveAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive().RemoveAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>());
     }
 
-    private static IOwnerPortraitStore StoreHolding(byte[] content)
+    private static IUserPortraitStore StoreHolding(byte[] content)
     {
-        var store = Substitute.For<IOwnerPortraitStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        var store = Substitute.For<IUserPortraitStore>();
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(new ReadOnlyMemory<byte>(content));
 
         return store;
     }
 
-    private static OwnPortrait ReachedBy(IOwnerPortraitStore store, params MailFathomPermission[] granted) =>
-        ReachedBy(store, SyntheticMailOwner.Deployment, granted);
+    private static OwnPortrait ReachedBy(IUserPortraitStore store, params MailFathomPermission[] granted) =>
+        ReachedBy(store, SyntheticMailUser.Deployment, granted);
 
     private static OwnPortrait ReachedBy(
-        IOwnerPortraitStore store,
-        MailOwnerId owner,
+        IUserPortraitStore store,
+        MailUserId user,
         params MailFathomPermission[] granted) =>
-        new(AccessAuthorizations.ForOwnerGranted(owner, granted), store);
+        new(AccessAuthorizations.ForUserGranted(user, granted), store);
 }

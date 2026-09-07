@@ -18,7 +18,7 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// What only a composed host can establish is that these five routes exist at all and inherit the group's requirement.
 /// The unit suite maps the group and reads the permission each route publishes, which says nothing about a process that
 /// dropped one of them or a filter that was written and never attached — and an outbox served to an unauthenticated
-/// caller is a list of what this owner is sending, while a decision route served to one is a way to put a message back
+/// caller is a list of what this user is sending, while a decision route served to one is a way to put a message back
 /// on its way to somebody's mailbox.
 /// </para>
 /// <para>

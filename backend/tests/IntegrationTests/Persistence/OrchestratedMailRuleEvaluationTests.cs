@@ -489,7 +489,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     JudgedExtractionOf(occurrenceId, subject),
                     StoredEmailContentAvailability.Available,
@@ -516,7 +516,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, SubjectOf(uid)),
                     extractedMetadata: null,
                     contentAvailability,

@@ -38,7 +38,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed record StoredEmailSummaryRow(
     Guid Id,
-    Guid OwnerId,
+    Guid UserId,
     string MailboxAccountId,
     string FolderAlias,
     Guid? ThreadId,
@@ -80,7 +80,7 @@ internal sealed record StoredEmailSummaryRow(
     public static Expression<Func<StoredEmailEntity, StoredEmailSummaryRow>> Projection { get; } = email =>
         new StoredEmailSummaryRow(
             email.Id,
-            email.OwnerId,
+            email.UserId,
             email.MailboxAccountId,
             email.MailFolder.Alias,
             email.EmailThreadId,
@@ -124,7 +124,7 @@ internal sealed record StoredEmailSummaryRow(
     {
         StoredEmailId = StoredEmailId.Create(this.Id),
         Account = MailAccountIdentity.Create(
-            MailOwnerId.Create(this.OwnerId),
+            MailUserId.Create(this.UserId),
             MailAccountId.Create(this.MailboxAccountId)),
         FolderAlias = MailFolderAlias.Create(this.FolderAlias),
         ThreadId = this.ThreadId is { } threadId ? EmailThreadId.Create(threadId) : null,

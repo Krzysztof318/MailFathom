@@ -13,7 +13,7 @@ informed:
 
 ## Context and Problem Statement
 
-Every tool MailFathom publishes today is safe to call by mistake. The worst outcome of a wrong `search_emails` is a wasted result, and `set_mail_flags` — the one tool that is not read-only — changes a mailbox its owner can change back. A wrong send is in somebody else's mailbox and cannot be recalled, and the caller is a language model acting on text that arrived from strangers. Issue 744 is the gate of issue 768 and asks what must have happened before mail leaves the process on a tool call, and who is responsible for making it happen.
+Every tool MailFathom publishes today is safe to call by mistake. The worst outcome of a wrong `search_emails` is a wasted result, and `set_mail_flags` — the one tool that is not read-only — changes a mailbox its user can change back. A wrong send is in somebody else's mailbox and cannot be recalled, and the caller is a language model acting on text that arrived from strangers. Issue 744 is the gate of issue 768 and asks what must have happened before mail leaves the process on a tool call, and who is responsible for making it happen.
 
 The protocol offers four answers and they are not equivalent: rely on the client's reading of the tool annotations, require elicitation, split the send into two calls joined by a server-minted token, or queue the message behind a cancellable hold. Which of them MailFathom requires decides the shape of every tool under issue 768, including whether `send_email` is one call or two, and what `destructiveHint` means for an act that destroys nothing and cannot be undone.
 
@@ -68,7 +68,7 @@ It is the only part of this decision that holds regardless of what the caller is
 
 ### The annotations are published, honest, and understood to be advisory
 
-A sending tool takes `readOnlyHint=false` and `openWorldHint=true`, which together say it changes state outside the caller and reaches a server this deployment does not own. `set_mail_flags` already carries both, so neither value is new to the surface; what is new is where the second one points, since that tool reaches the owner's own mailbox and this one reaches a submission server and a recipient nobody here controls. `idempotentHint` is `false`: a repeat of a send is a second message unless the caller supplied an idempotency key, and an annotation describes the tool as it may be called rather than as a careful caller would call it. Issue 746 may set it `true` if and only if it makes such a key required, in which case the annotation becomes true of the tool rather than of one way of using it.
+A sending tool takes `readOnlyHint=false` and `openWorldHint=true`, which together say it changes state outside the caller and reaches a server this deployment does not own. `set_mail_flags` already carries both, so neither value is new to the surface; what is new is where the second one points, since that tool reaches the user's own mailbox and this one reaches a submission server and a recipient nobody here controls. `idempotentHint` is `false`: a repeat of a send is a second message unless the caller supplied an idempotency key, and an annotation describes the tool as it may be called rather than as a careful caller would call it. Issue 746 may set it `true` if and only if it makes such a key required, in which case the annotation becomes true of the tool rather than of one way of using it.
 
 `destructiveHint` is `true`, and the reason is the one the protocol has no word for. The vocabulary offers two values and the SDK states them plainly: `true` where a tool *can perform destructive updates to its environment*, `false` where it *performs only additive updates*. Sending is literally additive — it creates a message where none was and overwrites nothing — so a literal reading gives `false`. The protocol has no `irreversibleHint`; `destructiveHint` is the nearest thing it has, and this record takes it, because the annotation is not a taxonomy entry but the input to a client's decision about whether a call needs a person, and `false` would place `send_email` in the same class as `create_contact`, which is one call to undo.
 
@@ -100,7 +100,7 @@ Elsewhere is `save_draft` and `send_draft` (issue 750), which are the compose-th
 
 An operator may set a window during which a queued message is not yet transmitted and `cancel_outgoing_email` still works. It composes with everything above rather than replacing any of it, and it is the one of the operator's two choices that no client setting can retract, because it lives entirely on this side of the connection. It converts a mistake from prevented to recoverable, which is a weaker promise and a keepable one.
 
-It is off by default, for the reason the confirmation is: the mailbox owner asking an agent to send something is usually watching, and a deployment that wants the window sets it. The mechanism is issue 742's and the cancellation is issue 748's; this record decides only that the window is a legitimate answer to issue 744's question and that its absence is the default.
+It is off by default, for the reason the confirmation is: the mailbox user asking an agent to send something is usually watching, and a deployment that wants the window sets it. The mechanism is issue 742's and the cancellation is issue 748's; this record decides only that the window is a legitimate answer to issue 744's question and that its absence is the default.
 
 ### What this record does not settle
 
@@ -126,7 +126,7 @@ It is off by default, for the reason the confirmation is: the mailbox owner aski
 - `Mcp.UnitTests` asserts the advertised `tools/list` metadata against the contract and fails the build on drift, which is what carries the four annotation values; the sending tool joins that assertion when issue 746 lands.
 - The refusal paths — confirmation required and unmet, declined, cancelled — are unit-tested against the use case and proven over a real endpoint in the composed-host suite, as the existing tools' refusals are.
 - That no MCP path transmits synchronously is already structural: `Boundaries.UnitTests` reads the compiled intermediate language of every assembly and fails a reference to `IMailDeliverySession` or its factory from anywhere but `Application` and `Infrastructure`, so an MCP tool cannot reach a submission channel even inside a method body.
-- [MCP tools](../features/mcp-tools.md) gains the sending row in its annotation table, the second ground for `destructiveHint` beside the one it already states, and the first `openWorldHint=true` on a tool that reaches a server outside the owner's own mailbox; the sending tools' documentation states the confirmation contract and what a deployment that enables it asks of a client.
+- [MCP tools](../features/mcp-tools.md) gains the sending row in its annotation table, the second ground for `destructiveHint` beside the one it already states, and the first `openWorldHint=true` on a tool that reaches a server outside the user's own mailbox; the sending tools' documentation states the confirmation contract and what a deployment that enables it asks of a client.
 
 ## Pros and Cons of the Options
 
@@ -166,7 +166,7 @@ Delay transmission by a window the operator sets, and let the message be cancell
 - Good, because it is the only protection here that no client setting can remove.
 - Good, because it composes with each of the other three rather than competing with any of them, and the mechanism and the cancellation already have issues.
 - Neutral, because it makes a mistake recoverable rather than prevented, which is a weaker promise and one that can actually be kept.
-- Bad, because it only helps where somebody notices inside the window, and a delay is a real cost to an owner who asked for a message to go now — which is why it is off by default.
+- Bad, because it only helps where somebody notices inside the window, and a delay is a real cost to a user who asked for a message to go now — which is why it is off by default.
 
 ## More Information
 

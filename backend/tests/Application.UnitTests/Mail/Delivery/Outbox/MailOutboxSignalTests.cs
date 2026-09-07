@@ -12,9 +12,9 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 public sealed class MailOutboxSignalTests
 {
     private static readonly MailAccountIdentity Work =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailAccountIdentity Personal =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     /// <summary>A capacity below one would be a queue nothing can enter, so it is refused where it is stated.</summary>
     [Theory]

@@ -38,7 +38,7 @@ internal sealed class SpamActionOptions
     /// <summary>Gets or sets whether junk has its remote <c>\Seen</c> flag set.</summary>
     /// <remarks>
     /// This is the one authored act that sets that flag. Synchronization and content retrieval still never do, which is
-    /// the invariant this does not touch: reading a message on the owner's behalf must not mark it read, and deciding
+    /// the invariant this does not touch: reading a message on the user's behalf must not mark it read, and deciding
     /// that a message is junk the operator asked to have marked read is a different act entirely.
     /// </remarks>
     public bool MarkAsRead { get; set; }

@@ -542,7 +542,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionFrom(
                         occurrenceId,

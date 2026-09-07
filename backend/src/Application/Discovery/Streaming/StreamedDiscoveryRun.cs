@@ -210,7 +210,7 @@ public sealed class StreamedDiscoveryRun
     /// configured period rather than from what has been spent, so publishing it discloses nothing about the deployment's
     /// activity — and neither state names a consumed amount, for the reason
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md">ADR 0022</see>
-    /// gives: on a deployment serving several owners the remaining allowance is a report of what the others have been
+    /// gives: on a deployment serving several users the remaining allowance is a report of what the others have been
     /// doing.
     /// </remarks>
     private void EndOnCeiling(DiscoveryRunJournal journal, MailAnsweringBudgetExhaustedException spent) =>

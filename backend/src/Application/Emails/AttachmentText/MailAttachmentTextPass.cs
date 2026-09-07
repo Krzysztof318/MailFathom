@@ -72,7 +72,7 @@ public sealed class MailAttachmentTextPass
     /// <param name="embeddingBacklog">Takes each message whose attachments yielded passages on to the embedding worker.</param>
     /// <param name="gateTelemetry">Reports which of the classification gate's answers let each message through.</param>
     /// <param name="commitPolicy">Commits one message's readings, retrying a conflict with a competing writer.</param>
-    /// <param name="spendGate">Says whether the period still admits reading and describing for this owner, and is charged for what it did.</param>
+    /// <param name="spendGate">Says whether the period still admits reading and describing for this user, and is charged for what it did.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAttachmentTextPass(
         IStoredEmailAttachmentTextStore attachmentTextStore,
@@ -146,7 +146,7 @@ public sealed class MailAttachmentTextPass
             foreach (var email in batch)
             {
                 // Read before the message is opened rather than after it has been paid for, and read per message
-                // because whose mail it is decides which owner's ceiling applies. A period reached here stops the pass
+                // because whose mail it is decides which user's ceiling applies. A period reached here stops the pass
                 // with the message untouched, which is the degradation the ceilings promise: the work waits for the
                 // roll-over rather than failing the account run it is part of. The overshoot that admitting a whole
                 // message on any remaining room allows is bounded by what one message may cost, which is the ceiling
@@ -218,9 +218,9 @@ public sealed class MailAttachmentTextPass
             emailsRemain);
     }
 
-    /// <summary>Names the aggregate ceiling that refuses this owner's next message, or nothing where both admit it.</summary>
+    /// <summary>Names the aggregate ceiling that refuses this user's next message, or nothing where both admit it.</summary>
     /// <remarks>
-    /// The deployment's ceiling is reported in preference to the owner's by the admission itself, and extraction is
+    /// The deployment's ceiling is reported in preference to the user's by the admission itself, and extraction is
     /// asked before description because a message is read before any picture on it is sent anywhere: an operator whose
     /// extraction period is spent is told about the ceiling that actually stopped the walk.
     /// </remarks>
@@ -230,7 +230,7 @@ public sealed class MailAttachmentTextPass
     {
         var extraction = await this.spendGate.ReadCurrentPeriodForAsync(
             AttachmentDerivationStep.Extraction,
-            email.Owner,
+            email.User,
             cancellationToken);
 
         if (!extraction.AdmitsWork)
@@ -240,7 +240,7 @@ public sealed class MailAttachmentTextPass
 
         var description = await this.spendGate.ReadCurrentPeriodForAsync(
             AttachmentDerivationStep.Description,
-            email.Owner,
+            email.User,
             cancellationToken);
 
         return description.AdmitsWork ? null : description;
@@ -270,14 +270,14 @@ public sealed class MailAttachmentTextPass
         await this.spendGate.RecordSpendAsync(
             session,
             AttachmentDerivationStep.Extraction,
-            email.Owner,
+            email.User,
             derived.ExtractedOctetCount,
             cancellationToken);
 
         await this.spendGate.RecordSpendAsync(
             session,
             AttachmentDerivationStep.Description,
-            email.Owner,
+            email.User,
             derived.ProviderDescriptionCount,
             cancellationToken);
     }

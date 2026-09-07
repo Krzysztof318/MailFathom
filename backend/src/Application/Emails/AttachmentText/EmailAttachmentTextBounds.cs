@@ -18,7 +18,7 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// Both are counted in octets read rather than in characters sent, which is the distinction the record draws between
 /// this budget and the embedding one: what a provider is paid for is characters, and what a parser costs is the bytes
 /// it was handed. A message that runs out records the reason against the attachments it never opened, so the ceiling is
-/// answerable to an owner rather than silent; a run that runs out leaves the message it was on untouched, because
+/// answerable to a user rather than silent; a run that runs out leaves the message it was on untouched, because
 /// nothing about that message has been decided and the next run should reach it.
 /// </para>
 /// <para>

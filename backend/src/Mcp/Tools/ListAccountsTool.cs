@@ -24,13 +24,13 @@ namespace MailFathom.Mcp.Tools;
 /// <para>
 /// It is the one tool on this surface that publishes the account set rather than using it as a bound, and it exists
 /// because the other tools take an account filter a caller would otherwise have no way to fill in. What it publishes is
-/// the names the caller's own owner gave their accounts and the progress of synchronization against them: no mail
+/// the names the caller's own user gave their accounts and the progress of synchronization against them: no mail
 /// server, no port, no user name, and no credential reaches a caller through it, and neither does the name of an
 /// account belonging to anybody else.
 /// </para>
 /// <para>
-/// Both names are scoped to the owner that gave them, which the advertised description says because a client stores
-/// them. An identifier is unique within its owner and nowhere wider, so two owners may each call an account
+/// Both names are scoped to the user that gave them, which the advertised description says because a client stores
+/// them. An identifier is unique within its user and nowhere wider, so two users may each call an account
 /// <c>work</c>; a client that read one identifier as the deployment's own name for a mailbox would be holding a value
 /// that names a different mailbox in somebody else's hands.
 /// </para>
@@ -57,9 +57,9 @@ internal sealed class ListAccountsTool(
     /// <remarks>It reads the local mailbox copy, which is the retrieval surface a deployment standing an instance up for reading publishes on its own. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
     public static McpToolCategory Category => McpToolCategory.Mailbox;
 
-    /// <summary>Lists the accounts the caller's owner owns.</summary>
+    /// <summary>Lists the accounts the caller's user owns.</summary>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
-    /// <returns>The owner's accounts with their folders' freshness, and whether the deployment refreshes them.</returns>
+    /// <returns>The user's accounts with their folders' freshness, and whether the deployment refreshes them.</returns>
     [McpServerTool(
         Name = ToolName,
         Title = "List accounts",
@@ -72,9 +72,9 @@ internal sealed class ListAccountsTool(
         "Lists the mail accounts you may read. Call it to learn which mailboxes exist and what to "
         + "call them before narrowing a listing, a search, or a question to one: every account carries a configured "
         + "identifier and a readable display name, and either may be used to name it. Both names are the ones the "
-        + "account's owner gave it, and both are unique within that owner rather than across the deployment, so the "
-        + "same spelling can name a different mailbox under another owner: store either name as this owner's name for "
-        + "the mailbox, and never compare it with one that came from another owner or another deployment. Also reports "
+        + "account's user gave it, and both are unique within that user rather than across the deployment, so the "
+        + "same spelling can name a different mailbox under another user: store either name as this user's name for "
+        + "the mailbox, and never compare it with one that came from another user or another deployment. Also reports "
         + "how current the local copy of each folder is and whether synchronization is running at all, which is what "
         + "tells an empty answer about a mailbox apart from a mailbox nothing has synchronized. Reads the local copy "
         + "only: it never contacts a mail server, and it returns no mail, no mail server address, no user name, and no "

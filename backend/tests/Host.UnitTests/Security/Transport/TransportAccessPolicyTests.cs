@@ -24,10 +24,10 @@ public sealed class TransportAccessPolicyTests
 
     private const string Issuer = "https://sso.example.test/realms/mailfathom";
 
-    private const string OwnerSubject = "9f2c";
+    private const string UserSubject = "9f2c";
 
-    private static readonly HashSet<string> AuthorizedOwner =
-        [OAuthIdentity.IdentityOf(Issuer, OwnerSubject)];
+    private static readonly HashSet<string> AuthorizedUser =
+        [OAuthIdentity.IdentityOf(Issuer, UserSubject)];
 
     /// <summary>The scopes asked of the issuer these principals carry, which is how the policy looks them up.</summary>
     private static Dictionary<string, IReadOnlyCollection<string>> ScopesRequiredOfTheIssuer(params string[] scopes) =>
@@ -40,7 +40,7 @@ public sealed class TransportAccessPolicyTests
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(anonymous, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
+        Assert.False(TransportAccessPolicy.IsAuthorized(anonymous, AuthorizedUser, ScopesRequiredOfTheIssuer()));
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class TransportAccessPolicyTests
         var caller = TokenPrincipal();
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer()));
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class TransportAccessPolicyTests
         var caller = TokenPrincipal("mailfathom.read", "mailfathom.search");
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     [Fact]
@@ -70,11 +70,11 @@ public sealed class TransportAccessPolicyTests
         var caller = TokenPrincipal("mailfathom.read");
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.search")));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.search")));
     }
 
     /// <summary>
-    /// A tenant holds whoever the operator's identity platform holds, and MailFathom serves one owner's mail to everyone it
+    /// A tenant holds whoever the operator's identity platform holds, and MailFathom serves one user's mail to everyone it
     /// admits. A colleague who can obtain a token for this resource is therefore refused by the subject alone, whatever
     /// the authorization server was willing to put in it.
     /// </summary>
@@ -85,7 +85,7 @@ public sealed class TransportAccessPolicyTests
         var colleague = TokenPrincipalFor(Issuer, "4b81", "mailfathom.read");
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(colleague, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.False(TransportAccessPolicy.IsAuthorized(colleague, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     /// <summary>A subject is unique only within the server that issued it, so the pair is compared rather than the subject alone.</summary>
@@ -93,10 +93,10 @@ public sealed class TransportAccessPolicyTests
     public void IsAuthorized_TheAuthorizedSubjectNamedByAnotherIssuer_IsRefused()
     {
         // Arrange
-        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailfathom", OwnerSubject);
+        var caller = TokenPrincipalFor("https://sso.other.test/realms/mailfathom", UserSubject);
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer()));
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public sealed class TransportAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     /// <summary>A key names no subject and is not expected to, so the subject list constrains tokens alone.</summary>
@@ -122,7 +122,7 @@ public sealed class TransportAccessPolicyTests
         var caller = ApiKeyPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer()));
     }
 
     /// <summary>
@@ -137,23 +137,23 @@ public sealed class TransportAccessPolicyTests
         var caller = ClientAssertionPrincipal("nightly-digest");
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     /// <summary>
     /// A password is a configured credential in the same sense a key is — an administrator provisioned it against an
-    /// owner this deployment serves — so it is admitted on that provisioning rather than sent back to a subject list it
+    /// user this deployment serves — so it is admitted on that provisioning rather than sent back to a subject list it
     /// names nothing in. Nothing else would admit it: a password names no issuer and carries no scope, so a principal
     /// this method authenticated would be refused on every route of both surfaces.
     /// </summary>
     [Fact]
-    public void IsAuthorized_AnOwnerPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
+    public void IsAuthorized_AnUserPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
     {
         // Arrange
-        var caller = OwnerPasswordPrincipal();
+        var caller = UserPasswordPrincipal();
 
         // Act, Assert
-        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
@@ -161,12 +161,12 @@ public sealed class TransportAccessPolicyTests
     public void IsAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
     {
         // Arrange
-        var claims = new[] { new Claim("iss", Issuer), new Claim("sub", OwnerSubject) };
+        var claims = new[] { new Claim("iss", Issuer), new Claim("sub", UserSubject) };
         var identity = OAuthIdentity.FromValidatedToken(claims, "MailFathomApiKey");
         var caller = new ClaimsPrincipal(identity!);
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
     /// <summary>An authenticated principal carrying no identity at all is refused rather than treated as unrestricted.</summary>
@@ -177,11 +177,11 @@ public sealed class TransportAccessPolicyTests
         var caller = new ClaimsPrincipal(new ClaimsIdentity(claims: [], OAuthScheme));
 
         // Act, Assert
-        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer()));
+        Assert.False(TransportAccessPolicy.IsAuthorized(caller, AuthorizedUser, ScopesRequiredOfTheIssuer()));
     }
 
     private static ClaimsPrincipal TokenPrincipal(params string[] scopes) =>
-        TokenPrincipalFor(Issuer, OwnerSubject, scopes);
+        TokenPrincipalFor(Issuer, UserSubject, scopes);
 
     private static ClaimsPrincipal TokenPrincipalFor(string issuer, string subject, params string[] scopes)
     {
@@ -202,7 +202,7 @@ public sealed class TransportAccessPolicyTests
             ApiKeyAuthentication.ApiKeyNameClaimType,
             roleType: string.Empty));
 
-    private static ClaimsPrincipal OwnerPasswordPrincipal() => new(
+    private static ClaimsPrincipal UserPasswordPrincipal() => new(
         new ClaimsIdentity(
             [new Claim(BasicAuthentication.CredentialIdClaimType, "0197c0de-0000-7000-8000-000000000001")],
             TransportSurface.Client.BasicSchemeName,

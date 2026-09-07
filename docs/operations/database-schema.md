@@ -29,16 +29,16 @@ given installation holds in order to know which file to apply — there is one f
 once.
 
 It writes two rows as well as creating tables, and each is written once and left alone afterwards. The chain provisions
-the **owner** every mailbox is bound to — one record, labelled `owner`, with the mail accounts this deployment already holds carried onto
-it — because a mailbox belongs to somebody from the moment its row exists. The label is what an administrator tells owners
+the **user** every mailbox is bound to — one record, labelled `user`, with the mail accounts this deployment already holds carried onto
+it — because a mailbox belongs to somebody from the moment its row exists. The label is what an administrator tells users
 apart by rather than anything that resolves one, so a deployment is free to rename it. It also provisions the singleton row of
 `settings_root`, the deployment's **persisted configuration** document, as an empty document at version 1, because the
 host reads that row before it opens any endpoint and a deployment that has configured nothing still has to start. Both
-inserts are guarded against a row already being there, so applying the file twice still provisions one owner and one
+inserts are guarded against a row already being there, so applying the file twice still provisions one user and one
 configuration document, and neither apply writes over what a running deployment has since put in them.
 
 Some migrations in the chain carry existing data onto a new shape as well, and one of them reads a table rather than
-only rewriting a column: the per-owner stored-content counter is seeded from what the message payloads already hold, so
+only rewriting a column: the per-user stored-content counter is seeded from what the message payloads already hold, so
 that apply scans the content table once. It reads the recorded lengths rather than the payloads beside them, so the cost
 is a sequential scan rather than a detoast, but on a mailbox of hundreds of thousands of messages it is the part of the
 apply that takes noticeable time.
@@ -72,7 +72,7 @@ initialization script does, so its `CREATE EXTENSION IF NOT EXISTS vector` then 
 schema step as a role that may.
 
 **Ownership follows whoever runs the DDL.** PostgreSQL makes the role that created a table, sequence, or index its
-owner, and ownership grants nothing to anybody else. A schema applied by any role but the one MailFathom connects as
+user, and ownership grants nothing to anybody else. A schema applied by any role but the one MailFathom connects as
 therefore leaves it failing on permission errors against a schema that plainly exists — the superuser included, which
 is the easiest version of this mistake to make.
 
@@ -262,20 +262,20 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
-**Three migrations narrow that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
+**Three migrations narrow that window rather than closing it.** `AddUserAccounts` makes the user of a mail account a
 required column, and a build older than the release carrying it does not know the column exists — so against this
 schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
-has never synchronized, because the row it writes states no owner. `AddContactOwner` does the same for the contact
+has never synchronized, because the row it writes states no user. `AddContactUser` does the same for the contact
 book: an older build reads and amends the contacts already stored and fails the moment it records a new person or adds
-an address, because the row it writes states no owner either. `KeyMailAccountByOwnerAndIdentifier` moves the owner into
+an address, because the row it writes states no user either. `KeyMailAccountByUserAndIdentifier` moves the user into
 seven primary keys, and the one an older build writes through by name is the sealed OAuth refresh token: its upsert
 names the account identifier as the conflict target, no unique constraint matches that column alone any more, and the
 statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
 than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
 that can be left running against them.
 
-**`KeyMailAccountByOwnerAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
-again.** A sealed refresh token is bound to the account it was stored for, and the account is now the owner and the
+**`KeyMailAccountByUserAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
+again.** A sealed refresh token is bound to the account it was stored for, and the account is now the user and the
 identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
 account's next token request fails with a cryptographic error rather than with `invalid_grant`, and nothing falls back
 to the configured reference, which is why [mailbox OAuth](mailbox-oauth.md#troubleshooting) carries a row of its own
@@ -292,7 +292,7 @@ transaction:
   `email_thread_identifiers` is proportional to the size of the mail corpus; the other six hold roughly one row per
   account, or per account and folder.
 - Three have their foreign key onto `mailbox_accounts` dropped and re-added as the pair — `email_threads`, `jobs`, and
-  `mail_folders` — and `jobs` takes the new `ck_jobs_account_owner` beside it. A foreign key and a check are both
+  `mail_folders` — and `jobs` takes the new `ck_jobs_account_user` beside it. A foreign key and a check are both
   validated by a full scan of the table they are added to, so each of those three is scanned once and `jobs` twice.
   `email_threads` holds one row per conversation and grows with the mail corpus, `jobs` grows with the queue's
   history, and `mail_folders` holds one row per bound folder.
@@ -346,13 +346,13 @@ That leaves two answers, and which one applies is decided before the upgrade rat
   deployment](#ordering-a-deployment) describes, so a defect in the new version can be answered by rolling the image
   back while leaving the schema where it is, and shipping the correction in the next release. This is the cheaper
   answer whenever the migration itself was not the problem. **It is not an answer for the release that carries
-  `AddOwnerAccounts`**: a build older than that release cannot bind a folder for an account this deployment has never
-  synchronized against a schema whose mail accounts require an owner, so rolling the image back leaves a deployment
+  `AddUserAccounts`**: a build older than that release cannot bind a folder for an account this deployment has never
+  synchronized against a schema whose mail accounts require a user, so rolling the image back leaves a deployment
   that serves the mail it holds and takes on no new mailbox. Restoring from the backup is the way back there.
 
-  **Nor for the release that carries `AddContactOwner`**, for the same reason one table over: a build older than that
+  **Nor for the release that carries `AddContactUser`**, for the same reason one table over: a build older than that
   release reads and amends the contacts already stored and fails the moment it records a new person or adds an address,
-  because the row it writes states no owner. Rolling the image back leaves a deployment whose contact book can be read
+  because the row it writes states no user. Rolling the image back leaves a deployment whose contact book can be read
   and not written — including by the collection pass, which writes a contact per correspondent it recognizes — so
   restoring from the backup is the way back there too.
 

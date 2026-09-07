@@ -30,8 +30,8 @@ internal static class MailRuleExecutionMapping
             MailboxAccountId = execution.Account.Id.Value,
 
             // Written from the identity the pass ran under, which is the account the caller or the run resolved. A
-            // recorded decision belongs to the same owner as the mail it was taken about.
-            OwnerId = execution.Account.Owner.Value,
+            // recorded decision belongs to the same user as the mail it was taken about.
+            UserId = execution.Account.User.Value,
             StoredEmailId = execution.StoredEmailId.Value,
             RuleName = execution.RuleName,
             Revision = execution.Revision.Value,
@@ -96,7 +96,7 @@ internal static class MailRuleExecutionMapping
         {
             Id = MailRuleExecutionId.Create(entity.Id),
             Account = MailAccountIdentity.Create(
-                MailOwnerId.Create(entity.OwnerId),
+                MailUserId.Create(entity.UserId),
                 MailAccountId.Create(entity.MailboxAccountId)),
             StoredEmailId = StoredEmailId.Create(entity.StoredEmailId),
             RuleName = entity.RuleName,

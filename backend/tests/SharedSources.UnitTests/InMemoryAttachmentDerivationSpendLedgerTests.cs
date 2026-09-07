@@ -11,8 +11,8 @@ namespace MailFathom.SharedSources.UnitTests;
 /// <summary>Covers the ledger every attachment-ceiling test measures a period from.</summary>
 /// <remarks>
 /// A fault here reports somebody else's arrangement. A ledger that summed the two steps together would let a
-/// description ceiling pass a test that only ever read octets; one that answered the deployment's total for an owner
-/// would make a per-owner ceiling test pass while the ceiling bounded everybody; and one that carried a charge across
+/// description ceiling pass a test that only ever read octets; one that answered the deployment's total for a user
+/// would make a per-user ceiling test pass while the ceiling bounded everybody; and one that carried a charge across
 /// period boundaries would report a roll-over that never happened.
 /// </remarks>
 public sealed class InMemoryAttachmentDerivationSpendLedgerTests
@@ -29,31 +29,31 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
         var totals = await ledger.ReadConsumedAsync(
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(0, totals.OwnerConsumedUnitCount);
+        Assert.Equal(0, totals.UserConsumedUnitCount);
         Assert.Equal(0, totals.DeploymentConsumedUnitCount);
     }
 
     [Fact]
-    public async Task ReadConsumedAsync_TwoOwnersSpendingInOnePeriod_AnswersEachWithTheirOwnBesideTheTotal()
+    public async Task ReadConsumedAsync_TwoUsersSpendingInOnePeriod_AnswersEachWithTheirOwnBesideTheTotal()
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment, 4_096);
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Another, 512);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Another, 512);
 
         // Act
         var totals = await ledger.ReadConsumedAsync(
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailOwner.Another,
+            SyntheticMailUser.Another,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(512, totals.OwnerConsumedUnitCount);
+        Assert.Equal(512, totals.UserConsumedUnitCount);
         Assert.Equal(4_608, totals.DeploymentConsumedUnitCount);
     }
 
@@ -62,8 +62,8 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment, 4_096);
-        ledger.Seed(Period, AttachmentDerivationStep.Description, SyntheticMailOwner.Deployment, 3);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
+        ledger.Seed(Period, AttachmentDerivationStep.Description, SyntheticMailUser.Deployment, 3);
 
         // Act
         var described = await ledger.ReadDeploymentConsumedAsync(
@@ -80,7 +80,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment, 4_096);
+        ledger.Seed(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4_096);
 
         // Act
         var next = await ledger.ReadDeploymentConsumedAsync(
@@ -103,21 +103,21 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             1_000,
             TestContext.Current.CancellationToken);
         await ledger.RecordSpendAsync(
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             24,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
             1_024,
-            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment)]);
+            ledger.Consumed[(Period, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
     }
 
     /// <summary>A step that consumed nothing writes no row, which is what keeps a period free of charges of zero.</summary>
@@ -132,7 +132,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Description,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             0,
             TestContext.Current.CancellationToken);
 
@@ -151,7 +151,7 @@ public sealed class InMemoryAttachmentDerivationSpendLedgerTests
             Session(),
             Period,
             AttachmentDerivationStep.Extraction,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             -1,
             TestContext.Current.CancellationToken));
     }

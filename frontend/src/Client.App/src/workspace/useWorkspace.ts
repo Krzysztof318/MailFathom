@@ -21,7 +21,7 @@ export interface Workspace {
     /**
      * The rows of the folder tree somebody has folded away, by the key each row is identified with.
      *
-     * Folded rather than unfolded, so a tree nobody has touched shows what is in it: an owner who opens the client and
+     * Folded rather than unfolded, so a tree nobody has touched shows what is in it: a user who opens the client and
      * sees a column of closed mailboxes has to open every one of them before the client says anything.
      */
     readonly collapsed: readonly string[];

@@ -49,10 +49,10 @@ public sealed class SenderTrustEvaluatingEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
         RemoteEmailContent content,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
-        var extraction = await this.inner.ReadMetadataAsync(content, owner, cancellationToken);
+        var extraction = await this.inner.ReadMetadataAsync(content, user, cancellationToken);
 
         // A message nobody could parse establishes no author to judge, and reaches storage with the columns the envelope
         // alone supports — which is the unknown answer, and the same one it already carries.

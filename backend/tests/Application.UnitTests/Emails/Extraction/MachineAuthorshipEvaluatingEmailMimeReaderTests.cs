@@ -30,7 +30,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Likely, extraction.Metadata?.MachineAuthorship.Band);
@@ -50,7 +50,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Unlikely, extraction.Metadata?.MachineAuthorship.Band);
@@ -67,7 +67,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Disabled);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -84,7 +84,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -103,7 +103,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipSignals.HiddenCharacters, extraction.Metadata?.MachineAuthorship.Signals);
@@ -115,12 +115,12 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
     {
         // Arrange
         var inner = Substitute.For<IEmailMimeReader>();
-        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var reader = new MachineAuthorshipEvaluatingEmailMimeReader(inner, MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.MalformedContent, extraction.Outcome);
@@ -138,7 +138,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
             MachineAuthorshipProfile.Standard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(text, extraction.Metadata?.Text);
@@ -150,7 +150,7 @@ public sealed class MachineAuthorshipEvaluatingEmailMimeReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",

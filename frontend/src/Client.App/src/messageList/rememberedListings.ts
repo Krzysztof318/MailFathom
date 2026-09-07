@@ -25,7 +25,7 @@ import {
 // Four of the five things the position is keyed by are in the key itself: the deployment's address and the scope, which
 // names the account and the folder. The fifth pair — the order and the filters — is inside the record rather than in
 // the key, which is the stronger arrangement: a cursor and the two values it was issued under are written and replaced
-// together, so a cursor cannot outlive them and there is no composite key to get wrong. The owner is the credential,
+// together, so a cursor cannot outlive them and there is no composite key to get wrong. The user is the credential,
 // and `forgetListings` is called wherever the client lets one go.
 //
 // The session's store rather than the machine's, and reached as `window.sessionStorage` rather than as the bare global,

@@ -154,7 +154,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
     }
 
     /// <summary>
-    /// The sweep obeys the arrival pipeline's order rather than a version of it: a message the owner's rules have not
+    /// The sweep obeys the arrival pipeline's order rather than a version of it: a message the user's rules have not
     /// reached is not cut here, however long it has been sitting uncut.
     /// </summary>
     /// <remarks>
@@ -238,7 +238,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
                 .OpenAsync(
                     session,
                     MailboxMutationRequest.Relocate(
-                        storedEmailId, SyntheticMailAccount.Owner,
+                        storedEmailId, SyntheticMailAccount.User,
                         occurrenceId,
                         MailboxMutationRequester.Rule("file-the-newsletters", "1"),
                         RemoteFolderPath.Create("Archive")),
@@ -339,7 +339,7 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,

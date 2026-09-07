@@ -7,8 +7,8 @@ using System.Globalization;
 using System.Reflection;
 using MailFathom.Application.Resilience;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Provisioning;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Secrets.Resolution;
 
@@ -43,7 +43,7 @@ internal static class ConfigurationKeySurface
     /// records their keys as an operator writes them — <c>Accounts:0:Id</c> rather than <c>Accounts:Id</c> — and a
     /// second one added without a line here would be recorded under a path nobody can write.
     /// </remarks>
-    private static readonly string[] SectionsBoundAsCollections = [DeclaredOwnerOptions.SectionName];
+    private static readonly string[] SectionsBoundAsCollections = [DeclaredUserOptions.SectionName];
 
     /// <summary>Renders the published configuration key set.</summary>
     /// <returns>The header and one line per key, ordered so the rendering depends on nothing but the keys themselves.</returns>

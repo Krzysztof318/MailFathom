@@ -10,38 +10,38 @@ namespace MailFathom.TestSupport;
 
 /// <summary>Answers whose mail a message is, from what a test arranged rather than from a database.</summary>
 /// <remarks>
-/// Hand-written rather than substituted, because a test that bounds two owners against each other has to be able to say
+/// Hand-written rather than substituted, because a test that bounds two users against each other has to be able to say
 /// which message belongs to which and read that back: a substitute would need one arrangement per identifier, and the
 /// arrangement would then be the thing under test.
 /// </remarks>
-internal sealed class StubMailOwnership(MailOwnerId defaultOwner) : IMailOwnership
+internal sealed class StubMailOwnership(MailUserId defaultUser) : IMailOwnership
 {
-    private readonly Dictionary<Guid, MailOwnerId> ownersByStoredEmail = [];
+    private readonly Dictionary<Guid, MailUserId> usersByStoredEmail = [];
 
-    /// <summary>Initializes ownership answering for the deployment's own owner unless a test says otherwise.</summary>
+    /// <summary>Initializes ownership answering for the deployment's own user unless a test says otherwise.</summary>
     public StubMailOwnership()
-        : this(SyntheticMailOwner.Deployment)
+        : this(SyntheticMailUser.Deployment)
     {
     }
 
-    /// <summary>Says that one message belongs to somebody other than the default owner.</summary>
+    /// <summary>Says that one message belongs to somebody other than the default user.</summary>
     /// <param name="storedEmailId">The message.</param>
-    /// <param name="owner">Whose it is.</param>
+    /// <param name="user">Whose it is.</param>
     /// <returns>This stub, so arrangements read as one expression.</returns>
-    public StubMailOwnership Owns(StoredEmailId storedEmailId, MailOwnerId owner)
+    public StubMailOwnership Owns(StoredEmailId storedEmailId, MailUserId user)
     {
-        this.ownersByStoredEmail[storedEmailId.Value] = owner;
+        this.usersByStoredEmail[storedEmailId.Value] = user;
 
         return this;
     }
 
     /// <inheritdoc />
-    public Task<MailOwnerId> ReadStoredEmailOwnerAsync(
+    public Task<MailUserId> ReadStoredEmailUserAsync(
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.FromResult(this.ownersByStoredEmail.GetValueOrDefault(storedEmailId.Value, defaultOwner));
+        return Task.FromResult(this.usersByStoredEmail.GetValueOrDefault(storedEmailId.Value, defaultUser));
     }
 }

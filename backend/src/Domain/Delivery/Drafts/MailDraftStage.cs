@@ -13,7 +13,7 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// </para>
 /// <para>
 /// The two replacement members are the reason the type exists. Editing a draft is an append followed by a removal, and
-/// both orders of that pair lose something when a process dies between them — removing first can leave the owner with
+/// both orders of that pair lose something when a process dies between them — removing first can leave the user with
 /// no draft at all, and appending first can leave them with two. The record is written before the first command, so a
 /// crash lands on one of these two members and the resumed attempt finishes the pair rather than starting it again.
 /// </para>
@@ -35,7 +35,7 @@ public enum MailDraftStage
 
     /// <summary>The current revision is not appended yet and the copy it replaces is still in the folder.</summary>
     /// <remarks>
-    /// The owner sees the previous version of the draft, which is one draft rather than none. Resuming appends the
+    /// The user sees the previous version of the draft, which is one draft rather than none. Resuming appends the
     /// current revision and then takes the previous one out.
     /// </remarks>
     ReplacementAppendPending = 3,
@@ -50,7 +50,7 @@ public enum MailDraftStage
     /// <summary>The draft has been given up and what is left is taking its copies back out of the folder.</summary>
     /// <remarks>
     /// The record outlives the decision to delete it on purpose: removing the row first would lose the only thing
-    /// naming the copies, and the copies would stand in the owner's folder with nothing left able to remove them.
+    /// naming the copies, and the copies would stand in the user's folder with nothing left able to remove them.
     /// </remarks>
     Discarded = 5,
 }

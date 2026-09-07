@@ -137,7 +137,7 @@ public sealed class MailAnsweringAuditTrail : IMailAnsweringAuditTrail
             {
                 Id = MailAnsweringAuditEntryId.Create(Guid.CreateVersion7(observation.CompletedAt)),
                 RunId = observation.RunId,
-                Account = MailAccountIdentity.Create(observation.Scope.Owner, accountId),
+                Account = MailAccountIdentity.Create(observation.Scope.User, accountId),
                 Emails = retrievedByAccount.GetValueOrDefault(accountId, []),
                 ChatEndpointAlias = observation.ChatEndpointAlias,
                 InstructionsVersion = observation.InstructionsVersion,

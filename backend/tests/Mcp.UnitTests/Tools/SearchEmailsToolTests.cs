@@ -604,7 +604,7 @@ public sealed class SearchEmailsToolTests
     private static EmailSummary SummaryOf(Guid storedEmailId, DateTimeOffset receivedAt) => new()
     {
         StoredEmailId = StoredEmailId.Create(storedEmailId),
-        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(ServedAccountId)),
+        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(ServedAccountId)),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         Subject = "Quarterly invoice",
         SenderAddress = "billing@example.test",

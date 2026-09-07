@@ -32,22 +32,22 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// </para>
 /// <para>
 /// <b>With nothing switched on this guard is inert.</b> It is registered whatever a deployment configured, so no
-/// consumer carries a null check or a second code path, and where the owner whose mail is being published has nothing
+/// consumer carries a null check or a second code path, and where the user whose mail is being published has nothing
 /// scanned for, every call returns its argument without constructing a detector, taking a concurrency permit, or
 /// touching an instrument. That is what makes an opt-in nobody took cost nothing on any of these paths.
 /// </para>
 /// <para>
-/// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several owners and each of
-/// them has a posture of their own, so the use case names the owner once — with <see cref="ActingFor" />, as soon as it
+/// <b>Whose mail is being published is settled before any of it is.</b> A deployment serves several users and each of
+/// them has a posture of their own, so the use case names the user once — with <see cref="ActingFor" />, as soon as it
 /// has resolved whose mail it may read — and every value guarded anywhere inside that flow is read under their posture.
 /// Guarding outside such a scope while this deployment scans anybody is a defect rather than a permissive default, and
 /// says so.
 /// </para>
 /// <para>
 /// It is a scope of its own rather than part of the reported operation because the two cover different stretches of one
-/// read. The operation is the payload being published and is opened where that payload is assembled; the owner is
+/// read. The operation is the payload being published and is opened where that payload is assembled; the user is
 /// settled far earlier, since a search embeds its query text through a model provider before it has a page to report
-/// on. Folding the owner into the operation would leave that call with nobody to answer for it.
+/// on. Folding the user into the operation would leave that call with nobody to answer for it.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentEgressGuard
@@ -58,24 +58,24 @@ public sealed class SensitiveContentEgressGuard
 
     /// <summary>Whose mail this asynchronous flow is reading, where a use case has said.</summary>
     /// <remarks>
-    /// Ambient rather than an argument, because the owner is settled by the use case that resolved the scope while the
+    /// Ambient rather than an argument, because the user is settled by the use case that resolved the scope while the
     /// values are guarded field by field several calls deeper — a search result's snippets inside the browser, a query
     /// placed in a vector space inside a provider adapter, a retrieved extract inside another. Threading it through
     /// every overload of this contract, and through the ports between, would put a parameter on each of them to say
     /// what the flow already knows.
     /// </remarks>
-    private readonly AsyncLocal<MailOwnerId?> actingFor = new();
+    private readonly AsyncLocal<MailUserId?> actingFor = new();
 
     /// <summary>The operation the guarding on this asynchronous flow is being reported as, where one was opened.</summary>
     /// <remarks>
-    /// Ambient for the reason the owner is: the operation is delimited by the consumer that owns the payload while the
+    /// Ambient for the reason the user is: the operation is delimited by the consumer that owns the payload while the
     /// values are guarded several calls deeper, which is the same reason the tracing API itself keeps the current span
     /// this way.
     /// </remarks>
     private readonly AsyncLocal<ISensitiveContentGuardScope?> currentOperation = new();
 
-    /// <summary>Initializes the guard of a deployment, whether or not any owner it serves is scanned for.</summary>
-    /// <param name="postures">Answers what each owner's mail is scanned under.</param>
+    /// <summary>Initializes the guard of a deployment, whether or not any user it serves is scanned for.</summary>
+    /// <param name="postures">Answers what each user's mail is scanned under.</param>
     /// <param name="telemetry">Reports what each guarded call found and what it cost.</param>
     /// <param name="timeProvider">Measures what the scan added to the operation being guarded.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -95,28 +95,28 @@ public sealed class SensitiveContentEgressGuard
 
     /// <summary>Gets whether anything is scanned for on this flow.</summary>
     /// <remarks>
-    /// The owner this flow is acting for where one has been named, and any owner at all where none has. Read by a
+    /// The user this flow is acting for where one has been named, and any user at all where none has. Read by a
     /// consumer deciding whether work only a scan makes necessary is worth doing — never as permission to hand text on
-    /// unguarded, which is what calling the guard already does when nothing scans the owner in scope. Inside a use case
-    /// this is that one owner's answer, so a reader serving somebody nothing scans does exactly what it did before this
+    /// unguarded, which is what calling the guard already does when nothing scans the user in scope. Inside a use case
+    /// this is that one user's answer, so a reader serving somebody nothing scans does exactly what it did before this
     /// feature existed however much the deployment scans for others.
     /// </remarks>
-    public bool IsActive => this.actingFor.Value is { } owner
-        ? this.postures.ForOwner(owner).IsActive
-        : this.postures.IsActiveForAnyOwner;
+    public bool IsActive => this.actingFor.Value is { } user
+        ? this.postures.ForUser(user).IsActive
+        : this.postures.IsActiveForAnyUser;
 
     /// <summary>States whose mail everything guarded on this flow from here on belongs to.</summary>
-    /// <param name="owner">The owner the use case resolved, whose posture every value is read under.</param>
+    /// <param name="user">The user the use case resolved, whose posture every value is read under.</param>
     /// <returns>The scope, which restores whatever the flow was acting for when it is disposed.</returns>
     /// <remarks>
     /// <para>
     /// Opened by the use case, immediately after it has established whose mail it may read and before it reads any.
     /// Everything below it — a page assembled, a query placed in a vector space, an extract written into a prompt, an
-    /// answer published — is that owner's, however many layers separate it from here.
+    /// answer published — is that user's, however many layers separate it from here.
     /// </para>
     /// <para>
-    /// Entering one twice for the same owner is an ordinary nesting rather than a mistake: a reader that assembles a
-    /// conversation inside a content read opens its own, and restoring the previous owner rather than clearing it is
+    /// Entering one twice for the same user is an ordinary nesting rather than a mistake: a reader that assembles a
+    /// conversation inside a content read opens its own, and restoring the previous user rather than clearing it is
     /// what keeps the enclosing read acting for the person it resolved.
     /// </para>
     /// <para>
@@ -124,13 +124,13 @@ public sealed class SensitiveContentEgressGuard
     /// <c>BeginScope</c> is: what a caller does with it is dispose it at the end of the method that opened it.
     /// </para>
     /// </remarks>
-    public IDisposable ActingFor(MailOwnerId owner)
+    public IDisposable ActingFor(MailUserId user)
     {
         var previous = this.actingFor.Value;
 
-        this.actingFor.Value = owner;
+        this.actingFor.Value = user;
 
-        return new OwnerScope(this, previous);
+        return new UserScope(this, previous);
     }
 
     /// <summary>Opens the report of one guarded operation, and reports every text guarded inside it as part of it.</summary>
@@ -331,35 +331,35 @@ public sealed class SensitiveContentEgressGuard
         }
     }
 
-    /// <summary>Finds the redaction the owner this flow is acting for is read under, if any is.</summary>
+    /// <summary>Finds the redaction the user this flow is acting for is read under, if any is.</summary>
     /// <remarks>
-    /// Guarding with no owner in scope is refused rather than answered, and refused only where this deployment scans
+    /// Guarding with no user in scope is refused rather than answered, and refused only where this deployment scans
     /// somebody: a path publishing mail without naming whose it is would otherwise read whichever posture happened to
-    /// be composed first, which is one owner's text judged by another's rules. Where nothing is scanned for anywhere
+    /// be composed first, which is one user's text judged by another's rules. Where nothing is scanned for anywhere
     /// there is no posture to get wrong, so such a path costs nothing and stays as free as it was before any of this
     /// existed.
     /// </remarks>
     private SensitiveContentRedactor? ActiveRedactor()
     {
-        if (this.actingFor.Value is { } owner)
+        if (this.actingFor.Value is { } user)
         {
-            return this.postures.ForOwner(owner).Redactor;
+            return this.postures.ForUser(user).Redactor;
         }
 
-        return this.postures.IsActiveForAnyOwner
+        return this.postures.IsActiveForAnyUser
             ? throw new InvalidOperationException(
-                "Text reached the sensitive-content egress guard on a flow acting for no owner, so there is no scanning "
-                + "posture to read. Every use case that publishes mail states the owner it resolved before it reads "
+                "Text reached the sensitive-content egress guard on a flow acting for no user, so there is no scanning "
+                + "posture to read. Every use case that publishes mail states the user it resolved before it reads "
                 + "any.")
             : null;
     }
 
-    /// <summary>Keeps one owner current for as long as the use case that resolved them is reading their mail.</summary>
+    /// <summary>Keeps one user current for as long as the use case that resolved them is reading their mail.</summary>
     /// <remarks>
-    /// The previous owner is restored rather than cleared, so a read nested inside another leaves the enclosing one
+    /// The previous user is restored rather than cleared, so a read nested inside another leaves the enclosing one
     /// acting for the person it resolved.
     /// </remarks>
-    private sealed class OwnerScope(SensitiveContentEgressGuard guard, MailOwnerId? previous) : IDisposable
+    private sealed class UserScope(SensitiveContentEgressGuard guard, MailUserId? previous) : IDisposable
     {
         public void Dispose() => guard.actingFor.Value = previous;
     }

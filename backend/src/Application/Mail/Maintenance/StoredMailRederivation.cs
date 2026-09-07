@@ -175,7 +175,7 @@ public sealed class StoredMailRederivation
 
             var outcome = await this.ReadBatchAsync(
                 batch,
-                scope.Account.Owner,
+                scope.Account.User,
                 readByteCount,
                 cancellationToken);
 
@@ -224,12 +224,12 @@ public sealed class StoredMailRederivation
 
     /// <summary>Re-reads a batch's emails outside any transaction, stopping early once either ceiling is reached.</summary>
     /// <param name="batch">The emails the walk offered, in the order it visits them.</param>
-    /// <param name="owner">The owner whose mail the run is re-deriving, whose posture each read is scanned under.</param>
+    /// <param name="user">The user whose mail the run is re-deriving, whose posture each read is scanned under.</param>
     /// <param name="bytesAlreadyReadThisPass">What earlier batches of this pass read, which the byte ceiling is against.</param>
     /// <param name="cancellationToken">Cancels between emails.</param>
     private async Task<BatchReadOutcome> ReadBatchAsync(
         IReadOnlyList<StoredMailAwaitingRederivation> batch,
-        MailOwnerId owner,
+        MailUserId user,
         long bytesAlreadyReadThisPass,
         CancellationToken cancellationToken)
     {
@@ -269,7 +269,7 @@ public sealed class StoredMailRederivation
 
             var extraction = await this.mimeReader.ReadMetadataAsync(
                 new RemoteEmailContent(email.OccurrenceId, storedContent.RawMime),
-                owner,
+                user,
                 cancellationToken);
 
             // A message no reader can parse keeps what it already holds and the position moves past it, exactly as

@@ -10,8 +10,8 @@ namespace MailFathom.Application.Portraits;
 /// <summary>Reads, replaces, and removes the picture the signed-in person is drawn by.</summary>
 /// <remarks>
 /// <para>
-/// Whose portrait this is comes from the principal rather than from the request, exactly as it does for the owner
-/// record and for a person's preferences: there is no argument here for another owner's identifier, so a request about
+/// Whose portrait this is comes from the principal rather than from the request, exactly as it does for the user
+/// record and for a person's preferences: there is no argument here for another user's identifier, so a request about
 /// somebody else is something a caller cannot express rather than something a surface has to refuse.
 /// </para>
 /// <para>
@@ -31,13 +31,13 @@ namespace MailFathom.Application.Portraits;
 public sealed class OwnPortrait
 {
     private readonly AccessAuthorization authorization;
-    private readonly IOwnerPortraitStore store;
+    private readonly IUserPortraitStore store;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="authorization">Reports the grant the caller holds and the owner it acts for.</param>
+    /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="store">Holds one person's portrait.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    public OwnPortrait(AccessAuthorization authorization, IOwnerPortraitStore store)
+    public OwnPortrait(AccessAuthorization authorization, IUserPortraitStore store)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(store);
@@ -49,14 +49,14 @@ public sealed class OwnPortrait
     /// <summary>Reads the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>Their portrait, or <see langword="null" /> where this deployment holds none for them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    public async Task<OwnerPortrait?> ReadAsync(CancellationToken cancellationToken)
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    public async Task<UserPortrait?> ReadAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var stored = await this.store.ReadAsync(this.authorization.RequireOwner(), cancellationToken);
+        var stored = await this.store.ReadAsync(this.authorization.RequireUser(), cancellationToken);
 
-        return stored is { } content ? OwnerPortrait.Of(content) : null;
+        return stored is { } content ? UserPortrait.Of(content) : null;
     }
 
     /// <summary>Replaces the picture the signed-in person is drawn by.</summary>
@@ -64,24 +64,24 @@ public sealed class OwnPortrait
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the write landed, and <see langword="false" /> when this deployment holds no record for the caller.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="portrait" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
-    public Task<bool> ReplaceAsync(OwnerPortrait portrait, CancellationToken cancellationToken)
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    public Task<bool> ReplaceAsync(UserPortrait portrait, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(portrait);
 
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.SaveAsync(this.authorization.RequireOwner(), portrait, cancellationToken);
+        return this.store.SaveAsync(this.authorization.RequireUser(), portrait, cancellationToken);
     }
 
     /// <summary>Removes the picture the signed-in person is drawn by.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>Nothing else about the person is touched, and the removal is silent about whether there was one to remove.</remarks>
     public Task RemoveAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.RemoveAsync(this.authorization.RequireOwner(), cancellationToken);
+        return this.store.RemoveAsync(this.authorization.RequireUser(), cancellationToken);
     }
 }

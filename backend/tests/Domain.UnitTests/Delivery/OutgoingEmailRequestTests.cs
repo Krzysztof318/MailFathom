@@ -12,7 +12,7 @@ namespace MailFathom.Domain.UnitTests.Delivery;
 public sealed class OutgoingEmailRequestTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly OutgoingEmailRequester Requester =
         OutgoingEmailRequester.Command("mfctl-4f2a");
@@ -108,7 +108,7 @@ public sealed class OutgoingEmailRequestTests
 
     /// <summary>
     /// An address longer than the column is refused rather than dropped, because dropping one would be a person the
-    /// owner wrote to who never receives the message and is told nothing about it.
+    /// user wrote to who never receives the message and is told nothing about it.
     /// </summary>
     [Fact]
     public void Recipient_AddressLongerThanTheColumn_IsRefused()
@@ -138,7 +138,7 @@ public sealed class OutgoingEmailRequestTests
     }
 
     /// <summary>
-    /// A recipient's address is personal data of somebody who is not this mailbox's owner, so nothing that describes a
+    /// A recipient's address is personal data of somebody who is not this mailbox's user, so nothing that describes a
     /// recipient — including the description a record struct would synthesize — may carry it into a log line, a span
     /// attribute, or an exception message.
     /// </summary>

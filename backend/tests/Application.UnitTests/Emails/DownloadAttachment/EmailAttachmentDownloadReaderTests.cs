@@ -57,7 +57,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
     private static readonly AuthorizedPrincipal RedeemedCapability =
-        AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, AuthorizedObject);
+        AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, AuthorizedObject);
 
     /// <summary>The principal the client surface establishes, which is a credential holding the mailbox read grant.</summary>
     private static readonly AuthorizedPrincipal SignedInReader =
@@ -151,24 +151,24 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
-    /// The use case answers for whichever owner the redeeming principal names, so an account that owner does not own
+    /// The use case answers for whichever user the redeeming principal names, so an account that user does not own
     /// reaches nothing, and the refusal is the one a deleted message gets.
     /// </summary>
     /// <remarks>
-    /// Which owner a redemption names is the route's decision rather than the ticket's, and today it is the
-    /// deployment's own: <c>AttachmentDownloadTicket</c> records no owner, and
-    /// <c>EmailAttachmentDownloadEndpoint</c> states the one owner a deployment declaring its accounts in
+    /// Which user a redemption names is the route's decision rather than the ticket's, and today it is the
+    /// deployment's own: <c>AttachmentDownloadTicket</c> records no user, and
+    /// <c>EmailAttachmentDownloadEndpoint</c> states the one user a deployment declaring its accounts in
     /// configuration holds. ADR 0014's ticket-borne ownership is what replaces that once an account can belong to a
-    /// second owner. So this holds the use case to the owner it is handed rather than asserting that a redemption can
+    /// second user. So this holds the use case to the user it is handed rather than asserting that a redemption can
     /// hand it somebody else's.
     /// </remarks>
     [Fact]
-    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsOwnerDoesNotOwn_Refuses()
+    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsUserDoesNotOwn_Refuses()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Another, AuthorizedObject));
+            AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, AuthorizedObject));
         var reader = ReaderOver(
             summary,
             accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
@@ -464,7 +464,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
-    /// Both values a reader sends are its own, so neither is trusted: an email outside the accounts the caller's owner
+    /// Both values a reader sends are its own, so neither is trusted: an email outside the accounts the caller's user
     /// owns is refused exactly as a deleted one is, and nothing of it is read.
     /// </summary>
     [Fact]
@@ -654,7 +654,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>
     /// A deployment screening nothing pays no document read at all. The test is worth stating because the read is the
-    /// largest cost on this path and an owner who switched nothing on must not meet it.
+    /// largest cost on this path and a user who switched nothing on must not meet it.
     /// </summary>
     [Fact]
     public async Task OpenAsync_DeploymentScreeningNothing_ServesTheFileWithoutReadingIt()

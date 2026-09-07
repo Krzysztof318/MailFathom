@@ -23,7 +23,7 @@ namespace MailFathom.Application.Spam.Actions;
 /// because synchronization observed the server — never because this decided they should.
 /// </para>
 /// <para>
-/// Two rules keep filing from turning into an argument with the mailbox's owner, and they are the reason this type is
+/// Two rules keep filing from turning into an argument with the mailbox's user, and they are the reason this type is
 /// more than a translation of two switches into two requests. A message already in the destination is not moved into it,
 /// and a message this feature has already asked to have filed, which is not in the destination, is left alone entirely:
 /// somebody moved it back, which is exactly the correction a false positive is supposed to have, and repeating the
@@ -63,7 +63,7 @@ public sealed class SpamActionRecorder
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
 
     /// <summary>Initializes the use case from the decisions it has to read and the record it writes.</summary>
-    /// <param name="settingsReader">Answers what the message's owner asked to happen to their own junk.</param>
+    /// <param name="settingsReader">Answers what the message's user asked to happen to their own junk.</param>
     /// <param name="occurrences">Reads where the classified email is and whether it is already read.</param>
     /// <param name="records">Opens the durable record each change is carried by.</param>
     /// <param name="destinations">Turns the configured junk folder into the folder on the server it currently names.</param>
@@ -93,8 +93,8 @@ public sealed class SpamActionRecorder
         this.retryPolicy = retryPolicy;
     }
 
-    /// <summary>Asks for whatever the owner's switches say should happen to one classified message.</summary>
-    /// <param name="owner">The owner whose mailbox would be written to, whose switches decide whether anything is.</param>
+    /// <summary>Asks for whatever the user's switches say should happen to one classified message.</summary>
+    /// <param name="user">The user whose mailbox would be written to, whose switches decide whether anything is.</param>
     /// <param name="classification">What classification concluded about the occurrence.</param>
     /// <param name="posture">Whether the changes are written down or only worked out.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -103,9 +103,9 @@ public sealed class SpamActionRecorder
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="posture" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The checks run in the order of what they cost and of what they settle. Whether this owner switched anything on is
+    /// The checks run in the order of what they cost and of what they settle. Whether this user switched anything on is
     /// free and answers for every one of their messages; the verdict and the threshold are already in hand; only then is
-    /// the mailbox read. An owner who asked for no action therefore costs one settings read per classified message of
+    /// the mailbox read. A user who asked for no action therefore costs one settings read per classified message of
     /// theirs and nothing else.
     /// <para>
     /// The posture is read last of all, after every one of those checks. That is what makes a dry run a rehearsal rather
@@ -114,7 +114,7 @@ public sealed class SpamActionRecorder
     /// </para>
     /// </remarks>
     public async Task<SpamActionResult> RecordAsync(
-        MailOwnerId owner,
+        MailUserId user,
         SpamClassification classification,
         SpamActionPosture posture,
         CancellationToken cancellationToken)
@@ -129,7 +129,7 @@ public sealed class SpamActionRecorder
                 "An attempt either writes the changes down or works them out and writes nothing.");
         }
 
-        var settings = this.settingsReader.ActionsFor(owner);
+        var settings = this.settingsReader.ActionsFor(user);
 
         if (!settings.IsAnyActionEnabled)
         {
@@ -289,7 +289,7 @@ public sealed class SpamActionRecorder
                         session,
                         MailboxMutationRequest.SetSeen(
                             occurrence.Id,
-                            occurrence.Owner,
+                            occurrence.User,
                             occurrence.Occurrence,
                             requester,
                             isSeen: true),
@@ -304,7 +304,7 @@ public sealed class SpamActionRecorder
                         session,
                         MailboxMutationRequest.Relocate(
                             occurrence.Id,
-                            occurrence.Owner,
+                            occurrence.User,
                             occurrence.Occurrence,
                             requester,
                             plan.Path,

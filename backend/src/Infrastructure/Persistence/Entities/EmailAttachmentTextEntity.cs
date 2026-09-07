@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <remarks>
 /// <para>
 /// A row per attachment whichever way the reading went, because the reason an attachment yielded nothing is a durable
-/// fact an owner is owed and a record that stops the next run from offering the same file to a parser again. Keeping
+/// fact a user is owed and a record that stops the next run from offering the same file to a parser again. Keeping
 /// the words here rather than only in the passages cut from them is what makes re-cutting a mailbox local: a boundary
 /// rule tuned upwards re-reads this text and re-embeds only the passages that actually changed, instead of parsing
 /// every document and calling a vision model a second time.
@@ -106,7 +106,7 @@ internal sealed class EmailAttachmentTextEntity
     /// <remarks>
     /// Its own stamp rather than the message's, because an attachment is read on a later pass than the body and a
     /// posture republished between the two would otherwise leave one row's stamp standing for text the other never went
-    /// through. The startup report counts the rows whose stamp is not their owner's current one, and a rebuilding
+    /// through. The startup report counts the rows whose stamp is not their user's current one, and a rebuilding
     /// extraction backfill discards them and takes the message's reading marker off, which puts it back in front of the
     /// attachment stage — so the words are taken again under that run's own budgets rather than by the walk that
     /// discarded them.

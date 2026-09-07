@@ -145,7 +145,7 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 
         var filter = EmailTimelineFilter.Create(
-            MailboxScope.Create(SyntheticMailOwner.Deployment, [.. accountIds.Select(MailAccountId.Create)], selectedFolders: null),
+            MailboxScope.Create(SyntheticMailUser.Deployment, [.. accountIds.Select(MailAccountId.Create)], selectedFolders: null),
             senderAddress: null,
             recipientAddress: null,
             subjectFragment: null,

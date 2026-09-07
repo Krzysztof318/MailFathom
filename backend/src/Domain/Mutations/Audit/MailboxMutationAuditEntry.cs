@@ -48,12 +48,12 @@ public sealed record MailboxMutationAuditEntry
     /// <summary>Gets the account whose mailbox was changed.</summary>
     public required MailAccountId AccountId { get; init; }
 
-    /// <summary>Gets the owner whose account the change was performed in.</summary>
+    /// <summary>Gets the user whose account the change was performed in.</summary>
     /// <remarks>
     /// Taken from the mutation record this entry states the ending of, so the trail records whose mailbox was changed
     /// without asking the account table what the identifier means.
     /// </remarks>
-    public required MailOwnerId Owner { get; init; }
+    public required MailUserId User { get; init; }
 
     /// <summary>Gets the local email the change was about.</summary>
     /// <remarks>
@@ -150,7 +150,7 @@ public sealed record MailboxMutationAuditEntry
             Id = id,
             MutationRecordId = record.Id,
             AccountId = record.Request.Occurrence.AccountId,
-            Owner = record.Owner,
+            User = record.User,
             StoredEmailId = record.Request.StoredEmailId,
             Mutation = record.Request.Mutation,
             SourceFolderPath = sourceFolder.RemotePath,

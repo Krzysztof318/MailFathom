@@ -18,7 +18,7 @@ internal sealed class InMemorySpamClassificationRunStore : ISpamClassificationRu
     internal IReadOnlyList<SpamClassificationRun> Saves => this.saves;
 
     /// <summary>Gets the run recorded for an account, whether or not it is still outstanding.</summary>
-    /// <param name="account">The account to read, named as the owner and the identifier together.</param>
+    /// <param name="account">The account to read, named as the user and the identifier together.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never had one.</returns>
     internal SpamClassificationRun? Find(MailAccountIdentity account) => this.runs.GetValueOrDefault(account);
 

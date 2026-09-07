@@ -41,7 +41,7 @@ public sealed class CreateContactToolTests
         Assert.Null(result.AddressHolderContactId);
     }
 
-    /// <summary>A caller writing for the owner writes somebody down, so the record is asserted rather than collected.</summary>
+    /// <summary>A caller writing for the user writes somebody down, so the record is asserted rather than collected.</summary>
     [Fact]
     public async Task CreateContactAsync_ARecordTheBookAccepts_PublishesItAsAsserted()
     {
@@ -69,7 +69,7 @@ public sealed class CreateContactToolTests
         var holder = ContactId.Create(Guid.CreateVersion7(StubContactBook.Now));
         var book = new StubContactBook();
         book.Directory
-            .FindHoldersOfAsync(Arg.Any<MailOwnerId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>
             {
                 [StubContactBook.Address("anna@example.test")] = holder,

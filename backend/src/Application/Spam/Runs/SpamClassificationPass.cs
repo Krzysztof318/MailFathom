@@ -58,7 +58,7 @@ public sealed class SpamClassificationPass
     /// <param name="classifications">Answers what an occurrence was already decided as, and under which terms.</param>
     /// <param name="classifier">Scores an occurrence and records the verdict.</param>
     /// <param name="actionRecorder">Applies the run's posture to a verdict, writing the changes down or only working them out.</param>
-    /// <param name="settingsReader">Answers whether the account's owner classifies and what profile their mail runs under.</param>
+    /// <param name="settingsReader">Answers whether the account's user classifies and what profile their mail runs under.</param>
     /// <param name="commitPolicy">Commits the run's position and counts.</param>
     /// <param name="options">Bounds one pass.</param>
     /// <param name="timeProvider">Stamps the instant a run ends.</param>
@@ -99,7 +99,7 @@ public sealed class SpamClassificationPass
     }
 
     /// <summary>Takes one bounded pass over the account's requested run, where it has one.</summary>
-    /// <param name="account">The account whose run is carried, named by its owner and its identifier.</param>
+    /// <param name="account">The account whose run is carried, named by its user and its identifier.</param>
     /// <param name="cancellationToken">Cancels the pass between messages and between batches; committed batches stay durable.</param>
     /// <returns>What the pass did, and how the run ended where this pass ended it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">
@@ -109,7 +109,7 @@ public sealed class SpamClassificationPass
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
     /// <remarks>
     /// The two ways a run ends without reaching the end of its mail are both decided here and before any message is
-    /// read, because both are statements about the whole run rather than about one message: the account's owner
+    /// read, because both are statements about the whole run rather than about one message: the account's user
     /// classifying nothing, and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
@@ -123,7 +123,7 @@ public sealed class SpamClassificationPass
             return SpamClassificationRunReport.NoRun;
         }
 
-        var settings = this.settingsReader.SettingsFor(account.Owner);
+        var settings = this.settingsReader.SettingsFor(account.User);
 
         if (!settings.IsEnabled)
         {
@@ -253,7 +253,7 @@ public sealed class SpamClassificationPass
         else
         {
             var result = await this.classifier.ClassifyAsync(
-                run.Account.Owner,
+                run.Account.User,
                 candidate.Id,
                 SpamClassificationMode.Reclassify,
                 cancellationToken);
@@ -270,7 +270,7 @@ public sealed class SpamClassificationPass
         }
 
         var action = await this.actionRecorder.RecordAsync(
-            run.Account.Owner,
+            run.Account.User,
             classification,
             run.Terms.Posture,
             cancellationToken);

@@ -132,7 +132,7 @@ describe('readMailFolders', () => {
         ]);
     });
 
-    it('reads an owner with no mail account as a tree with nothing in it', async () => {
+    it('reads a user with no mail account as a tree with nothing in it', async () => {
         const empty = JSON.stringify({ synchronizationEnabled: false, accounts: [] });
 
         const result = await readMailFolders(session, answering({ status: 200, body: empty }));
@@ -194,7 +194,7 @@ describe('readMailFolders', () => {
         expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
-    it('refuses an answer carrying more accounts than this surface serves one owner', async () => {
+    it('refuses an answer carrying more accounts than this surface serves one user', async () => {
         const accounts = Array.from({ length: 257 }, (_, index) => ({
             account: { ...workAccount, id: `account-${String(index)}` },
             folders: [],

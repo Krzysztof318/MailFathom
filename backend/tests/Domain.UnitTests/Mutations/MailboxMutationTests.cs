@@ -45,7 +45,7 @@ public sealed class MailboxMutationTests
     /// The three left out move a message rather than write a value on one, so a run recognizes them by where the
     /// message turned up. Admitting one of them here would make the flag-change read ask for records that can explain
     /// nothing it is looking at, and leaving one of the five out would leave that value unexplained and credited to the
-    /// mailbox owner.
+    /// mailbox user.
     /// </remarks>
     [Fact]
     public void FlagWriting_IsEveryMutationWhoseWholeEffectAFlagsResponseReports()

@@ -166,7 +166,7 @@ export function FolderTree({
     // one thing about an unread count somebody notices.
     const directory = unreadAfterMarking(answered.result.value, marked);
 
-    // An owner holding no account is told so and told what would fill it, rather than being handed an empty tree.
+    // A user holding no account is told so and told what would fill it, rather than being handed an empty tree.
     if (directory.accounts.length === 0) {
         return (
             <Note>

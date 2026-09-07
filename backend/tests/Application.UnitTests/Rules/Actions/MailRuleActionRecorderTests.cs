@@ -26,7 +26,7 @@ namespace MailFathom.Application.UnitTests.Rules.Actions;
 public sealed class MailRuleActionRecorderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
@@ -539,7 +539,7 @@ public sealed class MailRuleActionRecorderTests
         return await recorder.RecordAsync(
             Substitute.For<IPersistenceSession>(),
             storedEmailId,
-            Account.Owner,
+            Account.User,
             occurrence,
             plan,
             revision,

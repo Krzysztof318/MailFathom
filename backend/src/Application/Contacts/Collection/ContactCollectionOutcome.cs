@@ -8,7 +8,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <remarks>
 /// This is the whole of what collection reports, because it is the whole of what may be reported: every value is a
 /// decision about a person rather than the person, so an operator can read how a book is filling without any address
-/// reaching an instrument. Which of the refusals is rising is what they act on — a rising exclusion says the owner's
+/// reaching an instrument. Which of the refusals is rising is what they act on — a rising exclusion says the user's
 /// list is doing its work, a rising bound says the run's ceiling is pacing an initial synchronization, and a rising
 /// count of addresses below the threshold says the mailbox holds more one-time senders than correspondents.
 /// </remarks>
@@ -26,7 +26,7 @@ public enum ContactCollectionOutcome
     /// <summary>The address is not one this account records: the policy refuses it, or nothing usable could name it.</summary>
     /// <remarks>
     /// Two refusals under one value, because both are the same answer to an operator: this address was never a
-    /// candidate. The policy half is the ordinary one — an automated mailbox, an owner's exclusion, or the deployment's
+    /// candidate. The policy half is the ordinary one — an automated mailbox, a user's exclusion, or the deployment's
     /// own address — and the other is an address collection could derive no display name from, which needs an address
     /// past <c>ContactDisplayName</c>'s length carrying no name of its own and is correspondingly rare. They are not
     /// split because an operator reads a rising count as *my list is doing its work*, and a second value nobody's

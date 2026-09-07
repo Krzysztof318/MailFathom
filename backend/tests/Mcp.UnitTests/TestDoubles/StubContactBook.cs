@@ -32,7 +32,7 @@ internal sealed class StubContactBook
     /// <remarks>
     /// One instance rather than one per site, for the reason <c>AuthoredSendGovernors.Governing</c> states: production
     /// composes one scoped authorization that the use case and the ownership both read. Two of them here would let the
-    /// ownership answer from a caller the use cases never saw — this one carries no owner, so the resolution falls back
+    /// ownership answer from a caller the use cases never saw — this one carries no user, so the resolution falls back
     /// to the deployment's, and a change that made it read the use case's own principal would land on the same answer
     /// and leave every tool suite green.
     /// </remarks>
@@ -44,13 +44,13 @@ internal sealed class StubContactBook
     public StubContactBook()
     {
         this.Directory
-            .FindHoldersOfAsync(Arg.Any<MailOwnerId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<MailUserId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
 
         this.Store
             .ReplaceAsync(
                 Arg.Any<IPersistenceSession>(),
-                Arg.Any<MailOwnerId>(),
+                Arg.Any<MailUserId>(),
                 Arg.Any<Contact>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);

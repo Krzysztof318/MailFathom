@@ -24,7 +24,7 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// <inheritdoc />
     /// <remarks>
     /// A tombstoned occurrence is deliberately still readable here. The message left the server, and whether the local
-    /// copy is kept is a disposition an owner chose; a copy that is kept is mail a reader can still reach, so refusing to
+    /// copy is kept is a disposition a user chose; a copy that is kept is mail a reader can still reach, so refusing to
     /// classify it would leave exactly the mail nobody else can act on unclassified.
     /// </remarks>
     public async Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken)
@@ -52,13 +52,13 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// in this reader.
     /// </remarks>
     public async Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
-        var ownerId = owner.Value;
+        var userId = user.Value;
         var mailboxAccountId = occurrenceId.AccountId.Value;
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         var generation = occurrenceId.FolderResolutionId.Generation.Value;
@@ -67,7 +67,7 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
 
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.OwnerId == ownerId
+            .Where(email => email.UserId == userId
                 && email.MailboxAccountId == mailboxAccountId
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
@@ -101,12 +101,12 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
             return [];
         }
 
-        var ownerId = account.Owner.Value;
+        var userId = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         string[] aliases = [.. folderAliases.Select(static alias => alias.Value)];
         var emails = dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.OwnerId == ownerId
+            .Where(email => email.UserId == userId
                 && email.MailboxAccountId == mailboxAccountId
                 && aliases.Contains(email.MailFolder.Alias));
 

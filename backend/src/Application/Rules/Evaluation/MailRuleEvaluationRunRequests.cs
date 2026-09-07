@@ -62,7 +62,7 @@ public sealed class MailRuleEvaluationRunRequests
     }
 
     /// <summary>Asks for the account's rules to be run over every message stored for it.</summary>
-    /// <param name="account">The account to run the rules over, named by its owner and its identifier together.</param>
+    /// <param name="account">The account to run the rules over, named by its user and its identifier together.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
@@ -105,7 +105,7 @@ public sealed class MailRuleEvaluationRunRequests
     }
 
     /// <summary>Asks, on a rule's own declared occasion, for the account's scheduled rules to be run over its mailbox.</summary>
-    /// <param name="account">The account to run the scheduled rules over, named by its owner and its identifier together.</param>
+    /// <param name="account">The account to run the scheduled rules over, named by its user and its identifier together.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this occasion is what put it there.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>

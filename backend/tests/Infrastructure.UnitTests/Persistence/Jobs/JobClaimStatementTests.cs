@@ -124,9 +124,9 @@ public sealed class JobClaimStatementTests
     }
 
     /// <summary>
-    /// The order is the turn each job holds, which is the whole of what makes the claim fair across owners: the enqueue
-    /// spread each owner's backlog over the clock, so draining in turn order interleaves owners. Ordering by the
-    /// available instant again — the FIFO this replaced — would silently give one owner's backlog the whole queue for
+    /// The order is the turn each job holds, which is the whole of what makes the claim fair across users: the enqueue
+    /// spread each user's backlog over the clock, so draining in turn order interleaves users. Ordering by the
+    /// available instant again — the FIFO this replaced — would silently give one user's backlog the whole queue for
     /// as long as it lasted, and every other assertion here would go on passing.
     /// </summary>
     [Fact]
@@ -181,7 +181,7 @@ public sealed class JobClaimStatementTests
         var arguments = statement.GetArguments();
         Assert.DoesNotContain("attempt-a", statement.Format, StringComparison.Ordinal);
         Assert.DoesNotContain("classify-email-spam", statement.Format, StringComparison.Ordinal);
-        Assert.Contains(arguments, argument => Equals(argument, request.Owner.Value));
+        Assert.Contains(arguments, argument => Equals(argument, request.User.Value));
         Assert.Contains(arguments, argument => Equals(argument, request.BatchSize));
         Assert.Contains(arguments, argument => Equals(argument, ClaimedAt + request.LeaseDuration));
         Assert.Contains(

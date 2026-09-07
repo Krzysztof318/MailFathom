@@ -10,8 +10,8 @@ namespace MailFathom.Application.Preferences;
 /// <summary>Reads and replaces the signed-in person's own client preferences.</summary>
 /// <remarks>
 /// <para>
-/// Whose preferences these are comes from the principal rather than from the request, exactly as it does for the owner
-/// record: there is no argument here for another owner's identifier, so a request about somebody else is something a
+/// Whose preferences these are comes from the principal rather than from the request, exactly as it does for the user
+/// record: there is no argument here for another user's identifier, so a request about somebody else is something a
 /// caller cannot express rather than something a surface has to refuse.
 /// </para>
 /// <para>
@@ -24,8 +24,8 @@ namespace MailFathom.Application.Preferences;
 /// </para>
 /// <para>
 /// A read answers a document whatever the deployment holds, because a person who has set nothing wants the defaults
-/// drawn rather than an error. A write reports whether there was an owner to write for, which is the one case the two
-/// differ on and is an owner erased under a credential that has not yet been withdrawn.
+/// drawn rather than an error. A write reports whether there was a user to write for, which is the one case the two
+/// differ on and is a user erased under a credential that has not yet been withdrawn.
 /// </para>
 /// </remarks>
 public sealed class OwnClientPreferences
@@ -34,7 +34,7 @@ public sealed class OwnClientPreferences
     private readonly IClientPreferencesStore store;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="authorization">Reports the grant the caller holds and the owner it acts for.</param>
+    /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="store">Holds one person's preferences.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnClientPreferences(AccessAuthorization authorization, IClientPreferencesStore store)
@@ -49,13 +49,13 @@ public sealed class OwnClientPreferences
     /// <summary>Reads what the signed-in person set about their own client.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What they set, or <see cref="ClientPreferences.Unset" /> where they have set nothing.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="System.Text.Json.JsonException">Thrown when the stored row is not a document of preferences.</exception>
     public async Task<ClientPreferences> ReadAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var stored = await this.store.ReadAsync(this.authorization.RequireOwner(), cancellationToken);
+        var stored = await this.store.ReadAsync(this.authorization.RequireUser(), cancellationToken);
 
         return stored ?? ClientPreferences.Unset;
     }
@@ -65,13 +65,13 @@ public sealed class OwnClientPreferences
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns><see langword="true" /> when the write landed, and <see langword="false" /> when this deployment holds no record for the caller.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="preferences" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     public Task<bool> SaveAsync(ClientPreferences preferences, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(preferences);
 
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.SaveAsync(this.authorization.RequireOwner(), preferences, cancellationToken);
+        return this.store.SaveAsync(this.authorization.RequireUser(), preferences, cancellationToken);
     }
 }

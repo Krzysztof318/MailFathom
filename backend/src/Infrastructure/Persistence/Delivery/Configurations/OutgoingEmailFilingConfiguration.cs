@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 /// One row per role rather than per append, which is what makes filing idempotent without a read-then-write: the key
 /// is the record and the role, so a second attempt to file the same message into the same role is refused by the key
 /// rather than putting a second copy in the mailbox. That is the duplication no local correction can withdraw for
-/// the owner, since a copy in their sent folder is a message they will read as one they sent twice.
+/// the user, since a copy in their sent folder is a message they will read as one they sent twice.
 /// </para>
 /// <para>
 /// The row is written before the <c>APPEND</c> goes out and completed after it, which is why the stage is a column
@@ -74,7 +74,7 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // which would make them grow with everything ever sent rather than with what is in flight.
         entity.HasIndex(filing => new
         {
-            filing.OwnerId,
+            filing.UserId,
             filing.MailboxAccountId,
             filing.FolderPath,
             filing.PlacementUidValidity,
@@ -85,7 +85,7 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
 
         entity.HasIndex(filing => new
         {
-            filing.OwnerId,
+            filing.UserId,
             filing.MailboxAccountId,
             filing.InternetMessageId,
         })

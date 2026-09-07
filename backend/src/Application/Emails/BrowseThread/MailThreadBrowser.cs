@@ -129,7 +129,7 @@ public sealed class MailThreadBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailThread, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
 
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var fingerprint = EmailThreadCursor.FingerprintOf(request.ThreadId);
@@ -140,7 +140,7 @@ public sealed class MailThreadBrowser
         // a conversation is read by membership and the folder a caller opened it from would cut it.
         var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
 
-        // Every value has been validated by this point, so a deployment serving this owner no account answers the same
+        // Every value has been validated by this point, so a deployment serving this user no account answers the same
         // refusals a deployment serving several does, and only then reports that it holds no such conversation.
         if (scope.AccountIds.Count is 0)
         {

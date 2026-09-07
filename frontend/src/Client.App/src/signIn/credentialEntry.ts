@@ -33,7 +33,7 @@ export type CredentialEntryResult =
  * surface challenges with — so a password carrying anything outside US-ASCII survives the round trip rather than
  * depending on what a client guessed.
  *
- * @param userName The owner's user name, which the scheme's own grammar refuses a colon inside.
+ * @param userName The user's user name, which the scheme's own grammar refuses a colon inside.
  * @param password The password beside it, which may carry anything including a colon, up to the bound above.
  * @returns The finished header value, or the refusal naming why there is none.
  */

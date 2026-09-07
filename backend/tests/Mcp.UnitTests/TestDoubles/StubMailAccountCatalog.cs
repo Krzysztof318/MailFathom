@@ -8,9 +8,9 @@ using MailFathom.TestSupport;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
-/// <summary>Describes the accounts a test's deployment serves, and the accounts its one owner owns.</summary>
+/// <summary>Describes the accounts a test's deployment serves, and the accounts its one user owns.</summary>
 /// <remarks>
-/// It answers both catalogs with one set, because a tool test arranges a deployment serving one owner and the two
+/// It answers both catalogs with one set, because a tool test arranges a deployment serving one user and the two
 /// answers are the same there. A test about the difference between them arranges the two separately rather than
 /// reaching for this.
 /// </remarks>
@@ -29,9 +29,9 @@ internal sealed class StubMailAccountCatalog(params string[] servedAccountIds)
 
     /// <inheritdoc />
     /// <remarks>
-    /// The owner every account here belongs to, which is the deployment's one owner unless a test served an account of
+    /// The user every account here belongs to, which is the deployment's one user unless a test served an account of
     /// somebody else's. Read from the accounts rather than stated again, so the two halves cannot disagree.
     /// </remarks>
-    public MailOwnerId Owner =>
-        this.ServedAccounts.Count is 0 ? SyntheticMailOwner.Deployment : this.ServedAccounts[0].Owner;
+    public MailUserId User =>
+        this.ServedAccounts.Count is 0 ? SyntheticMailUser.Deployment : this.ServedAccounts[0].User;
 }

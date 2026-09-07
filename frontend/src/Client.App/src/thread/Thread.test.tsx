@@ -51,7 +51,7 @@ function row(id: string, overrides: Readonly<Record<string, unknown>> = {}): Rea
         sentAt: '2026-08-31T09:40:00+00:00',
         senderAddress: 'auditor@example.invalid',
         senderDisplayName: 'The auditor',
-        toAddresses: ['owner@example.invalid'],
+        toAddresses: ['user@example.invalid'],
         unread: false,
         flagged: false,
         answered: false,
@@ -73,7 +73,7 @@ function pageOf(
         messages: ids.map((id, at) => ({ position: at, answeredId: null, email: row(id, rows[id] ?? {}) })),
         participants: [
             { address: 'auditor@example.invalid', displayName: 'The auditor', messageCount: 2 },
-            { address: 'owner@example.invalid', displayName: null, messageCount: 1 },
+            { address: 'user@example.invalid', displayName: null, messageCount: 1 },
         ],
         messageCount: ids.length,
         moreMessagesNotAssembled: false,
@@ -274,7 +274,7 @@ describe('Thread', () => {
     it('names everybody who wrote from the answer rather than from the messages it happens to hold', async () => {
         drawing(deploymentAnswering(pageOf(['one'])));
 
-        expect(await screen.findByText('Written by The auditor and owner@example.invalid')).toBeDefined();
+        expect(await screen.findByText('Written by The auditor and user@example.invalid')).toBeDefined();
     });
 
     it('says a conversation has authors it does not name', async () => {

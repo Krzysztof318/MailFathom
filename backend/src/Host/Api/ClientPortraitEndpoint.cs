@@ -15,14 +15,14 @@ namespace MailFathom.Host.Api;
 /// <summary>Serves the signed-in person the picture they are drawn by, and takes it back replaced or removed.</summary>
 /// <remarks>
 /// <para>
-/// Three routes over one picture. It is stored on the owner axis beside the preferences document rather than inside
+/// Three routes over one picture. It is stored on the user axis beside the preferences document rather than inside
 /// one, because a megabyte of image octets is neither configuration nor a small closed document, and reading a switch
 /// should not carry a photograph.
 /// </para>
 /// <para>
-/// <b>No route here names an owner.</b> The person is the one the credential authenticated, resolved from the request
+/// <b>No route here names a user.</b> The person is the one the credential authenticated, resolved from the request
 /// exactly as the record routes resolve it, so a request reaching somebody else's portrait cannot be composed: there
-/// is no argument to put another owner's identifier in and no listing to discover one from.
+/// is no argument to put another user's identifier in and no listing to discover one from.
 /// </para>
 /// <para>
 /// All three are <see cref="MailFathomPermission.MailRead" />, and none adds a name to the published permission set.
@@ -161,7 +161,7 @@ internal static class ClientPortraitEndpoint
                 StatusCodes.Status400BadRequest);
         }
 
-        if (OwnerPortrait.Of(buffer.ToArray()) is not { } portrait)
+        if (UserPortrait.Of(buffer.ToArray()) is not { } portrait)
         {
             return Refusal(
                 $"A portrait is {string.Join(" or ", PortraitImageType.All.Select(kind => kind.MediaType))}, judged by what the file is rather than by what the request declared it to be.",
@@ -195,7 +195,7 @@ internal static class ClientPortraitEndpoint
 
     /// <summary>Names the served octets, so a client that already holds them is answered that they have not changed.</summary>
     /// <remarks>A digest of the picture rather than the instant it was written: it is stable across a restore, and two writes of the same picture leave a client's copy valid.</remarks>
-    private static EntityTagHeaderValue EntityTagOf(OwnerPortrait portrait) =>
+    private static EntityTagHeaderValue EntityTagOf(UserPortrait portrait) =>
         new($"\"{Convert.ToHexString(SHA256.HashData(portrait.Content.Span))}\"");
 
     private static ProblemHttpResult Refusal(string detail, int statusCode) =>

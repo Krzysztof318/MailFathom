@@ -14,37 +14,37 @@ public sealed class ClientSignalTicketsTests
 {
     private static readonly DateTimeOffset Instant = new(2026, 9, 4, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A ticket names the owner the credential that minted it named, and nobody else.</summary>
+    /// <summary>A ticket names the user the credential that minted it named, and nobody else.</summary>
     [Fact]
-    public void Redeem_AFreshlyMintedTicket_NamesTheOwnerItWasMintedFor()
+    public void Redeem_AFreshlyMintedTicket_NamesTheUserItWasMintedFor()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
 
         // Act
-        var owner = tickets.Redeem(minted?.Value);
+        var user = tickets.Redeem(minted?.Value);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Deployment, owner);
+        Assert.Equal(SyntheticMailUser.Deployment, user);
     }
 
-    /// <summary>Two owners minting at once each get their own, so one connection can never be opened as the other person.</summary>
+    /// <summary>Two users minting at once each get their own, so one connection can never be opened as the other person.</summary>
     [Fact]
-    public void Redeem_TicketsMintedForTwoOwners_NamesEachOwnersTicketAsTheirs()
+    public void Redeem_TicketsMintedForTwoUsers_NamesEachUsersTicketAsTheirs()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var mine = tickets.Mint(SyntheticMailOwner.Deployment);
-        var theirs = tickets.Mint(SyntheticMailOwner.Another);
+        var mine = tickets.Mint(SyntheticMailUser.Deployment);
+        var theirs = tickets.Mint(SyntheticMailUser.Another);
 
         // Act
-        var firstOwner = tickets.Redeem(mine?.Value);
-        var secondOwner = tickets.Redeem(theirs?.Value);
+        var firstUser = tickets.Redeem(mine?.Value);
+        var secondUser = tickets.Redeem(theirs?.Value);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Deployment, firstOwner);
-        Assert.Equal(SyntheticMailOwner.Another, secondOwner);
+        Assert.Equal(SyntheticMailUser.Deployment, firstUser);
+        Assert.Equal(SyntheticMailUser.Another, secondUser);
     }
 
     /// <summary>A ticket opens one connection, so one read out of a log or a browser's history opens none.</summary>
@@ -53,14 +53,14 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
 
         // Act
         var first = tickets.Redeem(minted?.Value);
         var second = tickets.Redeem(minted?.Value);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Deployment, first);
+        Assert.Equal(SyntheticMailUser.Deployment, first);
         Assert.Null(second);
     }
 
@@ -71,7 +71,7 @@ public sealed class ClientSignalTicketsTests
         // Arrange
         var clock = new FakeTimeProvider(Instant);
         var tickets = new ClientSignalTickets(clock);
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
 
         // Act
         clock.Advance(ClientSignalTickets.Lifetime + TimeSpan.FromSeconds(1));
@@ -93,7 +93,7 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        tickets.Mint(SyntheticMailOwner.Deployment);
+        tickets.Mint(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.Null(tickets.Redeem(presented));
@@ -105,7 +105,7 @@ public sealed class ClientSignalTicketsTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
         var identifier = minted!.Value[..minted.Value.IndexOf('.', StringComparison.Ordinal)];
 
         // Act
@@ -126,7 +126,7 @@ public sealed class ClientSignalTicketsTests
         // Act
         var minted = Enumerable
             .Range(0, 50)
-            .Select(_ => tickets.Mint(SyntheticMailOwner.Deployment)!.Value)
+            .Select(_ => tickets.Mint(SyntheticMailUser.Deployment)!.Value)
             .ToArray();
 
         // Assert
@@ -135,13 +135,13 @@ public sealed class ClientSignalTicketsTests
 
     /// <summary>A ticket says when it stops working, so a client mints another rather than retrying one that cannot open a connection.</summary>
     [Fact]
-    public void Mint_ForAnOwner_ReportsWhenPresentingItStopsWorking()
+    public void Mint_ForAnUser_ReportsWhenPresentingItStopsWorking()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
 
         // Act
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.Equal(Instant + ClientSignalTickets.Lifetime, minted?.ExpiresAt);
@@ -157,15 +157,15 @@ public sealed class ClientSignalTicketsTests
 
         for (var minted = 0; minted < ClientSignalTickets.MostOutstandingTickets; minted++)
         {
-            tickets.Mint(SyntheticMailOwner.Deployment);
+            tickets.Mint(SyntheticMailUser.Deployment);
         }
 
-        Assert.Null(tickets.Mint(SyntheticMailOwner.Deployment));
+        Assert.Null(tickets.Mint(SyntheticMailUser.Deployment));
 
         // Act
         clock.Advance(ClientSignalTickets.Lifetime + TimeSpan.FromSeconds(1));
 
         // Assert
-        Assert.NotNull(tickets.Mint(SyntheticMailOwner.Deployment));
+        Assert.NotNull(tickets.Mint(SyntheticMailUser.Deployment));
     }
 }

@@ -28,7 +28,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 public sealed class AuthoredMailDraftingTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -88,18 +88,18 @@ public sealed class AuthoredMailDraftingTests
     }
 
     /// <summary>
-    /// An account another owner owns is refused exactly as one nobody serves, so a caller cannot leave a message in
+    /// An account another user owns is refused exactly as one nobody serves, so a caller cannot leave a message in
     /// somebody else's own Drafts folder for them to read as theirs.
     /// </summary>
     [Fact]
-    public async Task SaveAsync_AnAccountTheCallersOwnerDoesNotOwn_IsRefusedAndWritesNoDraft()
+    public async Task SaveAsync_AnAccountTheCallersUserDoesNotOwn_IsRefusedAndWritesNoDraft()
     {
         // Arrange
         var harness = Harness(new InMemoryOutgoingEmailStore());
         var drafting = DraftingOver(
             harness,
-            authorization: AccessAuthorizations.ForOwnerGranted(
-                SyntheticMailOwner.Another,
+            authorization: AccessAuthorizations.ForUserGranted(
+                SyntheticMailUser.Another,
                 MailFathomPermission.MailDraftsWrite));
 
         // Act
@@ -116,7 +116,7 @@ public sealed class AuthoredMailDraftingTests
         // Assert
         var refused = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(refusal);
 
-        // The refusal repeats what the caller named and nothing else, which is what keeps an account another owner owns
+        // The refusal repeats what the caller named and nothing else, which is what keeps an account another user owns
         // from being told apart from one this deployment never served.
         Assert.Equal(MailAccountSelector.For(Account.Id), refused.RequestedAccount);
         Assert.Empty(harness.Drafts.Drafts);

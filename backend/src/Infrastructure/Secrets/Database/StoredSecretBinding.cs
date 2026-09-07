@@ -10,15 +10,15 @@ namespace MailFathom.Infrastructure.Secrets.Database;
 /// <summary>Composes the authenticated identity of one database-backed secret.</summary>
 internal static class StoredSecretBinding
 {
-    /// <summary>Binds material to its owner, row, name, and stored-secret purpose.</summary>
+    /// <summary>Binds material to its user, row, name, and stored-secret purpose.</summary>
     internal static DataEncryptionBinding Create(
-        MailOwnerId owner,
+        MailUserId user,
         DatabaseSecretReference reference,
         SecretName name)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
-            throw new ArgumentException("A stored secret belongs to an owner, and the value names nobody.", nameof(owner));
+            throw new ArgumentException("A stored secret belongs to a user, and the value names nobody.", nameof(user));
         }
 
         if (!reference.IsSpecified)
@@ -32,9 +32,9 @@ internal static class StoredSecretBinding
         }
 
         // The GUIDs use their fixed 36-character D form and SecretName admits no slash, so this separator cannot
-        // occur in any part and distinct owner/reference/name triples cannot compose the same subject.
+        // occur in any part and distinct user/reference/name triples cannot compose the same subject.
         return DataEncryptionBinding.Create(
             DataEncryptionPurpose.StoredSecret,
-            $"{owner.Value:D}/{reference.Id:D}/{name.Value}");
+            $"{user.Value:D}/{reference.Id:D}/{name.Value}");
     }
 }

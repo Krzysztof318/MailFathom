@@ -25,10 +25,10 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record RecurringSendJobPayload : IJobPayload
 {
-    /// <summary>Gets the owner whose account every occurrence is sent as.</summary>
-    public required Guid OwnerId { get; init; }
+    /// <summary>Gets the user whose account every occurrence is sent as.</summary>
+    public required Guid UserId { get; init; }
 
-    /// <summary>Gets the account every occurrence is submitted through and sent as, within that owner.</summary>
+    /// <summary>Gets the account every occurrence is submitted through and sent as, within that user.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the declaration whose occasion has come round.</summary>
@@ -40,12 +40,12 @@ public sealed record RecurringSendJobPayload : IJobPayload
     public JobType JobType => JobType.SendRecurringOccurrence;
 
     /// <summary>Describes one recurring send as the document a job carries.</summary>
-    /// <param name="account">The account every occurrence is sent as, named by its owner and its identifier together.</param>
+    /// <param name="account">The account every occurrence is sent as, named by its user and its identifier together.</param>
     /// <param name="recurringSendId">The declaration the occasion belongs to.</param>
     /// <returns>The payload naming that declaration.</returns>
     public static RecurringSendJobPayload For(MailAccountIdentity account, RecurringSendId recurringSendId) => new()
     {
-        OwnerId = account.Owner.Value,
+        UserId = account.User.Value,
         AccountId = account.Id.Value,
         DeclarationId = recurringSendId.Value,
     };
@@ -54,14 +54,14 @@ public sealed record RecurringSendJobPayload : IJobPayload
     /// <returns>The account identity.</returns>
     /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
     /// <remarks>
-    /// The owner is a required property, so a document that carries none is refused by the deserializer before
-    /// this is reached rather than resolving to an owner nobody named. A document the previous release wrote is
-    /// not that case: the migration that put the owner on the queue row writes it into the document beside it, so
+    /// The user is a required property, so a document that carries none is refused by the deserializer before
+    /// this is reached rather than resolving to a user nobody named. A document the previous release wrote is
+    /// not that case: the migration that put the user on the queue row writes it into the document beside it, so
     /// what remains here is a value that is present and does not name an account — which this refuses for the
     /// reason every payload record refuses a component that no longer validates.
     /// </remarks>
     public MailAccountIdentity ToAccountIdentity() =>
-        MailAccountIdentity.Create(MailOwnerId.Create(this.OwnerId), MailAccountId.Create(this.AccountId));
+        MailAccountIdentity.Create(MailUserId.Create(this.UserId), MailAccountId.Create(this.AccountId));
 
     /// <summary>Rebuilds the declaration identity this payload names.</summary>
     /// <returns>The declaration identity.</returns>

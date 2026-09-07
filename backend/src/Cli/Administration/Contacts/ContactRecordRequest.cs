@@ -10,7 +10,7 @@ namespace MailFathom.Cli.Administration.Contacts;
 /// <param name="DisplayName">The name to record.</param>
 /// <param name="Addresses">Every address the person uses.</param>
 /// <param name="PreferredAddress">The address to use by default, which is one of <paramref name="Addresses" />.</param>
-/// <param name="Note">What the owner wrote about the person, or <see langword="null" /> to hold no note.</param>
+/// <param name="Note">What the user wrote about the person, or <see langword="null" /> to hold no note.</param>
 /// <remarks>
 /// One shape for recording a person and for correcting one, because an amendment states the whole record rather than
 /// the difference from the one held. Which of the two is meant is the route and the verb, never a field.

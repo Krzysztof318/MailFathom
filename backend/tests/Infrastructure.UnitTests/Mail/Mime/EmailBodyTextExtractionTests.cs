@@ -195,7 +195,7 @@ public sealed class EmailBodyTextExtractionTests
 
         // Act
         var result = await CreateReader(new EmailMimeExtractionOptions())
-            .ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
+            .ReadMetadataAsync(content, SyntheticMailUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result.Metadata);
@@ -433,7 +433,7 @@ public sealed class EmailBodyTextExtractionTests
 
         // Act
         var result = await CreateReader(new EmailMimeExtractionOptions())
-            .ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
+            .ReadMetadataAsync(content, SyntheticMailUser.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, result.Outcome);
@@ -455,7 +455,7 @@ public sealed class EmailBodyTextExtractionTests
             options.MaxExtractedTextCharacters = bound;
         }
 
-        var result = await CreateReader(options).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
+        var result = await CreateReader(options).ReadMetadataAsync(content, SyntheticMailUser.Deployment, CancellationToken.None);
 
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, result.Outcome);
         Assert.NotNull(result.Metadata);

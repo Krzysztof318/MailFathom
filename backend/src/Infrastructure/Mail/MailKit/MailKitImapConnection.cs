@@ -256,7 +256,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             FolderAccess.ReadOnly,
             transportSecurityPolicy);
 
-    /// <summary>Gets whether the established connection is still in the state its owner needs.</summary>
+    /// <summary>Gets whether the established connection is still in the state its user needs.</summary>
     private bool IsUsable => this.client is { IsConnected: true }
         && (this.folder is null || this.selectedFolder is { IsOpen: true });
 
@@ -760,7 +760,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// <see cref="IMailService.IsConnected" /> is only reporting a socket. A dropped connection, a
     /// desynchronized stream, and an attempt abandoned mid-command therefore all end this connection, so the next
     /// attempt starts from a session it established itself. A terminal failure ends the operation anyway and leaves
-    /// the connection to its owner.
+    /// the connection to its user.
     /// </remarks>
     private void DiscardConnectionUnlessItSurvived(Exception failure)
     {

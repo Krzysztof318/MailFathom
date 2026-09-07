@@ -21,7 +21,7 @@ public sealed class PlannedMailRetrievalTests
     private static readonly EmailKnowledgeBounds Bounds = EmailKnowledgeBounds.Default;
 
     private static readonly MailboxScope WholeMailbox = MailboxScope.Create(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 

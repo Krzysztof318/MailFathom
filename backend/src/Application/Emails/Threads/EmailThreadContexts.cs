@@ -29,7 +29,7 @@ public sealed class EmailThreadContexts
 {
     private readonly IEmailThreadReader threadReader;
     private readonly MailboxScope readableScope;
-    private readonly MailOwnerId actingOwner;
+    private readonly MailUserId actingUser;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Dictionary<EmailThreadId, AssembledThread> assembled = [];
 
@@ -55,7 +55,7 @@ public sealed class EmailThreadContexts
 
         this.threadReader = threadReader;
         this.readableScope = scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
-        this.actingOwner = scopeResolver.Owner;
+        this.actingUser = scopeResolver.User;
         this.egressGuard = egressGuard;
     }
 
@@ -70,7 +70,7 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        using var actingFor = this.egressGuard.ActingFor(this.actingOwner);
+        using var actingFor = this.egressGuard.ActingFor(this.actingUser);
 
         var read = await this.threadReader.ReadEmailsAsync(threadId, this.readableScope, cancellationToken);
         var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;

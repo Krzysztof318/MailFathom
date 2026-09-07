@@ -12,7 +12,7 @@ namespace MailFathom.Application.Mail;
 /// <para>
 /// The list is per account because the accounts an instance synchronizes are different correspondence: a work account's
 /// counterparties have nothing to do with a personal one's, and a single list would either recognize too much on one
-/// account or make an owner maintain the union of both. What is deployment-wide is the set of domains the configured
+/// account or make a user maintain the union of both. What is deployment-wide is the set of domains the configured
 /// accounts themselves use, which every account's policy is built with unless the deployment says otherwise.
 /// </para>
 /// <para>

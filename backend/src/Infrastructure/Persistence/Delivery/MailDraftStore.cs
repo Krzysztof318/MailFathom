@@ -35,7 +35,7 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// <para>
 /// The append is not guarded by a read-then-write. The copy's key is the draft and the revision together, so appending
 /// one revision twice is refused by the database rather than by a check two callers can pass between — and a second
-/// copy in the owner's drafts folder is a draft they read as two.
+/// copy in the user's drafts folder is a draft they read as two.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -69,7 +69,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
             MailboxAccountId = account.Id.Value,
 
             // Written from the identity the caller's own catalog resolved, which is the account this draft belongs to.
-            OwnerId = account.Owner.Value,
+            UserId = account.User.Value,
             RequesterOrigin = author.Origin,
             RequesterIdentity = author.Identity,
             Subject = subject,
@@ -165,11 +165,11 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         var entities = await this.ReadDrafts()
-            .Where(draft => draft.OwnerId == ownerValue
+            .Where(draft => draft.UserId == userValue
                 && draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
                     || draft.PromotedToOutgoingEmailId != null
@@ -187,23 +187,23 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
 
     /// <inheritdoc />
     /// <remarks>
-    /// Narrowed on the owner first and the account second, which is the order the index over this table leads with, so
-    /// an owner's listing is a range scan whether or not it names an account. Drafts on their way out are left out at
+    /// Narrowed on the user first and the account second, which is the order the index over this table leads with, so
+    /// a user's listing is a range scan whether or not it names an account. Drafts on their way out are left out at
     /// the database rather than filtered afterwards: what a person means by their drafts is what they can still edit.
     /// </remarks>
-    public async Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
-        MailOwnerId owner,
+    public async Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
+        MailUserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var accountValue = account?.Value;
 
         var entities = await this.ReadDrafts()
-            .Where(draft => draft.OwnerId == ownerValue
+            .Where(draft => draft.UserId == userValue
                 && (accountValue == null || draft.MailboxAccountId == accountValue)
                 && draft.DiscardedAt == null
                 && draft.PromotedToOutgoingEmailId == null)
@@ -507,7 +507,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// draft repeated once per combination — and a listing of two hundred such drafts would read that product from the
     /// server to rebuild the same two hundred records. Four bounded statements cost four round trips and read each row
     /// once. What they give up is one statement's consistency: a revision committed between them can leave a record
-    /// carrying one revision's recipients beside another's copies, which is a draft this owner is editing rather than
+    /// carrying one revision's recipients beside another's copies, which is a draft this user is editing rather than
     /// mail, and every caller that acts on a draft re-reads it under the write's own transaction anyway.
     /// </para>
     /// </remarks>

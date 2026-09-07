@@ -22,16 +22,16 @@ public sealed class AttachmentDerivationBudgetTests
         // Arrange
         var budget = AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod: 4096,
-            maxInputOctetsPerPeriodPerOwner: 1024,
+            maxInputOctetsPerPeriodPerUser: 1024,
             maxDescriptionsPerPeriod: 40,
-            maxDescriptionsPerPeriodPerOwner: 10,
+            maxDescriptionsPerPeriodPerUser: 10,
             TimeSpan.FromDays(1));
 
         // Act, Assert
-        Assert.Equal(4096, budget.CeilingFor(AttachmentDerivationStep.Extraction, forOwner: false));
-        Assert.Equal(1024, budget.CeilingFor(AttachmentDerivationStep.Extraction, forOwner: true));
-        Assert.Equal(40, budget.CeilingFor(AttachmentDerivationStep.Description, forOwner: false));
-        Assert.Equal(10, budget.CeilingFor(AttachmentDerivationStep.Description, forOwner: true));
+        Assert.Equal(4096, budget.CeilingFor(AttachmentDerivationStep.Extraction, forUser: false));
+        Assert.Equal(1024, budget.CeilingFor(AttachmentDerivationStep.Extraction, forUser: true));
+        Assert.Equal(40, budget.CeilingFor(AttachmentDerivationStep.Description, forUser: false));
+        Assert.Equal(10, budget.CeilingFor(AttachmentDerivationStep.Description, forUser: true));
     }
 
     /// <summary>A step outside the set is refused rather than answered with a ceiling nobody declared.</summary>
@@ -42,7 +42,7 @@ public sealed class AttachmentDerivationBudgetTests
         var budget = AttachmentDerivationBudget.Unbounded;
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => budget.CeilingFor((AttachmentDerivationStep)7, forOwner: false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => budget.CeilingFor((AttachmentDerivationStep)7, forUser: false));
     }
 
     /// <summary>The default a deployment starts on declares nothing, in either step and either scope.</summary>
@@ -54,8 +54,8 @@ public sealed class AttachmentDerivationBudgetTests
 
         // Act, Assert
         Assert.True(budget.IsUnbounded);
-        Assert.Equal(0, budget.CeilingFor(AttachmentDerivationStep.Extraction, forOwner: false));
-        Assert.Equal(0, budget.CeilingFor(AttachmentDerivationStep.Description, forOwner: false));
+        Assert.Equal(0, budget.CeilingFor(AttachmentDerivationStep.Extraction, forUser: false));
+        Assert.Equal(0, budget.CeilingFor(AttachmentDerivationStep.Description, forUser: false));
     }
 
     /// <summary>A negative ceiling is refused, because a period that admits less than nothing is not a budget.</summary>
@@ -65,9 +65,9 @@ public sealed class AttachmentDerivationBudgetTests
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod: -1,
-            maxInputOctetsPerPeriodPerOwner: 0,
+            maxInputOctetsPerPeriodPerUser: 0,
             maxDescriptionsPerPeriod: 0,
-            maxDescriptionsPerPeriodPerOwner: 0,
+            maxDescriptionsPerPeriodPerUser: 0,
             TimeSpan.FromDays(1)));
     }
 

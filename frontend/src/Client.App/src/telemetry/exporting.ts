@@ -134,7 +134,7 @@ export function startRecording(): ClientPipeline {
             // ponytail: the measurements a session recorded stay in their instruments after it ends, the temporality
             // being cumulative and a provider belonging to the run rather than to a session — so signing out and
             // signing in as somebody else attributes the first person's totals to the second, on a deployment several
-            // owners share. Nothing personal travels either way, both being counts over a closed set of route
+            // users share. Nothing personal travels either way, both being counts over a closed set of route
             // templates and space names, and the spans and the log records are unaffected. Resetting them means a
             // meter provider per session, which the global registry refuses to re-register; #1227 is where that would
             // be taken up if a deployment reads a person's own totals rather than the deployment's.
@@ -170,7 +170,7 @@ export function startRecording(): ClientPipeline {
  * What every record this client exports says about who produced it.
  *
  * It identifies a client and never a person: the three attributes are what this stack is, what version of it is
- * running, and which head it is running in. The receiver on the client surface writes the owner attributes itself,
+ * running, and which head it is running in. The receiver on the client surface writes the user attributes itself,
  * from the credential the export presented, and replaces whatever a page put in their place — so nothing here is the
  * place a person would be named even if something tried.
  */

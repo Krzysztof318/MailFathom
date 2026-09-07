@@ -13,7 +13,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// <remarks>
 /// <para>
 /// Collection is the one part of this system that writes personal data about third parties without anybody asking it
-/// to, so an owner who switched it on is owed a way to see what it is doing. The counter is that way: one measurement
+/// to, so a user who switched it on is owed a way to see what it is doing. The counter is that way: one measurement
 /// per address considered, tagged with which of the six conclusions was reached, so a book filling too fast, a policy
 /// excluding everything, and a run repeatedly stopping at its ceiling are all readable apart from each other.
 /// </para>

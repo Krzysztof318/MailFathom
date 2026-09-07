@@ -8,7 +8,7 @@ namespace MailFathom.Domain.Delivery.Filing;
 /// <remarks>
 /// <para>
 /// An <c>APPEND</c> is the one command in a filing that must never be issued twice: a repeat is a second message in the
-/// owner's folder rather than a repeat of the first, and nothing the folder shows afterwards tells the two apart. So
+/// user's folder rather than a repeat of the first, and nothing the folder shows afterwards tells the two apart. So
 /// the row reaches <see cref="Issued" /> before the command goes out and <see cref="Confirmed" /> after the server has
 /// answered, and a row found at <see cref="Issued" /> is never appended again.
 /// </para>

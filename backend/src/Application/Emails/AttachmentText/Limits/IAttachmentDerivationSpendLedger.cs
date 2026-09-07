@@ -7,7 +7,7 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Emails.AttachmentText.Limits;
 
-/// <summary>Keeps the durable count of what each budget period has consumed reading attachments, per step and per owner.</summary>
+/// <summary>Keeps the durable count of what each budget period has consumed reading attachments, per step and per user.</summary>
 /// <remarks>
 /// <para>
 /// Durable rather than held in memory, for the reason the embedding ledger is: the failure an aggregate ceiling exists
@@ -16,12 +16,12 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// </para>
 /// <para>
 /// Kept apart from the stored readings, which would need no table at all. A reading discarded by a re-derivation, by a
-/// junk verdict, or by an owner's erasure would take the record of a parse that genuinely happened with it — and the
+/// junk verdict, or by a user's erasure would take the record of a parse that genuinely happened with it — and the
 /// period in which a large mailbox is first read is exactly the period an operator is watching.
 /// </para>
 /// <para>
-/// Every charge names the step it belongs to, because the two are counted in units that do not convert, and the owner
-/// it was incurred for, because a deployment serving several people bounds each of them as well as itself. The owner
+/// Every charge names the step it belongs to, because the two are counted in units that do not convert, and the user
+/// it was incurred for, because a deployment serving several people bounds each of them as well as itself. The user
 /// outlives its own record here on the same terms the embedding ledger's does:
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps a spend row as a cost record rather than erasing it with the mail it paid to read.
@@ -29,30 +29,30 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// </remarks>
 public interface IAttachmentDerivationSpendLedger
 {
-    /// <summary>Reads what one period has consumed on one step, for one owner and for every owner together.</summary>
+    /// <summary>Reads what one period has consumed on one step, for one user and for every user together.</summary>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
     /// <param name="derivationStep">The step whose unit is being counted.</param>
-    /// <param name="owner">The owner whose own consumption is asked for beside the deployment's.</param>
+    /// <param name="user">The user whose own consumption is asked for beside the deployment's.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Both totals, which are zero for a period nothing has been charged to yet.</returns>
     /// <remarks>
-    /// One read rather than two, because a gate weighing an owner's figure taken at one moment against a deployment
+    /// One read rather than two, because a gate weighing a user's figure taken at one moment against a deployment
     /// figure taken at another could admit work neither total alone admits.
     /// </remarks>
     Task<AttachmentDerivationTotals> ReadConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads what one period has consumed on one step across every owner, without naming one.</summary>
+    /// <summary>Reads what one period has consumed on one step across every user, without naming one.</summary>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
     /// <param name="derivationStep">The step whose unit is being counted.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>What every owner together consumed inside that period.</returns>
+    /// <returns>What every user together consumed inside that period.</returns>
     /// <remarks>
-    /// This is what an administrative reading asks. A deployment administrator acts for no owner, so the question they
-    /// can be answered is the deployment's, and a gate that had to invent an owner to answer it would be attributing a
+    /// This is what an administrative reading asks. A deployment administrator acts for no user, so the question they
+    /// can be answered is the deployment's, and a gate that had to invent a user to answer it would be attributing a
     /// figure to somebody who did not ask for it.
     /// </remarks>
     Task<long> ReadDeploymentConsumedAsync(
@@ -60,11 +60,11 @@ public interface IAttachmentDerivationSpendLedger
         AttachmentDerivationStep derivationStep,
         CancellationToken cancellationToken);
 
-    /// <summary>Adds what reading one message consumed to the period, step, and owner it belongs to.</summary>
+    /// <summary>Adds what reading one message consumed to the period, step, and user it belongs to.</summary>
     /// <param name="session">The session whose transaction this write joins.</param>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
     /// <param name="derivationStep">The step the units belong to.</param>
-    /// <param name="owner">The owner whose mail was read.</param>
+    /// <param name="user">The user whose mail was read.</param>
     /// <param name="unitCount">What the work consumed, in that step's own unit.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the increment has been issued inside the caller's transaction.</returns>
@@ -80,7 +80,7 @@ public interface IAttachmentDerivationSpendLedger
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         long unitCount,
         CancellationToken cancellationToken);
 }

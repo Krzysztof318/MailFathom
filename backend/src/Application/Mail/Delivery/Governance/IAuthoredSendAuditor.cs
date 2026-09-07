@@ -11,7 +11,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <summary>Records that a caller asked this deployment to send something, and what it was allowed to ask under.</summary>
 /// <remarks>
 /// <para>
-/// This is what turns "an agent sent something odd" from a suspicion into something an owner can read. What a send is
+/// This is what turns "an agent sent something odd" from a suspicion into something a user can read. What a send is
 /// answerable for afterwards is who asked, under which grant, for which act, and which record came of it — four facts
 /// that are each MailFathom's own name for something rather than anything a message said.
 /// </para>
@@ -29,7 +29,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <para>
 /// <b>It fails no send.</b> The record is durable and the message is on its way by the time this is called, so a sink
 /// that cannot write must report and let the send stand rather than raise: a hole in the evidence is worse than nothing
-/// only for whoever reads it, while a send failed by its own audit is a message the owner asked for and did not get.
+/// only for whoever reads it, while a send failed by its own audit is a message the user asked for and did not get.
 /// </para>
 /// </remarks>
 public interface IAuthoredSendAuditor

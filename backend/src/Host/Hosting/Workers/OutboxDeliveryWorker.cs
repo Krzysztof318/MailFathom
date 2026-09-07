@@ -211,7 +211,7 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// <remarks>
     /// Only the endings that leave a copy missing are written. A copy that was filed, one that was already there, and a
     /// place the account asked for nothing in are the ordinary states of every pass, and a line for each would be the
-    /// whole log — while the failure is what an owner notices as mail they sent and cannot find.
+    /// whole log — while the failure is what a user notices as mail they sent and cannot find.
     /// </remarks>
     private void ReportFilings(MailAccountId accountId, MailOutboxPassReport report)
     {

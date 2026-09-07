@@ -89,9 +89,9 @@ public sealed class ClientDraftEndpointTests
         Assert.DoesNotContain("aaaa", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
     }
 
-    /// <summary>An identifier naming nothing answers as a draft this owner does not hold, which is what one nobody holds answers.</summary>
+    /// <summary>An identifier naming nothing answers as a draft this user does not hold, which is what one nobody holds answers.</summary>
     [Fact]
-    public async Task ReadDraftAsync_AnIdentifierNamingNoDraft_AnswersAsOneThisOwnerDoesNotHold()
+    public async Task ReadDraftAsync_AnIdentifierNamingNoDraft_AnswersAsOneThisUserDoesNotHold()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
@@ -106,14 +106,14 @@ public sealed class ClientDraftEndpointTests
         Assert.IsType<NotFound>(result.Result);
     }
 
-    /// <summary>A draft this owner holds is opened with the words its stored message carries.</summary>
+    /// <summary>A draft this user holds is opened with the words its stored message carries.</summary>
     [Fact]
-    public async Task ReadDraftAsync_ADraftThisOwnerHolds_AnswersWithTheDraftAndItsText()
+    public async Task ReadDraftAsync_ADraftThisUserHolds_AnswersWithTheDraftAndItsText()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -133,14 +133,14 @@ public sealed class ClientDraftEndpointTests
         Assert.Equal("Hello.", reading.Value.PlainTextBody);
     }
 
-    /// <summary>A draft another owner holds is opened as one nobody holds, so a refusal says nothing about who else writes mail here.</summary>
+    /// <summary>A draft another user holds is opened as one nobody holds, so a refusal says nothing about who else writes mail here.</summary>
     [Fact]
-    public async Task ReadDraftAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHolds()
+    public async Task ReadDraftAsync_ADraftAnotherUserHolds_AnswersAsOneNobodyHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -164,7 +164,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -186,7 +186,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -209,7 +209,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -230,7 +230,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -247,13 +247,13 @@ public sealed class ClientDraftEndpointTests
         Assert.Empty(drafts.Peek(draft.Id)!.Attachments);
     }
 
-    /// <summary>An upload against a draft this owner does not hold answers as one nobody holds.</summary>
+    /// <summary>An upload against a draft this user does not hold answers as one nobody holds.</summary>
     [Fact]
-    public async Task StageAttachmentAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHolds()
+    public async Task StageAttachmentAsync_ADraftAnotherUserHolds_AnswersAsOneNobodyHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
 
         // Act
         var result = await ClientDraftEndpoints.StageAttachmentAsync(
@@ -275,7 +275,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
 
         // Act
         var result = await ClientDraftEndpoints.UnstageAttachmentAsync(
@@ -289,13 +289,13 @@ public sealed class ClientDraftEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
     }
 
-    /// <summary>Taking a file off a draft another owner holds answers as one nobody holds, and leaves their file where it is.</summary>
+    /// <summary>Taking a file off a draft another user holds answers as one nobody holds, and leaves their file where it is.</summary>
     [Fact]
-    public async Task UnstageAttachmentAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHoldsAndRemovesNothing()
+    public async Task UnstageAttachmentAsync_ADraftAnotherUserHolds_AnswersAsOneNobodyHoldsAndRemovesNothing()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
 
         var staged = await drafts.StageAttachmentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -323,7 +323,7 @@ public sealed class ClientDraftEndpointTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         var staged = await attachments.StageAsync(
@@ -359,7 +359,7 @@ public sealed class ClientDraftEndpointTests
         return context;
     }
 
-    /// <summary>Builds the reading the routes narrow by owner, for a caller acting for the deployment's owner.</summary>
+    /// <summary>Builds the reading the routes narrow by user, for a caller acting for the deployment's user.</summary>
     private static MailDraftDirectory DirectoryOver(
         InMemoryMailDraftStore drafts,
         InMemoryMailDraftContentStore? contents = null)
@@ -406,11 +406,11 @@ public sealed class ClientDraftEndpointTests
             new FakeTimeProvider(Moment));
     }
 
-    /// <summary>Writes one draft down for one owner, which is the arrangement every test here starts from.</summary>
-    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailOwnerId owner) =>
+    /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
+    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(owner, Work),
+            MailAccountIdentity.Create(user, Work),
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [],
             "a draft",

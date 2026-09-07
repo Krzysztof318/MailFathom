@@ -91,7 +91,7 @@ would have shipped an English screen to a Polish reader. What a column does carr
 which is how a client decides alignment. A cell the correspondence says nothing about carries no value at all, which is
 a different thing from a cell somebody left blank.
 
-**A draft is a proposal and never an act.** Its local status can say that it was composed, saved into the owner's
+**A draft is a proposal and never an act.** Its local status can say that it was composed, saved into the user's
 drafts, or queued in the outbox, and the set deliberately holds no member meaning sent: sending is something a person
 does afterwards, through the surface that governs sending.
 

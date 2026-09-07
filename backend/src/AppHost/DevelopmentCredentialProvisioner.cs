@@ -28,8 +28,8 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
 
         await this.WaitForStartedAsync(startedEndpoint, cancellationToken);
 
-        var owner = await this.ReadSoleServedOwnerAsync(adminEndpoint, cancellationToken);
-        if (await this.CredentialExistsAsync(adminEndpoint, owner, username, cancellationToken))
+        var user = await this.ReadSoleServedUserAsync(adminEndpoint, cancellationToken);
+        if (await this.CredentialExistsAsync(adminEndpoint, user, username, cancellationToken))
         {
             return false;
         }
@@ -43,7 +43,7 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         };
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            new Uri(adminEndpoint, $"api/admin/owners/{owner:D}/credentials"))
+            new Uri(adminEndpoint, $"api/admin/users/{user:D}/credentials"))
         {
             Content = new StringContent(requestBody.ToJsonString(), Encoding.UTF8, "application/json"),
         };
@@ -96,37 +96,37 @@ internal sealed class DevelopmentCredentialProvisioner(HttpClient client, TimePr
         }
     }
 
-    private async Task<Guid> ReadSoleServedOwnerAsync(Uri adminEndpoint, CancellationToken cancellationToken)
+    private async Task<Guid> ReadSoleServedUserAsync(Uri adminEndpoint, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
-            new Uri(adminEndpoint, "api/admin/owners"),
+            new Uri(adminEndpoint, "api/admin/users"),
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
         await using var content = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(content, cancellationToken: cancellationToken);
-        var owners = document.RootElement
-            .GetProperty("owners")
+        var users = document.RootElement
+            .GetProperty("users")
             .EnumerateArray()
-            .Where(static owner => owner.GetProperty("served").GetBoolean())
-            .Select(static owner => owner.GetProperty("id").GetGuid())
+            .Where(static user => user.GetProperty("served").GetBoolean())
+            .Select(static user => user.GetProperty("id").GetGuid())
             .ToArray();
 
-        return owners.Length == 1
-            ? owners[0]
+        return users.Length == 1
+            ? users[0]
             : throw new InvalidOperationException(
-                $"The normal Aspire launch expected one served owner but found {owners.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
+                $"The normal Aspire launch expected one served user but found {users.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
     }
 
     private async Task<bool> CredentialExistsAsync(
         Uri adminEndpoint,
-        Guid owner,
+        Guid user,
         string username,
         CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
-            new Uri(adminEndpoint, $"api/admin/owners/{owner:D}/credentials"),
+            new Uri(adminEndpoint, $"api/admin/users/{user:D}/credentials"),
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         response.EnsureSuccessStatusCode();

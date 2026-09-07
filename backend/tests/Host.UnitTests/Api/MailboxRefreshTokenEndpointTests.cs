@@ -26,9 +26,9 @@ public sealed class MailboxRefreshTokenEndpointTests
 {
     private static readonly MailAccountId Workspace = MailAccountId.Create("workspace");
 
-    /// <summary>The account the credential is recorded against, which is the owner and the identifier together.</summary>
+    /// <summary>The account the credential is recorded against, which is the user and the identifier together.</summary>
     private static readonly MailAccountIdentity WorkspaceIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Workspace);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Workspace);
 
     private readonly IMailboxRefreshTokenStore store = Substitute.For<IMailboxRefreshTokenStore>();
 

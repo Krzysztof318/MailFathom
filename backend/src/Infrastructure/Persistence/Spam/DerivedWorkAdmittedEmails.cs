@@ -24,7 +24,7 @@ namespace MailFathom.Infrastructure.Persistence.Spam;
 /// </para>
 /// <para>
 /// Nothing here is written down. The predicate reads where a message is now and what was decided about it, so mail the
-/// owner drags out of the junk folder is admitted by the next sweep with nothing having recorded the move.
+/// user drags out of the junk folder is admitted by the next sweep with nothing having recorded the move.
 /// </para>
 /// </remarks>
 internal static class DerivedWorkAdmittedEmails
@@ -38,17 +38,17 @@ internal static class DerivedWorkAdmittedEmails
     /// <para>
     /// Three clauses, in the order the gate asks its questions. The junk folders go first because placement decides with
     /// nothing having scored the message and because a reversal has to be able to undo a verdict scoring reached. The
-    /// verdict goes next, which is what withholds junk an owner scores without filing. The last is the wait, and its
+    /// verdict goes next, which is what withholds junk a user scores without filing. The last is the wait, and its
     /// three escapes are the whole of what keeps a wedged scanner from stopping the index: a folder no classification
     /// runs over, a message whose payload was never stored and never will be, and a message that has waited longer than
     /// a verdict is allowed to take.
     /// </para>
     /// <para>
-    /// Every clause is scoped to the accounts of the owners who classify, which is how one owner's decision reaches a
-    /// walk that spans owners. The junk folders arrive already narrowed to them, the verdict clause names them, and the
+    /// Every clause is scoped to the accounts of the users who classify, which is how one user's decision reaches a
+    /// walk that spans users. The junk folders arrive already narrowed to them, the verdict clause names them, and the
     /// wait is written as one implication per classified account — the same shape <see cref="AccountScopedMailFolders" />
     /// composes, and for the same reason: a row belongs to one account, so it meets exactly one non-vacuous clause. Mail
-    /// of an owner who classifies nothing therefore passes every clause and is admitted with nothing scored about it.
+    /// of a user who classifies nothing therefore passes every clause and is admitted with nothing scored about it.
     /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Admitting(

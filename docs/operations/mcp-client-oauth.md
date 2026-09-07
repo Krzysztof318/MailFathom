@@ -67,7 +67,7 @@ whatever connects to it afterwards:
 | Once per deployment | Once per client | Once per person |
 | --- | --- | --- |
 | Choose the resource identifier | Register an application in the provider | Find the subject identifier |
-| Make the token's audience match it | Allow that client's callback URL | Map it onto an owner with `mfctl` |
+| Make the token's audience match it | Allow that client's callback URL | Map it onto a user with `mfctl` |
 | Define the scope, if you require one | Set the token-endpoint authentication method | |
 | Write the `OAuth` entry in MailFathom | Paste the credentials into the client, where it takes them | |
 | Verify the endpoint answers | Point the client at the server URL | |
@@ -228,7 +228,7 @@ registration, and this step disappears — which is most of why those shapes are
 ### 6. Find the subject identifier
 
 A valid token says only that its bearer is somebody the authorization server knows. What decides whether it is served
-here — and whose mail it then reaches — is a credential record mapping the validated subject onto one owner, and a token
+here — and whose mail it then reaches — is a credential record mapping the validated subject onto one user, and a token
 whose subject resolves no record is refused exactly as an unknown credential is. So this step is required, and until it
 is done the entry written in step 7 admits nobody. What goes in the record is the `sub` the authorization server issues,
 and **an email address is not it** — a subject is what a server promises never to reuse, and an address is reassigned to
@@ -246,18 +246,18 @@ $ curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
 9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04
 ```
 
-Then map the subject onto the owner whose mail that person reads:
+Then map the subject onto the user whose mail that person reads:
 
 ```console
-$ mfctl credential create --method oauth-subject --owner 6f1c… \
+$ mfctl credential create --method oauth-subject --user 6f1c… \
     --issuer https://sso.example.test/realms/mailfathom \
     --subject 9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04
-Provisioned oauth-subject credential 41d7… for owner 6f1c….
+Provisioned oauth-subject credential 41d7… for user 6f1c….
 ```
 
 The issuer is the one written in the entry below, byte for byte, because the pair is what resolves the record.
 `--permission` records what tokens admitted under it may do; naming none grants everything the MCP surface publishes.
-[Owner credentials](admin-endpoint.md#owner-credentials) specifies the command, and the mapping takes effect at once —
+[User credentials](admin-endpoint.md#user-credentials) specifies the command, and the mapping takes effect at once —
 it is a record rather than a setting, so nothing restarts and closing one is `mfctl credential disable` or
 `mfctl credential delete` rather than an edit here.
 
@@ -450,7 +450,7 @@ second:
 | `401` on every call, sign-in itself succeeded | The audience. The token was issued for something other than `Resource` — [step 3](#3-make-the-tokens-audience-agree) |
 | `401`, and the log names an unknown issuer | `Issuer` does not match the token's `iss` exactly. Check the trailing slash — [step 7](#7-write-the-mailfathom-entry) |
 | `401` after a successful sign-in, on a deployment behind a proxy | The token was refused because the request did not arrive over TLS. The scheme is read after forwarded headers are applied, so either the proxy sends no `X-Forwarded-Proto` or its address falls outside [`ReverseProxy:TrustedProxies`](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy). Do not answer it by emptying that list — that trusts every peer and turns the refusal off rather than fixing the hop |
-| `401`, and the log says the token validated | The subject resolves no owner. Nothing maps that issuer and `sub` onto a credential record, or the record is disabled — [step 6](#6-find-the-subject-identifier) |
+| `401`, and the log says the token validated | The subject resolves no user. Nothing maps that issuer and `sub` onto a credential record, or the record is disabled — [step 6](#6-find-the-subject-identifier) |
 | `403` naming a scope in `WWW-Authenticate` | The token is missing a required scope. The client scope is not assigned, or not `Default`, or **Include in token scope** is off — [step 4](#4-register-an-application-for-the-client) |
 | `404` on the metadata address, everything else working | The request did not arrive under the scheme and host `Resource` names. Behind a proxy, the forwarded scheme and host are missing or the peer is outside `TrustedProxies` — [discovery a client uses](mcp-endpoint.md#discovery-a-client-uses) |
 | The client reports it cannot reach the server, and the provider logs no traffic at all | Discovery never completed, so the client never learned where to authorize. Run the first two commands of [step 8](#8-verify-before-you-touch-the-client) |
@@ -487,12 +487,12 @@ console goes stale without saying so, and a field name can be checked against th
 
 ---
 
-**Trademarks.** The product, service, and company names on this page are their owners' trademarks and are used solely to
+**Trademarks.** The product, service, and company names on this page are their users' trademarks and are used solely to
 identify the identity providers and client applications a MailFathom deployment can be connected through. Their use
-implies no affiliation with, sponsorship by, endorsement by, or certification from those owners, in either direction, and
+implies no affiliation with, sponsorship by, endorsement by, or certification from those users, in either direction, and
 this page reproduces no third-party logo, icon, wordmark, or screenshot.
 
 Keycloak is a trademark of the Linux Foundation. Microsoft and Microsoft Entra ID are trademarks of the Microsoft group
 of companies. Auth0 and Okta are trademarks of Okta, Inc.
 [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
-records the per-owner review this statement comes out of, and why it sits here rather than in `NOTICE`.
+records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

@@ -10,7 +10,7 @@ namespace MailFathom.Application.Emails.Summaries;
 /// <remarks>
 /// What counts as an attachment is MailFathom's rule rather than a mail library's default, because the count is shown to a
 /// caller and filtered on. A signature part, an embedded image a body references, and the members of an alternative
-/// body are all things a mailbox owner does not call attachments, and each of them arrives with a
+/// body are all things a mailbox user does not call attachments, and each of them arrives with a
 /// <c>Content-Disposition</c> header that a disposition-driven rule would count.
 /// </remarks>
 public sealed record EmailAttachmentSummary

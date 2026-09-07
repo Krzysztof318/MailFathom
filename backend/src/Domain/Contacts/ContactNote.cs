@@ -4,10 +4,10 @@
 
 namespace MailFathom.Domain.Contacts;
 
-/// <summary>Holds what an owner wrote about a person beyond their name and their addresses.</summary>
+/// <summary>Holds what a user wrote about a person beyond their name and their addresses.</summary>
 /// <remarks>
 /// <para>
-/// A note is the freest field the book has, so it is also the one most likely to hold something an owner would not want
+/// A note is the freest field the book has, so it is also the one most likely to hold something a user would not want
 /// read back to them by an agent: where somebody works, what was agreed, why they are being avoided. It is therefore
 /// personal data of the most sensitive kind this record carries and is treated as such everywhere — never logged, never
 /// a metric dimension, never in a failure message, and erased with the contact it belongs to.
@@ -23,17 +23,17 @@ public readonly record struct ContactNote
     /// <summary>The greatest length a note may carry.</summary>
     /// <remarks>
     /// Long enough for a paragraph somebody would actually write about a person, and bounded because the value is
-    /// unstructured text an owner controls: without a limit the book would become a place to keep documents, with the
+    /// unstructured text a user controls: without a limit the book would become a place to keep documents, with the
     /// retention and export obligations of one and none of the handling.
     /// </remarks>
     public const int MaximumLength = 4_000;
 
     private ContactNote(string value) => this.Value = value;
 
-    /// <summary>Gets the note as the owner wrote it, trimmed of surrounding whitespace.</summary>
+    /// <summary>Gets the note as the user wrote it, trimmed of surrounding whitespace.</summary>
     public string Value { get; }
 
-    /// <summary>Creates a note from text an owner supplied.</summary>
+    /// <summary>Creates a note from text a user supplied.</summary>
     /// <param name="value">The note to record.</param>
     /// <returns>A validated note, trimmed and otherwise as written.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or carries a character that does not render as part of the note, other than a line break or a tab.</exception>

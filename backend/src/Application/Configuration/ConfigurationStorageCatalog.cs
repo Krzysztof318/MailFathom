@@ -30,13 +30,13 @@ public static class ConfigurationStorageCatalog
 {
     /// <summary>The paths that are persisted somewhere other than the root document, and where each one goes.</summary>
     /// <remarks>
-    /// The owner-account collection is the top-level <c>Accounts</c>, which is not <c>MailSynchronization:Accounts</c>:
-    /// one document per owner rather than one settings row per mailbox. Everything nested beneath a path listed here
+    /// The user-account collection is the top-level <c>Accounts</c>, which is not <c>MailSynchronization:Accounts</c>:
+    /// one document per user rather than one settings row per mailbox. Everything nested beneath a path listed here
     /// travels with it, so a route is a section rather than a single key.
     /// </remarks>
     private static readonly (string Path, ConfigurationStorageRoute Route)[] SpecialRoutes =
     [
-        ("Accounts", ConfigurationStorageRoute.OwnerAccounts),
+        ("Accounts", ConfigurationStorageRoute.UserAccounts),
     ];
 
     /// <summary>Resolves where a write to a configuration path lands, or why it may not be written.</summary>
@@ -57,8 +57,8 @@ public static class ConfigurationStorageCatalog
     /// <returns>The specially routed paths the document reaches, ordered as they are declared, empty when it reaches none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="rootDocumentKeys" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The exclusion is what makes the routing worth anything. A root document carrying an owner's account beside the
-    /// <see cref="ConfigurationStorageRoute.OwnerAccounts" /> store's copy of it would leave two rows describing one
+    /// The exclusion is what makes the routing worth anything. A root document carrying a user's account beside the
+    /// <see cref="ConfigurationStorageRoute.UserAccounts" /> store's copy of it would leave two rows describing one
     /// setting, and the reader that composed them would be choosing which of the two the deployment meant.
     /// </remarks>
     public static IReadOnlyList<string> FindRoutedElsewhereIn(IEnumerable<string> rootDocumentKeys)

@@ -6119,580 +6119,6 @@
         ],
         "type": "object"
       },
-      "OwnerAdoptableMailAccountResponse": {
-        "properties": {
-          "accountId": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "accountId",
-          "displayName"
-        ],
-        "type": "object"
-      },
-      "OwnerAdoptableRecordSettingResponse": {
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "value"
-        ],
-        "type": "object"
-      },
-      "OwnerAdoptionPreviewResponse": {
-        "properties": {
-          "classification": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerAdoptableRecordSettingResponse"
-            },
-            "type": "array"
-          },
-          "configurationPath": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "mailAccounts": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerAdoptableMailAccountResponse"
-            },
-            "type": "array"
-          },
-          "owner": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "readFromConfiguration": {
-            "type": "boolean"
-          },
-          "sensitiveContent": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerAdoptableRecordSettingResponse"
-            },
-            "type": "array"
-          },
-          "source": {
-            "type": "string"
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "owner",
-          "displayName",
-          "version",
-          "source",
-          "readFromConfiguration",
-          "configurationPath",
-          "mailAccounts",
-          "classification",
-          "sensitiveContent"
-        ],
-        "type": "object"
-      },
-      "OwnerAdoptionRequest": {
-        "properties": {
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialEnablementRequest": {
-        "properties": {
-          "enabled": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialListResponse": {
-        "properties": {
-          "credentials": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerCredentialResponse"
-            },
-            "type": "array"
-          },
-          "owner": {
-            "format": "uuid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "credentials"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialMaterialRequest": {
-        "properties": {
-          "method": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "password": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "publicKey": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "username": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "method",
-          "username",
-          "password",
-          "publicKey"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialProvisionedResponse": {
-        "properties": {
-          "credentialId": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "key": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lookup": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "credentialId",
-          "lookup",
-          "key"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialProvisioningRequest": {
-        "properties": {
-          "issuer": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "method": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "password": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "permissions": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "null",
-              "array"
-            ]
-          },
-          "publicKey": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "subject": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "username": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "method",
-          "username",
-          "password",
-          "publicKey",
-          "issuer",
-          "subject",
-          "permissions"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialResponse": {
-        "properties": {
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "lookup": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "materialChangedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "method": {
-            "type": "string"
-          },
-          "permissions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "method",
-          "lookup",
-          "permissions",
-          "enabled",
-          "version",
-          "createdAt",
-          "materialChangedAt"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialRotatedResponse": {
-        "properties": {
-          "key": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lookup": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "lookup",
-          "key"
-        ],
-        "type": "object"
-      },
-      "OwnerErasureResponse": {
-        "properties": {
-          "erased": {
-            "type": "boolean"
-          },
-          "wasServed": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "erased",
-          "wasServed"
-        ],
-        "type": "object"
-      },
-      "OwnerMailAccountRemovalRequest": {
-        "properties": {
-          "accountId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version",
-          "accountId"
-        ],
-        "type": "object"
-      },
-      "OwnerMailAccountRequest": {
-        "properties": {
-          "account": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version",
-          "account"
-        ],
-        "type": "object"
-      },
-      "OwnerProvisionedResponse": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "OwnerProvisioningRequest": {
-        "properties": {
-          "displayName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "displayName"
-        ],
-        "type": "object"
-      },
-      "OwnerRecordResponse": {
-        "properties": {
-          "displayName": {
-            "type": "string"
-          },
-          "document": {
-            "type": "string"
-          },
-          "owner": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "readFromConfiguration": {
-            "type": "boolean"
-          },
-          "source": {
-            "type": "string"
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "owner",
-          "displayName",
-          "version",
-          "source",
-          "readFromConfiguration",
-          "document"
-        ],
-        "type": "object"
-      },
-      "OwnerRecordSaveRequest": {
-        "properties": {
-          "document": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "version",
-          "document"
-        ],
-        "type": "object"
-      },
-      "OwnerRecordWriteResponse": {
-        "properties": {
-          "code": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ]
-          },
-          "committed": {
-            "type": "boolean"
-          },
-          "messages": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "version": {
-            "format": "int64",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "committed",
-          "version",
-          "code",
-          "messages"
-        ],
-        "type": "object"
-      },
-      "OwnerRelabelRequest": {
-        "properties": {
-          "displayName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "displayName"
-        ],
-        "type": "object"
-      },
-      "OwnerRosterEntryResponse": {
-        "properties": {
-          "declaredInConfiguration": {
-            "type": "boolean"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "recordIsTheirOwn": {
-            "type": "boolean"
-          },
-          "served": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "displayName",
-          "recordIsTheirOwn",
-          "served",
-          "declaredInConfiguration"
-        ],
-        "type": "object"
-      },
-      "OwnerRosterResponse": {
-        "properties": {
-          "owners": {
-            "items": {
-              "$ref": "#/components/schemas/OwnerRosterEntryResponse"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "owners"
-        ],
-        "type": "object"
-      },
       "PersonEntry": {
         "properties": {
           "address": {
@@ -7879,6 +7305,580 @@
           "ReadingFailed",
           null
         ]
+      },
+      "UserAdoptableMailAccountResponse": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "displayName"
+        ],
+        "type": "object"
+      },
+      "UserAdoptableRecordSettingResponse": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
+      "UserAdoptionPreviewResponse": {
+        "properties": {
+          "classification": {
+            "items": {
+              "$ref": "#/components/schemas/UserAdoptableRecordSettingResponse"
+            },
+            "type": "array"
+          },
+          "configurationPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "mailAccounts": {
+            "items": {
+              "$ref": "#/components/schemas/UserAdoptableMailAccountResponse"
+            },
+            "type": "array"
+          },
+          "readFromConfiguration": {
+            "type": "boolean"
+          },
+          "sensitiveContent": {
+            "items": {
+              "$ref": "#/components/schemas/UserAdoptableRecordSettingResponse"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          },
+          "user": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "displayName",
+          "version",
+          "source",
+          "readFromConfiguration",
+          "configurationPath",
+          "mailAccounts",
+          "classification",
+          "sensitiveContent"
+        ],
+        "type": "object"
+      },
+      "UserAdoptionRequest": {
+        "properties": {
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "UserCredentialEnablementRequest": {
+        "properties": {
+          "enabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "UserCredentialListResponse": {
+        "properties": {
+          "credentials": {
+            "items": {
+              "$ref": "#/components/schemas/UserCredentialResponse"
+            },
+            "type": "array"
+          },
+          "user": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "credentials"
+        ],
+        "type": "object"
+      },
+      "UserCredentialMaterialRequest": {
+        "properties": {
+          "method": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "publicKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "method",
+          "username",
+          "password",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "UserCredentialProvisionedResponse": {
+        "properties": {
+          "credentialId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "credentialId",
+          "lookup",
+          "key"
+        ],
+        "type": "object"
+      },
+      "UserCredentialProvisioningRequest": {
+        "properties": {
+          "issuer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "method": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "publicKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "method",
+          "username",
+          "password",
+          "publicKey",
+          "issuer",
+          "subject",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "UserCredentialResponse": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "materialChangedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "method",
+          "lookup",
+          "permissions",
+          "enabled",
+          "version",
+          "createdAt",
+          "materialChangedAt"
+        ],
+        "type": "object"
+      },
+      "UserCredentialRotatedResponse": {
+        "properties": {
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "lookup",
+          "key"
+        ],
+        "type": "object"
+      },
+      "UserErasureResponse": {
+        "properties": {
+          "erased": {
+            "type": "boolean"
+          },
+          "wasServed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "erased",
+          "wasServed"
+        ],
+        "type": "object"
+      },
+      "UserMailAccountRemovalRequest": {
+        "properties": {
+          "accountId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "accountId"
+        ],
+        "type": "object"
+      },
+      "UserMailAccountRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "account"
+        ],
+        "type": "object"
+      },
+      "UserProvisionedResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "UserProvisioningRequest": {
+        "properties": {
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "displayName"
+        ],
+        "type": "object"
+      },
+      "UserRecordResponse": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "document": {
+            "type": "string"
+          },
+          "readFromConfiguration": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "user": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "displayName",
+          "version",
+          "source",
+          "readFromConfiguration",
+          "document"
+        ],
+        "type": "object"
+      },
+      "UserRecordSaveRequest": {
+        "properties": {
+          "document": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "document"
+        ],
+        "type": "object"
+      },
+      "UserRecordWriteResponse": {
+        "properties": {
+          "code": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "committed",
+          "version",
+          "code",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "UserRelabelRequest": {
+        "properties": {
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "displayName"
+        ],
+        "type": "object"
+      },
+      "UserRosterEntryResponse": {
+        "properties": {
+          "declaredInConfiguration": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "recordIsTheirOwn": {
+            "type": "boolean"
+          },
+          "served": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "recordIsTheirOwn",
+          "served",
+          "declaredInConfiguration"
+        ],
+        "type": "object"
+      },
+      "UserRosterResponse": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/UserRosterEntryResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -9401,746 +9401,6 @@
         ]
       }
     },
-    "/api/admin/owners": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRosterResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      },
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerProvisioningRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerProvisionedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}": {
-      "delete": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerErasureResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/credentials": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerCredentialListResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      },
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/OwnerCredentialProvisioningRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerCredentialProvisionedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/credentials/{credentialId}": {
-      "delete": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "credentialId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/credentials/{credentialId}/enablement": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "credentialId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/OwnerCredentialEnablementRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/credentials/{credentialId}/material": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "credentialId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/OwnerCredentialMaterialRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerCredentialRotatedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/display-name": {
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerRelabelRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/record": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      },
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerRecordSaveRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/record/adoption": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerAdoptionPreviewResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      },
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerAdoptionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/record/mail-accounts": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerMailAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/record/mail-accounts/removal": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OwnerMailAccountRemovalRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
-    "/api/admin/owners/{ownerId}/secrets": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "ownerId",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/StoredSecretWriteRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StoredSecretProvisionedResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "tags": [
-          "Administrative"
-        ]
-      }
-    },
     "/api/admin/rules": {
       "get": {
         "responses": {
@@ -10485,6 +9745,746 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRosterResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProvisioningRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProvisionedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/credentials": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCredentialListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UserCredentialProvisioningRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCredentialProvisionedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/credentials/{credentialId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credentialId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/credentials/{credentialId}/enablement": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credentialId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UserCredentialEnablementRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/credentials/{credentialId}/material": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credentialId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UserCredentialMaterialRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCredentialRotatedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/display-name": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRelabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/record": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRecordResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRecordSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/record/adoption": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAdoptionPreviewResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAdoptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/record/mail-accounts": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserMailAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/record/mail-accounts/removal": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserMailAccountRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/users/{userId}/secrets": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StoredSecretWriteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredSecretProvisionedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [
@@ -12147,7 +12147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordResponse"
+                  "$ref": "#/components/schemas/UserRecordResponse"
                 }
               }
             },
@@ -12178,7 +12178,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OwnerRecordSaveRequest"
+                "$ref": "#/components/schemas/UserRecordSaveRequest"
               }
             }
           },
@@ -12189,7 +12189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
                 }
               }
             },
@@ -12222,7 +12222,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OwnerMailAccountRequest"
+                "$ref": "#/components/schemas/UserMailAccountRequest"
               }
             }
           },
@@ -12233,7 +12233,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
                 }
               }
             },
@@ -12266,7 +12266,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OwnerMailAccountRemovalRequest"
+                "$ref": "#/components/schemas/UserMailAccountRemovalRequest"
               }
             }
           },
@@ -12277,7 +12277,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OwnerRecordWriteResponse"
+                  "$ref": "#/components/schemas/UserRecordWriteResponse"
                 }
               }
             },

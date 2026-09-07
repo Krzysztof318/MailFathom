@@ -33,7 +33,7 @@ public sealed class JobExecutorTests
         // Arrange
         var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam);
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.CompleteAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.store.CompleteAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(true);
 
         var executor = this.ExecutorFor(handler);
 
@@ -43,7 +43,7 @@ public sealed class JobExecutorTests
         // Assert
         Assert.Equal(JobExecutionOutcome.Succeeded, result.Outcome);
         Assert.Same(job.Payload, handler.ReceivedPayload);
-        await this.store.Received(1).CompleteAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        await this.store.Received(1).CompleteAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class JobExecutorTests
         Assert.Equal(JobFailureClassification.Permanent, result.AttemptFailure?.Record.Classification);
         await this.store.Received(1).DeadLetterAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             Arg.Is<JobFailureRecord>(failure => failure!.Reason == JobFailureRecord.HandlerMissing.Reason),
             Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().ReleaseAsync(
@@ -138,7 +138,7 @@ public sealed class JobExecutorTests
             Noon + RetryMaxDelay);
         await this.store.Received(1).ScheduleRetryAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             Arg.Is<JobFailureRecord>(failure =>
                 failure!.Classification == JobFailureClassification.Transient && failure.Reason == "TransientFailure"),
             Arg.Any<DateTimeOffset>(),
@@ -176,7 +176,7 @@ public sealed class JobExecutorTests
         Assert.Null(result.AttemptFailure?.NextAttemptAt);
         await this.store.Received(1).DeadLetterAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             Arg.Any<JobFailureRecord>(),
             Arg.Any<CancellationToken>());
     }
@@ -211,7 +211,7 @@ public sealed class JobExecutorTests
         Assert.Equal(JobFailureDisposition.RetryScheduled, result.AttemptFailure?.Disposition);
         await this.store.Received(1).ScheduleRetryAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             Arg.Is<JobFailureRecord>(failure => failure!.Reason == JobFailureRecord.ExecutionTimedOut.Reason),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
@@ -230,12 +230,12 @@ public sealed class JobExecutorTests
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
 
         this.store
-            .RenewLeaseAsync(job.JobId, job.Lease.Owner, LeaseDuration, Arg.Any<CancellationToken>())
+            .RenewLeaseAsync(job.JobId, job.Lease.User, LeaseDuration, Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 renewed.TrySetResult();
 
-                return Task.FromResult<JobLease?>(new JobLease(job.Lease.Owner, Noon + LeaseDuration + LeaseDuration));
+                return Task.FromResult<JobLease?>(new JobLease(job.Lease.User, Noon + LeaseDuration + LeaseDuration));
             });
         this.AllowRetryScheduling(job);
 
@@ -253,7 +253,7 @@ public sealed class JobExecutorTests
         Assert.Equal(JobExecutionOutcome.TimedOut, result.Outcome);
         await this.store
             .Received(1)
-            .RenewLeaseAsync(job.JobId, job.Lease.Owner, LeaseDuration, Arg.Any<CancellationToken>());
+            .RenewLeaseAsync(job.JobId, job.Lease.User, LeaseDuration, Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -271,7 +271,7 @@ public sealed class JobExecutorTests
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
 
         this.store
-            .RenewLeaseAsync(job.JobId, job.Lease.Owner, LeaseDuration, Arg.Any<CancellationToken>())
+            .RenewLeaseAsync(job.JobId, job.Lease.User, LeaseDuration, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<JobLease?>(null));
 
         var executor = this.ExecutorFor(handler);
@@ -319,7 +319,7 @@ public sealed class JobExecutorTests
             JobType.ClassifyEmailSpam,
             RecordingJobHandler.BlockUntilCancelled(started));
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.store.ReleaseAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(true);
 
         using var stoppingSource = new CancellationTokenSource();
         var executor = this.ExecutorFor(handler);
@@ -333,7 +333,7 @@ public sealed class JobExecutorTests
         // Assert
         Assert.Equal(JobExecutionOutcome.ReleasedForShutdown, result.Outcome);
         Assert.Null(result.AttemptFailure);
-        await this.store.Received(1).ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        await this.store.Received(1).ReleaseAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().DeadLetterAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
@@ -371,7 +371,7 @@ public sealed class JobExecutorTests
             throw new InvalidOperationException("the handler gave up when its token was cancelled");
         });
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.store.ReleaseAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(true);
 
         var executor = this.ExecutorFor(handler);
 
@@ -400,7 +400,7 @@ public sealed class JobExecutorTests
         // Arrange
         var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam);
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.store.ReleaseAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(true);
 
         using var stoppingSource = new CancellationTokenSource();
         await stoppingSource.CancelAsync();
@@ -413,7 +413,7 @@ public sealed class JobExecutorTests
         // Assert
         Assert.Equal(JobExecutionOutcome.ReleasedForShutdown, result.Outcome);
         Assert.Equal(0, handler.RunCount);
-        await this.store.Received(1).ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        await this.store.Received(1).ReleaseAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -426,7 +426,7 @@ public sealed class JobExecutorTests
         // Arrange
         var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam);
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.CompleteAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(false);
+        this.store.CompleteAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(false);
 
         var executor = this.ExecutorFor(handler);
 
@@ -449,7 +449,7 @@ public sealed class JobExecutorTests
         this.store
             .ScheduleRetryAsync(
                 job.JobId,
-                job.Lease.Owner,
+                job.Lease.User,
                 Arg.Any<JobFailureRecord>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
@@ -503,7 +503,7 @@ public sealed class JobExecutorTests
         // Arrange
         var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam);
         var job = LeasedJobFor(JobType.ClassifyEmailSpam, attemptCount: 3);
-        this.store.CompleteAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.store.CompleteAsync(job.JobId, job.Lease.User, Arg.Any<CancellationToken>()).Returns(true);
 
         var executor = this.ExecutorFor(handler);
 
@@ -523,7 +523,7 @@ public sealed class JobExecutorTests
         JobIdempotencyKey.Create("account-a/inbox/1/42"),
         new ClassifyEmailSpamJobPayload
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
             FolderAlias = "inbox",
             FolderResolutionGeneration = 1,
@@ -537,20 +537,20 @@ public sealed class JobExecutorTests
 
     /// <summary>Lets the lease keep being renewed, which is what a healthy long execution sees.</summary>
     private void AllowLeaseRenewal(LeasedJob job) => this.store
-        .RenewLeaseAsync(job.JobId, job.Lease.Owner, LeaseDuration, Arg.Any<CancellationToken>())
-        .Returns(Task.FromResult<JobLease?>(new JobLease(job.Lease.Owner, Noon + LeaseDuration + LeaseDuration)));
+        .RenewLeaseAsync(job.JobId, job.Lease.User, LeaseDuration, Arg.Any<CancellationToken>())
+        .Returns(Task.FromResult<JobLease?>(new JobLease(job.Lease.User, Noon + LeaseDuration + LeaseDuration)));
 
     private void AllowRetryScheduling(LeasedJob job) => this.store
         .ScheduleRetryAsync(
             job.JobId,
-            job.Lease.Owner,
+            job.Lease.User,
             Arg.Any<JobFailureRecord>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>())
         .Returns(true);
 
     private void AllowDeadLettering(LeasedJob job) => this.store
-        .DeadLetterAsync(job.JobId, job.Lease.Owner, Arg.Any<JobFailureRecord>(), Arg.Any<CancellationToken>())
+        .DeadLetterAsync(job.JobId, job.Lease.User, Arg.Any<JobFailureRecord>(), Arg.Any<CancellationToken>())
         .Returns(true);
 
     private JobExecutor ExecutorFor(params IJobHandler[] handlers) =>

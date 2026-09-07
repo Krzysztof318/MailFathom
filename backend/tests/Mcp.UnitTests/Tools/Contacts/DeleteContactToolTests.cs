@@ -25,7 +25,7 @@ public sealed class DeleteContactToolTests
         var erased = ContactId.Create(Guid.CreateVersion7(StubContactBook.Now));
         var book = new StubContactBook();
         book.Store
-            .EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailOwnerId>(), erased, Arg.Any<CancellationToken>())
+            .EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailUserId>(), erased, Arg.Any<CancellationToken>())
             .Returns(new ContactErasure(erased, WasHeld: true, AddressesErased: 3));
 
         var tool = new DeleteContactTool(book.Writer);
@@ -47,7 +47,7 @@ public sealed class DeleteContactToolTests
         var absent = ContactId.Create(Guid.CreateVersion7(StubContactBook.Now));
         var book = new StubContactBook();
         book.Store
-            .EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailOwnerId>(), absent, Arg.Any<CancellationToken>())
+            .EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailUserId>(), absent, Arg.Any<CancellationToken>())
             .Returns(new ContactErasure(absent, WasHeld: false, AddressesErased: 0));
 
         var tool = new DeleteContactTool(book.Writer);

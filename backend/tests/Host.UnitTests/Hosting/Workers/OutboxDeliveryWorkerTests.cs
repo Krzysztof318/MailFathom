@@ -42,10 +42,10 @@ public sealed class OutboxDeliveryWorkerTests
     private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
 
     private static readonly MailAccountIdentity Work =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailAccountIdentity Personal =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     /// <summary>A signalled account is the only thing that starts a pass, so an idle deployment claims nothing.</summary>
     [Fact]

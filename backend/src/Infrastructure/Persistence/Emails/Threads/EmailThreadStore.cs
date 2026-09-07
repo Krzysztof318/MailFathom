@@ -43,9 +43,9 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        // The owner leads the account in both passes, which is the order the binding index leads in. Reading the two
+        // The user leads the account in both passes, which is the order the binding index leads in. Reading the two
         // halves into locals is what keeps the comparison translatable.
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountId = account.Id.Value;
         var digestedIdentifiers = identifiers
             .Distinct(StringComparer.Ordinal)
@@ -53,13 +53,13 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         var digests = digestedIdentifiers.Keys.ToArray();
 
         var persisted = await dbContext.EmailThreadIdentifiers
-            .Where(binding => binding.OwnerId == owner
+            .Where(binding => binding.UserId == user
                 && binding.MailboxAccountId == accountId
                 && digests.Contains(binding.IdentifierHash))
             .ToListAsync(cancellationToken);
 
         var pending = dbContext.EmailThreadIdentifiers.Local
-            .Where(binding => binding.OwnerId == owner
+            .Where(binding => binding.UserId == user
                 && binding.MailboxAccountId == accountId
                 && digests.Contains(binding.IdentifierHash));
 
@@ -102,8 +102,8 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
             MailboxAccountId = account.Id.Value,
 
             // Written from the identity the assembly was given, which the caller took off the row it is storing mail
-            // into. A conversation belongs to the owner whose mail it assembles.
-            OwnerId = account.Owner.Value,
+            // into. A conversation belongs to the user whose mail it assembles.
+            UserId = account.User.Value,
             AssembledAt = assembledAt,
         };
 
@@ -132,7 +132,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
                 MailboxAccountId = account.Id.Value,
 
                 // The same identity the conversation was started under, for the same reason.
-                OwnerId = account.Owner.Value,
+                UserId = account.User.Value,
                 IdentifierHash = EmailThreadIdentifierDigest.Of(identifier),
                 EmailThreadId = threadId.Value,
             });

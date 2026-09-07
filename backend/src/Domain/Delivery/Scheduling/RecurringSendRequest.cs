@@ -34,10 +34,10 @@ public sealed record RecurringSendRequest
         this.Schedule = schedule;
     }
 
-    /// <summary>Gets the account every occurrence is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account every occurrence is submitted through and sent as, named by its user and its identifier.</summary>
     /// <remarks>
     /// The pair, for the reason <see cref="OutgoingEmailRequest.Account" /> is one: the declaration becomes a row that
-    /// records whose repetition it is, and the owner comes with the account the catalog resolved rather than from a
+    /// records whose repetition it is, and the user comes with the account the catalog resolved rather than from a
     /// second read of the account table.
     /// </remarks>
     public MailAccountIdentity Account { get; }
@@ -52,7 +52,7 @@ public sealed record RecurringSendRequest
     public string Schedule { get; }
 
     /// <summary>Asks for one message to be sent again on every occasion a schedule names.</summary>
-    /// <param name="account">The account every occurrence is sent as, named by its owner and its identifier.</param>
+    /// <param name="account">The account every occurrence is sent as, named by its user and its identifier.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="recipients">The people every occurrence is offered to.</param>
     /// <param name="schedule">The repetition as it was written.</param>

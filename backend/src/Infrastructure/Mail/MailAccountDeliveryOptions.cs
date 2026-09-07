@@ -31,7 +31,7 @@ public sealed class MailAccountDeliveryOptions
     /// Off unless an operator turns it on, and turned on one account at a time. That is what keeps an upgrade from
     /// making a deployment able to send: a release that gained the capability meets a configuration that never asked
     /// for it, and gaining it is therefore something an operator did rather than something that happened to them. It is
-    /// per account rather than per deployment because an owner may want one identity able to write and another purely
+    /// per account rather than per deployment because a user may want one identity able to write and another purely
     /// archival, which no single switch can express.
     /// </para>
     /// <para>
@@ -92,7 +92,7 @@ public sealed class MailAccountDeliveryOptions
     /// <para>
     /// It defaults to on, because a submission server does not file anything: SMTP carries the message to its
     /// recipients and says nothing about the sender's own mailbox, so a deployment that appends nothing leaves the
-    /// owner with mail they sent and no record of it in the client they read.
+    /// user with mail they sent and no record of it in the client they read.
     /// </para>
     /// <para>
     /// It is turned off for the account whose provider files the copy itself, which several webmail providers do for

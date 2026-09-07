@@ -46,7 +46,7 @@ internal static class MailboxMutationRecordMapping
             Id = MailboxMutationRecordId.Create(entity.Id),
             Request = MailboxMutationRequest.Create(
                 StoredEmailId.Create(entity.StoredEmailId),
-                MailOwnerId.Create(entity.OwnerId),
+                MailUserId.Create(entity.UserId),
                 occurrence,
                 mutation,
                 MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
@@ -79,7 +79,7 @@ internal static class MailboxMutationRecordMapping
     /// <para>
     /// A relocation carries one only when it moved the message to a folder nothing mirrors, which is where its local
     /// copy stops being on its way somewhere and becomes mail that has left the mirrored mailbox. The value is read back
-    /// rather than recomputed, for the reason it was written down: it is what the owner authored the change under, and
+    /// rather than recomputed, for the reason it was written down: it is what the user authored the change under, and
     /// reconciliation applies it in a later run the account may by then be configured differently for.
     /// </para>
     /// </remarks>

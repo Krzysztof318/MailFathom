@@ -88,7 +88,7 @@ public interface IStoredEmailExtractionBackfillStore
         StoredEmailId position,
         CancellationToken cancellationToken);
 
-    /// <summary>Counts what was derived under something other than its own owner's posture, message text and attachment readings apart.</summary>
+    /// <summary>Counts what was derived under something other than its own user's posture, message text and attachment readings apart.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>How many stored emails a rebuild would re-derive, and how many readings of an attachment it would discard and have taken again.</returns>
     /// <remarks>
@@ -99,12 +99,12 @@ public interface IStoredEmailExtractionBackfillStore
     /// </para>
     /// <para>
     /// It counts whether or not the rebuild is switched on, because that is the question it exists to answer: an
-    /// operator who has just enabled a scanner, or whose owner has, needs to know how much of the mail already stored
+    /// operator who has just enabled a scanner, or whose user has, needs to know how much of the mail already stored
     /// the switch does not reach before deciding whether to spend the re-derivation.
     /// </para>
     /// <para>
-    /// The postures are read by the store rather than supplied, because each row is judged against its own owner's and
-    /// no single value describes the answer. A count summed by a caller over one owner at a time would be the same
+    /// The postures are read by the store rather than supplied, because each row is judged against its own user's and
+    /// no single value describes the answer. A count summed by a caller over one user at a time would be the same
     /// number reached through several round trips.
     /// </para>
     /// <para>

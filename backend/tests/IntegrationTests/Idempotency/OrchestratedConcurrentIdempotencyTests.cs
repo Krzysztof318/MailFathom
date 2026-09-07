@@ -229,7 +229,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         string subject,
         CancellationToken cancellationToken) => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session, SyntheticMailAccount.Owner,
+                session, SyntheticMailAccount.User,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                 extractedMetadata: null,
                 StoredEmailContentAvailability.ExceededSizeLimit,
@@ -298,7 +298,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
             {
                 await services.InScopeAsync(
                     (scope, token) => scope.GetRequiredService<IJobStore>()
-                        .CompleteAsync(job.JobId, job.Lease.Owner, token),
+                        .CompleteAsync(job.JobId, job.Lease.User, token),
                     cancellationToken);
             }
         }
@@ -310,7 +310,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.Owner,
+            SyntheticMailAccount.User,
             SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{LeasedJobUid}"),
@@ -361,7 +361,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,

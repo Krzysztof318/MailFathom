@@ -11,7 +11,7 @@ namespace MailFathom.Application.Spam.Runs;
 public interface ISpamClassificationRunStore
 {
     /// <summary>Reads the run this account is still waiting to have carried further.</summary>
-    /// <param name="account">The account to read, named by its owner and its identifier.</param>
+    /// <param name="account">The account to read, named by its user and its identifier.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The outstanding run, or <see langword="null" /> when the account has none — including when the last one ended.</returns>
     Task<SpamClassificationRun?> FindOutstandingAsync(
@@ -19,7 +19,7 @@ public interface ISpamClassificationRunStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the run this account last had, whether it is still outstanding or has ended.</summary>
-    /// <param name="account">The account to read, named by its owner and its identifier.</param>
+    /// <param name="account">The account to read, named by its user and its identifier.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never been asked for one.</returns>
     /// <remarks>

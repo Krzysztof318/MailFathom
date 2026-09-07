@@ -33,7 +33,7 @@ public sealed class DiscoveryRunLauncherTests
 
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("which supplier quoted least"),
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [], []));
+        MailboxScope.Create(SyntheticMailUser.Deployment, [], []));
 
     private readonly FakeTimeProvider clock = new(Now);
 
@@ -43,7 +43,7 @@ public sealed class DiscoveryRunLauncherTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
 
         // Act
@@ -65,7 +65,7 @@ public sealed class DiscoveryRunLauncherTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         var logger = new RecordingLogger<DiscoveryRunLauncher>();
 
@@ -90,7 +90,7 @@ public sealed class DiscoveryRunLauncherTests
     {
         // Arrange
         var registry = new DiscoveryRunRegistry(this.clock);
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         this.clock.Advance(DiscoveryRunBounds.RetentionAfterLastUse);
 
@@ -98,12 +98,12 @@ public sealed class DiscoveryRunLauncherTests
         await LauncherOver(registry, new RecordingLogger<DiscoveryRunLauncher>()).Start(Question, journal, Caller);
 
         // Assert
-        Assert.True(registry.TryFind(journal.Id, SyntheticMailOwner.Deployment, out _));
+        Assert.True(registry.TryFind(journal.Id, SyntheticMailUser.Deployment, out _));
     }
 
     private static AuthorizedPrincipal Caller =>
         AuthorizedPrincipal.CallerActingFor(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             "test-caller",
             [MailFathomPermission.MailAsk]);
 

@@ -134,15 +134,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ConfigurationDocumentTooLarge { get; } = new(12011);
 
-    /// <summary>Gets subcategory 2, configuration sources: an owner's persisted record could not be read.</summary>
+    /// <summary>Gets subcategory 2, configuration sources: a user's persisted record could not be read.</summary>
     /// <remarks>
-    /// The per-owner counterpart of <see cref="RootSettingsUnreadable" />, and separate from it because what it stops
+    /// The per-user counterpart of <see cref="RootSettingsUnreadable" />, and separate from it because what it stops
     /// is different: the deployment's own layer is read before any endpoint opens and its absence stops a start, while
-    /// an owner's record is read for a caller and its absence stops that request alone. A record past what this build
+    /// a user's record is read for a caller and its absence stops that request alone. A record past what this build
     /// binds is the case it exists for — the bound is applied in the statement, so the row is refused rather than
     /// transferred, and the message names the limit and never the document.
     /// </remarks>
-    public static MailFathomErrorCode OwnerSettingsUnreadable { get; } = new(12012);
+    public static MailFathomErrorCode UserSettingsUnreadable { get; } = new(12012);
 
     /// <summary>Gets subcategory 2, configuration sources: a configuration write named a setting a source above the persisted layer already supplies.</summary>
     /// <remarks>
@@ -154,24 +154,24 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ConfigurationWriteShadowed { get; } = new(12013);
 
-    /// <summary>Gets subcategory 2, configuration sources: an owner's persisted record could not be written.</summary>
+    /// <summary>Gets subcategory 2, configuration sources: a user's persisted record could not be written.</summary>
     /// <remarks>
-    /// The counterpart of <see cref="OwnerSettingsUnreadable" /> on the other direction of travel, and separate from
+    /// The counterpart of <see cref="UserSettingsUnreadable" /> on the other direction of travel, and separate from
     /// it for the reason <see cref="RootSettingsUnwritable" /> is separate from <see cref="RootSettingsUnreadable" />:
     /// a read is refused to somebody asking about a record, and a write is refused to somebody who had already read
     /// one and composed a change over it. It is not <see cref="ConfigurationVersionSuperseded" />, which is another
     /// writer having won rather than the database having declined.
     /// </remarks>
-    public static MailFathomErrorCode OwnerSettingsUnwritable { get; } = new(12014);
+    public static MailFathomErrorCode UserSettingsUnwritable { get; } = new(12014);
 
-    /// <summary>Gets subcategory 2, configuration sources: an owner's record was written while a configuration source still supplies their mail accounts.</summary>
+    /// <summary>Gets subcategory 2, configuration sources: a user's record was written while a configuration source still supplies their mail accounts.</summary>
     /// <remarks>
-    /// The refusal that keeps an adoption an explicit act. An owner a file declares is served from that declaration
+    /// The refusal that keeps an adoption an explicit act. A user a file declares is served from that declaration
     /// and holds an empty document, so a change accepted into it would leave them served from a record holding less
     /// than the file was supplying — a mailbox that stops being synchronized because somebody edited a setting beside
-    /// it. What the message names is the command that moves the owner, after which every later write is ordinary.
+    /// it. What the message names is the command that moves the user, after which every later write is ordinary.
     /// </remarks>
-    public static MailFathomErrorCode OwnerRecordReadFromConfiguration { get; } = new(12015);
+    public static MailFathomErrorCode UserRecordReadFromConfiguration { get; } = new(12015);
 
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
@@ -188,14 +188,14 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PrincipalNotAuthorized { get; } = new(14001);
 
-    /// <summary>Gets subcategory 4, principal authorization: this deployment does not hold the single owner its configured mail accounts belong to.</summary>
+    /// <summary>Gets subcategory 4, principal authorization: this deployment does not hold the single user its configured mail accounts belong to.</summary>
     /// <remarks>
     /// It sits beside the refusal above because it is the same axis asked before any request arrives: a configured mail
-    /// account names no owner, so a deployment holding none or several cannot say whose mail it is serving and refuses
-    /// to serve any. An operator resolves it in the owner records rather than in a grant, which is what separates it
+    /// account names no user, so a deployment holding none or several cannot say whose mail it is serving and refuses
+    /// to serve any. An operator resolves it in the user records rather than in a grant, which is what separates it
     /// from the code above.
     /// </remarks>
-    public static MailFathomErrorCode DeploymentMailOwnerUnresolved { get; } = new(14002);
+    public static MailFathomErrorCode DeploymentMailUserUnresolved { get; } = new(14002);
 
     #endregion
 
@@ -396,7 +396,7 @@ public readonly record struct MailFathomErrorCode
 
     /// <summary>Gets subcategory 8, message composition: the address an authored act chose for a contact is not one that contact uses.</summary>
     /// <remarks>
-    /// Addressing a contact uses the address the owner made their preferred one unless the act names another of theirs,
+    /// Addressing a contact uses the address the user made their preferred one unless the act names another of theirs,
     /// and one they do not hold is refused rather than sent to. Reaching an arbitrary mailbox by naming a contact beside
     /// it would make the book a way around whatever the deployment allows a literal address to be, which is exactly what
     /// naming a contact must never become.
@@ -743,7 +743,7 @@ public readonly record struct MailFathomErrorCode
     /// <remarks>
     /// Separate from the policy refusal beside it because the two are different facts and call for different acts: the
     /// policy is a list an operator wrote, while this says the mailbox has no trace of the person at all — no contact,
-    /// and no address of its own. The remedy is therefore the owner's rather than the operator's, which is why it is
+    /// and no address of its own. The remedy is therefore the user's rather than the operator's, which is why it is
     /// worth its own code: write the person down, or have the deployment's posture admit somebody it cannot vouch for.
     /// The message names neither the address nor how many of them were refused, because a refusal that counted them
     /// would let a caller map the contact book one send at a time.
@@ -1041,14 +1041,14 @@ public readonly record struct MailFathomErrorCode
         ConfigurationSecretMaterialRefused,
         RootSettingsUnwritable,
         ConfigurationDocumentTooLarge,
-        OwnerSettingsUnreadable,
+        UserSettingsUnreadable,
         ConfigurationWriteShadowed,
-        OwnerSettingsUnwritable,
-        OwnerRecordReadFromConfiguration,
+        UserSettingsUnwritable,
+        UserRecordReadFromConfiguration,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,
-        DeploymentMailOwnerUnresolved,
+        DeploymentMailUserUnresolved,
         MailAuthenticationMechanismUnavailable,
         MailboxCredentialRefused,
         MailboxUnavailable,

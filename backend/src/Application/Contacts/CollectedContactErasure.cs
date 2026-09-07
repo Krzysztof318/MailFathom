@@ -8,7 +8,7 @@ namespace MailFathom.Application.Contacts;
 /// <param name="ContactsErased">How many contacts of the collected origin went.</param>
 /// <param name="AddressesErased">How many addresses went with them.</param>
 /// <remarks>
-/// The counts are what an owner reversing their mind about collection is owed: an answer saying how much of a record
+/// The counts are what a user reversing their mind about collection is owed: an answer saying how much of a record
 /// about other people this deployment had built and has now disposed of, rather than a call that returned without
 /// complaint. Erasing a book that had collected nobody is a completed erasure reporting two zeroes, for the reason
 /// erasing a person the book does not hold is one. It names nobody, because what an erasure reports about people is

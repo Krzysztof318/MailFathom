@@ -28,7 +28,7 @@ function result(at: number, carried: Record<string, unknown> = {}): Record<strin
         sentAt: null,
         senderAddress: `writer-${String(at)}@nordwind.example`,
         senderDisplayName: `Writer ${String(at)}`,
-        toAddresses: ['owner@example.invalid'],
+        toAddresses: ['user@example.invalid'],
         unread: false,
         flagged: false,
         answered: false,

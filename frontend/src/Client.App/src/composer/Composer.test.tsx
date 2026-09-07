@@ -261,7 +261,7 @@ describe('Composer, a message of its own', () => {
         expect(asked).toHaveLength(0);
     });
 
-    it('files the draft in the owner’s own drafts when that is asked for, and says it did', async () => {
+    it('files the draft in the user’s own drafts when that is asked for, and says it did', async () => {
         const { asked } = drawComposer();
 
         write('Subject', 'Invoice');

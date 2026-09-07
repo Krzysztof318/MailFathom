@@ -117,7 +117,7 @@ public sealed class MailboxChangeWithdrawer
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerCall);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.Owner, recordIds, cancellationToken);
+        var held = await this.records.ReadAsync(this.scopeResolver.User, recordIds, cancellationToken);
 
         var withdrawable = held
             .Where(record => covered.Contains(record.Request.Mutation) && this.IsReadable(record))
@@ -138,7 +138,7 @@ public sealed class MailboxChangeWithdrawer
                 // otherwise report the losing attempt's answers beside the winning one's.
                 var records = await this.records.WithdrawAsync(
                     session,
-                    this.scopeResolver.Owner,
+                    this.scopeResolver.User,
                     withdrawable,
                     attemptCancellationToken);
 

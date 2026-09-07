@@ -4,15 +4,15 @@
 
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Spam;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Spam;
 
-/// <summary>Covers how each owner's source becomes the settings an action on their junk is decided by.</summary>
+/// <summary>Covers how each user's source becomes the settings an action on their junk is decided by.</summary>
 public sealed class ConfiguredSpamActionSettingsReaderTests
 {
     [Fact]
@@ -22,7 +22,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         var reader = ReaderFor(new SpamClassificationOptions());
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
@@ -45,7 +45,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         });
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.True(settings.FilesJunk);
@@ -66,7 +66,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         });
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
@@ -77,10 +77,10 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
     {
         // Arrange
         var options = new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions());
-        var reader = new ConfiguredSpamActionSettingsReader(options, ConfiguredOwnerRoster());
+        var reader = new ConfiguredSpamActionSettingsReader(options, ConfiguredUserRoster());
 
         // Act
-        var beforeReload = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var beforeReload = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         options.ReportReload(new SpamClassificationOptions
         {
@@ -88,7 +88,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
             Actions = new SpamActionOptions { MoveToJunkFolder = true },
         });
 
-        var afterReload = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var afterReload = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(beforeReload.FilesJunk);
@@ -97,7 +97,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
 
     /// <summary>Nothing writes to a mailbox this deployment does not serve, whatever the deployment's own section says.</summary>
     [Fact]
-    public void ActionsFor_AnOwnerThisDeploymentDoesNotServe_AsksForNothing()
+    public void ActionsFor_AnUserThisDeploymentDoesNotServe_AsksForNothing()
     {
         // Arrange
         var reader = ReaderFor(new SpamClassificationOptions
@@ -107,14 +107,14 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         });
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailOwner.Another);
+        var settings = reader.ActionsFor(SyntheticMailUser.Another);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
     }
 
     [Fact]
-    public void ActionsFor_NoOwner_Throws()
+    public void ActionsFor_NoUser_Throws()
     {
         // Arrange
         var reader = ReaderFor(new SpamClassificationOptions());
@@ -123,30 +123,30 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         Assert.Throws<ArgumentException>(() => reader.ActionsFor(default));
     }
 
-    /// <summary>Each owner decides what happens to their own junk, so one filing it does not file anybody else's.</summary>
+    /// <summary>Each user decides what happens to their own junk, so one filing it does not file anybody else's.</summary>
     [Fact]
-    public void ActionsFor_TwoOwnersWithDifferentPostures_AnswersEachWithTheirOwn()
+    public void ActionsFor_TwoUsersWithDifferentPostures_AnswersEachWithTheirOwn()
     {
         // Arrange
         var reader = new ConfiguredSpamActionSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
-            new MailSynchronizationOptions().WithServedOwners(
+            new MailSynchronizationOptions().WithServedUsers(
             [
-                DocumentOwner(new OwnerSpamClassificationOptions
+                DocumentUser(new UserSpamClassificationOptions
                 {
                     Enabled = true,
-                    Actions = new OwnerSpamActionOptions { MoveToJunkFolder = true, JunkFolder = "quarantine" },
+                    Actions = new UserSpamActionOptions { MoveToJunkFolder = true, JunkFolder = "quarantine" },
                 }),
-                AnotherDocumentOwner(new OwnerSpamClassificationOptions
+                AnotherDocumentUser(new UserSpamClassificationOptions
                 {
                     Enabled = true,
-                    Actions = new OwnerSpamActionOptions { MarkAsRead = true },
+                    Actions = new UserSpamActionOptions { MarkAsRead = true },
                 }),
             ]));
 
         // Act
-        var filing = reader.ActionsFor(SyntheticMailOwner.Deployment);
-        var marking = reader.ActionsFor(SyntheticMailOwner.Another);
+        var filing = reader.ActionsFor(SyntheticMailUser.Deployment);
+        var marking = reader.ActionsFor(SyntheticMailUser.Another);
 
         // Assert
         Assert.True(filing.FilesJunk);
@@ -163,46 +163,46 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         // Arrange
         var reader = new ConfiguredSpamActionSettingsReader(
             new TestOptionsMonitor<SpamClassificationOptions>(new SpamClassificationOptions()),
-            new MailSynchronizationOptions().WithServedOwners(
+            new MailSynchronizationOptions().WithServedUsers(
             [
-                DocumentOwner(new OwnerSpamClassificationOptions
+                DocumentUser(new UserSpamClassificationOptions
                 {
                     Enabled = false,
-                    Actions = new OwnerSpamActionOptions { MoveToJunkFolder = true, MarkAsRead = true },
+                    Actions = new UserSpamActionOptions { MoveToJunkFolder = true, MarkAsRead = true },
                 }),
             ]));
 
         // Act
-        var settings = reader.ActionsFor(SyntheticMailOwner.Deployment);
+        var settings = reader.ActionsFor(SyntheticMailUser.Deployment);
 
         // Assert
         Assert.False(settings.IsAnyActionEnabled);
     }
 
     private static ConfiguredSpamActionSettingsReader ReaderFor(SpamClassificationOptions options) =>
-        new(new TestOptionsMonitor<SpamClassificationOptions>(options), ConfiguredOwnerRoster());
+        new(new TestOptionsMonitor<SpamClassificationOptions>(options), ConfiguredUserRoster());
 
-    private static MailSynchronizationOptions ConfiguredOwnerRoster() =>
-        new MailSynchronizationOptions().WithServedOwners(
+    private static MailSynchronizationOptions ConfiguredUserRoster() =>
+        new MailSynchronizationOptions().WithServedUsers(
         [
-            new ServedMailOwner(
-                SyntheticMailOwner.Deployment,
+            new ServedMailUser(
+                SyntheticMailUser.Deployment,
                 "the deployment",
-                MailOwnerAccountSource.DeploymentSection,
+                MailUserAccountSource.DeploymentSection,
                 []),
         ]);
 
-    private static ServedMailOwner DocumentOwner(OwnerSpamClassificationOptions classification) => new(
-        SyntheticMailOwner.Deployment,
-        "the first owner",
-        MailOwnerAccountSource.OwnerDocument,
+    private static ServedMailUser DocumentUser(UserSpamClassificationOptions classification) => new(
+        SyntheticMailUser.Deployment,
+        "the first user",
+        MailUserAccountSource.UserDocument,
         [],
         classification);
 
-    private static ServedMailOwner AnotherDocumentOwner(OwnerSpamClassificationOptions classification) => new(
-        SyntheticMailOwner.Another,
-        "the second owner",
-        MailOwnerAccountSource.OwnerDocument,
+    private static ServedMailUser AnotherDocumentUser(UserSpamClassificationOptions classification) => new(
+        SyntheticMailUser.Another,
+        "the second user",
+        MailUserAccountSource.UserDocument,
         [],
         classification);
 }

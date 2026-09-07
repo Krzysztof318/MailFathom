@@ -24,9 +24,9 @@ public sealed class AdminAccountRequestTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
-    /// <summary>The account a resolution answers with, which names the owner as well as the identifier.</summary>
+    /// <summary>The account a resolution answers with, which names the user as well as the identifier.</summary>
     private static readonly MailAccountIdentity WorkIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Work);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Work);
 
     /// <summary>The ordinary case: a name this deployment serves resolves to its identifier.</summary>
     [Fact]
@@ -208,7 +208,7 @@ public sealed class AdminAccountRequestTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

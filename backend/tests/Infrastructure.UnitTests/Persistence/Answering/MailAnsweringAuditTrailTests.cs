@@ -277,7 +277,7 @@ public sealed class MailAnsweringAuditTrailTests : IDisposable
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-            MailboxScope.Create(SyntheticMailOwner.Deployment, accountIds, []),
+            MailboxScope.Create(SyntheticMailUser.Deployment, accountIds, []),
             StartedAt);
 
         observation.RecordComposition(EndpointAlias, InstructionsVersion);

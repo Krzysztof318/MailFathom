@@ -79,7 +79,7 @@ public sealed class ListContactsToolTests
         var cursor = ContactCursor.After(contact.DisplayName, contact.Id);
         var book = new StubContactBook();
         book.Directory
-            .ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+            .ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([contact], cursor));
 
         var tool = new ListContactsTool(book.Reader);
@@ -133,7 +133,7 @@ public sealed class ListContactsToolTests
     {
         var book = new StubContactBook();
         book.Directory
-            .ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+            .ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([], NextCursor: null));
 
         return book;

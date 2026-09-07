@@ -78,7 +78,7 @@ internal sealed class ClientAssertionReplayStore
     /// <exception cref="ArgumentNullException">Thrown when either string is <see langword="null" />.</exception>
     /// <remarks>
     /// The overload taking a configured name delegates here, because the scoping is the same question whichever kind of
-    /// credential verified the assertion: an owner's registered public key is identified by its fingerprint and a
+    /// credential verified the assertion: a user's registered public key is identified by its fingerprint and a
     /// configured one by the name an operator gave it, and neither may spend the other's identifiers. The two
     /// vocabularies cannot collide — a fingerprint is 43 base64url characters and a configured name is not — and if one
     /// ever did, what it would cost is one client refusing another's identifier rather than admitting it.

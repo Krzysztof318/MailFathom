@@ -29,7 +29,7 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// What the answers may carry differs by route, deliberately. The summary and the listing name no recipient and no
-/// subject, because a page of an outbox would otherwise be an export of who this owner writes to, a page at a time. The
+/// subject, because a page of an outbox would otherwise be an export of who this user writes to, a page at a time. The
 /// single-record reading names its recipients and what the server said about each, because it was asked about one send
 /// by identity and cannot answer without them. None of the five reads the message: no subject, no body, and no raw MIME
 /// is loaded on this surface at all.

@@ -60,7 +60,7 @@ public sealed record SpamClassificationHistoryQuery
 
     /// <summary>Gets the account whose classifications are read.</summary>
     public MailAccountIdentity Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
     public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the occurrence the page is narrowed to, or <see langword="null" /> for every occurrence of the account.</summary>
@@ -158,7 +158,7 @@ public sealed record SpamClassificationHistoryQuery
         DateTimeOffset? evaluatedFrom,
         DateTimeOffset? evaluatedBefore) =>
         PageFilterFingerprint.Of(
-            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
             account.Id.Value,
             storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture),
             verdict?.ToString(),

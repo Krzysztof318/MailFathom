@@ -130,7 +130,7 @@ export function signIn(session: ClientSession, transport: MailFathomTransport): 
             );
         }
 
-        // A grant this credential does not hold is the one refusal that is about what an owner may do rather than about who
+        // A grant this credential does not hold is the one refusal that is about what a user may do rather than about who
         // they are, so it is never a reason to ask for the password again. Nothing else the deployment can answer here says
         // anything about the credential: a failing deployment is retried, and anything else is not MailFathom answering.
         if (response.status === 403) {

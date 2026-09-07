@@ -17,7 +17,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// A conversation is the one mail screen a folder cannot be the scope of: the question is in the inbox, the answer is
 /// in the sent folder, and a forwarded copy is somewhere else again. So the route names a conversation and nothing
-/// else — no account, no folder — and reads it across everything the signed-in owner owns, junk included, because a
+/// else — no account, no folder — and reads it across everything the signed-in user owns, junk included, because a
 /// reply that landed in junk is still part of the exchange somebody is reading.
 /// </para>
 /// <para>
@@ -47,15 +47,15 @@ internal static class ClientMailThreadEndpoint
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
-    /// <summary>Serves one page of one of the acting owner's conversations, or reports what was wrong with the request.</summary>
+    /// <summary>Serves one page of one of the acting user's conversations, or reports what was wrong with the request.</summary>
     /// <param name="threadId">The conversation to read, as a message row published it.</param>
     /// <param name="pageSize">How many messages the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the start of the conversation.</param>
     /// <param name="thread">Reads the conversation, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the page, <c>400</c> naming what was wrong with the request, <c>404</c> where this owner has no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
+    /// <returns><c>200</c> with the page, <c>400</c> naming what was wrong with the request, <c>404</c> where this user has no such conversation, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
     /// <remarks>
-    /// A conversation this owner does not hold and one no deployment ever held answer identically, so nothing here tells
+    /// A conversation this user does not hold and one no deployment ever held answer identically, so nothing here tells
     /// a caller that somebody else's exchange exists. The identifier is matched as a UUID by the route itself, which is
     /// what makes text that names no conversation at all the same <c>404</c> rather than a refusal of its own.
     /// </remarks>

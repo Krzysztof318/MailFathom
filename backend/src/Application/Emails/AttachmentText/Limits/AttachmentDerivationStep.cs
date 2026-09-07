@@ -18,7 +18,7 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// Embedding is deliberately not a member. ADR 0029 decision 2 states that an attachment-derived passage is the same
 /// kind of passage under one profile with no second ceiling on what may be sent — a character out of a document costs
 /// exactly what a character out of a body costs — so what bounds it is <c>Embeddings:MaxInputCharactersPerPeriod</c>
-/// and its per-owner companion, which already do. Cutting passages is not a member either: it reaches no provider, and
+/// and its per-user companion, which already do. Cutting passages is not a member either: it reaches no provider, and
 /// what it grows is storage, which is reported beside the extraction figures rather than paced by a ceiling that prices
 /// a provider call.
 /// </para>

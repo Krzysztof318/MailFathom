@@ -12,7 +12,7 @@ public sealed class DevelopmentCredentialProvisionerTests
 {
     private static readonly Uri StartedEndpoint = new("http://127.0.0.1:5100/started");
     private static readonly Uri AdminEndpoint = new("http://127.0.0.1:5200/");
-    private static readonly Guid OwnerId = Guid.Parse("b107de3d-4331-4755-8b17-3270dbe53b59");
+    private static readonly Guid UserId = Guid.Parse("b107de3d-4331-4755-8b17-3270dbe53b59");
 
     [Fact]
     public async Task EnsureAsync_CredentialDoesNotExist_ProvisionsItAfterTheHostStarts()
@@ -21,8 +21,8 @@ public sealed class DevelopmentCredentialProvisionerTests
         using var responses = new RecordingHandler(
             Response(HttpStatusCode.ServiceUnavailable),
             Response(HttpStatusCode.OK),
-            JsonResponse($$"""{"owners":[{"id":"{{OwnerId}}","served":true}]}"""),
-            JsonResponse($$"""{"owner":"{{OwnerId}}","credentials":[]}"""),
+            JsonResponse($$"""{"users":[{"id":"{{UserId}}","served":true}]}"""),
+            JsonResponse($$"""{"user":"{{UserId}}","credentials":[]}"""),
             JsonResponse("{}"));
         using var client = new HttpClient(responses);
         var timeProvider = new FakeTimeProvider();
@@ -44,9 +44,9 @@ public sealed class DevelopmentCredentialProvisionerTests
             [
                 $"GET {StartedEndpoint}",
                 $"GET {StartedEndpoint}",
-                "GET http://127.0.0.1:5200/api/admin/owners",
-                $"GET http://127.0.0.1:5200/api/admin/owners/{OwnerId:D}/credentials",
-                $"POST http://127.0.0.1:5200/api/admin/owners/{OwnerId:D}/credentials",
+                "GET http://127.0.0.1:5200/api/admin/users",
+                $"GET http://127.0.0.1:5200/api/admin/users/{UserId:D}/credentials",
+                $"POST http://127.0.0.1:5200/api/admin/users/{UserId:D}/credentials",
             ],
             responses.Requests.Select(static request => $"{request.Method} {request.Address}"));
         Assert.Equal(
@@ -60,9 +60,9 @@ public sealed class DevelopmentCredentialProvisionerTests
         // Arrange
         using var responses = new RecordingHandler(
             Response(HttpStatusCode.OK),
-            JsonResponse($$"""{"owners":[{"id":"{{OwnerId}}","served":true}]}"""),
+            JsonResponse($$"""{"users":[{"id":"{{UserId}}","served":true}]}"""),
             JsonResponse(
-                $$"""{"owner":"{{OwnerId}}","credentials":[{"method":"password","lookup":"test","enabled":true}]}"""));
+                $$"""{"user":"{{UserId}}","credentials":[{"method":"password","lookup":"test","enabled":true}]}"""));
         using var client = new HttpClient(responses);
         var provisioner = new DevelopmentCredentialProvisioner(client, TimeProvider.System);
 

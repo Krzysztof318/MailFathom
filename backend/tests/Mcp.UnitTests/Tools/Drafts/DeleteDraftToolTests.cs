@@ -13,7 +13,7 @@ namespace MailFathom.Mcp.UnitTests.Tools.Drafts;
 /// <summary>Covers what the <c>delete_draft</c> tool owns: naming a draft this deployment wrote and giving it up.</summary>
 /// <remarks>
 /// The identifier is the whole of what a caller may reach with, and it names a record MailFathom wrote — so a message
-/// the owner drafted in their own mail client is not refused by a check but by there being nothing here that names it.
+/// the user drafted in their own mail client is not refused by a check but by there being nothing here that names it.
 /// A second call meets the same answer, which is what makes asking twice safe.
 /// </remarks>
 public sealed class DeleteDraftToolTests

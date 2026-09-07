@@ -56,7 +56,7 @@ public sealed class SaveDraftToolTests
         Assert.Empty(deployment.OutgoingEmails.OpenRequests);
     }
 
-    /// <summary>The account maps no drafts folder here, so the draft is held and the owner's own client shows nothing yet.</summary>
+    /// <summary>The account maps no drafts folder here, so the draft is held and the user's own client shows nothing yet.</summary>
     [Fact]
     public async Task SaveDraftAsync_AnAccountWhoseMailboxWasNotReached_ReportsTheDraftAsHeldRatherThanFiled()
     {

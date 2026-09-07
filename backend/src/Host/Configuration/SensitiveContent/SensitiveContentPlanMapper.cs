@@ -31,7 +31,7 @@ internal static class SensitiveContentPlanMapper
     /// <summary>Composes the plan one set of switched-on scanners describes.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentDeclarationRules" />.</param>
     /// <param name="catalogs">Every catalog the registered scanners declare.</param>
-    /// <param name="switchedOn">Which scanners this plan runs, which is one owner's answer rather than the section's.</param>
+    /// <param name="switchedOn">Which scanners this plan runs, which is one user's answer rather than the section's.</param>
     /// <returns>The plan, or <see langword="null" /> when nothing is switched on.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
@@ -41,7 +41,7 @@ internal static class SensitiveContentPlanMapper
     /// </para>
     /// <para>
     /// Which scanners run is an argument while what each of them looks for is read from the section, and the split is
-    /// the whole of what an owner may decide: a scanner switched on for one owner looks for the categories the
+    /// the whole of what a user may decide: a scanner switched on for one user looks for the categories the
     /// deployment named, because what a scanner detects is one answer for the machine it runs on.
     /// </para>
     /// </remarks>
@@ -76,11 +76,11 @@ internal static class SensitiveContentPlanMapper
 
     /// <summary>Reads which scanners stop an outgoing message on a deployment that named none.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
-    /// <returns>The scanners the deployment screens every owner's outgoing mail for, which may be none.</returns>
+    /// <returns>The scanners the deployment screens every user's outgoing mail for, which may be none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Published rather than folded into the composition below, because two things ask it: the policy an act is judged
-    /// by, and the rule that refuses an owner naming fewer scanners in their own record than the deployment requires.
+    /// by, and the rule that refuses a user naming fewer scanners in their own record than the deployment requires.
     /// An entry that names no scanner is unreachable here, because startup validation refuses it before anything reads
     /// this; one arriving anyway is dropped rather than guessed at.
     /// </remarks>
@@ -98,15 +98,15 @@ internal static class SensitiveContentPlanMapper
             : DefaultScreeningScanners;
     }
 
-    /// <summary>Composes what one owner's outgoing message may not carry out of this deployment.</summary>
+    /// <summary>Composes what one user's outgoing message may not carry out of this deployment.</summary>
     /// <param name="plan">The posture's plan, which decides which categories a named scanner covers.</param>
-    /// <param name="screeningScanners">The scanners whose findings stop the act, deployment and owner composed.</param>
+    /// <param name="screeningScanners">The scanners whose findings stop the act, deployment and user composed.</param>
     /// <returns>The policy every screened act is judged by, which screens nothing where nothing was named.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// An absent key takes the default and a written empty list takes nothing, which is the distinction both keys are
     /// typed as arrays to preserve. What arrives here is already the union of the two answers, so a scanner the
-    /// deployment named cannot be missing from one owner's policy.
+    /// deployment named cannot be missing from one user's policy.
     /// </remarks>
     public static SensitiveContentScreeningPolicy MapScreeningPolicy(
         SensitiveContentPlan plan,
@@ -125,7 +125,7 @@ internal static class SensitiveContentPlanMapper
     /// <exception cref="InvalidOperationException">Thrown when the configuration names no analyzer address.</exception>
     /// <remarks>
     /// Called only where the deployment stated an address, which is what makes the personal-data scanner available at
-    /// all — to the deployment itself and to any owner who switches it on for their own mail. An absent address here is
+    /// all — to the deployment itself and to any user who switches it on for their own mail. An absent address here is
     /// therefore a defect rather than a configuration error to report: the composition root registers nothing that
     /// reaches this without one, and reaching it with none means the two passes disagree.
     /// </remarks>

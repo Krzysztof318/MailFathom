@@ -7,11 +7,11 @@ using MailFathom.Domain.Contacts;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
-/// <summary>One person an owner's contact book holds, with the addresses they use as rows of their own.</summary>
+/// <summary>One person a user's contact book holds, with the addresses they use as rows of their own.</summary>
 /// <remarks>
 /// <para>
-/// The book is one owner's, so every row names the owner whose it is and every read of it leads with that column. It
-/// is the discriminator the mail graph does not need — mail reaches an owner through its account, and a contact hangs
+/// The book is one user's, so every row names the user whose it is and every read of it leads with that column. It
+/// is the discriminator the mail graph does not need — mail reaches a user through its account, and a contact hangs
 /// on nothing that could carry one — which is why the column is here rather than derived.
 /// </para>
 /// <para>
@@ -36,14 +36,14 @@ internal sealed class ContactEntity
 
     public Guid Id { get; set; }
 
-    /// <summary>Gets or sets the owner whose book holds this person.</summary>
+    /// <summary>Gets or sets the user whose book holds this person.</summary>
     /// <remarks>
-    /// Keyed onto the owner record, so erasing an owner takes their whole book with it rather than leaving the people
+    /// Keyed onto the user record, so erasing a user takes their whole book with it rather than leaving the people
     /// they wrote down behind, and it never changes: a contact is not moved between books, it is written in one.
     /// </remarks>
-    public Guid OwnerId { get; set; }
+    public Guid UserId { get; set; }
 
-    /// <summary>Gets or sets the name as the owner wrote it, which is what a reader is shown.</summary>
+    /// <summary>Gets or sets the name as the user wrote it, which is what a reader is shown.</summary>
     public required string DisplayName { get; set; }
 
     /// <summary>Gets or sets the comparison form a listing is ordered and paginated by.</summary>
@@ -70,7 +70,7 @@ internal sealed class ContactEntity
     /// </remarks>
     public required string PreferredNormalizedAddress { get; set; }
 
-    /// <summary>Gets or sets what the owner wrote about this person, or <see langword="null" /> when they wrote nothing.</summary>
+    /// <summary>Gets or sets what the user wrote about this person, or <see langword="null" /> when they wrote nothing.</summary>
     public string? Note { get; set; }
 
     /// <summary>Gets or sets how this contact came to be in the book, which decides who may amend it.</summary>

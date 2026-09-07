@@ -6,7 +6,7 @@ using MailFathom.Application.Accounts;
 
 namespace MailFathom.Application.Folders;
 
-/// <summary>One of the owner's accounts together with the folders a screen draws beneath it.</summary>
+/// <summary>One of the user's accounts together with the folders a screen draws beneath it.</summary>
 /// <param name="Account">How current the account's local copy is, and under which names it is published.</param>
 /// <param name="Folders">One entry per folder local state knows of, ordered by alias, empty when synchronization has reached none.</param>
 /// <remarks>

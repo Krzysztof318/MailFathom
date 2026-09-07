@@ -265,7 +265,7 @@ is one nothing could read. That refusal is the one exception to the paragraph ab
 `errorCode` `59004` rather than `404`, because it is about the file this caller was admitted to fetch rather than about
 what became of mail they may no longer read — a holder who already knows the message and the position learns only that
 this deployment screens what it serves. Nothing else changes: the same reads, the same repair request, the same `404`
-for every other refusal, and no extraction at all where the owner screens nothing.
+for every other refusal, and no extraction at all where the user screens nothing.
 
 The response states the attachment's own media type and file name, both of which are text a sender wrote: the media type
 is parsed before it is echoed and falls back to `application/octet-stream` when it is not a media type, and the file name
@@ -317,7 +317,7 @@ appears — so a payload cannot be added beside it and quietly inherit none of t
 | `Readable` | The body was read; an empty one means the message displayed nothing |
 | `EncryptedNotReadableLocally` | The body arrived inside a cryptographic envelope and nothing here can read it |
 | `NotStoredExceededSizeLimit` | The raw MIME exceeded `MailSynchronization:MaxRawMimeBytes`, so it was never stored |
-| `NotStoredAwaitingStorageHeadroom` | Local content storage was at `MailSynchronization:MaxStoredContentBytes`, or the message's owner was at `MailSynchronization:MaxStoredContentBytesPerOwner`, when it arrived, so its content is not stored yet |
+| `NotStoredAwaitingStorageHeadroom` | Local content storage was at `MailSynchronization:MaxStoredContentBytes`, or the message's user was at `MailSynchronization:MaxStoredContentBytesPerUser`, when it arrived, so its content is not stored yet |
 
 An encrypted body is a state rather than an empty string, because merging the two would make mail this deployment holds
 and cannot decrypt indistinguishable from mail that genuinely said nothing. Decrypting it is out of scope and is tracked

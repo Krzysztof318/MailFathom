@@ -13,7 +13,7 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// A draft is its own record rather than a stage of <see cref="OutgoingEmailRecord" />, because almost nothing an
 /// outgoing record exists for is true of one. It has no delivery, no recipient that has to be valid, no idempotency
 /// identity against a duplicate that could not be withdrawn, and no terminal stage — a draft is edited for as long as
-/// its owner keeps editing it. What it has instead is the one thing an outgoing record never does: a copy on somebody
+/// its user keeps editing it. What it has instead is the one thing an outgoing record never does: a copy on somebody
 /// else's server that has to be replaced whenever the local one changes.
 /// </para>
 /// <para>
@@ -23,7 +23,7 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// reads to finish the pair instead of starting it again.
 /// </para>
 /// <para>
-/// It is derived personal data on the same terms as the mail beside it: a draft says who this mailbox's owner is
+/// It is derived personal data on the same terms as the mail beside it: a draft says who this mailbox's user is
 /// writing to and what about. The addresses are here because a promotion cannot build an envelope without them, the
 /// message itself stays in the content store, and the record is erased with the mail it belongs to.
 /// </para>
@@ -33,17 +33,17 @@ public sealed record MailDraftRecord
     /// <summary>Gets what everything after the first write refers to this draft by, including its stored MIME.</summary>
     public required MailDraftId Id { get; init; }
 
-    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as, named by its user and its identifier.</summary>
     /// <remarks>
     /// The pair, read back from the draft's own row rather than resolved again: a promotion writes an outgoing record
-    /// about this account, and the owner that record carries is the one the draft was written under.
+    /// about this account, and the user that record carries is the one the draft was written under.
     /// </remarks>
     public required MailAccountIdentity Account { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
     /// <remarks>
     /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
     /// alone there says what the code means.
     /// </remarks>
     public MailAccountId AccountId => this.Account.Id;
@@ -53,7 +53,7 @@ public sealed record MailDraftRecord
     /// <remarks>
     /// It is the same shape an outgoing record's requester is, so a draft written by a rule and one written by somebody
     /// present are told apart the same way a send is. It is provenance here rather than an idempotency identity: two
-    /// identical requests to save a draft are two drafts, because a draft that turned out to exist twice costs an owner
+    /// identical requests to save a draft are two drafts, because a draft that turned out to exist twice costs a user
     /// a deletion rather than a recipient a second message.
     /// </remarks>
     public required OutgoingEmailRequester Author { get; init; }
@@ -98,7 +98,7 @@ public sealed record MailDraftRecord
     /// <summary>Gets when the draft was first written down.</summary>
     public required DateTimeOffset ComposedAt { get; init; }
 
-    /// <summary>Gets when the draft last changed, which is what an owner sorts their drafts by.</summary>
+    /// <summary>Gets when the draft last changed, which is what a user sorts their drafts by.</summary>
     public required DateTimeOffset RevisedAt { get; init; }
 
     /// <summary>Gets when the draft was given up, or <see langword="null" /> while it stands.</summary>
@@ -112,7 +112,7 @@ public sealed record MailDraftRecord
     /// <summary>Gets the outgoing record a promotion wrote, or <see langword="null" /> while the draft was never promoted.</summary>
     /// <remarks>
     /// A promoted draft is not deleted at once. The message is queued rather than sent, so the draft stands until the
-    /// send is delivered — a promotion whose delivery never succeeds must leave the owner their draft.
+    /// send is delivered — a promotion whose delivery never succeeds must leave the user their draft.
     /// </remarks>
     public required OutgoingEmailId? PromotedTo { get; init; }
 
@@ -140,7 +140,7 @@ public sealed record MailDraftRecord
 
     /// <summary>Gets every copy a revision replaced that the folder still holds.</summary>
     /// <remarks>
-    /// Ordinarily none or one. More than one is a deployment whose removals kept failing while its owner kept editing,
+    /// Ordinarily none or one. More than one is a deployment whose removals kept failing while its user kept editing,
     /// which is why the copies are a list rather than a slot: each is a message in somebody's folder that only this
     /// record can still name.
     /// </remarks>
@@ -155,7 +155,7 @@ public sealed record MailDraftRecord
     /// <summary>Gets whether an append of this draft went out and the server's answer to it never came back.</summary>
     /// <remarks>
     /// It stops every later act on the mailbox, whichever revision the unanswered append was of. Appending again would
-    /// put a second draft in the owner's folder beside a copy nobody can prove is there, and removing something means
+    /// put a second draft in the user's folder beside a copy nobody can prove is there, and removing something means
     /// naming a UID the server never gave — so the draft goes on being edited here and its copy is left where it is.
     /// </remarks>
     public bool HasUnansweredAppend => this.Copies.Any(copy => copy.HasUnknownOutcome);
@@ -171,7 +171,7 @@ public sealed record MailDraftRecord
     /// Giving up is what delivery does to the draft it was promoted from, and it is written once — by the pass that
     /// delivered the send. So the mark is the only thing that says it happened, and a promoted draft still carrying
     /// none is one whose give-up never committed: a crash or a refused write between the delivery and the mark. It is
-    /// outstanding until then, because otherwise its copy would stand in the owner's drafts folder for a message that
+    /// outstanding until then, because otherwise its copy would stand in the user's drafts folder for a message that
     /// has already gone out and nothing would ever reach it again.
     /// </remarks>
     public bool AwaitsPromotionGiveUp => this.PromotedTo is not null && !this.IsDiscarded;

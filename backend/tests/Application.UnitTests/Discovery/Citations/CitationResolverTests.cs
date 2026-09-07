@@ -432,7 +432,7 @@ public sealed class CitationResolverTests
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
-        catalog.Owner.Returns(SyntheticMailOwner.Deployment);
+        catalog.User.Returns(SyntheticMailUser.Deployment);
 
         return catalog;
     }

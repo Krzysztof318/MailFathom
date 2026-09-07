@@ -31,7 +31,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", policy));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Trusted, extraction.Metadata?.SenderTrust.Level);
@@ -52,7 +52,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", policy));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, extraction.Metadata?.SenderTrust.Level);
@@ -72,7 +72,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", policy));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Trusted, extraction.Metadata?.SenderTrust.Level);
@@ -91,7 +91,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", policy));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, extraction.Metadata?.SenderTrust.Level);
@@ -114,7 +114,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", SenderTrustPolicy.Create([], [entry], [])));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Trusted, extraction.Metadata?.SenderTrust.Level);
@@ -131,11 +131,11 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
         var reader = new SenderTrustEvaluatingEmailMimeReader(
             ReaderYielding(
                 WrittenBy("partner.example"),
-                [new EmailParticipant(EmailAddressRole.To, AddressOf("owner@work.example"))]),
+                [new EmailParticipant(EmailAddressRole.To, AddressOf("user@work.example"))]),
             PolicyReaderFor("primary", policy));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, extraction.Metadata?.SenderTrust.Level);
@@ -149,12 +149,12 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
         // Arrange
         var policies = Substitute.For<ISenderTrustPolicyReader>();
         var inner = Substitute.For<IEmailMimeReader>();
-        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var reader = new SenderTrustEvaluatingEmailMimeReader(inner, policies);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.MalformedContent, extraction.Outcome);
@@ -172,7 +172,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
             PolicyReaderFor("primary", PolicyRecognizing("partner.example")));
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(authentication, extraction.Metadata?.SenderAuthentication);
@@ -216,7 +216,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",

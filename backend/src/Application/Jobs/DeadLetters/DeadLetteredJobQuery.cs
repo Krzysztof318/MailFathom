@@ -110,6 +110,6 @@ public sealed record DeadLetteredJobQuery
     private static string ComputeFingerprint(JobType? jobType, MailAccountIdentity? account) =>
         PageFilterFingerprint.Of(
             jobType?.Name,
-            account?.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account?.User.Value.ToString("N", CultureInfo.InvariantCulture),
             account?.Id.Value);
 }

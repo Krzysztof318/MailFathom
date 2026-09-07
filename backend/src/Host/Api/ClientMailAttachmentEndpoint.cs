@@ -58,16 +58,16 @@ internal static class ClientMailAttachmentEndpoint
             .Produces<Stream>(StatusCodes.Status200OK, AttachmentContentResponse.FallbackMediaType);
     }
 
-    /// <summary>Streams one attachment of one of the acting owner's messages, or reports that there is no such file.</summary>
+    /// <summary>Streams one attachment of one of the acting user's messages, or reports that there is no such file.</summary>
     /// <param name="storedEmailId">The message the file belongs to, as a read of that message published it.</param>
     /// <param name="position">The file's place in the order that read listed the message's attachments in.</param>
     /// <param name="attachments">Opens the attachment, for a caller the read's own grant admits.</param>
     /// <param name="context">The request being answered, whose response body the file is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns>The file's octets, <c>404</c> where this owner has no such file, <c>409</c> where this deployment's screen stopped the file, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
+    /// <returns>The file's octets, <c>404</c> where this user has no such file, <c>409</c> where this deployment's screen stopped the file, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
-    /// Every refusal about the mail is one refusal. A message this owner does not hold, one no deployment ever held, a
+    /// Every refusal about the mail is one refusal. A message this user does not hold, one no deployment ever held, a
     /// local copy that is damaged or missing, and a position the message carries no part at all answer identically,
     /// because telling them apart would let a caller learn what became of mail they cannot read by asking about it. A
     /// file the screen stopped is not one of those and says so, for the reason the signed route's own refusal gives.

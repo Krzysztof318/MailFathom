@@ -4,16 +4,16 @@
 
 namespace MailFathom.Application.SensitiveContent;
 
-/// <summary>The one budget of scans this process runs at once, whichever owner's mail each of them is reading.</summary>
+/// <summary>The one budget of scans this process runs at once, whichever user's mail each of them is reading.</summary>
 /// <remarks>
 /// <para>
 /// It is a type of its own rather than a field of <see cref="Redaction.SensitiveContentRedactor" /> because a
-/// deployment composes one redaction per owner posture and the permits are the process's CPU and memory rather than
-/// any owner's. A semaphore inside each redaction would multiply the bound by the number of distinct postures, so a
-/// deployment that admitted a second owner would silently double what one analyzer is asked to serve.
+/// deployment composes one redaction per user posture and the permits are the process's CPU and memory rather than
+/// any user's. A semaphore inside each redaction would multiply the bound by the number of distinct postures, so a
+/// deployment that admitted a second user would silently double what one analyzer is asked to serve.
 /// </para>
 /// <para>
-/// The bound is the deployment's for the same reason the analyzer address is: the machine is shared, and no owner's
+/// The bound is the deployment's for the same reason the analyzer address is: the machine is shared, and no user's
 /// document may buy more of it.
 /// </para>
 /// </remarks>

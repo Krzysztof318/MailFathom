@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.DataEncryption;
 /// <para>
 /// A binding is a purpose and a subject: what the value is, and whose it is. Both are authenticated but not encrypted,
 /// which is what makes a sealed value refuse to open anywhere other than where it was written. A row copied between
-/// accounts fails to open rather than opening as the wrong owner's credential, a value moved into a column that means
+/// accounts fails to open rather than opening as the wrong user's credential, a value moved into a column that means
 /// something else fails the same way, and so does a row restored from another deployment.
 /// </para>
 /// <para>

@@ -80,7 +80,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
         RemoteEmailContent content,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);

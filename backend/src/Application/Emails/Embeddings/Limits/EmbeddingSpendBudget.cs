@@ -15,7 +15,7 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// is the one quantity this deployment can count exactly without carrying a model's own tokenizer.
 /// </para>
 /// <para>
-/// There are two ceilings and they answer different questions. The deployment's bounds the bill; an owner's bounds any
+/// There are two ceilings and they answer different questions. The deployment's bounds the bill; a user's bounds any
 /// one person's share of it, so that a backfill of one large mailbox cannot exhaust the window everybody else is
 /// working in. Both are counted over the same period, and a request is admitted only where both admit it.
 /// </para>
@@ -36,50 +36,50 @@ public sealed class EmbeddingSpendBudget
 {
     private EmbeddingSpendBudget(
         long maxInputCharactersPerPeriod,
-        long maxInputCharactersPerPeriodPerOwner,
+        long maxInputCharactersPerPeriodPerUser,
         TimeSpan period)
     {
         this.MaxInputCharactersPerPeriod = maxInputCharactersPerPeriod;
-        this.MaxInputCharactersPerPeriodPerOwner = maxInputCharactersPerPeriodPerOwner;
+        this.MaxInputCharactersPerPeriodPerUser = maxInputCharactersPerPeriodPerUser;
         this.Period = period;
     }
 
     /// <summary>Gets a budget that bounds nothing, which is what an operator writing a ceiling of zero asked for.</summary>
     public static EmbeddingSpendBudget Unbounded { get; } = new(
         maxInputCharactersPerPeriod: 0,
-        maxInputCharactersPerPeriodPerOwner: 0,
+        maxInputCharactersPerPeriodPerUser: 0,
         TimeSpan.FromDays(1));
 
     /// <summary>Gets the characters one period may send to a provider in total, or zero where the operator declared no ceiling.</summary>
     public long MaxInputCharactersPerPeriod { get; }
 
-    /// <summary>Gets the characters one period may send for any one owner, or zero where the operator declared no per-owner ceiling.</summary>
-    public long MaxInputCharactersPerPeriodPerOwner { get; }
+    /// <summary>Gets the characters one period may send for any one user, or zero where the operator declared no per-user ceiling.</summary>
+    public long MaxInputCharactersPerPeriodPerUser { get; }
 
     /// <summary>Gets the length of the window the ceilings are counted over.</summary>
     public TimeSpan Period { get; }
 
     /// <summary>Gets whether this budget refuses nothing.</summary>
-    public bool IsUnbounded => this.MaxInputCharactersPerPeriod == 0 && this.MaxInputCharactersPerPeriodPerOwner == 0;
+    public bool IsUnbounded => this.MaxInputCharactersPerPeriod == 0 && this.MaxInputCharactersPerPeriodPerUser == 0;
 
     /// <summary>Builds a budget from what a deployment declared.</summary>
     /// <param name="maxInputCharactersPerPeriod">The characters one period may send in total, or zero for no ceiling at all.</param>
-    /// <param name="maxInputCharactersPerPeriodPerOwner">The characters one period may send for any one owner, or zero for no per-owner ceiling.</param>
+    /// <param name="maxInputCharactersPerPeriodPerUser">The characters one period may send for any one user, or zero for no per-user ceiling.</param>
     /// <param name="period">The window the ceilings are counted over.</param>
     /// <returns>The budget.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either ceiling is negative, or the period is not positive.</exception>
     public static EmbeddingSpendBudget Create(
         long maxInputCharactersPerPeriod,
-        long maxInputCharactersPerPeriodPerOwner,
+        long maxInputCharactersPerPeriodPerUser,
         TimeSpan period)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxInputCharactersPerPeriod);
-        ArgumentOutOfRangeException.ThrowIfNegative(maxInputCharactersPerPeriodPerOwner);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxInputCharactersPerPeriodPerUser);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
 
-        return maxInputCharactersPerPeriod == 0 && maxInputCharactersPerPeriodPerOwner == 0
+        return maxInputCharactersPerPeriod == 0 && maxInputCharactersPerPeriodPerUser == 0
             ? Unbounded
-            : new EmbeddingSpendBudget(maxInputCharactersPerPeriod, maxInputCharactersPerPeriodPerOwner, period);
+            : new EmbeddingSpendBudget(maxInputCharactersPerPeriod, maxInputCharactersPerPeriodPerUser, period);
     }
 
     /// <summary>Finds the start of the period an instant falls in, which is the key the consumed total is counted under.</summary>

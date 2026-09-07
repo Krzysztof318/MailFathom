@@ -16,8 +16,8 @@ internal sealed class RecurringSendEntity
     /// <remarks>A plain column rather than a foreign key onto the stored account, for the reason the outgoing record's copy is one: an account configured to send need never have synchronized anything, and a key here would refuse a declaration from a submission-only account instead of recording it.</remarks>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the recurrence sends from.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the recurrence sends from.</summary>
+    public required Guid UserId { get; set; }
 
     public OutgoingEmailOrigin RequesterOrigin { get; set; }
 
@@ -39,7 +39,7 @@ internal sealed class RecurringSendEntity
 
     /// <summary>Gets or sets when the declaration was stopped, and <see langword="null" /> while it still produces occurrences.</summary>
     /// <remarks>
-    /// An instant rather than a flag, and the row is kept rather than deleted: what an owner stopped and when they
+    /// An instant rather than a flag, and the row is kept rather than deleted: what a user stopped and when they
     /// stopped it is part of the account of a mailbox that used to send something every week, and a deleted row would
     /// make the stopping indistinguishable from a declaration nobody ever made.
     /// </remarks>

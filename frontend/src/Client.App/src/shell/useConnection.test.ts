@@ -40,7 +40,7 @@ describe('reconnectionDelay', () => {
 // is asserted where a person would read it, in `App.test.tsx` and `ConnectionSummary.test.tsx`.
 
 const baseAddress = 'https://mail.example.invalid';
-const firstCredential = 'Basic b3duZXI6b3Blbg==';
+const firstCredential = 'Basic dXNlcjpvcGVu';
 const secondCredential = 'Basic c29tZWJvZHk6ZWxzZQ==';
 
 // The instant this suite decided, which is what an answer is stamped with when the hook is handed it — never a system

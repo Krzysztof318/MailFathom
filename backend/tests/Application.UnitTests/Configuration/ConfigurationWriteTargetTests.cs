@@ -19,11 +19,11 @@ public sealed class ConfigurationWriteTargetTests
     public void RoutedTo_Store_IsWritableAndCarriesNoRefusal()
     {
         // Act
-        var target = ConfigurationWriteTarget.RoutedTo(ConfigurationStorageRoute.OwnerAccounts);
+        var target = ConfigurationWriteTarget.RoutedTo(ConfigurationStorageRoute.UserAccounts);
 
         // Assert
         Assert.True(target.IsWritable);
-        Assert.Equal(ConfigurationStorageRoute.OwnerAccounts, target.Route);
+        Assert.Equal(ConfigurationStorageRoute.UserAccounts, target.Route);
         Assert.Null(target.RefusalMessage);
     }
 

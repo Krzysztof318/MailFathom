@@ -208,9 +208,9 @@ public sealed class SensitiveContentDerivationStampTests
     }
 
     /// <summary>
-    /// A cursor is discarded whenever anything the walk judges mail against has moved, and mail whose owner the roster
+    /// A cursor is discarded whenever anything the walk judges mail against has moved, and mail whose user the roster
     /// no longer names is judged against the deployment's own posture. That posture moving is invisible in the rostered
-    /// stamps whenever every rostered owner had already asked for at least as much, so it is digested beside them —
+    /// stamps whenever every rostered user had already asked for at least as much, so it is digested beside them —
     /// otherwise the walk resumes past rows that had just become stale and never revisits them.
     /// </summary>
     [Fact]
@@ -223,8 +223,8 @@ public sealed class SensitiveContentDerivationStampTests
         using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
         var rostered = new[]
         {
-            new OwnerSensitiveContentPosture(
-                SyntheticMailOwner.Deployment,
+            new UserSensitiveContentPosture(
+                SyntheticMailUser.Deployment,
                 SensitiveContentPosture.Scanning(
                     [scanner.Scanner],
                     new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),

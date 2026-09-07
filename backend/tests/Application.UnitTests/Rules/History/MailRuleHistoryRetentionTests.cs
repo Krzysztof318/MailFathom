@@ -21,9 +21,9 @@ public sealed class MailRuleHistoryRetentionTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
 
     private readonly InMemoryMailRuleExecutionStore store = new();
@@ -139,7 +139,7 @@ public sealed class MailRuleHistoryRetentionTests
             [.. evaluatedAt.Select(instant => new MailRuleExecution
             {
                 Id = MailRuleExecutionId.New(),
-                Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId),
+                Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId),
                 StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
                 RuleName = "file-invoices",
                 Revision = Revision,

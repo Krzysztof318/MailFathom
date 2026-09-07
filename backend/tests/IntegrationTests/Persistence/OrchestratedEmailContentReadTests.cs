@@ -143,7 +143,7 @@ public sealed class OrchestratedEmailContentReadTests(MailFathomOrchestrationFix
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject, sizeOctets: 2048),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

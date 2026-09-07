@@ -48,16 +48,16 @@ internal sealed class JobEntity
     /// </remarks>
     public string? MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner the work belongs to, and <see langword="null" /> when it belongs to none.</summary>
+    /// <summary>Gets or sets the user the work belongs to, and <see langword="null" /> when it belongs to none.</summary>
     /// <remarks>
     /// Nullable exactly as <see cref="MailboxAccountId" /> is, and for the same reason: work no mailbox asked
     /// for belongs to nobody's mail. The two together are the foreign key onto the account, an account being
-    /// identified by its owner and its identifier — and because both halves are optional, PostgreSQL leaves a row
-    /// supplying only one of them unchecked, which is why <c>ck_jobs_account_owner</c> states that the owner is
+    /// identified by its user and its identifier — and because both halves are optional, PostgreSQL leaves a row
+    /// supplying only one of them unchecked, which is why <c>ck_jobs_account_user</c> states that the user is
     /// present for exactly the rows the account is. Carrying it here rather than reaching it through the account is
-    /// also what lets the fair claim rank one owner's waiting work on an index rather than through a join.
+    /// also what lets the fair claim rank one user's waiting work on an index rather than through a join.
     /// </remarks>
-    public Guid? OwnerId { get; set; }
+    public Guid? UserId { get; set; }
 
     public MailboxAccountEntity? MailboxAccount { get; set; }
 
@@ -66,13 +66,13 @@ internal sealed class JobEntity
     /// <summary>Gets or sets the instant before which no claim may take the job.</summary>
     public DateTimeOffset AvailableAt { get; set; }
 
-    /// <summary>Gets or sets the instant this job's turn comes once its owner's queue is shared with everybody else's.</summary>
+    /// <summary>Gets or sets the instant this job's turn comes once its user's queue is shared with everybody else's.</summary>
     /// <remarks>
     /// <para>
     /// The order a claim takes due work in, and the whole of what makes that order fair. It is a virtual instant rather
-    /// than a real one: the enqueue stamps it one spacing past the latest turn the same owner's waiting work already
-    /// holds, and never earlier than the job becomes available. An owner with nothing waiting therefore lands on the
-    /// instant its work is due, and an owner working through a backlog lands further and further ahead of the clock,
+    /// than a real one: the enqueue stamps it one spacing past the latest turn the same user's waiting work already
+    /// holds, and never earlier than the job becomes available. A user with nothing waiting therefore lands on the
+    /// instant its work is due, and a user working through a backlog lands further and further ahead of the clock,
     /// which is what lets somebody else's due job overtake it instead of queueing behind the whole backlog.
     /// </para>
     /// <para>
@@ -81,7 +81,7 @@ internal sealed class JobEntity
     /// returned dead letter each carry it forward to the instant they name, so no write ever leaves a job holding a
     /// turn it could not take. The two do diverge afterwards, and a release is where: it moves the available instant to
     /// now and leaves the turn where it was, because the attempt gave the work back rather than failing at it, so a
-    /// released job resumes the place it already had instead of going to the end of its owner's queue. Nothing may
+    /// released job resumes the place it already had instead of going to the end of its user's queue. Nothing may
     /// therefore assume <c>TurnAt &gt;= AvailableAt</c> of a row it reads.
     /// </para>
     /// </remarks>

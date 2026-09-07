@@ -45,7 +45,7 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
 
     /// <inheritdoc />
     public Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken) => Task.FromResult(
         this.emailIdsByOccurrence.TryGetValue(occurrenceId, out var emailId) ? emailId : (StoredEmailId?)null);

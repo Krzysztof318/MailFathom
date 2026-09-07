@@ -249,7 +249,7 @@ public sealed class SensitiveContentPlanMapperTests
     }
 
     /// <summary>
-    /// The profile follows the address rather than the switch, because an owner may switch the scanner on for their own
+    /// The profile follows the address rather than the switch, because a user may switch the scanner on for their own
     /// mail while the deployment left it off, and the client it would then reach is registered before any roster exists.
     /// </summary>
     [Fact]
@@ -355,9 +355,9 @@ public sealed class SensitiveContentPlanMapperTests
         Assert.False(policy.RefusesAnything);
     }
 
-    /// <summary>The scanners this deployment switched on for every owner, which is what its own posture runs.</summary>
+    /// <summary>The scanners this deployment switched on for every user, which is what its own posture runs.</summary>
     /// <remarks>
-    /// Which scanners run is an argument to the mapper rather than a reading of the section, because an owner's record
+    /// Which scanners run is an argument to the mapper rather than a reading of the section, because a user's record
     /// can switch one on that the deployment left off. What these tests are about is everything else the section
     /// decides, so each of them passes the deployment's own answer.
     /// </remarks>

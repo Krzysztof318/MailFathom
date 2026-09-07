@@ -22,7 +22,7 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// against the account's own budget and never delays the pass that is carrying the change.
 /// </para>
 /// <para>
-/// A record belonging to another owner is absent rather than refused, and so is one recorded in a folder this caller
+/// A record belonging to another user is absent rather than refused, and so is one recorded in a folder this caller
 /// may no longer read — the same answer a read of that folder's mail gives, reached the same way. What is left is a
 /// caller reading about its own work, which is why the grant is the one that already lets it read the mail the work is
 /// about.
@@ -83,7 +83,7 @@ public sealed class MailboxChangeProgressReader
 
         ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerRead);
 
-        var held = await this.records.ReadAsync(this.scopeResolver.Owner, recordIds, cancellationToken);
+        var held = await this.records.ReadAsync(this.scopeResolver.User, recordIds, cancellationToken);
 
         return
         [

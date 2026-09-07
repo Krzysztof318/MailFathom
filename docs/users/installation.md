@@ -87,7 +87,7 @@ none of them does, and how a download is verified — nothing published there is
 What every shape *does* serve, page or no page, is the client **surface** under `/api/client`, which is an endpoint of
 its own and is what both heads call. Signing in to it needs a credential no shape provisions on its own: there is no
 self-service and no default, so a username and password are written over
-[the administrative endpoint](../operations/admin-endpoint.md#owner-credentials) or they do not exist.
+[the administrative endpoint](../operations/admin-endpoint.md#user-credentials) or they do not exist.
 
 ## What every shape needs
 

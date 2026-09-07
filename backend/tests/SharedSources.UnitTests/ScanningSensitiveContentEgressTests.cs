@@ -23,7 +23,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -50,7 +50,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider, scanner);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -72,7 +72,7 @@ public sealed class ScanningSensitiveContentEgressTests
             Marker,
             this.timeProvider,
             bounds: SensitiveContentScanBounds.Create(8, TimeSpan.FromSeconds(5), 4));
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
 
         // Act
         var guarded = await egress.Guard.GuardWithOmissionAsync(
@@ -90,7 +90,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
@@ -122,12 +122,12 @@ public sealed class ScanningSensitiveContentEgressTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
-            ScanningSensitiveContentEgress.Owner,
+            ScanningSensitiveContentEgress.User,
             [$"the key is {Marker}"],
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.Owner));
+        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.User));
         Assert.NotNull(refusal);
         Assert.Equal(scanner, refusal.Scanner);
     }
@@ -139,7 +139,7 @@ public sealed class ScanningSensitiveContentEgressTests
         // Arrange
         var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
 
         // Act
         egress.Dispose();

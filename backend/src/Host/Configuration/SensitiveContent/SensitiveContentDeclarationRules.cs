@@ -22,7 +22,7 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// <para>
 /// Two questions are asked of different sets, and the difference is who can turn a scanner on. What the operator
 /// <em>wrote</em> under a scanner — its categories and its suppressions — is judged for every scanner this deployment
-/// provides, switched on or not, because an owner's own record may switch a provided scanner on for their own mail and
+/// provides, switched on or not, because a user's own record may switch a provided scanner on for their own mail and
 /// no roster exists while this runs: a mistyped category under a switch that is off would otherwise pass a start and
 /// then throw out of the posture composition the moment somebody opted in, taking every scanning path on the
 /// deployment with it. A scanner this section switched on is judged too, whether or not the deployment can provide it,
@@ -147,7 +147,7 @@ internal static class SensitiveContentDeclarationRules
         if (SensitiveContentCatalogResolution.ResolveCategories(settings, catalog).Count == 0)
         {
             // A written list that resolves to nothing is what the operator wrote, so it is refused whether or not this
-            // section runs the scanner: an owner switching that scanner on for their own mail would otherwise be the
+            // section runs the scanner: a user switching that scanner on for their own mail would otherwise be the
             // first thing to meet it, out of the posture composition rather than out of a start. An empty list is a
             // property of the catalog instead, and is judged only where this section runs it.
             if (settings.Categories.Count > 0)

@@ -5,7 +5,7 @@
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -42,8 +42,8 @@ internal static class DeclaredMailAccounts
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Both places a mailbox is declared are read: the deployment's own section, and each owner's <c>MailAccounts</c>
-    /// under the top-level owner collection. A deployment declaring owners is refused a non-empty
+    /// Both places a mailbox is declared are read: the deployment's own section, and each user's <c>MailAccounts</c>
+    /// under the top-level user collection. A deployment declaring users is refused a non-empty
     /// <c>MailSynchronization:Accounts</c>, so exactly one of the two is ever populated — and a rule judged against
     /// only the first would refuse every scope such a file names while naming the section that file may not fill.
     /// </remarks>
@@ -57,10 +57,10 @@ internal static class DeclaredMailAccounts
                 .GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
                 .GetChildren()
                 .Concat(configuration
-                    .GetSection(DeclaredOwnerOptions.SectionName)
+                    .GetSection(DeclaredUserOptions.SectionName)
                     .GetChildren()
-                    .SelectMany(owner => owner
-                        .GetSection(nameof(DeclaredOwnerOptions.MailAccounts))
+                    .SelectMany(user => user
+                        .GetSection(nameof(DeclaredUserOptions.MailAccounts))
                         .GetChildren()))
                 .Select(ReadAccount)
                 .OfType<DeclaredMailAccount>(),
@@ -72,8 +72,8 @@ internal static class DeclaredMailAccounts
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The owners' own declarations come off the roster the snapshot carries rather than out of a section, because
-    /// that is where an owner's mailboxes are once the startup gate has resolved them — an owner read from their own
+    /// The users' own declarations come off the roster the snapshot carries rather than out of a section, because
+    /// that is where a user's mailboxes are once the startup gate has resolved them — a user read from their own
     /// document has no section at all. A reload runs behind that gate, so the roster is established by the time this
     /// is asked.
     /// </remarks>
@@ -82,15 +82,15 @@ internal static class DeclaredMailAccounts
         ArgumentNullException.ThrowIfNull(settings);
 
         return ReadFrom(settings.Accounts
-            .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? []));
+            .Concat(settings.ServedUsers?.SelectMany(static user => user.MailAccounts) ?? []));
     }
 
     /// <summary>Reads the declared accounts from one bound set of mailbox declarations.</summary>
-    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
+    /// <param name="accounts">The declarations, which may be one user's own rather than the whole deployment's.</param>
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The overload a claim about one owner's own mailboxes is judged through, which is every claim an owner's record
+    /// The overload a claim about one user's own mailboxes is judged through, which is every claim a user's record
     /// makes about a folder: their scanned folders and their junk destination resolve within their own accounts and
     /// nowhere else. Reading them the same way the deployment's are read is what keeps one answer to *is this a mapped
     /// folder* rather than two.

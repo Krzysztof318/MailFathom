@@ -48,7 +48,7 @@ internal static class FakeContactDeployment
     /// <param name="displayName">The name the contact carries.</param>
     /// <param name="addresses">The addresses it holds, the preferred one first.</param>
     /// <param name="origin">How the contact came to be in the book.</param>
-    /// <param name="note">What the owner wrote about the person, or <see langword="null" /> for none.</param>
+    /// <param name="note">What the user wrote about the person, or <see langword="null" /> for none.</param>
     /// <returns>The response body.</returns>
     internal static string Lookup(
         string displayName = "Anna Kowalska",

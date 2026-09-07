@@ -31,7 +31,7 @@ public sealed class ConfigurationStorageCatalogTests
     }
 
     /// <summary>
-    /// The owner-account collection is the first special route, and everything beneath it travels with it: an owner's
+    /// The user-account collection is the first special route, and everything beneath it travels with it: a user's
     /// document is one row in its own store rather than a subtree of the deployment's document.
     /// </summary>
     [Theory]
@@ -39,18 +39,18 @@ public sealed class ConfigurationStorageCatalogTests
     [InlineData("Accounts:0")]
     [InlineData("Accounts:0:DisplayName")]
     [InlineData("accounts:0:MailAccounts:1:Identifier")]
-    public void ResolveWriteTarget_OwnerAccountCollection_IsPersistedInTheOwnerAccountsStore(string configurationPath)
+    public void ResolveWriteTarget_UserAccountCollection_IsPersistedInTheUserAccountsStore(string configurationPath)
     {
         // Act
         var target = ConfigurationStorageCatalog.ResolveWriteTarget(configurationPath);
 
         // Assert
         Assert.True(target.IsWritable);
-        Assert.Equal(ConfigurationStorageRoute.OwnerAccounts, target.Route);
+        Assert.Equal(ConfigurationStorageRoute.UserAccounts, target.Route);
     }
 
     /// <summary>
-    /// The mail-synchronization accounts are mailbox declarations rather than owners, and they carry the same word. The
+    /// The mail-synchronization accounts are mailbox declarations rather than users, and they carry the same word. The
     /// route is the top-level collection alone, so this one stays an ordinary deployment setting.
     /// </summary>
     [Theory]
@@ -89,7 +89,7 @@ public sealed class ConfigurationStorageCatalogTests
     [Theory]
     [InlineData("settings_accounts")]
     [InlineData("settings_root")]
-    [InlineData("owner-accounts")]
+    [InlineData("user-accounts")]
     public void ResolveWriteTarget_StoreNameSuppliedAsThePath_IsPersistedInTheRootDocument(string configurationPath)
     {
         // Act

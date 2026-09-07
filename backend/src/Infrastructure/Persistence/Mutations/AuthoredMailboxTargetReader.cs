@@ -50,7 +50,7 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             .Where(email => email.RemoteExpungeObservedAt == null)
             .Select(email => new
             {
-                email.OwnerId,
+                email.UserId,
                 email.MailboxAccountId,
                 email.UidValidity,
                 email.Uid,
@@ -71,7 +71,7 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             RemoteFolderPath.Create(located.RemotePath));
 
         return new AuthoredMailboxTarget(
-            MailOwnerId.Create(located.OwnerId),
+            MailUserId.Create(located.UserId),
             EmailOccurrenceId.Create(
                 MailAccountId.Create(located.MailboxAccountId),
                 folder.Id,

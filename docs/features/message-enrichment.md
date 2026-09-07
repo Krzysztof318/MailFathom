@@ -51,7 +51,7 @@ ever writes is a state every reader has to rule out on every row.
 
 Enrichment is the last stage of the [arrival pipeline](../architecture/arrival-pipeline.md), behind the cut — a message
 derived before it was cut would have nothing to rest its evidence on. Everything the earlier stages settle is settled
-by the time it runs: classification has admitted the message, the owner's rules have finished with it, and its passages
+by the time it runs: classification has admitted the message, the user's rules have finished with it, and its passages
 exist.
 
 **All of its passages**, which is stricter than having some. A derivation is taken once and never revisited, so a

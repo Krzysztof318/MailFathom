@@ -50,7 +50,7 @@ public sealed class StoredEmailTombstoneTests
         Assert.False(admitted);
     }
 
-    /// <summary>A delete the owner authored to free the server keeps the mail readable, which is the whole of that setting.</summary>
+    /// <summary>A delete the user authored to free the server keeps the mail readable, which is the whole of that setting.</summary>
     /// <remarks>
     /// The row carries the expunge as well, because the server genuinely no longer holds the message and the
     /// reconciliation queue is ordered by that column. Reading only that column here would hide exactly the mail this
@@ -73,16 +73,16 @@ public sealed class StoredEmailTombstoneTests
 
     private static StoredEmailEntity CreateEmail()
     {
-        var account = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "personal" };
+        var account = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "personal" };
 
         return new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = account.Id,
             MailFolder = new MailFolderEntity
             {
-                OwnerId = SyntheticMailOwner.Deployment.Value,
+                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = account.Id,
                 MailboxAccount = account,
                 Alias = "inbox",

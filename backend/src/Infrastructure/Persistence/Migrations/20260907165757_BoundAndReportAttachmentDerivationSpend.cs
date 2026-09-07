@@ -20,13 +20,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     PeriodStartsAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Step = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     ConsumedUnitCount = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_attachment_derivation_spend_periods", x => new { x.PeriodStartsAt, x.OwnerId, x.Step });
+                    table.PrimaryKey("PK_attachment_derivation_spend_periods", x => new { x.PeriodStartsAt, x.UserId, x.Step });
                 });
         }
 

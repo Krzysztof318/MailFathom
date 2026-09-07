@@ -9,22 +9,22 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// A claim is taken against what a message is expected to occupy, before it is fetched, and settled against what was
 /// actually written. Disposing it gives back whatever was never settled, so a fetch that was abandoned and a commit
 /// that was rolled back both leave the ceilings where they found them rather than consuming room nothing occupies. It
-/// holds the deployment's level and its owner's together, because a payload occupies both and giving one back without
+/// holds the deployment's level and its user's together, because a payload occupies both and giving one back without
 /// the other would leave a level describing storage that is not there.
 /// </remarks>
 public sealed class StoredContentClaim : IDisposable
 {
     private readonly StoredContentCeiling.ContentLevel deployment;
-    private readonly StoredContentCeiling.ContentLevel owner;
+    private readonly StoredContentCeiling.ContentLevel user;
     private long heldBytes;
 
     internal StoredContentClaim(
         StoredContentCeiling.ContentLevel deployment,
-        StoredContentCeiling.ContentLevel owner,
+        StoredContentCeiling.ContentLevel user,
         long bytes)
     {
         this.deployment = deployment;
-        this.owner = owner;
+        this.user = user;
         this.ClaimedBytes = bytes;
         this.heldBytes = bytes;
     }
@@ -60,6 +60,6 @@ public sealed class StoredContentClaim : IDisposable
     private void ReleaseBoth(long bytes)
     {
         this.deployment.Release(bytes);
-        this.owner.Release(bytes);
+        this.user.Release(bytes);
     }
 }

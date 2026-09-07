@@ -8,7 +8,7 @@ namespace MailFathom.Application.Contacts;
 
 /// <summary>Everything this deployment holds about one person in its contact book, as of one instant.</summary>
 /// <param name="Contact">The complete record: the name, every address, which one is preferred, the note, the origin, and both timestamps.</param>
-/// <param name="ProducedAt">When the export was produced, which is what dates the answer an owner is handed.</param>
+/// <param name="ProducedAt">When the export was produced, which is what dates the answer a user is handed.</param>
 /// <remarks>
 /// <para>
 /// The data-subject access path, named as one rather than left as "read the contact and print it". Today the whole of
@@ -18,7 +18,7 @@ namespace MailFathom.Application.Contacts;
 /// something to add to it.
 /// </para>
 /// <para>
-/// Rendering is deliberately not here. What an owner reads is a surface's decision, and every surface over the book
+/// Rendering is deliberately not here. What a user reads is a surface's decision, and every surface over the book
 /// renders the same complete record rather than choosing which parts of a person to hand back.
 /// </para>
 /// </remarks>

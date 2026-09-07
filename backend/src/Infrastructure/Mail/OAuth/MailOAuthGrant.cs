@@ -28,7 +28,7 @@ public readonly record struct MailOAuthGrant
     }
 
     /// <summary>Gets the grant that exchanges an operator-supplied refresh token for an access token.</summary>
-    /// <remarks>This is the delegated path: the token acts for one mailbox owner, and Google offers no other route for a Workspace mailbox.</remarks>
+    /// <remarks>This is the delegated path: the token acts for one mailbox user, and Google offers no other route for a Workspace mailbox.</remarks>
     public static MailOAuthGrant RefreshToken { get; } = new("refresh_token", requiresRefreshToken: true);
 
     /// <summary>Gets the app-only grant that authenticates the registered application itself.</summary>

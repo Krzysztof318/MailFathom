@@ -48,7 +48,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     private readonly ILogger<MailEmbeddingBackfillWorker> logger;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>The period an owner's ceiling has already been reported for, so one line is written per period.</summary>
+    /// <summary>The period a user's ceiling has already been reported for, so one line is written per period.</summary>
     /// <remarks>
     /// The sweep steps past such a message rather than ending, so this fact is true of every pass for as long as the
     /// period lasts — and a busy instance takes the short interval, which would write the same warning every few
@@ -56,7 +56,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     /// <c>MailEmbeddingWorker</c> holds the same field for the live path, for the same reason. It is only ever touched
     /// from the single loop below, which is why it needs no synchronization.
     /// </remarks>
-    private DateTimeOffset? ownerCeilingReportedForPeriodEndingAt;
+    private DateTimeOffset? userCeilingReportedForPeriodEndingAt;
 
     /// <summary>Initializes a new embedding backfill worker.</summary>
     public MailEmbeddingBackfillWorker(
@@ -246,15 +246,15 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         }
 
         // Reported beside the run's ending for the same reason, and it is the one number that says a bound was reached
-        // without the run stopping: the walk steps past a message whose owner has spent their period so that everybody
+        // without the run stopping: the walk steps past a message whose user has spent their period so that everybody
         // else's mail keeps being embedded, which leaves nothing else for an operator to read it from. Once per period
         // rather than once per pass, because the run does not end on it and every pass until the rollover would repeat
         // the same fact — which is why the result names the period rather than only the count.
-        if (result.OwnerSpendCeilingEmailCount > 0
-            && this.ownerCeilingReportedForPeriodEndingAt != result.OwnerSpendPeriodEndsAt)
+        if (result.UserSpendCeilingEmailCount > 0
+            && this.userCeilingReportedForPeriodEndingAt != result.UserSpendPeriodEndsAt)
         {
-            this.ownerCeilingReportedForPeriodEndingAt = result.OwnerSpendPeriodEndsAt;
-            this.LogOwnerSpendCeilingReached(result.OwnerSpendCeilingEmailCount);
+            this.userCeilingReportedForPeriodEndingAt = result.UserSpendPeriodEndsAt;
+            this.LogUserSpendCeilingReached(result.UserSpendCeilingEmailCount);
         }
 
         // Every one of the three is asked about, because a run can move the third alone: a message that spends its whole
@@ -351,8 +351,8 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{OwnerSpendCeilingEmailCount} messages were stepped past because the owner they belong to has spent what one period admits for them; every other owner's mail kept being embedded, and the rolled-over period reaches these. Raise Embeddings:MaxInputCharactersPerPeriodPerOwner to admit more per owner, or set it to zero to bound only the deployment.")]
-    private partial void LogOwnerSpendCeilingReached(int ownerSpendCeilingEmailCount);
+        Message = "{UserSpendCeilingEmailCount} messages were stepped past because the user they belong to has spent what one period admits for them; every other user's mail kept being embedded, and the rolled-over period reaches these. Raise Embeddings:MaxInputCharactersPerPeriodPerUser to admit more per user, or set it to zero to bound only the deployment.")]
+    private partial void LogUserSpendCeilingReached(int userSpendCeilingEmailCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

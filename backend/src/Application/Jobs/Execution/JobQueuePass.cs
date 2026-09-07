@@ -7,7 +7,7 @@ namespace MailFathom.Application.Jobs.Execution;
 /// <summary>Takes one batch of due jobs this process can run, and runs them under the capacity the instance allows.</summary>
 /// <remarks>
 /// <para>
-/// One claim and one owner per pass. The owner identifies the attempt rather than the process, which is what lets a
+/// One claim and one user per pass. The user identifies the attempt rather than the process, which is what lets a
 /// write be refused once the lease has moved on, and a batch shares one because the claim that stamped them is one
 /// statement.
 /// </para>

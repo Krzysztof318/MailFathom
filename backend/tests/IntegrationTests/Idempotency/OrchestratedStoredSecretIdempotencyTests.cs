@@ -5,9 +5,9 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Configuration.OwnerSettings.Administration;
+using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Infrastructure.Persistence;
-using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -26,7 +26,7 @@ public sealed class OrchestratedStoredSecretIdempotencyTests(MailFathomOrchestra
     private const string StoredSecretName = "concurrent-stored-secret";
 
     [Fact]
-    public async Task StoreAsync_ManyAdministratorsCreatingOneOwnerAndName_ReturnsOneReference()
+    public async Task StoreAsync_ManyAdministratorsCreatingOneUserAndName_ReturnsOneReference()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -45,7 +45,7 @@ public sealed class OrchestratedStoredSecretIdempotencyTests(MailFathomOrchestra
                     {
                         using var material = ResolvedSecret.FromText($"concurrent-material-{ordinal}");
                         return await Administration(scope).StoreAsync(
-                            services.ServedOwner,
+                            services.ServedUser,
                             name,
                             material,
                             inner);
@@ -71,7 +71,7 @@ public sealed class OrchestratedStoredSecretIdempotencyTests(MailFathomOrchestra
 
     private static StoredSecretAdministration Administration(IServiceProvider scope) => new(
         scope.GetRequiredService<AccessAuthorization>(),
-        scope.GetRequiredService<IOwnerSettingsDocumentReader>(),
+        scope.GetRequiredService<IUserSettingsDocumentReader>(),
         scope.GetRequiredService<IStoredSecretStore>(),
         scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>());
 
@@ -80,7 +80,7 @@ public sealed class OrchestratedStoredSecretIdempotencyTests(MailFathomOrchestra
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredSecrets
                 .CountAsync(
-                    secret => secret.OwnerId == services.ServedOwner.Value && secret.Name == StoredSecretName,
+                    secret => secret.UserId == services.ServedUser.Value && secret.Name == StoredSecretName,
                     token),
             cancellationToken);
 
@@ -88,7 +88,7 @@ public sealed class OrchestratedStoredSecretIdempotencyTests(MailFathomOrchestra
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredSecrets
-                .Where(secret => secret.OwnerId == services.ServedOwner.Value && secret.Name == StoredSecretName)
+                .Where(secret => secret.UserId == services.ServedUser.Value && secret.Name == StoredSecretName)
                 .ExecuteDeleteAsync(token),
             cancellationToken);
 }

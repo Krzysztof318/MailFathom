@@ -10,9 +10,9 @@ namespace MailFathom.Infrastructure.Persistence.Preferences.Configurations;
 
 /// <summary>Declares the row holding what one person set about their own client.</summary>
 /// <remarks>
-/// The owner is the primary key rather than a column beside a generated one, because one person has one set of
+/// The user is the primary key rather than a column beside a generated one, because one person has one set of
 /// preferences and nothing else identifies them: that is what makes a write an upsert on a key the caller already
-/// holds, and what makes the foreign key onto the owner row and the key the same column.
+/// holds, and what makes the foreign key onto the user row and the key the same column.
 /// </remarks>
 internal sealed class ClientPreferencesConfiguration : IEntityTypeConfiguration<ClientPreferencesEntity>
 {
@@ -20,18 +20,18 @@ internal sealed class ClientPreferencesConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<ClientPreferencesEntity> entity)
     {
         entity.ToTable("client_preferences");
-        entity.HasKey(preferences => preferences.OwnerId);
-        entity.Property(preferences => preferences.OwnerId).ValueGeneratedNever();
+        entity.HasKey(preferences => preferences.UserId);
+        entity.Property(preferences => preferences.UserId).ValueGeneratedNever();
 
-        // A document rather than a column per preference, for the reason the owner record is one: what it holds is
+        // A document rather than a column per preference, for the reason the user record is one: what it holds is
         // decided by the layer that writes it, and a preference added later is a key rather than a migration.
         entity.Property(preferences => preferences.Document).HasColumnType("jsonb").IsRequired();
 
         // Cascade rather than a statement in the erasure walk: what somebody set about their own client is derived
         // from them, so it goes when they do without an erasure having to know this table exists.
-        entity.HasOne<OwnerAccountEntity>()
+        entity.HasOne<UserAccountEntity>()
             .WithMany()
-            .HasForeignKey(preferences => preferences.OwnerId)
+            .HasForeignKey(preferences => preferences.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

@@ -16,11 +16,11 @@
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <!-- Every administrative route builds the use case behind it, and every one of those asks who reached it. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
-    <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
+    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
     <!-- An embedding run resolves whose mail the message is before it reads a ceiling, so a worker composed here
          needs the same answer the synchronizer's tests arrange. -->
     <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
-    <Compile Include="..\shared\InMemoryOwnerStoredContentLedger.cs" Link="InMemoryOwnerStoredContentLedger.cs" />
+    <Compile Include="..\shared\InMemoryUserStoredContentLedger.cs" Link="InMemoryUserStoredContentLedger.cs" />
     <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />

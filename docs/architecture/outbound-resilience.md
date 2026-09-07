@@ -291,7 +291,7 @@ is the layer rather than something MailFathom re-implements:
   well as staging changes: the content store overwrites a draft's `bytea` payload with a set-based `UPDATE` rather
   than reading it into memory, the contact erasures delete a contact and its collected addresses in ordered batches,
   the chunk store discards a message's passages, the rule evaluation store stamps a batch of messages as evaluated,
-  the spend ledger upserts a period's total, and the embedding generation switch and the owner erasure each take a
+  the spend ledger upserts a period's total, and the embedding generation switch and the user erasure each take a
   `SELECT … FOR UPDATE` row lock before the statements whose outcome depends on holding it. Each of those has already
   reached the server when `SaveChangesAsync` runs, and the transaction is the only thing that makes them one fact with
   the changes staged beside them — the row lock in particular exists for the length of a transaction and for nothing

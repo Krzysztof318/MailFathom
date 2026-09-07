@@ -18,7 +18,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 public sealed class MailboxMutationAuditQueryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset CompletedAt = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
@@ -114,7 +114,7 @@ public sealed class MailboxMutationAuditQueryTests
         var mine = Create(pageSize: null).Query!;
 
         var theirs = MailboxMutationAuditQuery.Create(
-            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")),
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")),
             mutation: default,
             completedFrom: null,
             completedBefore: null,
@@ -140,7 +140,7 @@ public sealed class MailboxMutationAuditQueryTests
     {
         Id = MailboxMutationAuditEntryId.Create(Guid.CreateVersion7(CompletedAt)),
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
-        Owner = Account.Owner,
+        User = Account.User,
         AccountId = Account.Id,
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7(CompletedAt)),
         Mutation = MailboxMutation.Relocate,

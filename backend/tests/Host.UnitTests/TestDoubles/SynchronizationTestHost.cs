@@ -55,7 +55,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -149,7 +149,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IEmailContentStore>());
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
-        services.AddSingleton<IOwnerStoredContentLedger>(new InMemoryOwnerStoredContentLedger());
+        services.AddSingleton<IUserStoredContentLedger>(new InMemoryUserStoredContentLedger());
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());
         // Registered with no channel behind it, so every service a run resolves composes while what it says about the
         // run reaches nobody. A test that has a claim about what a client was told supplies its own publisher to the
@@ -296,7 +296,7 @@ internal static class SynchronizationTestHost
         services.AddScoped(_ => AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
 
         // Whose book the run writes into. The process identity acts for nobody, so the resolution answers with the
-        // owner the deployment serves, exactly as it does on a deployment where every account comes from configuration.
+        // user the deployment serves, exactly as it does on a deployment where every account comes from configuration.
         services.AddScoped(provider =>
             ContactBookOwnerships.For(provider.GetRequiredService<AccessAuthorization>()));
         services.AddScoped<ContactBook>();
@@ -352,12 +352,12 @@ internal static class SynchronizationTestHost
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
         // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
         // composes it, so the account list a supervision pass reads is the one the latest reload published. The roster
-        // is supplied rather than configured, because a configured account block names no owner.
-        services.AddSingleton(ResolvedServedMailOwners.TheSoleOwner());
-        services.AddSingleton<IDeploymentMailOwnerSource>(provider => provider.GetRequiredService<ServedMailOwners>());
+        // is supplied rather than configured, because a configured account block names no user.
+        services.AddSingleton(ResolvedServedMailUsers.TheSoleUser());
+        services.AddSingleton<IDeploymentMailUserSource>(provider => provider.GetRequiredService<ServedMailUsers>());
         services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedMailOwners>()));
+            provider.GetRequiredService<ServedMailUsers>()));
 
         return services.BuildServiceProvider();
     }
@@ -438,7 +438,7 @@ internal static class SynchronizationTestHost
     private static ISpamClassificationSettingsReader CreateClassificationSettingsReader()
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
-        reader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(SpamClassificationSettings.Disabled);
+        reader.SettingsFor(Arg.Any<MailUserId>()).Returns(SpamClassificationSettings.Disabled);
         reader.ScopeInForce.Returns(SpamClassificationScope.None);
 
         return reader;
@@ -448,7 +448,7 @@ internal static class SynchronizationTestHost
     private static ISpamActionSettingsReader CreateSpamActionSettingsReader()
     {
         var reader = Substitute.For<ISpamActionSettingsReader>();
-        reader.ActionsFor(Arg.Any<MailOwnerId>()).Returns(SpamActionSettings.None);
+        reader.ActionsFor(Arg.Any<MailUserId>()).Returns(SpamActionSettings.None);
 
         return reader;
     }
@@ -674,7 +674,7 @@ internal static class SynchronizationTestHost
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: null,

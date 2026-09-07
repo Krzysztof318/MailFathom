@@ -17,7 +17,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves one page of the owner's message list, keyset-paged in both directions.</summary>
+/// <summary>Serves one page of the user's message list, keyset-paged in both directions.</summary>
 /// <remarks>
 /// <para>
 /// It is the route a mail screen spends its time in, and the one most easily made slow. A page is an indexed read of a
@@ -42,7 +42,7 @@ namespace MailFathom.Host.Api;
 /// </remarks>
 internal static class ClientMailTimelineEndpoint
 {
-    /// <summary>The route reporting one page of the owner's mail, relative to the client prefix.</summary>
+    /// <summary>The route reporting one page of the user's mail, relative to the client prefix.</summary>
     internal const string MailTimelineRoute = "/emails";
 
     /// <summary>The one value the <c>sort</c> parameter accepts, which is the column the timeline indexes are ordered by.</summary>
@@ -71,8 +71,8 @@ internal static class ClientMailTimelineEndpoint
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
-    /// <summary>Serves one page of the acting owner's mail, or reports what was wrong with the request.</summary>
-    /// <param name="account">The account to draw from, by its identifier or its display name, or <see langword="null" /> for every account the owner owns.</param>
+    /// <summary>Serves one page of the acting user's mail, or reports what was wrong with the request.</summary>
+    /// <param name="account">The account to draw from, by its identifier or its display name, or <see langword="null" /> for every account the user owns.</param>
     /// <param name="folder">The folder to draw from, by its alias or as <c>role:Inbox</c>, or <see langword="null" /> for every folder.</param>
     /// <param name="includeJunk">Whether the junk folder takes part, which it does not unless the request asks.</param>
     /// <param name="unread">Whether to keep only unread mail, only read mail, or <see langword="null" /> for both.</param>
@@ -168,7 +168,7 @@ internal static class ClientMailTimelineEndpoint
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
         {
@@ -218,7 +218,7 @@ internal static class ClientMailTimelineEndpoint
     /// <summary>Reads the two names a request narrows the list with, refusing text no name of this system is spelled with.</summary>
     /// <remarks>
     /// One account and one folder rather than lists of them, because this route draws a folder somebody is looking at.
-    /// A request that names neither draws every folder of every account the owner owns, which is the unified view.
+    /// A request that names neither draws every folder of every account the user owns, which is the unified view.
     /// </remarks>
     private static bool TryReadScope(
         string? account,
@@ -243,7 +243,7 @@ internal static class ClientMailTimelineEndpoint
     }
 }
 
-/// <summary>One page of the owner's mail, as the client endpoint serves it.</summary>
+/// <summary>One page of the user's mail, as the client endpoint serves it.</summary>
 /// <param name="Emails">The rows, in the order the request asked the list to be sorted in.</param>
 /// <param name="NextCursor">The cursor the following page is asked with, or <see langword="null" /> at the end of the list.</param>
 /// <param name="PreviousCursor">The cursor the preceding page is asked with, or <see langword="null" /> at the beginning of the list.</param>

@@ -9,7 +9,7 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// <para>
 /// The whole point of tracking a draft's copy is that MailFathom may replace and remove that copy and nothing else. The
 /// moment the tracked occurrence stops being provably the one that was appended, the honest act is to leave it where it
-/// is — a draft the owner may be working on is worth more than a folder without a stray message in it — and to say why,
+/// is — a draft the user may be working on is worth more than a folder without a stray message in it — and to say why,
 /// so an operator reading the record is not left to guess which of these happened.
 /// </para>
 /// <para>

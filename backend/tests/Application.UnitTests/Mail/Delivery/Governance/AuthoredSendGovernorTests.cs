@@ -24,7 +24,7 @@ public sealed class AuthoredSendGovernorTests
     private const string CallerIdentity = "test-caller";
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Recorded =
         DateTimeOffset.Parse("2026-08-19T09:00:00Z", CultureInfo.InvariantCulture);
@@ -110,12 +110,12 @@ public sealed class AuthoredSendGovernorTests
     public async Task RequirePermittedAsync_RecipientTheCallersOwnBookHolds_IsVouchedForUnderTheRefusingPosture()
     {
         // Arrange
-        var caller = AccessAuthorizations.ForOwnerGranted(
-            SyntheticMailOwner.Another,
+        var caller = AccessAuthorizations.ForUserGranted(
+            SyntheticMailUser.Another,
             MailFathomPermission.MailSend);
 
         var book = new InMemoryContactBookStore();
-        book.Hold(SyntheticMailOwner.Another, ContactOf("Anna", "anna@example.test"));
+        book.Hold(SyntheticMailUser.Another, ContactOf("Anna", "anna@example.test"));
 
         var governor = AuthoredSendGovernors.Governing(
             settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse),

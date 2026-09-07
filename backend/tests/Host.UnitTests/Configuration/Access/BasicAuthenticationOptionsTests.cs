@@ -37,7 +37,7 @@ public sealed class BasicAuthenticationOptionsTests
         Assert.Empty(options.FindConfigurationErrors(SettingPath));
     }
 
-    /// <summary>Zero would refuse every owner and the ceiling is an offline guessing rate, so both ends are a misreading rather than a posture.</summary>
+    /// <summary>Zero would refuse every user and the ceiling is an offline guessing rate, so both ends are a misreading rather than a posture.</summary>
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

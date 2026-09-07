@@ -39,7 +39,7 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// <para>
 /// Both walks also leave out the copies MailFathom filed of this account's own outgoing mail, which is the one
 /// exclusion that is about authorship rather than about readiness. Such a message is stored, searchable, and readable
-/// like any other; what it is not is arriving mail, and a rule that moved or flagged what the owner just sent would be
+/// like any other; what it is not is arriving mail, and a rule that moved or flagged what the user just sent would be
 /// reacting to this deployment's own act.
 /// </para>
 /// <para>
@@ -161,7 +161,7 @@ internal sealed class MailRuleEvaluationStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var ownerId = account.Owner.Value;
+        var userId = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var resumeAfterId = resumeAfter?.Value;
 
@@ -178,12 +178,12 @@ internal sealed class MailRuleEvaluationStore(
             .Where(StoredEmailTombstone.IsNotTombstoned)
             // The copies this deployment filed of its own outgoing mail. They are stored, searchable, and readable like
             // any other message, and they are the one thing a rule must never act on: a rule conditioned on arriving
-            // mail would otherwise fire on the owner's own message the moment its sent copy came back. Both walks leave
+            // mail would otherwise fire on the user's own message the moment its sent copy came back. Both walks leave
             // them out, so a requested whole-mailbox run reaches the same conclusion an arrival did.
             .Where(email => email.FiledFromOutgoingEmailId == null)
-            // The owner leads the pair, which is both what makes the account term unambiguous and what lets this walk
-            // run on ix_stored_emails_owner_account_identity rather than on a scan the identity order is sorted out of.
-            .Where(email => email.OwnerId == ownerId
+            // The user leads the pair, which is both what makes the account term unambiguous and what lets this walk
+            // run on ix_stored_emails_user_account_identity rather than on a scan the identity order is sorted out of.
+            .Where(email => email.UserId == userId
                 && email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)

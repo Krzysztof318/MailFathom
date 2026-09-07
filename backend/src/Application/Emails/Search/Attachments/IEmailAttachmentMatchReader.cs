@@ -44,7 +44,7 @@ public interface IEmailAttachmentMatchReader
     /// A message whose attachments matched nothing is absent rather than present and empty, and so is an attachment
     /// MailFathom could not read — encrypted, corrupt, unsupported, carrying no text layer, or excluded by format. There
     /// is no searched-and-empty state here: what the reason was lives on the attachment's own row, which is where an
-    /// owner asking why is answered.
+    /// user asking why is answered.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAttachmentMatches>> ReadWrittenMatchesAsync(
         MailboxEmailSelection selection,

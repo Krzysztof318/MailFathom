@@ -90,7 +90,7 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 | Field | Meaning | Absent means |
 |---|---|---|
 | `QueryText` | The text to search for | refused — see below |
-| `Accounts` | The accounts to search, each named by its identifier or by its display name | every account the caller's owner owns |
+| `Accounts` | The accounts to search, each named by its identifier or by its display name | every account the caller's user owns |
 | `Folders` | The folders to search, each named by its alias or by the role it plays | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -201,7 +201,7 @@ The search vector carries no lexeme weights, so the lexical rank reflects how of
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the
 same.
 
-A message that exists in two folders — because the mailbox owner copied it, or because MailFathom did — is **two
+A message that exists in two folders — because the mailbox user copied it, or because MailFathom did — is **two
 results**, one per folder, ranked independently and each naming where it was found. Nothing collapses them, because
 nothing joins them: a stored row is one occurrence, which is the decision
 [ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
@@ -270,7 +270,7 @@ for two instances to disagree about what "most relevant" means while both report
 - **The vector ranking is exact rather than approximate**, because the caller's filters join it and an approximate index
   scan cannot carry a filter on a joined table. No vector index is built at all, so the fused order is deterministic —
   the property the whole method rests on. [What a semantic search
-  costs](../architecture/semantic-ranking-cost.md) states what exactness costs on a mailbox at the scale an owner
+  costs](../architecture/semantic-ranking-cost.md) states what exactness costs on a mailbox at the scale a user
   reaches, measured, what a caller's own filters take off that, and what an approximate path was found to cost.
 - **The query is prepared exactly as a passage is.** A profile's `PassageInstruction` is applied to the query text too,
   because the preparation is part of the profile's identity and a search that prepared its query differently would be
@@ -441,7 +441,7 @@ backward one would promise a re-read of a list that no longer exists in the form
 
 A query that matches nothing returns an empty window rather than a failure, so a search cannot be used to establish that
 an account or a folder holds mail the caller was not already entitled to see. A name that reaches none of the accounts
-the caller's owner owns is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a
+the caller's user owns is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a
 listing refuses one: an empty result would confirm the identifier. It is one answer for three cases — nothing carries
 that name, this deployment stopped serving the account, or the account is somebody else's — so a refusal separates none
 of them.

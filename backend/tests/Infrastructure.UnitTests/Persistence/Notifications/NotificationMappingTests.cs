@@ -13,7 +13,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Notifications;
 /// <summary>Covers the row a notification is written as, and the three shapes its target flattens into.</summary>
 public sealed class NotificationMappingTests
 {
-    private static readonly MailOwnerId Owner = MailOwnerId.Create(Guid.NewGuid());
+    private static readonly MailUserId User = MailUserId.Create(Guid.NewGuid());
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
@@ -29,7 +29,7 @@ public sealed class NotificationMappingTests
 
         // Assert
         Assert.Equal(notification.Id.Value, entity.Id);
-        Assert.Equal(Owner.Value, entity.OwnerId);
+        Assert.Equal(User.Value, entity.UserId);
         Assert.Equal(NotificationKind.System, entity.Kind);
         Assert.Equal("Something happened", entity.Title);
         Assert.Equal("Something happened that nobody was at the screen for.", entity.Body);
@@ -109,7 +109,7 @@ public sealed class NotificationMappingTests
 
         // Assert
         Assert.Equal(notification.Id, restored.Id);
-        Assert.Equal(notification.Owner, restored.Owner);
+        Assert.Equal(notification.User, restored.User);
         Assert.Equal(notification.Kind, restored.Kind);
         Assert.Equal(notification.Title, restored.Title);
         Assert.Equal(notification.Body, restored.Body);
@@ -179,7 +179,7 @@ public sealed class NotificationMappingTests
     private static Notification Compose(NotificationTarget target, string? source = "work") =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(OccurredAt)),
-            Owner,
+            User,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",

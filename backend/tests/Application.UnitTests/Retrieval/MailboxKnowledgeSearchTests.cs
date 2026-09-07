@@ -53,7 +53,7 @@ public sealed class MailboxKnowledgeSearchTests
     /// the unrestricted one is what a deployment serving no account at all resolves to.
     /// </remarks>
     private static readonly MailboxScope EveryAccount = MailboxScope.Create(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         EveryServedAccount,
         selectedFolders: null);
 
@@ -414,7 +414,7 @@ public sealed class MailboxKnowledgeSearchTests
             .With(SyntheticEmailSummaries.Create(FirstJuly, accountId: "secondary"), snippets: "a mention");
         var search = SearchOver(index);
         var scope = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             [MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)],
             []);
 
@@ -438,7 +438,7 @@ public sealed class MailboxKnowledgeSearchTests
             .With(inArchive, snippets: "an archived mention");
         var search = SearchOver(index);
         var scope = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             EveryServedAccount,
             [
                 new MailFolderIdentity(

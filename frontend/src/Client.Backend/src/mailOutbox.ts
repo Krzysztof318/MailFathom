@@ -10,7 +10,7 @@ import { send, type ClientResponse, type MailFathomTransport } from './transport
 
 // Taking one send back while it is still queued, which is the closest thing to unsending that is honest and is why a
 // send is confirmed rather than delayed. Nothing else of the outbox is here: what a client draws today is the send it
-// has just asked for, and a listing of what an owner is sending is a screen of its own to publish an operation for.
+// has just asked for, and a listing of what a user is sending is a screen of its own to publish an operation for.
 //
 // The route is `mailfathom.mail.send` like every other one there, withdrawing a send being part of sending rather than
 // a power beside it.

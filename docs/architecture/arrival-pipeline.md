@@ -145,7 +145,7 @@ record. [Mail delivery](../features/mail-delivery.md#how-a-written-down-send-rea
 described; nothing else on this page concerns it.
 
 The last step of that sequence belongs to no arrival either, and is drawn nowhere above for the same reason: once the
-passes have finished, the run tells the account's owner what happened to it — mail arrived, a credential was refused,
+passes have finished, the run tells the account's user what happened to it — mail arrived, a credential was refused,
 some folders did not finish. It is stated per run rather than per message, which is why it cannot sit on this page's
 graph: what it reports is the run's own outcome, and the count it carries is how much of what the passes above stored
 was mail arriving for the person — the inbox, unread on the server, and nothing MailFathom itself placed there —
@@ -184,21 +184,21 @@ body; a subject, an address, and a thread identifier are routing metadata, and w
 ## What each classification outcome permits
 
 The gate reads where the message is now and what was decided about it, and it writes nothing down — which is what makes
-mail an owner drags out of the junk folder ordinary mail from that moment.
+mail a user drags out of the junk folder ordinary mail from that moment.
 
 | Outcome | Rules | Passages | Vectors |
 | --- | --- | --- | --- |
 | Junk — a verdict, or the message is in the account's junk folder | No | No, and any already cut are removed | No |
-| Not junk, or the folder is outside that owner's scope | Yes | Yes | Yes |
+| Not junk, or the folder is outside that user's scope | Yes | Yes | Yes |
 | No verdict yet — the job is queued, running, or ran out of attempts without recording one | No, held | No, held | No, held |
 | Released — the message carries nothing classifiable, or it waited longer than allowed | Yes | Yes | Yes |
-| The message's owner classifies nothing | Yes | Yes | Yes |
+| The message's user classifies nothing | Yes | Yes | Yes |
 
-**The gate is read per owner, and the last row is what that buys.** Classification is
-[each owner's decision about their own mail](../features/spam-classification.md#each-owner-decides-this-for-their-own-mail),
-so the terms a walk is decided under name the accounts of the owners who classify rather than a single deployment-wide
-switch. An owner who classifies nothing has every one of their messages admitted at once — their junk folder included,
-because withholding it is an ordering behind a verdict rather than a rule of its own — while another owner's mail in the
+**The gate is read per user, and the last row is what that buys.** Classification is
+[each user's decision about their own mail](../features/spam-classification.md#each-user-decides-this-for-their-own-mail),
+so the terms a walk is decided under name the accounts of the users who classify rather than a single deployment-wide
+switch. A user who classifies nothing has every one of their messages admitted at once — their junk folder included,
+because withholding it is an ordering behind a verdict rather than a rule of its own — while another user's mail in the
 same walk goes on waiting on its own.
 
 A held message is held rather than dropped. The same four facts are read again by the next account run and by both
@@ -241,7 +241,7 @@ would be met again by the next.
 The transaction that stores a message contains its metadata, the two judgements above, the conversation its own
 identifiers place it in, its raw MIME, and its search document — and deliberately not its passages. Two stages run after
 that commit and before the cut, and both can change what the cut should produce: classification can decide the message
-is not derived from at all, and the owner's rules can file it into a folder mapped differently from the one it arrived
+is not derived from at all, and the user's rules can file it into a folder mapped differently from the one it arrived
 in. Passages are not undone by a message moving afterwards, so cutting inside the commit would write passages of a
 placement and a verdict that had not been settled yet.
 
@@ -360,7 +360,7 @@ has a scanner switched on.
 | The conversation a message is placed in | [The stored email](stored-email-schema.md#the-conversation-a-message-belongs-to) |
 | Classification, its verdicts, and the gate | [Spam classification](../features/spam-classification.md) |
 | Recording the people an account corresponds with | [Contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) |
-| The owner's rules and what a match asks for | [Mail rules](../features/mail-rules.md) |
+| The user's rules and what a match asks for | [Mail rules](../features/mail-rules.md) |
 | Redaction, the stamp, and the egress guard | [Sensitive-content scanning](../features/sensitive-content-scanning.md) |
 | The boundary rules a cut obeys, and what a passage of an attachment carries | [Message chunks](../features/message-chunks.md) |
 | What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |

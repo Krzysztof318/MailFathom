@@ -12,8 +12,8 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// <param name="EmbeddedEmailCount">How many messages this run brought up to date, or spent a provider call on.</param>
 /// <param name="EmbeddedChunkCount">How many passages this run committed vectors for.</param>
 /// <param name="CallBudgetExhaustedEmailCount">How many messages this run left part-way through because one turn spent every provider call a turn is allowed.</param>
-/// <param name="OwnerSpendCeilingEmailCount">How many messages this run stepped past because the owner they belong to had spent what one period admits for them.</param>
-/// <param name="OwnerSpendPeriodEndsAt">When the period those owners had spent rolls over, present exactly when <paramref name="OwnerSpendCeilingEmailCount" /> is greater than zero.</param>
+/// <param name="UserSpendCeilingEmailCount">How many messages this run stepped past because the user they belong to had spent what one period admits for them.</param>
+/// <param name="UserSpendPeriodEndsAt">When the period those users had spent rolls over, present exactly when <paramref name="UserSpendCeilingEmailCount" /> is greater than zero.</param>
 /// <param name="OutstandingEmailCountAtSweepStart">How many messages awaited embedding when this sweep began, or <see langword="null" /> when the run resumed a sweep somebody else measured.</param>
 /// <param name="Failure">Why a provider call produced nothing, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.ProviderFailed" />.</param>
 /// <param name="SpendPeriodEndsAt">When the budget period rolls over, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached" />.</param>
@@ -30,7 +30,7 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// exactly like one that is finishing them.
 /// </para>
 /// <para>
-/// The owner-ceiling count carries the period it belongs to for a different reason: the run does not end on it, so the
+/// The user-ceiling count carries the period it belongs to for a different reason: the run does not end on it, so the
 /// worker reporting it sees the same fact on every pass until the period rolls over. Naming the period is what lets the
 /// worker say it once, the way the live worker already does.
 /// </para>
@@ -41,8 +41,8 @@ public sealed record StoredEmailEmbeddingBackfillResult(
     int EmbeddedEmailCount,
     int EmbeddedChunkCount,
     int CallBudgetExhaustedEmailCount,
-    int OwnerSpendCeilingEmailCount,
-    DateTimeOffset? OwnerSpendPeriodEndsAt,
+    int UserSpendCeilingEmailCount,
+    DateTimeOffset? UserSpendPeriodEndsAt,
     int? OutstandingEmailCountAtSweepStart,
     EmbeddingGenerationFailure? Failure,
     DateTimeOffset? SpendPeriodEndsAt,
@@ -60,8 +60,8 @@ public sealed record StoredEmailEmbeddingBackfillResult(
         EmbeddedEmailCount: 0,
         EmbeddedChunkCount: 0,
         CallBudgetExhaustedEmailCount: 0,
-        OwnerSpendCeilingEmailCount: 0,
-        OwnerSpendPeriodEndsAt: null,
+        UserSpendCeilingEmailCount: 0,
+        UserSpendPeriodEndsAt: null,
         OutstandingEmailCountAtSweepStart: null,
         Failure: null,
         SpendPeriodEndsAt: null);

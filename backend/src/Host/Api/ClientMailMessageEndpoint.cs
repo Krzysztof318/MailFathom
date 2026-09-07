@@ -55,13 +55,13 @@ internal static class ClientMailMessageEndpoint
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
-    /// <summary>Serves one of the acting owner's messages, or reports that there is no such message.</summary>
+    /// <summary>Serves one of the acting user's messages, or reports that there is no such message.</summary>
     /// <param name="storedEmailId">The message to read, as a list row or a conversation published it.</param>
     /// <param name="content">Reads the message from the local copy, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the message, <c>404</c> where this owner has no such message, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
+    /// <returns><c>200</c> with the message, <c>404</c> where this user has no such message, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
     /// <remarks>
-    /// A message this owner does not hold and one no deployment ever held answer identically, so nothing here tells a
+    /// A message this user does not hold and one no deployment ever held answer identically, so nothing here tells a
     /// caller that somebody else's mail exists. A local copy that is damaged or missing answers the same way as well,
     /// having recorded the repair request the use case records for it.
     /// </remarks>

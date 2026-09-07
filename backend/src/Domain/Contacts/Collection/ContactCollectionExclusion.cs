@@ -9,11 +9,11 @@ using MailFathom.Domain.Emails.Authentication;
 
 namespace MailFathom.Domain.Contacts.Collection;
 
-/// <summary>One address, or one whole domain, an account's owner said collection never records.</summary>
+/// <summary>One address, or one whole domain, an account's user said collection never records.</summary>
 /// <remarks>
 /// <para>
 /// An entry names a domain or writes a pattern over the address, and the two answer different questions. A domain entry
-/// is the shape for correspondence that all arrives from one place an owner wants nothing kept from — a ticketing
+/// is the shape for correspondence that all arrives from one place a user wants nothing kept from — a ticketing
 /// system, a newsletter provider, an employer's automation. A pattern is the shape for a name rather than a place:
 /// <c>*+noreply@*</c> and <c>bot-*@example.test</c> select on how an address is spelled, wherever it is hosted.
 /// </para>
@@ -30,7 +30,7 @@ namespace MailFathom.Domain.Contacts.Collection;
 /// address, so an entry that writes no wildcard at all excludes exactly one mailbox.
 /// </para>
 /// <para>
-/// An entry is personal data — it names who an owner does not want recorded — so nothing here may be logged.
+/// An entry is personal data — it names who a user does not want recorded — so nothing here may be logged.
 /// </para>
 /// </remarks>
 public sealed record ContactCollectionExclusion
@@ -88,11 +88,11 @@ public sealed record ContactCollectionExclusion
     /// <para>
     /// Blank text and text beyond <see cref="MaximumPatternLength" /> are refused, and so is a pattern that narrows
     /// nothing: an entry matching every address would switch collection off through a list written to narrow it, and an
-    /// owner meaning that turns collection off where it is turned on.
+    /// user meaning that turns collection off where it is turned on.
     /// </para>
     /// <para>
     /// A pattern narrows nothing when its only characters are the two wildcards and the at-sign, which is wider than
-    /// refusing an all-wildcard pattern and is the shape that actually reaches an owner. <c>*@*</c> is not all wildcards
+    /// refusing an all-wildcard pattern and is the shape that actually reaches a user. <c>*@*</c> is not all wildcards
     /// — it carries a literal — and yet it matches every address there is, because a normalized address holds exactly
     /// one at-sign and arbitrary text on either side of it. The same rule also refuses the mirror mistakes, <c>*@</c>
     /// and <c>@*</c>, which match no address at all, and that is deliberate: an entry selecting on nothing an address

@@ -23,7 +23,7 @@ const email: MailTimelineEntry = {
     sentAt: null,
     senderAddress: 'writer@nordwind.example',
     senderDisplayName: 'Writer',
-    toAddresses: ['owner@example.invalid'],
+    toAddresses: ['user@example.invalid'],
     unread: false,
     flagged: false,
     answered: false,

@@ -22,7 +22,7 @@ public sealed class SenderTrustPolicyTests
             storedTrustedSenders: []);
 
         // Act
-        var trust = policy.Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
+        var trust = policy.Evaluate(WrittenBy("work.example"), AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Trusted, trust.Level);
@@ -40,7 +40,7 @@ public sealed class SenderTrustPolicyTests
             storedTrustedSenders: []);
 
         // Act
-        var trust = policy.Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
+        var trust = policy.Evaluate(WrittenBy("work.example"), AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, trust.Level);
@@ -220,7 +220,7 @@ public sealed class SenderTrustPolicyTests
         // Act
         var trust = policy.Evaluate(
             SenderAuthentication.NotEstablished(DomainOf("work.example")),
-            AddressOf("owner@work.example"));
+            AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, trust.Level);

@@ -84,8 +84,8 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             MailboxAccountId = request.Account.Id.Value,
 
             // Written from the identity the request carried, which the boundary resolved through the catalog before
-            // anything was composed. A send belongs to the owner whose account it goes out as.
-            OwnerId = request.Account.Owner.Value,
+            // anything was composed. A send belongs to the user whose account it goes out as.
+            UserId = request.Account.User.Value,
             RequesterOrigin = request.Requester.Origin,
             RequesterIdentity = request.Requester.Identity,
             PrincipalFingerprint = principal.Fingerprint,
@@ -150,14 +150,14 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         var entities = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
             .Include(message => message.Filings)
-            .Where(message => message.OwnerId == ownerValue
+            .Where(message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
@@ -180,12 +180,12 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         var counted = await readContext.OutgoingEmails
             .AsNoTracking()
-            .Where(message => message.OwnerId == ownerValue
+            .Where(message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
@@ -264,13 +264,13 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// </remarks>
     public Task<int> MarkUnknownOutcomesAsync(MailAccountIdentity account, CancellationToken cancellationToken)
     {
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var markedAt = timeProvider.GetUtcNow();
         var unknownOutcome = MailFathomErrorCode.OutgoingEmailOutcomeUnknown.Value;
 
         return readContext.OutgoingEmails
-            .Where(message => message.OwnerId == ownerValue
+            .Where(message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue
                 && message.Stage == OutgoingEmailStage.TransmissionBegun
                 && (message.LastFailureCode == null || message.LastFailureCode != unknownOutcome)
@@ -554,7 +554,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// The recipients' case exactly, one collection over: a record resolved from the change tracker carries whatever an
     /// earlier write in this session asked for, and a record mapped without its filings reports that nothing was ever
     /// filed for it. What acts on that answer is the pass deciding whether to append a copy, so the omission would put
-    /// a second copy of one send in the owner's own mailbox rather than merely under-reporting.
+    /// a second copy of one send in the user's own mailbox rather than merely under-reporting.
     /// </remarks>
     private static async Task LoadFilingsAsync(
         IPersistenceSession session,
@@ -581,7 +581,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         OutgoingEmailRequest request,
         CancellationToken cancellationToken)
     {
-        var ownerValue = request.Account.Owner.Value;
+        var userValue = request.Account.User.Value;
         var accountValue = request.Account.Id.Value;
         var origin = request.Requester.Origin;
         var identity = request.Requester.Identity;
@@ -594,7 +594,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             writeContext.OutgoingEmails
                 .Include(message => message.Recipients)
                 .Include(message => message.Filings),
-            message => message.OwnerId == ownerValue
+            message => message.UserId == userValue
                 && message.MailboxAccountId == accountValue
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,
@@ -618,9 +618,9 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
 
         var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
-        if (entity.LeaseOwner != lease.Owner)
+        if (entity.LeaseOwner != lease.User)
         {
-            throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.Owner);
+            throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.User);
         }
 
         return entity;

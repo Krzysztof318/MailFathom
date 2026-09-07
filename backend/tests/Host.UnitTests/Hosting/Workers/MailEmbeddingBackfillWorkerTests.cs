@@ -324,19 +324,19 @@ public sealed class MailEmbeddingBackfillWorkerTests
     }
 
     /// <summary>
-    /// One owner at their share stops that owner's mail and nobody else's, so the sweep steps past the message and
+    /// One user at their share stops that user's mail and nobody else's, so the sweep steps past the message and
     /// runs to its end rather than pausing for the period — and the count of what it stepped past is the only place an
     /// operator reads that a bound was reached at all, since no wait follows to announce it.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AnOwnerHasSpentTheirShare_StepsPastTheirMailAndReportsHowMuch()
+    public async Task ExecuteAsync_AnUserHasSpentTheirShare_StepsPastTheirMailAndReportsHowMuch()
     {
         // Arrange
         using var world = CreateWorld(
             new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
             EmbeddingSpendBudget.Create(
                 maxInputCharactersPerPeriod: 1_000,
-                maxInputCharactersPerPeriodPerOwner: 10,
+                maxInputCharactersPerPeriodPerUser: 10,
                 TimeSpan.FromDays(1)),
             consumedInputCharacterCount: 10,
             deploymentConsumedInputCharacterCount: 10);
@@ -370,7 +370,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         // Assert
         Assert.Contains(
             world.Logger.Messages,
-            line => line.Contains("MaxInputCharactersPerPeriodPerOwner", StringComparison.Ordinal));
+            line => line.Contains("MaxInputCharactersPerPeriodPerUser", StringComparison.Ordinal));
 
         // The deployment still had room, so nothing announced a wait: reporting the instance's ceiling here would send
         // an operator after disk when what is full is one person's share.
@@ -385,19 +385,19 @@ public sealed class MailEmbeddingBackfillWorkerTests
     }
 
     /// <summary>
-    /// Nothing ends on an owner's ceiling, so the same fact is true of every pass until the period rolls over — and a
+    /// Nothing ends on a user's ceiling, so the same fact is true of every pass until the period rolls over — and a
     /// busy instance takes the short interval. The warning is written once for the period and the counter beside it
-    /// carries the rest, which is what keeps one owner over their share from burying the log for everybody.
+    /// carries the rest, which is what keeps one user over their share from burying the log for everybody.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AnOwnerStaysOverTheirShareAcrossPasses_WarnsOnceForThePeriod()
+    public async Task ExecuteAsync_AnUserStaysOverTheirShareAcrossPasses_WarnsOnceForThePeriod()
     {
         // Arrange
         using var world = CreateWorld(
             new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
             EmbeddingSpendBudget.Create(
                 maxInputCharactersPerPeriod: 1_000,
-                maxInputCharactersPerPeriodPerOwner: 10,
+                maxInputCharactersPerPeriodPerUser: 10,
                 TimeSpan.FromDays(1)),
             consumedInputCharacterCount: 10,
             deploymentConsumedInputCharacterCount: 10);
@@ -459,7 +459,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         var ledger = Substitute.For<IEmbeddingSpendLedger>();
         ledger.ReadConsumedInputCharactersAsync(
                 Arg.Any<DateTimeOffset>(),
-                Arg.Any<MailOwnerId>(),
+                Arg.Any<MailUserId>(),
                 Arg.Any<CancellationToken>())
             .Returns(new EmbeddingSpendTotals(
                 consumedInputCharacterCount,

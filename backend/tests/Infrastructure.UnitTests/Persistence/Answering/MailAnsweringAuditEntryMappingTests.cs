@@ -96,7 +96,7 @@ public sealed class MailAnsweringAuditEntryMappingTests
         {
             Id = MailAnsweringAuditEntryId.Create(Guid.CreateVersion7(StartedAt)),
             RunId = MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
+            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
             Emails =
             [
                 new MailAnsweringAuditedEmail(StoredEmailId.Create(EmailIdentityAt(1)), 0, WasCited: false),

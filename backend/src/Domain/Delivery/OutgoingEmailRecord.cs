@@ -23,7 +23,7 @@ namespace MailFathom.Domain.Delivery;
 /// rather than two. The identity is enforced by a unique constraint rather than by any code declining to write.
 /// </para>
 /// <para>
-/// It is derived personal data of a kind mail metadata is not: an outgoing record says who this mailbox's owner wrote
+/// It is derived personal data of a kind mail metadata is not: an outgoing record says who this mailbox's user wrote
 /// to and when. It inherits the retention, deletion, and export obligations of the mail beside it, and the MIME it
 /// points at is erased with it. Nothing here is mail content — the addresses, the account, the requester, and the
 /// reply codes are the envelope and this system's own names for things, and the message itself stays in the content
@@ -38,10 +38,10 @@ public sealed record OutgoingEmailRecord
     /// <summary>Gets the account the message is submitted through and sent as.</summary>
     public required MailAccountIdentity Account { get; init; }
 
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
     /// <remarks>
     /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
-    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// because most readers of this record are inside a scope whose user is already settled, and naming the identifier
     /// alone there says what the code means.
     /// </remarks>
     public MailAccountId AccountId => this.Account.Id;
@@ -91,7 +91,7 @@ public sealed record OutgoingEmailRecord
     /// <remarks>
     /// It is read rather than only written because it is the one value that says a message is <em>waiting</em> rather
     /// than merely queued. A send whose instant has passed is claimed by the next pass and is gone in seconds; one whose
-    /// instant lies ahead sits in the outbox until then, which is the message worth mirroring into a folder the owner
+    /// instant lies ahead sits in the outbox until then, which is the message worth mirroring into a folder the user
     /// can see.
     /// </remarks>
     public required DateTimeOffset AvailableAt { get; init; }
@@ -140,7 +140,7 @@ public sealed record OutgoingEmailRecord
     /// <summary>Gets the failure the last filing attempt ended in, or <see langword="null" /> while none has failed.</summary>
     /// <remarks>
     /// It is separate from <see cref="LastFailure" /> because the two answer different questions and an operator acts on
-    /// them differently. A delivery failure means somebody did not receive the message; a filing failure means the owner
+    /// them differently. A delivery failure means somebody did not receive the message; a filing failure means the user
     /// cannot see it in their own mail client. Overwriting one with the other would lose whichever happened first.
     /// </remarks>
     public required MailFathomErrorCode? LastFilingFailure { get; init; }

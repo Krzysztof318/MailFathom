@@ -438,8 +438,8 @@ public sealed class TelemetrySurfaceContractTests
                     EmbeddedEmailCount: 2,
                     EmbeddedChunkCount: 5,
                     CallBudgetExhaustedEmailCount: 0,
-                    OwnerSpendCeilingEmailCount: 0,
-                    OwnerSpendPeriodEndsAt: null,
+                    UserSpendCeilingEmailCount: 0,
+                    UserSpendPeriodEndsAt: null,
                     OutstandingEmailCountAtSweepStart: 61_011,
                     Failure: null,
                     SpendPeriodEndsAt: null),
@@ -454,8 +454,8 @@ public sealed class TelemetrySurfaceContractTests
                 EmbeddedEmailCount: 2,
                 EmbeddedChunkCount: 5,
                 CallBudgetExhaustedEmailCount: 0,
-                OwnerSpendCeilingEmailCount: 0,
-                OwnerSpendPeriodEndsAt: null,
+                UserSpendCeilingEmailCount: 0,
+                UserSpendPeriodEndsAt: null,
                 OutstandingEmailCountAtSweepStart: 61_011,
                 Failure: null,
                 SpendPeriodEndsAt: null),
@@ -512,7 +512,7 @@ public sealed class TelemetrySurfaceContractTests
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7(Moment)),
-            MailboxScope.Create(SyntheticMailOwner.Deployment, [Account], []),
+            MailboxScope.Create(SyntheticMailUser.Deployment, [Account], []),
             Moment);
 
         observation.RecordComposition(TelemetryRedactionContract.ConfiguredAliasSentinel, "0a1b2c3d4e5f");
@@ -543,7 +543,7 @@ public sealed class TelemetrySurfaceContractTests
         {
             using var guarded = Egress.BeginGuardedOperation(
                 egressPoint,
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 CancellationToken.None);
             guarded.TextGuarded();
             guarded.Completed();
@@ -557,7 +557,7 @@ public sealed class TelemetrySurfaceContractTests
                 StoredBytes: 61_027,
                 StoredContentBytes: 61_029,
                 DeferredForStorageEmailCount: 1,
-                DeferredForOwnerStorageEmailCount: 1,
+                DeferredForUserStorageEmailCount: 1,
                 RefilledEmailCount: 1,
                 StoppedForContentBudget: true));
 
@@ -642,7 +642,7 @@ public sealed class TelemetrySurfaceContractTests
         Id = MailboxMutationAuditEntryId.Create(Guid.CreateVersion7()),
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7()),
         AccountId = Account,
-        Owner = SyntheticMailOwner.Deployment,
+        User = SyntheticMailUser.Deployment,
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
         Mutation = MailboxMutation.Relocate,
         SourceFolderPath = RemoteFolderPath.Create(TelemetryRedactionContract.MailDerivedSentinel),

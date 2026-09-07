@@ -16,7 +16,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.BrowseSearch;
 
-/// <summary>Searches the owner's mail by words and by meaning at once, and pages through what the ranking produced.</summary>
+/// <summary>Searches the user's mail by words and by meaning at once, and pages through what the ranking produced.</summary>
 /// <remarks>
 /// <para>
 /// It is the search a screen is drawn from, beside <see cref="SearchEmails.MailboxSearchReader" />, which is the one a
@@ -127,7 +127,7 @@ public sealed class MailSearchBrowser
     /// <returns>The page, how it was ranked, and the cursor that continues it where the list goes on.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the query text is blank or unusable, or a structured filter carries a value or a length the query does not accept.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account its owner does not own.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account its user does not own.</exception>
     /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a page size outside the accepted range.</exception>
     /// <exception cref="MailboxQueryCursorMalformedException">Thrown when the request carries a cursor this system did not issue.</exception>
     /// <exception cref="MailboxQueryCursorFilterMismatchException">Thrown when the cursor was issued for a different search than the request describes.</exception>
@@ -147,13 +147,13 @@ public sealed class MailSearchBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
 
         var rankedList = this.RankedList(request);
         var pageSize = EmailSearchResultLimit.FromRequested(request.PageSize);
         var boundary = ContinuationBoundary(request.Cursor, rankedList);
 
-        // Every value has been validated by this point, so a deployment serving this owner no account answers the same
+        // Every value has been validated by this point, so a deployment serving this user no account answers the same
         // refusals a deployment serving several does, and only then reports that it holds nothing to search.
         if (rankedList.Selection.Scope.AccountIds.Count is 0)
         {
@@ -205,7 +205,7 @@ public sealed class MailSearchBrowser
             rankedList.Selection.Scope.IncludesJunkMail);
     }
 
-    /// <summary>Answers a search whose owner owns no account this deployment serves.</summary>
+    /// <summary>Answers a search whose user owns no account this deployment serves.</summary>
     /// <remarks>
     /// The capability is still read and still reported. It describes the instance rather than the page, so an empty
     /// answer that claimed semantic retrieval was inactive would be wrong about a hybrid deployment for the one request
@@ -309,7 +309,7 @@ public sealed class MailSearchBrowser
             semantic.Capability);
     }
 
-    /// <summary>Validates what the request asked for and restricts the search to the accounts its owner owns.</summary>
+    /// <summary>Validates what the request asked for and restricts the search to the accounts its user owns.</summary>
     private RankedSearchList RankedList(BrowseSearchRequest request) => RankedSearchList.Create(
         this.scopeResolver.ReadableScope(
             request.Accounts,

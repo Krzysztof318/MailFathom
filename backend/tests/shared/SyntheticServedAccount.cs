@@ -18,30 +18,30 @@ namespace MailFathom.TestSupport;
 /// prove.
 /// </para>
 /// <para>
-/// The owner defaults for the same reason the display name is derived: an account belongs to one, every row naming the
-/// account carries it, and most tests are not about which owner it is. A test that is about that states the owner, which
+/// The user defaults for the same reason the display name is derived: an account belongs to one, every row naming the
+/// account carries it, and most tests are not about which user it is. A test that is about that states the user, which
 /// is what lets one arrange an account of somebody this deployment does not serve.
 /// </para>
 /// </remarks>
 internal static class SyntheticServedAccount
 {
     /// <summary>Builds one served account from its identifier.</summary>
-    /// <param name="accountId">The account to serve, within its owner.</param>
-    /// <param name="owner">The owner the account belongs to, defaulting to the one a deployment serves.</param>
+    /// <param name="accountId">The account to serve, within its user.</param>
+    /// <param name="user">The user the account belongs to, defaulting to the one a deployment serves.</param>
     /// <returns>The account, polling, under a display name derived from the identifier.</returns>
-    public static ServedMailAccount Of(MailAccountId accountId, MailOwnerId? owner = null) =>
+    public static ServedMailAccount Of(MailAccountId accountId, MailUserId? user = null) =>
         new(
-            owner ?? SyntheticMailOwner.Deployment,
+            user ?? SyntheticMailUser.Deployment,
             accountId,
             DisplayNameOf(accountId),
             MailSynchronizationMode.Polling);
 
     /// <summary>Builds one served account from the text of its identifier.</summary>
-    /// <param name="accountId">The account to serve, within its owner.</param>
-    /// <param name="owner">The owner the account belongs to, defaulting to the one a deployment serves.</param>
+    /// <param name="accountId">The account to serve, within its user.</param>
+    /// <param name="user">The user the account belongs to, defaulting to the one a deployment serves.</param>
     /// <returns>The account, polling, under a display name derived from the identifier.</returns>
-    public static ServedMailAccount Of(string accountId, MailOwnerId? owner = null) =>
-        Of(MailAccountId.Create(accountId), owner);
+    public static ServedMailAccount Of(string accountId, MailUserId? user = null) =>
+        Of(MailAccountId.Create(accountId), user);
 
     /// <summary>Reads the display name this helper gives one account, which a test asserting on the name names.</summary>
     /// <param name="accountId">The account to name.</param>

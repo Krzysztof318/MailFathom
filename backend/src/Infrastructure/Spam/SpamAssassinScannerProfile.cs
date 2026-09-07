@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.Spam;
 /// <para>
 /// The daemon is <b>expected to be deployment-local</b>. Scanning is the one path that hands a whole message to a
 /// separate process, and what makes that acceptable is that the process is inside the same trust boundary; an address on
-/// the public internet sends the owner's mail, in full and unredacted, to somebody else in order to find out whether it
+/// the public internet sends the user's mail, in full and unredacted, to somebody else in order to find out whether it
 /// is spam. Nothing here refuses one, because a deployment may legitimately run one daemon for several services on its
 /// own network and no rule about addresses tells the two apart, and the documentation states what is given up.
 /// </para>

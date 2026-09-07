@@ -186,7 +186,7 @@ public sealed class AccessAuthorizationTests
     public void RequirePermission_SignedCapability_RefusesNamingNoPermission()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
@@ -231,7 +231,7 @@ public sealed class AccessAuthorizationTests
     public void RequireSignedCapability_AVerifiedCapability_Permits()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
 
         // Act
         var refusal = Record.Exception(authorization.RequireSignedCapability);
@@ -250,38 +250,38 @@ public sealed class AccessAuthorizationTests
         Assert.Throws<PrincipalNotAuthorizedException>(authorization.RequireSignedCapability);
     }
 
-    /// <summary>A caller admitted to act for an owner carries that owner into every use case reading one owner's mail.</summary>
+    /// <summary>A caller admitted to act for a user carries that user into every use case reading one user's mail.</summary>
     [Fact]
-    public void RequireOwner_ACallerAdmittedToActForAnOwner_ReportsThatOwner()
+    public void RequireUser_ACallerAdmittedToActForAnUser_ReportsThatUser()
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.CallerActingFor(SyntheticMailOwner.Another, "mcp-key", [MailFathomPermission.MailRead]));
+            AuthorizedPrincipal.CallerActingFor(SyntheticMailUser.Another, "mcp-key", [MailFathomPermission.MailRead]));
 
         // Act
-        var owner = authorization.RequireOwner();
+        var user = authorization.RequireUser();
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Another, owner);
+        Assert.Equal(SyntheticMailUser.Another, user);
     }
 
     /// <summary>
-    /// A redeemed capability carries an owner as well, and this requirement admits it: an attachment download states a
-    /// signed-capability principal and then reads through the same owner-scoped catalog every mail read does, so
+    /// A redeemed capability carries a user as well, and this requirement admits it: an attachment download states a
+    /// signed-capability principal and then reads through the same user-scoped catalog every mail read does, so
     /// narrowing the requirement to the caller kind would refuse every download while this class stayed green.
     /// </summary>
     [Fact]
-    public void RequireOwner_ACapabilityRedeemedForAnOwnersAttachment_ReportsThatOwner()
+    public void RequireUser_ACapabilityRedeemedForAnUsersAttachment_ReportsThatUser()
     {
         // Arrange
         var authorization = AuthorizationOver(
-            AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Another, "/attachments/an-object/0"));
+            AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Another, "/attachments/an-object/0"));
 
         // Act
-        var owner = authorization.RequireOwner();
+        var user = authorization.RequireUser();
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Another, owner);
+        Assert.Equal(SyntheticMailUser.Another, user);
     }
 
     /// <summary>
@@ -290,17 +290,17 @@ public sealed class AccessAuthorizationTests
     /// neither of them is acting for anybody.
     /// </summary>
     [Theory]
-    [MemberData(nameof(PrincipalsActingForNoOwner))]
-    public void RequireOwner_APrincipalActingForNoOwner_Refuses(AuthorizedPrincipal principal)
+    [MemberData(nameof(PrincipalsActingForNoUser))]
+    public void RequireUser_APrincipalActingForNoUser_Refuses(AuthorizedPrincipal principal)
     {
         // Arrange
         var authorization = AuthorizationOver(principal);
 
         // Act & Assert
-        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireOwner());
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireUser());
     }
 
-    public static TheoryData<AuthorizedPrincipal> PrincipalsActingForNoOwner() =>
+    public static TheoryData<AuthorizedPrincipal> PrincipalsActingForNoUser() =>
     [
         AuthorizedPrincipal.Caller("admin-key", [.. MailFathomPermission.All]),
         AuthorizedPrincipal.Process,
@@ -320,7 +320,7 @@ public sealed class AccessAuthorizationTests
             () => authorization.RequirePermission(MailFathomPermission.MailRead),
             authorization.RequireProcessIdentity,
             authorization.RequireSignedCapability,
-            () => authorization.RequireOwner(),
+            () => authorization.RequireUser(),
         ];
 
         // Act
@@ -367,7 +367,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var processIdentity = AuthorizationOver(AuthorizedPrincipal.Process);
-        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
+        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailUser.Deployment, "/attachments/an-object/0"));
 
         // Act, Assert
         Assert.False(processIdentity.Permits(permission));

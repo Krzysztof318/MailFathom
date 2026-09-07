@@ -46,7 +46,7 @@ public readonly record struct OutgoingMailFiling
         this.Flags = flags;
     }
 
-    /// <summary>Gets the filing of a message the owner is still composing, into the drafts folder.</summary>
+    /// <summary>Gets the filing of a message the user is still composing, into the drafts folder.</summary>
     public static OutgoingMailFiling Draft { get; } =
         new("draft", MailFolderSpecialUse.Drafts, AppendedMailFlags.Draft);
 
@@ -78,7 +78,7 @@ public readonly record struct OutgoingMailFiling
 
     /// <summary>Gets whether the copy is withdrawn once the message leaves the stage this filing describes.</summary>
     /// <remarks>
-    /// Only the outbox mirror is. A draft and a sent copy are what the owner keeps; the mirror exists to show a message
+    /// Only the outbox mirror is. A draft and a sent copy are what the user keeps; the mirror exists to show a message
     /// that has not gone yet, so leaving it behind after the message went would show an outbox that never drains.
     /// </remarks>
     public bool IsWithdrawnWhenTheMessageLeaves => this == Held;

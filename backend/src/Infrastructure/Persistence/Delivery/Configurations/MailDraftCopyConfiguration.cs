@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 
-/// <summary>Declares the copies of a draft this deployment put into the owner's drafts folder.</summary>
+/// <summary>Declares the copies of a draft this deployment put into the user's drafts folder.</summary>
 /// <remarks>
 /// <para>
 /// One row per revision, which is what makes a replacement expressible at all. IMAP has no command that changes a

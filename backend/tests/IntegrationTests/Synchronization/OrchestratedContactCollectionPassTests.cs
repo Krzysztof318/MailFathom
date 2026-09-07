@@ -27,7 +27,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// that stores mail, in the order that makes them mean anything — a real message is fetched from a real server, its
 /// headers are read by the real MIME reader, the automation claim it carries survives extraction, the threshold is
 /// answered by counting real rows, and what comes out of the far end is a book holding exactly the people the folder
-/// says the owner corresponds with. A defect anywhere along that chain shows up as a missing contact or an extra one
+/// says the user corresponds with. A defect anywhere along that chain shows up as a missing contact or an extra one
 /// rather than as a failure, which is precisely the kind this suite exists for.
 /// </para>
 /// <para>
@@ -52,7 +52,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
     /// <summary>The same, for the test that proves a switched-off account writes nothing.</summary>
     private const string IgnoringSuffix = "UNWATCHED.CONTACTS.TEST";
 
-    /// <summary>The domain an owner excluded, which is a real correspondent they would rather not have written down.</summary>
+    /// <summary>The domain a user excluded, which is a real correspondent they would rather not have written down.</summary>
     private const string ExcludedDomain = "bulletins.sighted.contacts.test";
 
     private static readonly MailFolderMapping CollectingFolder = MailFolderMapping.ToRemotePath(
@@ -63,7 +63,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
         MailFolderAlias.Create("contacts-ignored"),
         RemoteFolderPath.Create(IgnoringFolderName, hierarchyDelimiter: '.'));
 
-    /// <summary>The one person the seeded folder says the owner corresponds with.</summary>
+    /// <summary>The one person the seeded folder says the user corresponds with.</summary>
     private static readonly SyntheticParticipant Correspondent =
         new("Zofia Kowalska", "Zofia.Kowalska@sighted.contacts.test");
 
@@ -79,7 +79,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
     private static readonly SyntheticParticipant BulkSender =
         new("Ewa Zielińska", "Ewa.Zielinska@sighted.contacts.test");
 
-    /// <summary>A real person on the domain the owner excluded.</summary>
+    /// <summary>A real person on the domain the user excluded.</summary>
     private static readonly SyntheticParticipant OnTheExcludedDomain =
         new("Marta Wrona", $"Marta.Wrona@{ExcludedDomain}");
 
@@ -88,12 +88,12 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
         new("Paweł Adamczyk", "Pawel.Adamczyk@unwatched.contacts.test");
 
     /// <summary>
-    /// A pass over synchronized mail records the people the folder says the owner corresponds with, and nobody else.
+    /// A pass over synchronized mail records the people the folder says the user corresponds with, and nobody else.
     /// </summary>
     /// <remarks>
     /// Five senders, of which exactly one is a correspondent, and the four refusals are each of a different kind: one
     /// has not written often enough yet, one is a mailbox nobody reads, one announced its messages as bulk in a header
-    /// only the real MIME reader produces, and one is on a domain the owner excluded. Asserting the whole set rather
+    /// only the real MIME reader produces, and one is on a domain the user excluded. Asserting the whole set rather
     /// than each member is what makes "and no others" a claim: an extra contact fails the comparison instead of passing
     /// four separate lookups.
     /// </remarks>
@@ -165,7 +165,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
         Assert.Empty(await ReadCollectedAddressesAsync(services, IgnoringSuffix, cancellationToken));
     }
 
-    /// <summary>The settings an owner who switched collection on for this account would have written.</summary>
+    /// <summary>The settings a user who switched collection on for this account would have written.</summary>
     private static ContactCollectionSettings CollectionSwitchedOn()
     {
         Assert.True(ContactCollectionExclusion.TryCreateForDomain(
@@ -245,7 +245,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
                 }
 
                 return scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                    services.ServedOwner,
+                    services.ServedUser,
                     emailAddress,
                     token);
             },

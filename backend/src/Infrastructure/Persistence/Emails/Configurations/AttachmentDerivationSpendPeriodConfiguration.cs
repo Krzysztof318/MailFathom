@@ -8,13 +8,13 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MailFathom.Infrastructure.Persistence.Emails.Configurations;
 
-/// <summary>Declares what one budget period of attachment reading cost each owner this deployment serves, step by step.</summary>
+/// <summary>Declares what one budget period of attachment reading cost each user this deployment serves, step by step.</summary>
 /// <remarks>
-/// One row per budget period, owner, and step, keyed in that order — so the same key answers what one owner consumed on
-/// one step, as a range over its first two columns what that owner consumed altogether, and as a range over its leading
-/// column what the deployment consumed. Nothing hangs off it and nothing cascades into it, not even from the owner
+/// One row per budget period, user, and step, keyed in that order — so the same key answers what one user consumed on
+/// one step, as a range over its first two columns what that user consumed altogether, and as a range over its leading
+/// column what the deployment consumed. Nothing hangs off it and nothing cascades into it, not even from the user
 /// record: what it records is a cost that was incurred, which stays true after the readings it paid for have been
-/// discarded and after the owner it was incurred for has been erased. The step is stored as its name for the reason
+/// discarded and after the user it was incurred for has been erased. The step is stored as its name for the reason
 /// every other enumeration in this schema is — a row read outside this process says what it means — and the column
 /// names are the entity's own constants, because the one write is a composed upsert and the statement and this mapping
 /// must name the same things by construction.
@@ -31,12 +31,12 @@ internal sealed class AttachmentDerivationSpendPeriodConfiguration
         ArgumentNullException.ThrowIfNull(entity);
 
         entity.ToTable(AttachmentDerivationSpendPeriodEntity.TableName);
-        entity.HasKey(period => new { period.PeriodStartsAt, period.OwnerId, period.Step });
+        entity.HasKey(period => new { period.PeriodStartsAt, period.UserId, period.Step });
         entity.Property(period => period.PeriodStartsAt)
             .HasColumnName(AttachmentDerivationSpendPeriodEntity.PeriodStartsAtColumnName)
             .ValueGeneratedNever();
-        entity.Property(period => period.OwnerId)
-            .HasColumnName(AttachmentDerivationSpendPeriodEntity.OwnerIdColumnName)
+        entity.Property(period => period.UserId)
+            .HasColumnName(AttachmentDerivationSpendPeriodEntity.UserIdColumnName)
             .ValueGeneratedNever();
         entity.Property(period => period.Step)
             .HasColumnName(AttachmentDerivationSpendPeriodEntity.StepColumnName)

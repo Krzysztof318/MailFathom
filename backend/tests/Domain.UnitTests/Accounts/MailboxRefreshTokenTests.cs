@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Accounts;
 
-/// <summary>Covers the credential MailFathom holds on a mailbox owner's behalf, and the promises made about erasing it.</summary>
+/// <summary>Covers the credential MailFathom holds on a mailbox user's behalf, and the promises made about erasing it.</summary>
 /// <remarks>
 /// The erasure assertions read the buffer directly rather than inferring erasure from an accessor throwing, because a
 /// type that threw after disposal while leaving the bytes in memory would pass every behavioural test and break the one

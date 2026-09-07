@@ -67,7 +67,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -91,7 +91,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
     /// which is what keeps every metric dimension a closed set.
     /// </summary>
     [Fact]
-    public void BeginGuardedOperation_AnOperationPublishingOneOwnersMail_PublishesWhoseMailItWas()
+    public void BeginGuardedOperation_AnOperationPublishingOneUsersMail_PublishesWhoseMailItWas()
     {
         // Arrange
         var telemetry = new SensitiveContentEgressTelemetry();
@@ -99,7 +99,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailOwner.Another,
+            SyntheticMailUser.Another,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -109,12 +109,12 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Assert
         var span = Assert.Single(this.published);
 
-        Assert.Equal(SyntheticMailOwner.Another.Value.ToString(), span.GetTagItem("mailfathom.owner"));
+        Assert.Equal(SyntheticMailUser.Another.Value.ToString(), span.GetTagItem("mailfathom.user"));
     }
 
-    /// <summary>A deployment that scans nobody opens no operation, so an unset owner is a flow that skipped resolving one.</summary>
+    /// <summary>A deployment that scans nobody opens no operation, so an unset user is a flow that skipped resolving one.</summary>
     [Fact]
-    public void BeginGuardedOperation_AnOperationNamingNoOwner_PublishesNoOwnerAttribute()
+    public void BeginGuardedOperation_AnOperationNamingNoUser_PublishesNoUserAttribute()
     {
         // Arrange
         var telemetry = new SensitiveContentEgressTelemetry();
@@ -131,7 +131,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Assert
         var span = Assert.Single(this.published);
 
-        Assert.Null(span.GetTagItem("mailfathom.owner"));
+        Assert.Null(span.GetTagItem("mailfathom.user"));
     }
 
     /// <summary>A refusal is an ending rather than an error, because the scanner stopped the egress on purpose.</summary>
@@ -144,7 +144,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.Refused();
@@ -171,7 +171,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         {
             using var operation = telemetry.BeginGuardedOperation(
                 SensitiveContentEgressPoint.McpEmailContent,
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 TestContext.Current.CancellationToken);
 
             operation.TextGuarded();
@@ -193,7 +193,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -218,7 +218,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             shutdown.Token))
         {
             shutdown.Cancel();

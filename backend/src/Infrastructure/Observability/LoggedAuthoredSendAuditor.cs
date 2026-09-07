@@ -11,7 +11,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// <remarks>
 /// <para>
 /// This is the one place in MailFathom that writes a calling principal's identity outside the database, and the reason
-/// is the same one the folder mapping auditor is written for: an owner asking who sent something cannot be answered
+/// is the same one the folder mapping auditor is written for: a user asking who sent something cannot be answered
 /// from a record that does not say. Every ordinary log line on this surface names the account and the record; this one
 /// names who asked and under which grant.
 /// </para>
@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// <b>Nothing about the message is written.</b> An account identifier, an outgoing record identity, an act, a
 /// permission, and two counts are MailFathom's own names for things; the addresses, the subject, and both bodies stay
 /// in the stored MIME the record points at. A send that reached somebody nobody here vouches for is logged at a level
-/// of its own, because that is the line an owner looking for an odd send is looking for.
+/// of its own, because that is the line a user looking for an odd send is looking for.
 /// </para>
 /// <para>
 /// A durable evidence store replaces this implementation without any caller changing, which is what the port beside it

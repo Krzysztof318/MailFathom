@@ -57,7 +57,7 @@ public readonly record struct MailboxMutation
     /// <summary>Gets the mutation that sets or clears the remote <c>\Flagged</c> flag of one email.</summary>
     /// <remarks>
     /// It carries no meaning of its own beyond the one a mail client gives the flag, which is exactly why it is worth
-    /// writing: whatever a rule singles mail out for is then visible in the client the owner already reads their mail
+    /// writing: whatever a rule singles mail out for is then visible in the client the user already reads their mail
     /// in, rather than only in MailFathom.
     /// </remarks>
     public static MailboxMutation SetFlagged { get; } = new("set-flagged");
@@ -85,7 +85,7 @@ public readonly record struct MailboxMutation
     /// <remarks>
     /// Provenance turns on this set. A change to one of these values reaches synchronization as nothing but a changed
     /// modification sequence, which is what a person marking mail read in their own client produces too, so what
-    /// separates MailFathom's own write from the mailbox owner's act is a record naming one of these and nothing else.
+    /// separates MailFathom's own write from the mailbox user's act is a record naming one of these and nothing else.
     /// The other three move a message rather than a value on one, and are recognized by where the message turned up.
     /// It is declared here so the read that asks for those records and the ceiling that bounds the answer are the same
     /// decision rather than two lists that can disagree.

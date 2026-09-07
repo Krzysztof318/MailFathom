@@ -28,7 +28,7 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// </para>
 /// <para>
 /// Every instrument's dimensions are closed sets of this process's own words — three signal names, six refusals, six
-/// conditions — so nothing here opens a series per person, per batch, or per collector. The owner a batch was
+/// conditions — so nothing here opens a series per person, per batch, or per collector. The user a batch was
 /// attributed to is deliberately on no instrument, for the reason
 /// <see cref="Infrastructure.Observability.SensitiveContentEgressTelemetry" /> states about the same identifier: a
 /// counter incremented once per export would be a time series per person.

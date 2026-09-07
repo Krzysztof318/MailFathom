@@ -18,7 +18,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <para>
 /// A promoted draft is not a second kind of send. What comes out is the outgoing record every other send is written
 /// down as, transmitted through the same outbox and filed by the same mechanism, and what goes in is the stored MIME
-/// the drafts folder already shows — so the message the owner read in their own mail client is byte for byte the
+/// the drafts folder already shows — so the message the user read in their own mail client is byte for byte the
 /// message their correspondent receives. Nothing is recomposed, which is what keeps the <c>Message-ID</c> the one the
 /// draft has been carrying.
 /// </para>
@@ -40,7 +40,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <para>
 /// <b>A promotion that fails leaves the draft exactly as it was.</b> Nothing about the draft is written until the
 /// outgoing record exists, so a refused recipient, a full period, an account that has since been turned read-only, and
-/// a message too large all leave the owner the draft they wrote.
+/// a message too large all leave the user the draft they wrote.
 /// </para>
 /// <para>
 /// The draft is not deleted here either. The record is queued rather than sent, so the copy in the drafts folder stands

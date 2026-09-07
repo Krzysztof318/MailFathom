@@ -31,7 +31,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Enrichment;
 /// </remarks>
 public sealed class StoredEmailEnrichmentSelectionTests
 {
-    private static readonly Guid Owner = SyntheticMailOwner.Deployment.Value;
+    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
 
     private static readonly DateTimeOffset Now = new(2026, 9, 6, 10, 0, 0, TimeSpan.Zero);
 
@@ -327,7 +327,7 @@ public sealed class StoredEmailEnrichmentSelectionTests
         [
             .. StoredEmailEnrichmentStore.Selecting(
                 new[] { email }.AsQueryable(),
-                Owner,
+                User,
                 "work",
                 folders ?? [WorkInbox],
                 readsAttachments,
@@ -339,15 +339,15 @@ public sealed class StoredEmailEnrichmentSelectionTests
     {
         var email = new StoredEmailEntity
         {
-            OwnerId = Owner,
+            UserId = User,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                OwnerId = Owner,
+                UserId = User,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { OwnerId = Owner, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { UserId = User, Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,
@@ -390,7 +390,7 @@ public sealed class StoredEmailEnrichmentSelectionTests
     {
         StoredEmailId = email.Id,
         StoredEmail = email,
-        OwnerId = email.OwnerId,
+        UserId = email.UserId,
         MailboxAccountId = email.MailboxAccountId,
         MailFolder = email.MailFolder,
         Mutation = MailboxMutation.Relocate.Name,

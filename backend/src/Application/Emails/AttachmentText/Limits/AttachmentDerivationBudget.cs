@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// one account run, which is what keeps any single unit of work small; none of them bounds how much a deployment reads
 /// in a day, because a run that starts with a full budget starts one again on the next interval.  These are the
 /// aggregate ceilings that do, and they are the shape <c>EmbeddingSpendBudget</c> already established for embedding:
-/// one for the deployment, which bounds the bill, and one for any single owner, so a mailbox full of large attachments
+/// one for the deployment, which bounds the bill, and one for any single user, so a mailbox full of large attachments
 /// cannot exhaust the window everybody else is working in.
 /// </para>
 /// <para>
@@ -37,15 +37,15 @@ public sealed class AttachmentDerivationBudget
 {
     private AttachmentDerivationBudget(
         long maxInputOctetsPerPeriod,
-        long maxInputOctetsPerPeriodPerOwner,
+        long maxInputOctetsPerPeriodPerUser,
         long maxDescriptionsPerPeriod,
-        long maxDescriptionsPerPeriodPerOwner,
+        long maxDescriptionsPerPeriodPerUser,
         TimeSpan period)
     {
         this.MaxInputOctetsPerPeriod = maxInputOctetsPerPeriod;
-        this.MaxInputOctetsPerPeriodPerOwner = maxInputOctetsPerPeriodPerOwner;
+        this.MaxInputOctetsPerPeriodPerUser = maxInputOctetsPerPeriodPerUser;
         this.MaxDescriptionsPerPeriod = maxDescriptionsPerPeriod;
-        this.MaxDescriptionsPerPeriodPerOwner = maxDescriptionsPerPeriodPerOwner;
+        this.MaxDescriptionsPerPeriodPerUser = maxDescriptionsPerPeriodPerUser;
         this.Period = period;
     }
 
@@ -57,51 +57,51 @@ public sealed class AttachmentDerivationBudget
     /// </remarks>
     public static AttachmentDerivationBudget Unbounded { get; } = new(
         maxInputOctetsPerPeriod: 0,
-        maxInputOctetsPerPeriodPerOwner: 0,
+        maxInputOctetsPerPeriodPerUser: 0,
         maxDescriptionsPerPeriod: 0,
-        maxDescriptionsPerPeriodPerOwner: 0,
+        maxDescriptionsPerPeriodPerUser: 0,
         TimeSpan.FromDays(1));
 
     /// <summary>Gets the octets one period may read out of attachments in total, or zero where no ceiling was declared.</summary>
     public long MaxInputOctetsPerPeriod { get; }
 
-    /// <summary>Gets the octets one period may read for any one owner, or zero where no per-owner ceiling was declared.</summary>
-    public long MaxInputOctetsPerPeriodPerOwner { get; }
+    /// <summary>Gets the octets one period may read for any one user, or zero where no per-user ceiling was declared.</summary>
+    public long MaxInputOctetsPerPeriodPerUser { get; }
 
     /// <summary>Gets the image descriptions one period may ask a provider for in total, or zero where no ceiling was declared.</summary>
     public long MaxDescriptionsPerPeriod { get; }
 
-    /// <summary>Gets the image descriptions one period may ask for on behalf of any one owner, or zero where none was declared.</summary>
-    public long MaxDescriptionsPerPeriodPerOwner { get; }
+    /// <summary>Gets the image descriptions one period may ask for on behalf of any one user, or zero where none was declared.</summary>
+    public long MaxDescriptionsPerPeriodPerUser { get; }
 
     /// <summary>Gets the length of the window every ceiling here is counted over.</summary>
     public TimeSpan Period { get; }
 
     /// <summary>Gets whether this budget refuses nothing at all.</summary>
     public bool IsUnbounded => this.MaxInputOctetsPerPeriod == 0
-        && this.MaxInputOctetsPerPeriodPerOwner == 0
+        && this.MaxInputOctetsPerPeriodPerUser == 0
         && this.MaxDescriptionsPerPeriod == 0
-        && this.MaxDescriptionsPerPeriodPerOwner == 0;
+        && this.MaxDescriptionsPerPeriodPerUser == 0;
 
     /// <summary>Builds a budget from what a deployment declared.</summary>
     /// <param name="maxInputOctetsPerPeriod">The octets one period may read in total, or zero for no ceiling.</param>
-    /// <param name="maxInputOctetsPerPeriodPerOwner">The octets one period may read for any one owner, or zero for no ceiling.</param>
+    /// <param name="maxInputOctetsPerPeriodPerUser">The octets one period may read for any one user, or zero for no ceiling.</param>
     /// <param name="maxDescriptionsPerPeriod">The descriptions one period may ask for in total, or zero for no ceiling.</param>
-    /// <param name="maxDescriptionsPerPeriodPerOwner">The descriptions one period may ask for per owner, or zero for no ceiling.</param>
+    /// <param name="maxDescriptionsPerPeriodPerUser">The descriptions one period may ask for per user, or zero for no ceiling.</param>
     /// <param name="period">The window the ceilings are counted over.</param>
     /// <returns>The budget.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any ceiling is negative, or the period is not positive.</exception>
     public static AttachmentDerivationBudget Create(
         long maxInputOctetsPerPeriod,
-        long maxInputOctetsPerPeriodPerOwner,
+        long maxInputOctetsPerPeriodPerUser,
         long maxDescriptionsPerPeriod,
-        long maxDescriptionsPerPeriodPerOwner,
+        long maxDescriptionsPerPeriodPerUser,
         TimeSpan period)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxInputOctetsPerPeriod);
-        ArgumentOutOfRangeException.ThrowIfNegative(maxInputOctetsPerPeriodPerOwner);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxInputOctetsPerPeriodPerUser);
         ArgumentOutOfRangeException.ThrowIfNegative(maxDescriptionsPerPeriod);
-        ArgumentOutOfRangeException.ThrowIfNegative(maxDescriptionsPerPeriodPerOwner);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxDescriptionsPerPeriodPerUser);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(period, TimeSpan.Zero);
 
         // The caller's period is kept whether or not any ceiling was declared, so the singleton above is a default
@@ -110,24 +110,24 @@ public sealed class AttachmentDerivationBudget
         // screen that disagrees with the embedding ceiling's — the one thing this window exists to keep identical.
         return new AttachmentDerivationBudget(
             maxInputOctetsPerPeriod,
-            maxInputOctetsPerPeriodPerOwner,
+            maxInputOctetsPerPeriodPerUser,
             maxDescriptionsPerPeriod,
-            maxDescriptionsPerPeriodPerOwner,
+            maxDescriptionsPerPeriodPerUser,
             period);
     }
 
-    /// <summary>Reads the ceiling one step is bounded by, for the deployment or for any one owner.</summary>
+    /// <summary>Reads the ceiling one step is bounded by, for the deployment or for any one user.</summary>
     /// <param name="derivationStep">The step being bounded.</param>
-    /// <param name="forOwner"><see langword="true" /> for the per-owner ceiling, <see langword="false" /> for the deployment's.</param>
+    /// <param name="forUser"><see langword="true" /> for the per-user ceiling, <see langword="false" /> for the deployment's.</param>
     /// <returns>The ceiling, or zero where the deployment declared none for that step and scope.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="derivationStep" /> is not a member of the set.</exception>
-    public long CeilingFor(AttachmentDerivationStep derivationStep, bool forOwner) => derivationStep switch
+    public long CeilingFor(AttachmentDerivationStep derivationStep, bool forUser) => derivationStep switch
     {
-        AttachmentDerivationStep.Extraction => forOwner
-            ? this.MaxInputOctetsPerPeriodPerOwner
+        AttachmentDerivationStep.Extraction => forUser
+            ? this.MaxInputOctetsPerPeriodPerUser
             : this.MaxInputOctetsPerPeriod,
-        AttachmentDerivationStep.Description => forOwner
-            ? this.MaxDescriptionsPerPeriodPerOwner
+        AttachmentDerivationStep.Description => forUser
+            ? this.MaxDescriptionsPerPeriodPerUser
             : this.MaxDescriptionsPerPeriod,
         _ => throw new ArgumentOutOfRangeException(nameof(derivationStep), derivationStep, "The step names no attachment derivation ceiling."),
     };

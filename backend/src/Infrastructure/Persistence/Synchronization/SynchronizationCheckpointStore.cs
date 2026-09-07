@@ -29,7 +29,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountId = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
@@ -37,7 +37,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         var entity = await readContext.SynchronizationCheckpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                checkpoint => checkpoint.MailFolder.OwnerId == owner
+                checkpoint => checkpoint.MailFolder.UserId == user
                     && checkpoint.MailFolder.MailboxAccountId == accountId
                     && checkpoint.MailFolder.Alias == alias
                     && checkpoint.MailFolder.ResolutionGeneration == generation,
@@ -106,7 +106,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         CancellationToken cancellationToken)
     {
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountId = account.Id.Value;
         var alias = folderAlias?.Value;
 
@@ -114,7 +114,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         // ExecuteDelete would run outside the change tracker and commit on its own.
         var checkpoints = await writeContext.SynchronizationCheckpoints
             .Include(checkpoint => checkpoint.MailFolder)
-            .Where(checkpoint => checkpoint.MailFolder.OwnerId == owner
+            .Where(checkpoint => checkpoint.MailFolder.UserId == user
                 && checkpoint.MailFolder.MailboxAccountId == accountId
                 && (alias == null || checkpoint.MailFolder.Alias == alias))
             .ToArrayAsync(cancellationToken);

@@ -53,7 +53,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
 
     /// <summary>Each disposition decides one local copy, and the account's remote-deletion setting decides none of them.</summary>
     [Fact]
-    public async Task SynchronizeAsync_AfterDeletesTheOwnerAuthored_DisposesOfEachLocalCopyAsItsOwnRecordSaid()
+    public async Task SynchronizeAsync_AfterDeletesTheUserAuthored_DisposesOfEachLocalCopyAsItsOwnRecordSaid()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -100,7 +100,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
         Assert.Equal(0, result.Reconciliation.RemotelyDeletedEmailCount);
         Assert.Empty(await mailbox.ReadAsync(FolderName, cancellationToken));
 
-        // The mail the owner asked to free space for is still theirs to read, which is the outcome that separates
+        // The mail the user asked to free space for is still theirs to read, which is the outcome that separates
         // deleting on the server from forgetting the mail.
         var retained = await ReadStoredEmailAsync(
             services,
@@ -166,7 +166,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
             stored.UidValidity,
             stored.Uid);
         var request = MailboxMutationRequest.Delete(
-            stored.StoredEmailId, SyntheticMailAccount.Owner,
+            stored.StoredEmailId, SyntheticMailAccount.User,
             occurrence,
             Requester,
             localDisposition);

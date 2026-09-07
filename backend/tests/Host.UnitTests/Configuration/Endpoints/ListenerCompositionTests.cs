@@ -54,7 +54,7 @@ public sealed class ListenerCompositionTests
             Assert.Single(composed.Listeners).Surfaces);
     }
 
-    /// <summary>The failure the owner named: one socket cannot both redirect to TLS and serve the routes in clear text.</summary>
+    /// <summary>The failure the user named: one socket cannot both redirect to TLS and serve the routes in clear text.</summary>
     [Fact]
     public void Compose_OneSurfaceRedirectingWhereAnotherServes_IsRefused()
     {

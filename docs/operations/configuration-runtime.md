@@ -1,6 +1,6 @@
 # Storage, keys, jobs, and logging
 
-<!-- describes: backend/src/Host/Configuration/Provisioning/**, backend/src/Host/Configuration/OwnerSettings/**, backend/src/Host/Configuration/Persistence/**, backend/src/Host/Configuration/DataEncryption/**, backend/src/Host/Configuration/Jobs/**, backend/src/Host/Configuration/DeploymentOptions.cs, backend/src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, backend/src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
+<!-- describes: backend/src/Host/Configuration/Provisioning/**, backend/src/Host/Configuration/UserSettings/**, backend/src/Host/Configuration/Persistence/**, backend/src/Host/Configuration/DataEncryption/**, backend/src/Host/Configuration/Jobs/**, backend/src/Host/Configuration/DeploymentOptions.cs, backend/src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, backend/src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
 
 Every key about the deployment itself rather than about the mail passing through it: where its configuration is read
 from and how a secret-bearing value is interpreted, the database it writes to, the key ring that seals what it stores,
@@ -23,34 +23,34 @@ The *content* of files that existed at startup reloads; adding or removing a fil
 
 ## `Accounts`
 
-The owners this deployment serves, each with the mail accounts they own. It is a top-level collection and is **not**
-`MailSynchronization:Accounts`, which is the deployment's own mailbox section and belongs to whichever sole owner a
-deployment declaring no owner holds. [The owners a deployment
-serves](configuration-sources.md#the-owners-a-deployment-serves) is the page: what the identifier is, how to generate
+The users this deployment serves, each with the mail accounts they own. It is a top-level collection and is **not**
+`MailSynchronization:Accounts`, which is the deployment's own mailbox section and belongs to whichever sole user a
+deployment declaring no user holds. [The users a deployment
+serves](configuration-sources.md#the-users-a-deployment-serves) is the page: what the identifier is, how to generate
 one, what a start reports, and what an adoption costs.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Accounts:<n>:Id` | string | *(required)* | A UUID, not the all-zero one, unique among the declared owners, and never changed for an owner the deployment already holds | restart |
-| `Accounts:<n>:DisplayName` | string | *(required)* | 1 – 128 characters, unique among the declared owners compared exactly | restart |
+| `Accounts:<n>:Id` | string | *(required)* | A UUID, not the all-zero one, unique among the declared users, and never changed for a user the deployment already holds | restart |
+| `Accounts:<n>:DisplayName` | string | *(required)* | 1 – 128 characters, unique among the declared users compared exactly | restart |
 | `Accounts:<n>:MailAccounts:<m>` | object | `[]` | Declared exactly as [one mail account](configuration-mail.md#one-account--mailsynchronizationaccountsn) is, and judged by the same rules | restart |
 | `Accounts:<n>:SensitiveContent:Secrets:Enabled` | bool | unset | May be `true` where [`SensitiveContent:Secrets:Enabled`](configuration-ai.md#sensitivecontent) is off, and never `false` where it is on | restart |
 | `Accounts:<n>:SensitiveContent:Pii:Enabled` | bool | unset | The same, and `true` additionally requires [`SensitiveContent:PersonalDataAnalyzer:Endpoint`](configuration-ai.md#sensitivecontent) to name an address | restart |
 | `Accounts:<n>:SensitiveContent:ScreenOutgoingMailFor:<m>` | string | unset | Each entry is `Secrets` or `Pii`, matched ignoring capitalization, and the list names at least what `SensitiveContent:ScreenOutgoingMailFor` does | restart |
 
-The scanning block is what an owner asks for over their own mail, and only a tightening of what the deployment set is
-accepted. [What an owner may say about scanning their own
-mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) states the three refusals and what
+The scanning block is what a user asks for over their own mail, and only a tightening of what the deployment set is
+accepted. [What a user may say about scanning their own
+mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) states the three refusals and what
 stays deployment-wide.
 
-At most 256 owners may be declared. Declaring any owner refuses a non-empty `MailSynchronization:Accounts`, no two
-owners may name a mail account alike, and only one owner may be served while the MCP endpoint, the client endpoint, or
+At most 256 users may be declared. Declaring any user refuses a non-empty `MailSynchronization:Accounts`, no two
+users may name a mail account alike, and only one user may be served while the MCP endpoint, the client endpoint, or
 the administrative endpoint is enabled.
 
-A declared owner states nothing here beyond their mailboxes. How their mail is classified as spam is theirs to decide,
+A declared user states nothing here beyond their mailboxes. How their mail is classified as spam is theirs to decide,
 but while a configuration source still reaches them it is read from the deployment's
 [`SpamClassification`](configuration-ai.md#spamclassification) section; the block that lets them decide it for
-themselves is [in their own record](configuration-sources.md#one-owners-own-classification-posture), which an adoption
+themselves is [in their own record](configuration-sources.md#one-users-own-classification-posture), which an adoption
 writes.
 
 ## `Secrets`

@@ -21,7 +21,7 @@ using Xunit;
 
 namespace MailFathom.IntegrationTests.Delivery;
 
-/// <summary>Proves that editing a draft leaves one message in the folder, that sending it leaves none, and that the owner's own draft survives both.</summary>
+/// <summary>Proves that editing a draft leaves one message in the folder, that sending it leaves none, and that the user's own draft survives both.</summary>
 /// <remarks>
 /// <para>
 /// Three claims, and no substitute settles any of them. Whether replacing a stored message leaves one draft or two is
@@ -52,7 +52,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
 
     /// <summary>The whole loop a draft travels, from the first append to the folder a delivered send leaves behind.</summary>
     [Fact]
-    public async Task SaveAsync_ADraftEditedAndThenPromoted_LeavesOneDraftThenNoneAndSparesTheOwnersOwn()
+    public async Task SaveAsync_ADraftEditedAndThenPromoted_LeavesOneDraftThenNoneAndSparesTheUsersOwn()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -90,7 +90,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         // The draft MailFathom did not write, appended before anything else reaches the folder so that every command
         // the run afterwards issues has had the chance to take it.
         await mailbox.AppendDraftAsync(SyntheticMailAccount.DraftCopyFolderPath, foreign, cancellationToken);
-        var owners = Assert.Single(await ReadDraftsAsync(mailbox, cancellationToken), Named(foreign));
+        var users = Assert.Single(await ReadDraftsAsync(mailbox, cancellationToken), Named(foreign));
 
         // Act
         var draft = await SaveAsync(services, written, revises: null, cancellationToken);
@@ -136,11 +136,11 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             OutgoingMailFilingOutcome.Filed,
             Assert.Single(report.FilingResults, entry => entry.OutgoingEmailId == promoted.Id).Outcome);
 
-        // The independent witness on both folders: the drafts folder holds the owner's own message and nothing else,
+        // The independent witness on both folders: the drafts folder holds the user's own message and nothing else,
         // still under the UID it was appended with, and what was drafted is in the sent folder exactly once.
         var remaining = Assert.Single(await ReadDraftsAsync(mailbox, cancellationToken));
         Assert.Equal(foreign, remaining.Subject);
-        Assert.Equal(owners.Uid, remaining.Uid);
+        Assert.Equal(users.Uid, remaining.Uid);
         Assert.True(remaining.IsDraft);
 
         Assert.Single(
@@ -209,7 +209,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
     /// a projection that no application-level test composes: the description a listing draws is read without the
     /// octets, and the octets a composition needs are read separately and have to survive the round trip through
     /// <c>bytea</c> byte for byte. The two reads that reach the draft are asserted beside it, because which drafts a
-    /// pass settles and which an owner is shown are predicates PostgreSQL evaluates over the row and its copies rather
+    /// pass settles and which a user is shown are predicates PostgreSQL evaluates over the row and its copies rather
     /// than domain properties a double could answer differently.
     /// </remarks>
     [Fact]
@@ -269,7 +269,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             content.Select(file => Encoding.UTF8.GetString(file.Content.Span)));
 
         Assert.Contains(opened.Id, await OutstandingAsync(services, cancellationToken));
-        Assert.Contains(opened.Id, await HeldForOwnerAsync(services, cancellationToken));
+        Assert.Contains(opened.Id, await HeldForUserAsync(services, cancellationToken));
     }
 
     /// <summary>Reads which of this account's drafts owe the mail server something, as the pass reads it.</summary>
@@ -285,14 +285,14 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             cancellationToken)).Select(draft => draft.Id),
     ];
 
-    /// <summary>Reads which drafts this owner is still writing, as the client's own listing reads them.</summary>
-    private static async Task<IReadOnlyList<MailDraftId>> HeldForOwnerAsync(
+    /// <summary>Reads which drafts this user is still writing, as the client's own listing reads them.</summary>
+    private static async Task<IReadOnlyList<MailDraftId>> HeldForUserAsync(
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) =>
     [
         .. (await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IMailDraftStore>().ReadForOwnerAsync(
-                SyntheticMailAccount.Account.Owner,
+            (scope, token) => scope.GetRequiredService<IMailDraftStore>().ReadForUserAsync(
+                SyntheticMailAccount.Account.User,
                 SyntheticMailAccount.Account.Id,
                 maxCount: 50,
                 token),

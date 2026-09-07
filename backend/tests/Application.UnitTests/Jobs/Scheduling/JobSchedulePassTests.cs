@@ -19,7 +19,7 @@ namespace MailFathom.Application.UnitTests.Jobs.Scheduling;
 public sealed class JobSchedulePassTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
     private static readonly JobScheduleId ScheduleId = JobScheduleId.Create("mail-rules:personal:housekeeping");
 
     private readonly InMemoryJobScheduleStore schedules = new();

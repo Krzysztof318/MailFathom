@@ -25,7 +25,7 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// <para>
 /// Stated once because both persisted documents are judged by it. A rule that held for the deployment's settings and
-/// not for an owner's record would leave a mailbox password written verbatim into the column an owner's declarations
+/// not for a user's record would leave a mailbox password written verbatim into the column a user's declarations
 /// live in, which is the one outcome the check exists to prevent.
 /// </para>
 /// </remarks>

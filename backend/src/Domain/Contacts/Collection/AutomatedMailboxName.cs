@@ -9,7 +9,7 @@ namespace MailFathom.Domain.Contacts.Collection;
 /// <summary>Answers whether an address names a machine, a role, or a mailing list's administration rather than a person.</summary>
 /// <remarks>
 /// <para>
-/// This is the half of collection's bounds an owner does not write. A book is worth having because it holds people, and
+/// This is the half of collection's bounds a user does not write. A book is worth having because it holds people, and
 /// the addresses below are the ones every mailbox receives from without anybody corresponding with them — so leaving
 /// them to a configured exclusion list would mean every deployment discovering the same noise and writing the same list
 /// against it.
@@ -25,7 +25,7 @@ namespace MailFathom.Domain.Contacts.Collection;
 /// <para>
 /// The comparison is on the address's own comparison form, so the rule is the same rule the book matches addresses by
 /// and a sender's casing decides nothing. What the rule costs is stated rather than hidden: a person whose mailbox is
-/// genuinely <c>news@</c> or <c>sales@</c> at their own domain is not collected, and an owner who corresponds with them
+/// genuinely <c>news@</c> or <c>sales@</c> at their own domain is not collected, and a user who corresponds with them
 /// writes them down instead — which is the safe direction, since a book that is missing somebody is corrected by
 /// recording them and a book full of machines is not corrected at all.
 /// </para>

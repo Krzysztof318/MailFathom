@@ -12,9 +12,9 @@ namespace MailFathom.Application.Notifications;
 /// <remarks>
 /// <para>
 /// Whose notifications these are comes from the principal rather than from the request, exactly as it does for the
-/// owner record and the client preferences: there is no argument here for another owner's identifier, so a reading of
+/// user record and the client preferences: there is no argument here for another user's identifier, so a reading of
 /// somebody else's centre is something a caller cannot express rather than something a surface has to refuse. A
-/// notification named by identifier is addressed with the owner beside it, so one another person holds answers as one
+/// notification named by identifier is addressed with the user beside it, so one another person holds answers as one
 /// that does not exist.
 /// </para>
 /// <para>
@@ -48,7 +48,7 @@ public sealed class OwnNotifications
     private readonly INotificationStore store;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="authorization">Reports the grant the caller holds and the owner it acts for.</param>
+    /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="store">Holds what happened to a person.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnNotifications(AccessAuthorization authorization, INotificationStore store)
@@ -65,7 +65,7 @@ public sealed class OwnNotifications
     /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the newest page.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The page, or <see langword="null" /> when the cursor is not one this deployment issued to this caller.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// A page size below one is served the default rather than refused, for the reason a page size above the maximum is
     /// clamped: both are a client asking for something no screen wants, and the number this deployment serves is a
@@ -78,21 +78,21 @@ public sealed class OwnNotifications
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        var owner = this.authorization.RequireOwner();
-        var fingerprint = NotificationCursor.FingerprintOf(owner);
+        var user = this.authorization.RequireUser();
+        var fingerprint = NotificationCursor.FingerprintOf(user);
         NotificationCursor? boundary = null;
 
         if (!string.IsNullOrWhiteSpace(cursor))
         {
             if (!NotificationCursor.TryDecode(cursor, out boundary)
-                || !string.Equals(boundary!.Value.OwnerFingerprint, fingerprint, StringComparison.Ordinal))
+                || !string.Equals(boundary!.Value.UserFingerprint, fingerprint, StringComparison.Ordinal))
             {
                 return null;
             }
         }
 
         var limit = Bounded(pageSize);
-        var notifications = await this.store.ReadPageAsync(owner, boundary, limit, cancellationToken);
+        var notifications = await this.store.ReadPageAsync(user, boundary, limit, cancellationToken);
 
         // The page is short only where the centre held nothing more, so the boundary is issued exactly when a full
         // page came back — which is what lets a caller stop on the absent cursor rather than on a length comparison.
@@ -106,12 +106,12 @@ public sealed class OwnNotifications
     /// <summary>Counts what the signed-in person has not read.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>How many of their notifications stand unread.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     public Task<int> CountUnreadAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.CountUnreadAsync(this.authorization.RequireOwner(), cancellationToken);
+        return this.store.CountUnreadAsync(this.authorization.RequireUser(), cancellationToken);
     }
 
     /// <summary>Puts one of the signed-in person's notifications into a stated read state.</summary>
@@ -119,7 +119,7 @@ public sealed class OwnNotifications
     /// <param name="isRead">The read state it is to stand in.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>What became of the request.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     public Task<NotificationReadOutcome> SetReadAsync(
         NotificationId notification,
         bool isRead,
@@ -128,7 +128,7 @@ public sealed class OwnNotifications
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         return this.store.SetReadAsync(
-            this.authorization.RequireOwner(),
+            this.authorization.RequireUser(),
             notification,
             isRead,
             cancellationToken);
@@ -137,12 +137,12 @@ public sealed class OwnNotifications
     /// <summary>Marks every one of the signed-in person's unread notifications read.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>How many notifications the request changed.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no owner, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
     public Task<int> MarkAllReadAsync(CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
-        return this.store.MarkAllReadAsync(this.authorization.RequireOwner(), cancellationToken);
+        return this.store.MarkAllReadAsync(this.authorization.RequireUser(), cancellationToken);
     }
 
     /// <summary>Reduces what a caller asked for to a page size this deployment serves.</summary>

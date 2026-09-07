@@ -65,11 +65,11 @@ internal sealed class MailRuleExecutionStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var ownerValue = query.Account.Owner.Value;
+        var userValue = query.Account.User.Value;
         var accountValue = query.Account.Id.Value;
 
         var entities = await this.Filter(query)
-            .Where(execution => execution.OwnerId == ownerValue && execution.MailboxAccountId == accountValue)
+            .Where(execution => execution.UserId == userValue && execution.MailboxAccountId == accountValue)
 
             // The actions are the point of an execution that matched, so they are loaded with it rather than left to a
             // second read per row. A rule declares a bounded set of changes and the page is bounded, so the join is too.
@@ -126,12 +126,12 @@ internal sealed class MailRuleExecutionStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         var expiringIds = await readContext.MailRuleExecutions
             .AsNoTracking()
-            .Where(execution => execution.OwnerId == ownerValue
+            .Where(execution => execution.UserId == userValue
                 && execution.MailboxAccountId == accountValue
                 && execution.EvaluatedAt < evaluatedBefore)
             .OrderBy(execution => execution.EvaluatedAt)

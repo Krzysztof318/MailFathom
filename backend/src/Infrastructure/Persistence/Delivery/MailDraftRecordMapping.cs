@@ -36,7 +36,7 @@ internal static class MailDraftRecordMapping
         {
             Id = MailDraftId.Create(entity.Id),
             Account = MailAccountIdentity.Create(
-                MailOwnerId.Create(entity.OwnerId),
+                MailUserId.Create(entity.UserId),
                 MailAccountId.Create(entity.MailboxAccountId)),
             Author = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Recipients = recipients,

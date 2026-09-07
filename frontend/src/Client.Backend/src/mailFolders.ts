@@ -15,11 +15,11 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-// The owner's mailboxes and the folders in them, which the service answers in one exchange because they are one tree
+// The user's mailboxes and the folders in them, which the service answers in one exchange because they are one tree
 // on screen. The account inside each entry is the accounts route's own shape, parsed by the accounts route's own
 // parser, so the two reads cannot come to disagree about what a mailbox is.
 
-/** The route the owner's folders are served at, relative to the client prefix. */
+/** The route the user's folders are served at, relative to the client prefix. */
 export const mailFoldersRoute = '/folders';
 
 /**
@@ -54,13 +54,13 @@ export interface MailFolder {
     readonly behind: boolean;
 }
 
-/** One of the owner's accounts and the folders beneath it. */
+/** One of the user's accounts and the folders beneath it. */
 export interface MailAccountFolders {
     readonly account: MailAccount;
     readonly folders: readonly MailFolder[];
 }
 
-/** The owner's whole tree, beside the deployment-wide switch saying whether any of it is being refreshed at all. */
+/** The user's whole tree, beside the deployment-wide switch saying whether any of it is being refreshed at all. */
 export interface MailFolderDirectory {
     readonly synchronizationEnabled: boolean;
     readonly accounts: readonly MailAccountFolders[];
@@ -88,7 +88,7 @@ const roles: readonly MailFolderRole[] = [
     'Outbox',
 ];
 
-/** Reads the signed-in owner's mailboxes and folders, answering an expected failure as a value rather than by throwing. */
+/** Reads the signed-in user's mailboxes and folders, answering an expected failure as a value rather than by throwing. */
 export function readMailFolders(
     session: ClientSession,
     transport: MailFathomTransport,

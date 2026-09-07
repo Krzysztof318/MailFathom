@@ -11,10 +11,10 @@ using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools.Drafts;
 
-/// <summary>Covers what <c>delete_draft</c> tells a caller about the copy of the draft in the owner's own folder.</summary>
+/// <summary>Covers what <c>delete_draft</c> tells a caller about the copy of the draft in the user's own folder.</summary>
 /// <remarks>
 /// The settling pass reports in a vocabulary of its own — eight outcomes and a divergence beside them — and the caller
-/// asks one question: will the owner still see that message. This is where the two meet, so every shape the pass can
+/// asks one question: will the user still see that message. This is where the two meet, so every shape the pass can
 /// hand over is read here rather than only the one a deployment mapping no drafts folder produces. It is driven from a
 /// filing result rather than through the tool because what makes a copy unreachable is a mail server: producing one
 /// belongs to <c>MailDraftFilerTests</c>, which covers each divergence against a substituted mailbox, and to the
@@ -25,7 +25,7 @@ public sealed class DeleteDraftToolResultTests
     private static readonly MailDraftId Draft =
         MailDraftId.Create(Guid.CreateVersion7(new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.Zero)));
 
-    /// <summary>A copy the removal could not take out is a message the owner still sees, whatever put it out of reach.</summary>
+    /// <summary>A copy the removal could not take out is a message the user still sees, whatever put it out of reach.</summary>
     [Theory]
     [InlineData(MailDraftDivergenceReason.AppendOutcomeUnknown)]
     [InlineData(MailDraftDivergenceReason.PlacementUnreported)]

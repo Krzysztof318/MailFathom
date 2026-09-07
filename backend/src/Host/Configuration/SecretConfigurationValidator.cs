@@ -8,8 +8,8 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
@@ -264,26 +264,26 @@ internal sealed partial class SecretConfigurationValidator
         return errors;
     }
 
-    /// <summary>Finds everything an operator must fix before one owner's own mail accounts can be connected with.</summary>
-    /// <param name="ownerConfigurationPath">The path the owner's declarations hang under, which prefixes every reported path.</param>
-    /// <param name="mailAccounts">The mail accounts that owner declares, wherever they were declared.</param>
+    /// <summary>Finds everything an operator must fix before one user's own mail accounts can be connected with.</summary>
+    /// <param name="userConfigurationPath">The path the user's declarations hang under, which prefixes every reported path.</param>
+    /// <param name="mailAccounts">The mail accounts that user declares, wherever they were declared.</param>
     /// <param name="cancellationToken">Cancels the resolution.</param>
-    /// <returns>One message per unusable setting, empty when the owner's mail accounts are all usable.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="ownerConfigurationPath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <returns>One message per unusable setting, empty when the user's mail accounts are all usable.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="userConfigurationPath" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailAccounts" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// An owner's mailboxes are declared outside <c>MailSynchronization:Accounts</c> and therefore outside the graph
+    /// A user's mailboxes are declared outside <c>MailSynchronization:Accounts</c> and therefore outside the graph
     /// the mail check above walks, so without this they would start a host clean and fail per connection instead —
-    /// while the identical declaration in the deployment's own section fails the start. The whole owner is put through
+    /// while the identical declaration in the deployment's own section fails the start. The whole user is put through
     /// one walk rather than one per account, because a repeated secret name is a refusal within the section that
     /// declares it and judging each account alone would stop seeing the repeat.
     /// </remarks>
-    internal async Task<IReadOnlyList<string>> FindOwnerMailAccountErrorsAsync(
-        string ownerConfigurationPath,
+    internal async Task<IReadOnlyList<string>> FindUserMailAccountErrorsAsync(
+        string userConfigurationPath,
         IReadOnlyList<MailSynchronizationAccountOptions> mailAccounts,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ownerConfigurationPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userConfigurationPath);
         ArgumentNullException.ThrowIfNull(mailAccounts);
 
         if (mailAccounts.Count == 0)
@@ -291,13 +291,13 @@ internal sealed partial class SecretConfigurationValidator
             return [];
         }
 
-        var owner = new OwnerAccountOptions { MailAccounts = [.. mailAccounts] };
+        var user = new UserAccountOptions { MailAccounts = [.. mailAccounts] };
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, null, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(userConfigurationPath, user, null, cancellationToken));
 
         errors.AddRange(await this.FindTrustAnchorErrorsAsync(
-            $"{ownerConfigurationPath}:{nameof(OwnerAccountOptions.MailAccounts)}",
+            $"{userConfigurationPath}:{nameof(UserAccountOptions.MailAccounts)}",
             mailAccounts,
             cancellationToken));
 

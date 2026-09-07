@@ -51,7 +51,7 @@ public sealed class StoredMailRederivationTests
     /// <summary>A payload of which that many emails pass the ceiling, rounded up so the tenth is what reaches it.</summary>
     private const int BytesPerEmail = ((64 * 1024 * 1024) / EmailsReachingTheByteCeiling) + 1;
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
 
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private int arrangedRunCount;
@@ -461,7 +461,7 @@ public sealed class StoredMailRederivationTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
                 MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId, bodyText))));
 
@@ -477,7 +477,7 @@ public sealed class StoredMailRederivationTests
         var mimeReader = Substitute.For<IEmailMimeReader>();
 
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var occurrenceId = call.Arg<RemoteEmailContent>()!.OccurrenceId;

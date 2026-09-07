@@ -57,7 +57,7 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// <para>
     /// A draft shares it with a send rather than taking a member of its own, because what both do is put the author's
-    /// text on a server this deployment does not own. That the drafts folder is the owner's own mailbox narrows who
+    /// text on a server this deployment does not own. That the drafts folder is the user's own mailbox narrows who
     /// reads it and changes nothing about where the bytes end up, and a message written into it is one <c>send_draft</c>
     /// call away from a recipient.
     /// </para>

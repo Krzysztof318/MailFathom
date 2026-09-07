@@ -190,7 +190,7 @@ public sealed class ClientMailAttachmentEndpointTests
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>An identifier naming no message at all is the same refusal as a message this owner does not hold.</summary>
+    /// <summary>An identifier naming no message at all is the same refusal as a message this user does not hold.</summary>
     [Fact]
     public async Task DownloadAsync_EmptyIdentifier_RefusesWithoutOpeningAnything()
     {
@@ -268,7 +268,7 @@ public sealed class ClientMailAttachmentEndpointTests
     private static EmailSummary SummaryOf() => new()
     {
         StoredEmailId = StoredEmailId.Create(Message),
-        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary")),
+        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         InternetMessageId = "<abc@example.test>",
         Subject = "Quarterly invoice",

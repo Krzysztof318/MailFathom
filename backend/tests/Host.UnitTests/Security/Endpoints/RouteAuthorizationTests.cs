@@ -232,13 +232,13 @@ public sealed class RouteAuthorizationTests
     }
 
     /// <summary>
-    /// A deployment serving several owners is a state a start now admits, and an administrative act reached by a
-    /// credential naming nobody has no single owner to be composed against. What the caller reads is the failure's own
+    /// A deployment serving several users is a state a start now admits, and an administrative act reached by a
+    /// credential naming nobody has no single user to be composed against. What the caller reads is the failure's own
     /// code and sentence rather than an unclassified fault, because no grant would have made the act answerable and
-    /// the remedy is a credential that names its owner.
+    /// the remedy is a credential that names its user.
     /// </summary>
     [Fact]
-    public async Task RefuseUnpermittedAsync_AUseCaseWithNoSoleOwnerToActFor_AnswersWithTheFailuresOwnCode()
+    public async Task RefuseUnpermittedAsync_AUseCaseWithNoSoleUserToActFor_AnswersWithTheFailuresOwnCode()
     {
         // Arrange
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead);
@@ -247,14 +247,14 @@ public sealed class RouteAuthorizationTests
         // Act
         var answer = await RouteAuthorization.RefuseUnpermittedAsync(
             context,
-            _ => throw DeploymentMailOwnerUnresolvedException.NoSoleOwnerToActFor(),
+            _ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor(),
             Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
         Assert.Equal(
-            MailFathomErrorCode.DeploymentMailOwnerUnresolved.Value,
+            MailFathomErrorCode.DeploymentMailUserUnresolved.Value,
             Assert.Contains(RouteAuthorization.ErrorCodeExtension, refusal.ProblemDetails.Extensions));
     }
 

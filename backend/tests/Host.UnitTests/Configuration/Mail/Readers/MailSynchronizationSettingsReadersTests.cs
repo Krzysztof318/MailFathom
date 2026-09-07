@@ -25,7 +25,7 @@ public sealed class MailSynchronizationSettingsReadersTests
     {
         // Arrange
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
-            OptionsFor(AccountAt("work", "owner@work.example")));
+            OptionsFor(AccountAt("work", "user@work.example")));
 
         // Act
         var first = new ScopedMailSynchronizationSettings(published).Current.Readers;
@@ -41,7 +41,7 @@ public sealed class MailSynchronizationSettingsReadersTests
     {
         // Arrange
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
-            OptionsFor(AccountAt("work", "owner@work.example")));
+            OptionsFor(AccountAt("work", "user@work.example")));
         var work = MailAccountId.Create("work");
 
         // Act
@@ -59,7 +59,7 @@ public sealed class MailSynchronizationSettingsReadersTests
     public void GetContactCollectionSettings_AskedFromTwoScopesOfOneSnapshot_AnswersFromOneBuild()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions { Enabled = true };
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(OptionsFor(account));
         var work = MailAccountId.Create("work");
@@ -80,11 +80,11 @@ public sealed class MailSynchronizationSettingsReadersTests
     {
         // Arrange
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
-            OptionsFor(AccountAt("work", "owner@work.example")));
+            OptionsFor(AccountAt("work", "user@work.example")));
         var beforeReload = new ScopedMailSynchronizationSettings(published).Current.Readers;
 
         // Act
-        published.Current = OptionsFor(AccountAt("work", "owner@work.example"));
+        published.Current = OptionsFor(AccountAt("work", "user@work.example"));
         var afterReload = new ScopedMailSynchronizationSettings(published).Current.Readers;
 
         // Assert
@@ -97,8 +97,8 @@ public sealed class MailSynchronizationSettingsReadersTests
     {
         // Arrange
         var published = new StubSettingsSnapshot<MailSynchronizationOptions>(
-            OptionsFor(AccountAt("added-by-a-reload", "owner@work.example")));
-        var runSnapshot = OptionsFor(AccountAt("scheduled-by-the-run", "owner@work.example"));
+            OptionsFor(AccountAt("added-by-a-reload", "user@work.example")));
+        var runSnapshot = OptionsFor(AccountAt("scheduled-by-the-run", "user@work.example"));
         var scope = new ScopedMailSynchronizationSettings(published);
 
         // Act

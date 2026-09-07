@@ -122,7 +122,7 @@ public sealed class DiscoveryCompositionAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act
@@ -137,7 +137,7 @@ public sealed class DiscoveryCompositionAgentTests
         Assert.DoesNotContain(Marker, provider.RequestBodies[0], StringComparison.Ordinal);
     }
 
-    /// <summary>The question is the owner's own words and leaves this deployment in the same turn, so it is guarded like an extract.</summary>
+    /// <summary>The question is the user's own words and leaves this deployment in the same turn, so it is guarded like an extract.</summary>
     [Fact]
     public async Task ComposeAsync_AQuestionCarryingASecret_SendsTheProviderTheGuardedQuestion()
     {
@@ -145,7 +145,7 @@ public sealed class DiscoveryCompositionAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act
@@ -182,15 +182,15 @@ public sealed class DiscoveryCompositionAgentTests
         Assert.Empty(provider.RequestBodies);
     }
 
-    /// <summary>What a plan quotes is the owner's own mail going back to the owner, so it is not redacted on the way.</summary>
+    /// <summary>What a plan quotes is the user's own mail going back to the user, so it is not redacted on the way.</summary>
     [Fact]
-    public async Task ComposeAsync_AnExtractCarryingASecret_StillQuotesItBackToTheOwner()
+    public async Task ComposeAsync_AnExtractCarryingASecret_StillQuotesItBackToTheUser()
     {
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"answer\": \"They accepted.\", \"sources\": [\"s1\"]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var composer = provider.ComposerOver(egressGuard: egress.Guard);
 
         // Act
@@ -286,7 +286,7 @@ public sealed class DiscoveryCompositionAgentTests
     private static MailQuestion Question(string text = "which supplier quoted least") =>
         new(
             MailQuestionText.Create(text),
-            MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], []));
+            MailboxScope.Create(SyntheticMailUser.Deployment, [Primary], []));
 
     private static DiscoveryRunPlan Plan(DiscoveryIntent intent) =>
         DiscoveryRunPlan.Compose(

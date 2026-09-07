@@ -75,7 +75,7 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
 
     /// <summary>Declares one rule's schedule for one account, as the repeated work a dispatch reads.</summary>
     /// <remarks>
-    /// The payload names the owner beside the identifier, because the run it starts writes rows about that account. The
+    /// The payload names the user beside the identifier, because the run it starts writes rows about that account. The
     /// schedule's own identity is still composed from the identifier alone: making every identity composed as text say
     /// whose account it names is a later step of ADR 0014's delivery order, and taking it here would move the durable
     /// state a deployment already keeps under those strings.

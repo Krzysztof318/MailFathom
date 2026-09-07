@@ -16,7 +16,7 @@ import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import { offers } from './capabilities';
 
 // What the client knows about the deployment it is signed in to: what the credential may do there, how current each of
-// the owner's accounts is, and whether the deployment is answering at all. It is one thing rather than three because it
+// the user's accounts is, and whether the deployment is answering at all. It is one thing rather than three because it
 // arrives as one exchange — the grant decides whether the accounts are asked for at all, and a deployment that stopped
 // answering stops both.
 //
@@ -33,7 +33,7 @@ export interface Connection {
     /** What the deployment says the credential may do, or `null` while that is being read for the first time on this attempt. */
     readonly session: ClientResult<DeploymentSession> | null;
 
-    /** The owner's accounts, or `null` where they have not been read — which includes a credential not allowed to. */
+    /** The user's accounts, or `null` where they have not been read — which includes a credential not allowed to. */
     readonly accounts: ClientResult<MailAccountDirectory> | null;
 
     /** When the accounts on the screen were read, which is what every age beside one is measured from. */
@@ -58,7 +58,7 @@ export interface Connection {
  *
  * The identity is half of that tag rather than the attempt alone, and it is the half that matters most: signing out and
  * back in as somebody else changes the credential without changing the attempt, so an answer tagged by attempt alone
- * would put the previous owner's accounts and the previous owner's grants in front of the next person for as long as
+ * would put the previous user's accounts and the previous user's grants in front of the next person for as long as
  * their own read takes. It holds the credential the frame is already holding rather than a second copy of anything, it
  * is compared and never read, and nothing renders it.
  */

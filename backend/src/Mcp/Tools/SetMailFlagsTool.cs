@@ -62,7 +62,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailFlagsWrite;
 
     /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
-    /// <remarks>Marking mail reaches the owner's own mail server, which is why it is not part of the retrieval surface a deployment may publish alone. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    /// <remarks>Marking mail reaches the user's own mail server, which is why it is not part of the retrieval surface a deployment may publish alone. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
     public static McpToolCategory Category => McpToolCategory.Flags;
 
     /// <summary>The greatest length a caller-supplied request identity may carry.</summary>
@@ -108,7 +108,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         string storedEmailId,
         [Description("true marks the email read, false marks it unread. Omit it to leave the flag where it stands. Reading mail through MailFathom never sets it, so this is the only way it moves from here.")]
         bool? seen = null,
-        [Description("true stars the email, false unstars it. This is the flag a mail client draws as a star or a flag, and it is what the owner will see in their own client.")]
+        [Description("true stars the email, false unstars it. This is the flag a mail client draws as a star or a flag, and it is what the user will see in their own client.")]
         bool? flagged = null,
         [Description("What to do with keywords: add puts the listed ones on beside whatever the email already carries, remove takes the listed ones off and leaves the rest, replace makes the keywords exactly the listed ones. Send it together with keywords; either one alone is refused.")]
         SetMailFlagsKeywordChange? keywordChange = null,

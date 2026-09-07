@@ -16,7 +16,6 @@ using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
-using MailFathom.Infrastructure.Persistence.Owners.Configurations;
 using MailFathom.Infrastructure.Persistence.Portraits.Configurations;
 using MailFathom.Infrastructure.Persistence.Preferences.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
@@ -24,6 +23,7 @@ using MailFathom.Infrastructure.Persistence.Secrets.Configurations;
 using MailFathom.Infrastructure.Persistence.Settings.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
+using MailFathom.Infrastructure.Persistence.Users.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence;
@@ -62,18 +62,18 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<RootSettingsEntity> RootSettings => this.Set<RootSettingsEntity>();
 
-    internal DbSet<OwnerAccountEntity> OwnerAccounts => this.Set<OwnerAccountEntity>();
+    internal DbSet<UserAccountEntity> UserAccounts => this.Set<UserAccountEntity>();
 
-    internal DbSet<OwnerCredentialEntity> OwnerCredentials =>
-        this.Set<OwnerCredentialEntity>();
+    internal DbSet<UserCredentialEntity> UserCredentials =>
+        this.Set<UserCredentialEntity>();
 
     internal DbSet<ClientPreferencesEntity> ClientPreferences => this.Set<ClientPreferencesEntity>();
 
-    internal DbSet<OwnerPortraitEntity> OwnerPortraits => this.Set<OwnerPortraitEntity>();
+    internal DbSet<UserPortraitEntity> UserPortraits => this.Set<UserPortraitEntity>();
 
     internal DbSet<StoredSecretEntity> StoredSecrets => this.Set<StoredSecretEntity>();
 
-    internal DbSet<OwnerStoredContentEntity> OwnerStoredContent => this.Set<OwnerStoredContentEntity>();
+    internal DbSet<UserStoredContentEntity> UserStoredContent => this.Set<UserStoredContentEntity>();
 
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
@@ -196,12 +196,12 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.HasPostgresExtension("vector");
 
         modelBuilder.ApplyConfiguration(new RootSettingsConfiguration());
-        modelBuilder.ApplyConfiguration(new OwnerAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new UserAccountConfiguration());
         modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
-        modelBuilder.ApplyConfiguration(new OwnerCredentialConfiguration());
+        modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
-        modelBuilder.ApplyConfiguration(new OwnerPortraitConfiguration());
-        modelBuilder.ApplyConfiguration(new OwnerStoredContentConfiguration());
+        modelBuilder.ApplyConfiguration(new UserPortraitConfiguration());
+        modelBuilder.ApplyConfiguration(new UserStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());
         modelBuilder.ApplyConfiguration(new StoredEmailConfiguration());

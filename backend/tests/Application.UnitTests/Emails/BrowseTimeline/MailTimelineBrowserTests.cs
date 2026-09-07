@@ -503,9 +503,9 @@ public sealed class MailTimelineBrowserTests
             browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken));
     }
 
-    /// <summary>An owner who owns no account reads an empty list rather than every other owner's mail.</summary>
+    /// <summary>A user who owns no account reads an empty list rather than every other user's mail.</summary>
     [Fact]
-    public async Task BrowsePageAsync_AnOwnerWhoOwnsNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
+    public async Task BrowsePageAsync_AnUserWhoOwnsNoAccount_ReadsAnEmptyPageWithoutReachingStorage()
     {
         // Arrange
         var timeline = new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));

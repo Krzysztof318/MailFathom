@@ -20,7 +20,7 @@ namespace MailFathom.Application.Synchronization.Sessions;
 /// fetch an envelope, a body, or a flag.
 /// </para>
 /// <para>
-/// The session is long-lived, so its owner recycles it when the settings it was opened under are superseded. One
+/// The session is long-lived, so its user recycles it when the settings it was opened under are superseded. One
 /// session is used by one waiter at a time and nothing here is safe for concurrent use.
 /// </para>
 /// </remarks>

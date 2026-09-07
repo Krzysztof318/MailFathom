@@ -102,8 +102,8 @@ public sealed class DiscoveryCoverageReader
     /// it never mentions. The two overlap for every account that has been reconciled once.
     /// <para>
     /// <see cref="MailboxScope.ReadableFolders" /> is deliberately not a third source. It is the deployment's folder
-    /// participation rather than this owner's, so it names folders of every account the deployment serves; taking
-    /// account identifiers from it would put another owner's configured names on this owner's plan, and — the ordering
+    /// participation rather than this user's, so it names folders of every account the deployment serves; taking
+    /// account identifiers from it would put another user's configured names on this user's plan, and — the ordering
     /// below being ordinal — could displace one of the caller's own accounts from what the plan may report.
     /// <see cref="MailboxScope.AccountIds" /> already names every account the scope reached, a caller who owns none
     /// having resolved to a scope that admits nothing before this is reached.

@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 public sealed class StoredSecretModelTests
 {
     [Fact]
-    public void StoredSecretModel_Owner_IsRequiredAndErasesTheSecretWithTheOwner()
+    public void StoredSecretModel_User_IsRequiredAndErasesTheSecretWithTheUser()
     {
         // Arrange
         using var context = CreateContext();
@@ -23,11 +23,11 @@ public sealed class StoredSecretModelTests
         var reference = Assert.Single(EntityType(context).GetForeignKeys());
 
         // Assert
-        Assert.Equal(["OwnerId"], reference.Properties.Select(property => property.Name));
-        Assert.Equal(typeof(OwnerAccountEntity), reference.PrincipalEntityType.ClrType);
+        Assert.Equal(["UserId"], reference.Properties.Select(property => property.Name));
+        Assert.Equal(typeof(UserAccountEntity), reference.PrincipalEntityType.ClrType);
         Assert.True(reference.IsRequired);
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
-        Assert.Equal(PersistenceConstraintNames.StoredSecretOwnerForeignKeyName, reference.GetConstraintName());
+        Assert.Equal(PersistenceConstraintNames.StoredSecretUserForeignKeyName, reference.GetConstraintName());
     }
 
     [Fact]
@@ -59,8 +59,8 @@ public sealed class StoredSecretModelTests
         var indexes = EntityType(context).GetIndexes().ToDictionary(index => index.GetDatabaseName()!);
 
         // Assert
-        var identity = indexes[PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName];
-        Assert.Equal(["OwnerId", "Name"], identity.Properties.Select(property => property.Name));
+        var identity = indexes[PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName];
+        Assert.Equal(["UserId", "Name"], identity.Properties.Select(property => property.Name));
         Assert.True(identity.IsUnique);
 
         var key = indexes[PersistenceConstraintNames.StoredSecretKeyIndexName];

@@ -20,7 +20,7 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// It is the safe half of authoring mail, and the annotations are where that shows. Writing a draft is not read-only,
 /// creates rather than takes away, and leaves a second draft when it is called twice — so three of the four values are
 /// the opposite of <c>send_email</c>'s. <c>openWorldHint</c> is the one they share, and for a reason worth stating:
-/// the draft is appended to the owner's own drafts folder on a mail server this deployment does not own, which is
+/// the draft is appended to the user's own drafts folder on a mail server this deployment does not own, which is
 /// <c>set_mail_flags</c>'s reach rather than a send's. Nothing this tool does reaches a third party.
 /// </para>
 /// <para>
@@ -78,8 +78,8 @@ internal sealed class SaveDraftTool(DraftedMailWriting drafts)
         OpenWorld = true,
         UseStructuredContent = true)]
     [Description(
-        "Writes a message into the owner's own Drafts folder and SENDS NOTHING. Nobody receives it, no mail server is "
-        + "offered it, and the only person who ever sees it is the mailbox's owner, in their own mail client. Use it "
+        "Writes a message into the user's own Drafts folder and SENDS NOTHING. Nobody receives it, no mail server is "
+        + "offered it, and the only person who ever sees it is the mailbox's user, in their own mail client. Use it "
         + "when the person you are acting for should read a message before it goes out; sending it afterwards is "
         + "send_draft, a separate tool behind a separate permission that this tool does not grant. A draft can be "
         + "edited with update_draft and taken back with delete_draft, so nothing here is final. "

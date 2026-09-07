@@ -12,7 +12,7 @@ public sealed class ContactTests
 {
     private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>One person's several addresses are one record, with the owner's choice of default kept as such.</summary>
+    /// <summary>One person's several addresses are one record, with the user's choice of default kept as such.</summary>
     [Fact]
     public void Create_PersonUsingSeveralAddresses_HoldsThemAllWithThePreferredOneFirst()
     {
@@ -130,7 +130,7 @@ public sealed class ContactTests
         Assert.Throws<ArgumentException>(() => ContactOf(overBound, preferred: overBound[0]));
     }
 
-    /// <summary>An address longer than SMTP admits is refused rather than dropped, because an owner typed it.</summary>
+    /// <summary>An address longer than SMTP admits is refused rather than dropped, because a user typed it.</summary>
     [Fact]
     public void Create_AnAddressLongerThanTheBound_IsRefused()
     {
@@ -158,7 +158,7 @@ public sealed class ContactTests
             RecordedAt));
     }
 
-    /// <summary>An amendment states the record the owner wants, and keeps everything identity is made of.</summary>
+    /// <summary>An amendment states the record the user wants, and keeps everything identity is made of.</summary>
     [Fact]
     public void AmendedWith_ANewNamePreferredAddressAndNote_KeepsIdentityOriginAndArrival()
     {
@@ -253,13 +253,13 @@ public sealed class ContactTests
         Assert.Equal(expected, amendable);
     }
 
-    /// <summary>Only a writer acting for the owner promotes, whichever origin the contact itself carries.</summary>
+    /// <summary>Only a writer acting for the user promotes, whichever origin the contact itself carries.</summary>
     [Theory]
     [InlineData(ContactOrigin.Collected, ContactOrigin.Asserted, true)]
     [InlineData(ContactOrigin.Collected, ContactOrigin.Collected, false)]
     [InlineData(ContactOrigin.Asserted, ContactOrigin.Asserted, true)]
     [InlineData(ContactOrigin.Asserted, ContactOrigin.Collected, false)]
-    public void IsPromotableBy_AWriterOfEachOrigin_AnswersForTheOwnersWriterAlone(
+    public void IsPromotableBy_AWriterOfEachOrigin_AnswersForTheUsersWriterAlone(
         ContactOrigin contactOrigin,
         ContactOrigin writer,
         bool expected)

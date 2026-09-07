@@ -18,7 +18,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// cannot reach: <see langword="default" />, which holds no claim and names no bound. Nothing here produces it — this
 /// type is returned by <see cref="StoredContentCeiling.TryClaim" /> and read at the call site — and a reader who does
 /// reach one is holding an attempt that was never made rather than a granted or a refused one. It is documented rather
-/// than designed away, exactly as <see cref="MailOwnerId" /> documents its own, because the alternative is an
+/// than designed away, exactly as <see cref="MailUserId" /> documents its own, because the alternative is an
 /// allocation per stored message to describe a state no code path constructs.
 /// </para>
 /// </remarks>

@@ -16,28 +16,28 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal static class AccessAuthorizations
 {
-    /// <summary>Builds the authorization of an admitted caller granted exactly the permissions named, acting for the deployment's owner.</summary>
+    /// <summary>Builds the authorization of an admitted caller granted exactly the permissions named, acting for the deployment's user.</summary>
     /// <param name="grantedPermissions">What the entry that admitted the caller resolved to, which is empty for a caller granted nothing.</param>
     /// <returns>The authorization a use case reached by that caller consults.</returns>
     /// <remarks>
-    /// An ordinary caller acts for somebody, so this states an owner rather than leaving the principal without one: a
+    /// An ordinary caller acts for somebody, so this states a user rather than leaving the principal without one: a
     /// helper that omitted it would arrange the deployment administrator in every test about reading a mailbox, and
     /// those tests would then be proving a refusal instead of what they were written for. A test about a principal
     /// acting for nobody arranges <see cref="ForAdministratorGranted" /> by name.
     /// </remarks>
     internal static AccessAuthorization ForCallerGranted(params MailFathomPermission[] grantedPermissions) =>
-        ForOwnerGranted(SyntheticMailOwner.Deployment, grantedPermissions);
+        ForUserGranted(SyntheticMailUser.Deployment, grantedPermissions);
 
-    /// <summary>Builds the authorization of an admitted caller acting for one named owner.</summary>
-    /// <param name="owner">The owner whose mail the caller was admitted to act on.</param>
+    /// <summary>Builds the authorization of an admitted caller acting for one named user.</summary>
+    /// <param name="user">The user whose mail the caller was admitted to act on.</param>
     /// <param name="grantedPermissions">What the entry that admitted the caller resolved to.</param>
     /// <returns>The authorization a use case reached by that caller consults.</returns>
-    internal static AccessAuthorization ForOwnerGranted(
-        MailOwnerId owner,
+    internal static AccessAuthorization ForUserGranted(
+        MailUserId user,
         params MailFathomPermission[] grantedPermissions) =>
-        ForPrincipal(AuthorizedPrincipal.CallerActingFor(owner, "test-caller", grantedPermissions));
+        ForPrincipal(AuthorizedPrincipal.CallerActingFor(user, "test-caller", grantedPermissions));
 
-    /// <summary>Builds the authorization of the deployment administrator, which is a caller acting for no owner.</summary>
+    /// <summary>Builds the authorization of the deployment administrator, which is a caller acting for no user.</summary>
     /// <param name="grantedPermissions">What the entry that admitted the administrator resolved to.</param>
     /// <returns>The authorization a use case reached by that caller consults.</returns>
     internal static AccessAuthorization ForAdministratorGranted(params MailFathomPermission[] grantedPermissions) =>

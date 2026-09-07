@@ -49,7 +49,7 @@ public sealed record MailAnsweringAuditQuery
 
     /// <summary>Gets the account whose record is read.</summary>
     public MailAccountIdentity Account { get; }
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one user names.</summary>
     public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the earliest completion instant served, inclusive, or <see langword="null" /> when the page reaches back as far as the record does.</summary>
@@ -122,7 +122,7 @@ public sealed record MailAnsweringAuditQuery
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.User.Value.ToString("N", CultureInfo.InvariantCulture),
             account.Id.Value,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
             completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));

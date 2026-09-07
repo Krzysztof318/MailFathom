@@ -56,14 +56,14 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
-using MailFathom.Host.Configuration.OwnerSettings;
-using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
+using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Hosting.Warnings;
@@ -131,7 +131,7 @@ internal static class HostComposition
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
         BoundSettings.AddTo(builder.Services, builder.Configuration);
-        AddServedMailOwners(builder);
+        AddServedMailUsers(builder);
 
         AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -154,18 +154,18 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Refuses the owners this deployment declares before anything is registered against them.</summary>
+    /// <summary>Refuses the users this deployment declares before anything is registered against them.</summary>
     /// <remarks>
     /// Who this deployment serves decides what every other section is read for, so it is judged first among the groups
     /// a start takes before its container exists. Nothing here reaches the database: what a declaration says is judged
     /// on its own, and what the deployment already holds is reconciled against it by the startup gate that can read the
     /// rows.
     /// </remarks>
-    /// <exception cref="OptionsValidationException">Thrown when the declared owners could not be served, which fails startup with every problem in the collection at once.</exception>
-    private static void AddServedMailOwners(WebApplicationBuilder builder)
+    /// <exception cref="OptionsValidationException">Thrown when the declared users could not be served, which fails startup with every problem in the collection at once.</exception>
+    private static void AddServedMailUsers(WebApplicationBuilder builder)
     {
         ComposedSettings.RefuseFirstOf(
-            ComposedSettings.FindOwnerDeclarationRefusals(builder.Configuration, TimeProvider.System));
+            ComposedSettings.FindUserDeclarationRefusals(builder.Configuration, TimeProvider.System));
 
     }
 
@@ -225,32 +225,32 @@ internal static class HostComposition
             provider.GetRequiredService<TransportAuthorizedPrincipalSource>());
         // Whose mail an admitted caller is acting on. A singleton because it is a property of the deployment rather than
         // of a request: a startup gate settles it once, and the two registrations are the same object so nothing can
-        // read an owner the gate has not established.
-        builder.Services.AddSingleton<ServedMailOwners>();
-        builder.Services.AddSingleton<IDeploymentMailOwnerSource>(provider =>
-            provider.GetRequiredService<ServedMailOwners>());
+        // read a user the gate has not established.
+        builder.Services.AddSingleton<ServedMailUsers>();
+        builder.Services.AddSingleton<IDeploymentMailUserSource>(provider =>
+            provider.GetRequiredService<ServedMailUsers>());
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
             builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
         // What a persisted document may carry where a credential belongs, read from the schemes the line above
         // registered. Beside them rather than beside either document, because both are judged by it and neither owns
-        // it — the deployment's settings and every owner's record alike.
+        // it — the deployment's settings and every user's record alike.
         builder.Services.AddSingleton<PersistedSecretMaterial>();
-        builder.Services.AddSingleton<OwnerAccountDocumentBinder>();
-        // Whether this deployment's endpoints could tell one owner's caller from another's, which decides whether it
-        // may serve a second owner at all. A singleton over the startup snapshot, because it is the posture the
+        builder.Services.AddSingleton<UserAccountDocumentBinder>();
+        // Whether this deployment's endpoints could tell one user's caller from another's, which decides whether it
+        // may serve a second user at all. A singleton over the startup snapshot, because it is the posture the
         // authentication schemes were registered from: the startup gate and the provisioning ask the same instance so
         // the two cannot come to different answers about one deployment.
-        builder.Services.AddSingleton<SeveralOwnerAdmission>();
-        // What a configuration source still supplies for one owner, which is what an adoption moves and what a record
+        builder.Services.AddSingleton<SeveralUserAdmission>();
+        // What a configuration source still supplies for one user, which is what an adoption moves and what a record
         // is judged against. A singleton because both halves of it — the file and the published runtime roster — are
         // properties of the deployment rather than of a request.
-        builder.Services.AddSingleton<ConfiguredOwnerSettings>();
+        builder.Services.AddSingleton<ConfiguredUserSettings>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
         // its operations are published under, and that service is scoped to whatever admitted the caller.
-        builder.Services.AddScoped<OwnerRosterAdministration>();
-        builder.Services.AddScoped<OwnerRecordAdministration>();
+        builder.Services.AddScoped<UserRosterAdministration>();
+        builder.Services.AddScoped<UserRecordAdministration>();
         builder.Services.AddScoped<OwnDisplayName>();
         builder.Services.AddScoped<StoredSecretAdministration>();
     }
@@ -258,7 +258,7 @@ internal static class HostComposition
     /// <summary>Registers the scanners this deployment provides, and the postures that decide whose mail meets one.</summary>
     /// <remarks>
     /// <para>
-    /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because an owner's
+    /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because a user's
     /// own record may switch a scanner on for their own mail and no roster exists while services are being registered.
     /// Providing is not the same as costing anything: a detector registered here is constructed on first resolution,
     /// and nothing resolves one until a posture runs it, so a deployment nobody asked for scanning on still compiles no
@@ -268,7 +268,7 @@ internal static class HostComposition
     /// The plan registered here is the provisioned one — every scanner this deployment stands behind, with the
     /// categories, suppressions, and bounds its own section names — because the detectors and the readiness probe are
     /// built from it and each must be able to find everything the deployment configured. Which of them run over one
-    /// owner's mail is that owner's posture, which composes a plan of its own naming a subset of the same scanners.
+    /// user's mail is that user's posture, which composes a plan of its own naming a subset of the same scanners.
     /// </para>
     /// </remarks>
     private static void AddSensitiveContentScanning(WebApplicationBuilder builder)
@@ -286,7 +286,7 @@ internal static class HostComposition
         builder.Services.AddSensitiveContentCatalogs();
 
         // Unconditional, because the secrets scanner runs inside this process and needs nothing deployed beside it: any
-        // owner may switch it on for their own mail, so every deployment provides it.
+        // user may switch it on for their own mail, so every deployment provides it.
         builder.Services.AddSecretContentScanning();
 
         if (declaredSensitiveContent.ProvidesPersonalDataScanner)
@@ -317,22 +317,22 @@ internal static class HostComposition
             ?? throw new InvalidOperationException(
                 "The provisioned sensitive-content plan is empty, and every deployment provides at least the secrets scanner."));
 
-        // One budget for the process rather than one per posture, which is the whole of what makes several owners'
-        // scanning affordable: an owner switching a scanner on adds work to the same queue rather than a queue of their
-        // own, so the bound an operator set is the bound the machine keeps however many owners it serves.
+        // One budget for the process rather than one per posture, which is the whole of what makes several users'
+        // scanning affordable: a user switching a scanner on adds work to the same queue rather than a queue of their
+        // own, so the bound an operator set is the bound the machine keeps however many users it serves.
         builder.Services.AddSingleton(provider => new SensitiveContentScanConcurrency(
             provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value.MaximumConcurrentScans));
 
         // The detectors arrive behind a delegate rather than resolved, so a deployment where nobody is scanned for never
         // constructs one. Everything that scans reads this port, and nothing reads the deployment's own section for a
         // posture: composing the two answers is this type's and no caller's.
-        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new OwnerSensitiveContentPostures(
+        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new UserSensitiveContentPostures(
             provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
             provider.GetServices<ISensitiveContentCatalog>(),
             provider.GetServices<ISensitiveContentScanner>,
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SensitiveContentScanConcurrency>(),
-            provider.GetRequiredService<ServedMailOwners>()));
+            provider.GetRequiredService<ServedMailUsers>()));
     }
 
     /// <summary>Registers spam classification, and reports whether a scanner was declared behind it.</summary>
@@ -397,7 +397,7 @@ internal static class HostComposition
         // itself, because what it asks before it reads is which principal reached it, and that is a fact about one request.
         builder.Services.AddScoped<MailRuleSetReader>();
         // The rule section validates itself on reload instead of letting the options framework drop an invalid candidate in
-        // silence. That default is the wrong behavior here above everywhere else: an owner who mistypes a fact name would
+        // silence. That default is the wrong behavior here above everywhere else: a user who mistypes a fact name would
         // get an instance that goes on acting on mail under the previous rules while their file says otherwise. A refused
         // candidate is logged and the last proven rule set stays in effect.
         // The accounts a scope may name are read from the published synchronization snapshot rather than captured here, so
@@ -459,7 +459,7 @@ internal static class HostComposition
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<DataEncryptionOptions>>>()));
         builder.Services.AddSingleton(provider => new MailSynchronizationSettingsSnapshot(
             provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
-            provider.GetRequiredService<ServedMailOwners>()));
+            provider.GetRequiredService<ServedMailUsers>()));
         builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<MailSynchronizationSettingsSnapshot>());
         builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
         builder.Services.AddSingleton<ISettingsSnapshot<DataEncryptionOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
@@ -483,12 +483,12 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
         // Composed here rather than taken off the snapshot's reader set, because an account is described by whose it is
-        // as well as by what an operator configured, and the owner is established by a startup gate rather than bound
+        // as well as by what an operator configured, and the user is established by a startup gate rather than bound
         // from a file. The snapshot still decides which accounts are served; this adds the half configuration cannot
         // state.
         builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<ServedMailOwners>()));
+            provider.GetRequiredService<ServedMailUsers>()));
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -544,13 +544,13 @@ internal static class HostComposition
             provider.GetRequiredService<MailSynchronizationOptions>().ToSynchronizationOptions());
         // A singleton, because the ceilings are one answer for the one content store every account writes into. Reading
         // them per scope would give each concurrent folder run ceilings of its own, which is the sum they exist to
-        // bound — and the per-owner level would stop bounding anything at all, since two runs of one owner would each
+        // bound — and the per-user level would stop bounding anything at all, since two runs of one user would each
         // hold a level the other could not see.
         builder.Services.AddSingleton(provider =>
         {
             var settings = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current;
 
-            return new StoredContentCeiling(settings.MaxStoredContentBytes, settings.MaxStoredContentBytesPerOwner);
+            return new StoredContentCeiling(settings.MaxStoredContentBytes, settings.MaxStoredContentBytesPerUser);
         });
         // A singleton, because what it bounds is the memory of the whole process rather than of any one run: a budget read
         // per scope would give every concurrent work unit a budget of its own, which is the sum this exists to bound. That
@@ -664,7 +664,7 @@ internal static class HostComposition
         // the outbox, where it becomes an ordinary send.
         builder.Services.AddScoped<IJobHandler, HeldSendDispatchHandler>();
         builder.Services.AddScoped<IJobHandler, RecurringSendOccurrenceHandler>();
-        // The second source of recurring dispatches, beside the rules': the repetitions an owner declared, read from
+        // The second source of recurring dispatches, beside the rules': the repetitions a user declared, read from
         // the database rather than from configuration because that is where somebody makes and stops one.
         builder.Services.AddScoped<IScheduledJobSource, RecurringSendScheduleSource>();
         // Registered whatever backend the deployment stores content in, because the queue resolves a handler by type
@@ -689,7 +689,7 @@ internal static class HostComposition
         [
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
-            HostStartupGate.ServedMailOwners,
+            HostStartupGate.ServedMailUsers,
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -757,7 +757,7 @@ internal static class HostComposition
 
             return EmbeddingSpendBudget.Create(
                 settings.MaxInputCharactersPerPeriod,
-                settings.MaxInputCharactersPerPeriodPerOwner,
+                settings.MaxInputCharactersPerPeriodPerUser,
                 settings.SpendPeriod);
         });
         // A singleton for the reason the other ceilings are: what one attachment may cost to parse is an answer about
@@ -1058,10 +1058,10 @@ internal static class HostComposition
         // after the infrastructure that registers the inspector it resolves.
         builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
 
-        // Behind the schema gate, because the owner records live in a table that migration creates, and ahead of
-        // everything that serves a request, because a caller is admitted to act for an owner and there is nothing to
+        // Behind the schema gate, because the user records live in a table that migration creates, and ahead of
+        // everything that serves a request, because a caller is admitted to act for a user and there is nothing to
         // admit one for until this has run.
-        builder.Services.AddHostedService<ServedMailOwnersStartupGate>();
+        builder.Services.AddHostedService<ServedMailUsersStartupGate>();
 
         // Ahead of the workers for a different reason from the gate above, because the spam scanner does not fail
         // closed: a deployment whose daemon is absent would classify every message from its headers alone and look
@@ -1076,7 +1076,7 @@ internal static class HostComposition
         // reports, so what an operator sees at start is the state the instance came up in. Registered whatever this
         // deployment's own section says, because whether anything can be stale follows the postures the roster composes
         // and the roster is settled by the gate above rather than known here; the report asks that question itself and
-        // says nothing where no owner's mail is scanned.
+        // says nothing where no user's mail is scanned.
         builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
 
         builder.Services.AddHostedService<MailSynchronizationCoordinator>();

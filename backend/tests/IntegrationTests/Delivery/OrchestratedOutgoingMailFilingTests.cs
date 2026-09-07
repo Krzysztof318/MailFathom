@@ -115,7 +115,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
             Assert.Single(settledAgain).Outcome);
 
         // The independent witness: one copy of the message in the folder, read over a connection nothing under test
-        // owns, and read as the owner's own mail client would show it — sent mail is not unread mail.
+        // owns, and read as the user's own mail client would show it — sent mail is not unread mail.
         var filed = Assert.Single(
             await mailbox.ReadAsync(SyntheticMailAccount.OutgoingCopyFolderPath, cancellationToken),
             message => message.Subject == subject);

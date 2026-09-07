@@ -15,11 +15,11 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Security.Basic;
 
-/// <summary>Authenticates a request against the username-and-password credentials this deployment holds for its owners.</summary>
+/// <summary>Authenticates a request against the username-and-password credentials this deployment holds for its users.</summary>
 /// <remarks>
 /// <para>
 /// The handler is the adapter and nothing more: it lifts the header out of the request, names the source the attempt
-/// came from, hands both to <see cref="OwnerPasswordAuthenticator" />, and turns the answer into the framework's own
+/// came from, hands both to <see cref="UserPasswordAuthenticator" />, and turns the answer into the framework's own
 /// vocabulary. Every rule worth asserting — what a readable credential is, what a username folds to, how a password is
 /// compared, how often one may be tried, and what a refusal is allowed to distinguish — lives below this boundary,
 /// where a test reaches it without a request pipeline.
@@ -27,8 +27,8 @@ namespace MailFathom.Host.Security.Basic;
 /// <para>
 /// One handler serves every surface, because the only thing that differs between two of them is the attempt bucket,
 /// which the scheme's own options carry. The grant is not among them: it arrives on the credential the password
-/// resolved, so nothing here decides what an admitted owner may do. A credential is the deployment's rather than a
-/// surface's, so the same owner signs in to the client and to the MCP endpoint with one password — and spends a
+/// resolved, so nothing here decides what an admitted user may do. A credential is the deployment's rather than a
+/// surface's, so the same user signs in to the client and to the MCP endpoint with one password — and spends a
 /// separate bucket of attempts on each, which is what the surface in the partition key buys.
 /// </para>
 /// <para>
@@ -52,7 +52,7 @@ namespace MailFathom.Host.Security.Basic;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
 internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAuthenticationSchemeOptions>
 {
-    private readonly OwnerPasswordAuthenticator authenticator;
+    private readonly UserPasswordAuthenticator authenticator;
     private readonly IReadOnlyList<IPAddress> declaredProxyAddresses;
     private readonly IReadOnlyList<IPNetwork> declaredProxyNetworks;
 
@@ -67,7 +67,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
         IOptionsMonitor<BasicAuthenticationSchemeOptions> schemeOptions,
         ILoggerFactory loggerFactory,
         UrlEncoder urlEncoder,
-        OwnerPasswordAuthenticator authenticator,
+        UserPasswordAuthenticator authenticator,
         IOptions<ReverseProxyOptions> reverseProxySettings)
         : base(schemeOptions, loggerFactory, urlEncoder)
     {
@@ -113,9 +113,9 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             this.Options.Surface.BasicSchemeName,
             admitted.Permissions);
 
-        // The owner is what separates this method from every other one: the credential named a person, so the principal
+        // The user is what separates this method from every other one: the credential named a person, so the principal
         // carries them rather than leaving the surface to answer for whose mail the request acts on.
-        identity.AddClaim(TransportCallerOwner.ClaimFor(admitted.Owner));
+        identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
@@ -126,8 +126,8 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// The peer is the client except when the peer is itself a proxy this deployment declared. Every request through
     /// such a proxy arrives from its address — <c>X-Forwarded-For</c> is deliberately never read, so the peer this
     /// process observes stays the one that opened the connection — and a per-source partition on it would be one
-    /// partition for the whole world, which a single guesser could empty and so close password sign-in for every owner
-    /// at once. The username bound is what holds there, and it holds per owner rather than across all of them.
+    /// partition for the whole world, which a single guesser could empty and so close password sign-in for every user
+    /// at once. The username bound is what holds there, and it holds per user rather than across all of them.
     /// <para>
     /// The question is asked of the peer rather than of the deployment, because <c>ReverseProxy</c> is one section for
     /// the whole process while a listener is not: a deployment declaring a proxy for one surface may serve another
@@ -141,7 +141,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// address families. The forwarded-headers middleware maps the same peer down before it reads the same section, so
     /// reading it any other way here would leave the proxy's own scheme believed while the proxy went unrecognized as
     /// one — every request in the deployment sharing that one partition, and ten wrong passwords a minute from anybody
-    /// behind it closing password sign-in for every owner. Mapping is what keeps one configured list read one way.
+    /// behind it closing password sign-in for every user. Mapping is what keeps one configured list read one way.
     /// </para>
     /// </remarks>
     private string? SourceToBoundBy()

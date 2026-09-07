@@ -16,7 +16,7 @@ namespace MailFathom.Application.Mail.Delivery.Addressing;
 /// send has to understand.
 /// </para>
 /// <para>
-/// A contact is named either by the identity the book gave it or by the name the owner recorded, and exactly one of the
+/// A contact is named either by the identity the book gave it or by the name the user recorded, and exactly one of the
 /// two. The name is the whole name rather than part of one, and it addresses a message only where it belongs to one
 /// person: a recipient chosen out of several by a ranking is a message delivered to somebody nobody named.
 /// </para>
@@ -52,7 +52,7 @@ public sealed record NamedRecipient
 
     /// <summary>Gets the name to write beside a supplied address, or <see langword="null" /> to write the address alone.</summary>
     /// <remarks>
-    /// It belongs to an address the author wrote down. A contact carries the name the owner recorded for that person, so
+    /// It belongs to an address the author wrote down. A contact carries the name the user recorded for that person, so
     /// resolution supplies it and nothing here overrides it.
     /// </remarks>
     public string? DisplayName { get; }
@@ -60,7 +60,7 @@ public sealed record NamedRecipient
     /// <summary>Gets the contact named by identity, or <see langword="null" /> when the recipient was named another way.</summary>
     public ContactId? Contact { get; }
 
-    /// <summary>Gets the contact named by the owner's own name for them, or <see langword="null" /> when the recipient was named another way.</summary>
+    /// <summary>Gets the contact named by the user's own name for them, or <see langword="null" /> when the recipient was named another way.</summary>
     public ContactDisplayName? ContactName { get; }
 
     /// <summary>Gets which of the contact's addresses to use, or <see langword="null" /> to use the one they prefer.</summary>
@@ -109,9 +109,9 @@ public sealed record NamedRecipient
             contactAddress);
     }
 
-    /// <summary>Names a recipient by the name the owner recorded for them.</summary>
+    /// <summary>Names a recipient by the name the user recorded for them.</summary>
     /// <param name="role">The header to name them in.</param>
-    /// <param name="contactName">The whole name the owner wrote down.</param>
+    /// <param name="contactName">The whole name the user wrote down.</param>
     /// <param name="contactAddress">Which of their addresses to use, or <see langword="null" /> for the one they prefer.</param>
     /// <returns>The recipient the author named.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="contactAddress" /> is supplied blank.</exception>

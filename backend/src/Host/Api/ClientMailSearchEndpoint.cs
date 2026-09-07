@@ -16,7 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves one page of the owner's mail ranked against what they are looking for, by words and by meaning at once.</summary>
+/// <summary>Serves one page of the user's mail ranked against what they are looking for, by words and by meaning at once.</summary>
 /// <remarks>
 /// <para>
 /// It is one route rather than two because finding a message is one question. A person looking for mail does not know
@@ -67,9 +67,9 @@ internal static class ClientMailSearchEndpoint
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
-    /// <summary>Searches the acting owner's mail, or reports what was wrong with the request.</summary>
+    /// <summary>Searches the acting user's mail, or reports what was wrong with the request.</summary>
     /// <param name="query">The text to search for, which every search carries.</param>
-    /// <param name="account">The account to search, by its identifier or its display name, or <see langword="null" /> for every account the owner owns.</param>
+    /// <param name="account">The account to search, by its identifier or its display name, or <see langword="null" /> for every account the user owns.</param>
     /// <param name="folder">The folder to search, by its alias or as <c>role:Inbox</c>, or <see langword="null" /> for every folder.</param>
     /// <param name="includeJunk">Whether the junk folder takes part, which it does not unless the request asks.</param>
     /// <param name="sender">The address the sender must carry, or <see langword="null" /> for any sender.</param>
@@ -151,7 +151,7 @@ internal static class ClientMailSearchEndpoint
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
         {
@@ -175,7 +175,7 @@ internal static class ClientMailSearchEndpoint
     /// <summary>Reads the two names a request narrows the search with, refusing text no name of this system is spelled with.</summary>
     /// <remarks>
     /// One account and one folder rather than lists of them, because this route serves a screen searching where somebody
-    /// is looking. A request that names neither searches every folder of every account the owner owns, which is what a
+    /// is looking. A request that names neither searches every folder of every account the user owns, which is what a
     /// search box with no scope chosen means.
     /// </remarks>
     private static bool TryReadScope(

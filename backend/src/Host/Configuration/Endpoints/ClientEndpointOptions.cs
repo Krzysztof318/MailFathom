@@ -99,7 +99,7 @@ internal sealed class ClientEndpointOptions
     /// resource a token is issued for is what separates signing in to the mail client from reading the same mailbox as
     /// an agent.
     /// </remarks>
-    public IList<OwnerFacingAuthenticationOptions> Authentication { get; } = [];
+    public IList<UserFacingAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets or sets whether this deployment also serves the client's bundle from this endpoint's listeners.</summary>
     /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the bundle carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
@@ -132,17 +132,17 @@ internal sealed class ClientEndpointOptions
     public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
 
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.Accepts(OwnerCredentialMethod.ApiKey);
+    public bool AllowsApiKey => this.Accepts(UserCredentialMethod.ApiKey);
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.Accepts(OwnerCredentialMethod.OAuthSubject);
+    public bool AllowsOAuth => this.Accepts(UserCredentialMethod.OAuthSubject);
 
     /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
-    public bool AllowsClientAssertion => this.Accepts(OwnerCredentialMethod.PublicKey);
+    public bool AllowsClientAssertion => this.Accepts(UserCredentialMethod.PublicKey);
 
-    /// <summary>Gets whether a client may authenticate with an owner's own username and password.</summary>
-    /// <remarks>What it reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
-    public bool AllowsBasic => this.Accepts(OwnerCredentialMethod.Password);
+    /// <summary>Gets whether a client may authenticate with a user's own username and password.</summary>
+    /// <remarks>What it reports is that the endpoint accepts the method; which users can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
+    public bool AllowsBasic => this.Accepts(UserCredentialMethod.Password);
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Authentication.Count > 0;
@@ -179,7 +179,7 @@ internal sealed class ClientEndpointOptions
         // Read before the strict bind rather than after it. A retired key is a key this type no longer declares, so
         // binding first would raise the framework's own message about an unknown property — which says nothing about the
         // credential that replaced the setting, and that is the whole of what an operator upgrading has to be told.
-        var retiredSettings = OwnerFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
+        var retiredSettings = UserFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
 
         if (retiredSettings.Count > 0)
         {
@@ -207,7 +207,7 @@ internal sealed class ClientEndpointOptions
 
         // Each entry's grant is read the same way and for the same reason, and every endpoint asks it through one
         // method so the absent-versus-emptied reading exists once.
-        OwnerFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+        UserFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }
@@ -233,16 +233,16 @@ internal sealed class ClientEndpointOptions
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
     /// <remarks>A method rather than a property, because it reads the same objects the list already holds and a second path to them would leave which one a refusal names decided by the order reflection reports them in.</remarks>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        OwnerFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+        UserFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
 
-    /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
+    /// <summary>Reports the entry that accepts a user's username and password, where the endpoint accepts one.</summary>
     /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
     /// <remarks>A method rather than a property, for the reason <see cref="OAuthMethods" /> is one.</remarks>
-    public OwnerFacingAuthenticationOptions? BasicMethod() =>
-        OwnerFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+    public UserFacingAuthenticationOptions? BasicMethod() =>
+        UserFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
 
-    private bool Accepts(OwnerCredentialMethod method) =>
-        OwnerFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
+    private bool Accepts(UserCredentialMethod method) =>
+        UserFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -280,7 +280,7 @@ internal sealed class ClientEndpointOptions
                 : [];
         }
 
-        var authenticationErrors = OwnerFacingAuthenticationConfiguration.FindConfigurationErrors(
+        var authenticationErrors = UserFacingAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
             [.. this.Authentication]);
 
@@ -354,7 +354,7 @@ internal sealed class ClientEndpointOptions
                 continue;
             }
 
-            yield return $"{OwnerFacingAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(OwnerFacingAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{UserFacingAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(UserFacingAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 

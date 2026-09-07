@@ -18,7 +18,7 @@ public enum DraftDisposition
     /// <summary>The run composed it and nothing has been written down; it exists only in this plan.</summary>
     Composed = 0,
 
-    /// <summary>It was written into the owner's drafts, where they can find it without this plan.</summary>
+    /// <summary>It was written into the user's drafts, where they can find it without this plan.</summary>
     Saved = 1,
 
     /// <summary>It is waiting in the outbox for whatever governs sending to act on it.</summary>

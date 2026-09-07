@@ -30,7 +30,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     private const string Injection = "Quarterly report\r\nBcc: elsewhere@example.test";
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
 
     private static readonly DateTimeOffset ComposedAt = new(2026, 8, 17, 9, 30, 0, TimeSpan.Zero);
 

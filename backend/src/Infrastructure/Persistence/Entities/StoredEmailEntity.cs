@@ -40,13 +40,13 @@ internal sealed class StoredEmailEntity
     /// </summary>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account this message belongs to.</summary>
+    /// <summary>Gets or sets the user whose account this message belongs to.</summary>
     /// <remarks>
     /// Carried beside the account rather than reached through it, because every read of this table narrows on the
-    /// owner first and an index cannot lead with a column that lives behind a join. It is written once with the
-    /// row, from the account the write had already resolved, and nothing repoints an account at another owner.
+    /// user first and an index cannot lead with a column that lives behind a join. It is written once with the
+    /// row, from the account the write had already resolved, and nothing repoints an account at another user.
     /// </remarks>
-    public required Guid OwnerId { get; set; }
+    public required Guid UserId { get; set; }
 
     public long MailFolderId { get; set; }
 
@@ -347,7 +347,7 @@ internal sealed class StoredEmailEntity
     /// Nothing but a change MailFathom itself authored sets it: a delete, or a relocation into a folder MailFathom does
     /// not mirror, which is the same loss of the occurrence and is answered by the same setting. A disappearance somebody
     /// else caused is answered by <see cref="RemotelyDeletedEmailDisposition" />, which has no value that keeps the mail
-    /// readable: MailFathom did not cause that removal and cannot say the owner meant to keep a local copy of it. The
+    /// readable: MailFathom did not cause that removal and cannot say the user meant to keep a local copy of it. The
     /// name says "authored delete" because that is the setting's name and the case it was written for; a relocation out
     /// of the mirrored mailbox joined it rather than earning a column of its own.
     /// </para>
@@ -359,7 +359,7 @@ internal sealed class StoredEmailEntity
     /// <para>
     /// A copy MailFathom appends to the sent or outbox folder comes back through synchronization as ordinary new mail,
     /// and this is what tells it apart afterwards. It is the join everything reacting to newly synchronized mail filters
-    /// on: a rule conditioned on arriving mail must not fire on the owner's own outgoing message the moment its copy is
+    /// on: a rule conditioned on arriving mail must not fire on the user's own outgoing message the moment its copy is
     /// discovered.
     /// </para>
     /// <para>
@@ -399,7 +399,7 @@ internal sealed class StoredEmailEntity
     /// <para>
     /// The column is the arrival queue. A pass reads the account's rows carrying no value, in identity order, and
     /// writing one is what takes a row out of the queue — so a rule applies to mail arriving from now on rather than to
-    /// a mailbox's whole history, and running the rules over mail already stored is something an owner asks for.
+    /// a mailbox's whole history, and running the rules over mail already stored is something a user asks for.
     /// </para>
     /// <para>
     /// The migration that adds it stamps every row already stored, which is the same statement made about the mail that

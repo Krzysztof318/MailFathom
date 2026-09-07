@@ -27,7 +27,7 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// losing the message.
 /// </para>
 /// <para>
-/// The grant is its own, and is not the one that writes flags. A flag misdescribes mail the owner can still find; a
+/// The grant is its own, and is not the one that writes flags. A flag misdescribes mail the user can still find; a
 /// move puts the mail somewhere else, which is why <see cref="MailFathomPermission.MailMove" /> is a name a deployment
 /// grants separately.
 /// </para>
@@ -133,7 +133,7 @@ public sealed class MailRelocationRecorder
             return AuthoredMailRelocationResult.NotRecorded(MailRelocationOutcome.DestinationNotFound);
         }
 
-        var account = MailAccountIdentity.Create(target.Owner, target.Occurrence.AccountId);
+        var account = MailAccountIdentity.Create(target.User, target.Occurrence.AccountId);
         var reference = MailFolderReference.ToAlias(destination);
         var resolved = await this.destinations.ResolveAsync(account, [reference], cancellationToken);
 
@@ -164,7 +164,7 @@ public sealed class MailRelocationRecorder
 
         var request = MailboxMutationRequest.Relocate(
             storedEmailId,
-            target.Owner,
+            target.User,
             target.Occurrence,
             requester,
             folder.Path,

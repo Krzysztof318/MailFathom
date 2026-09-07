@@ -46,7 +46,7 @@ Google project, that obligation is yours.
 
 | | `refresh_token` | `client_credentials` |
 | --- | --- | --- |
-| Acts for | one mailbox owner | the registered application |
+| Acts for | one mailbox user | the registered application |
 | Needs a person to sign in | once, to produce the refresh token | never |
 | Where it applies | Google, and Microsoft delegated access | Exchange Online app-only access |
 
@@ -190,7 +190,7 @@ Four things about that run are worth stating, because each removes a way the man
 - **The token reaches one place.** It is not printed, not redirected, not written to a file, and not repeated in the
   line that confirms the outcome — so it never enters your scrollback, your shell history, or a session log.
 - **The account is checked against configuration.** A deployment that configures no account by that name refuses the
-  grant and names it, rather than storing a credential for a mailbox owner that nothing would ever read.
+  grant and names it, rather than storing a credential for a mailbox user that nothing would ever read.
 - **Storing replaces.** Authorizing the same account again replaces what was stored, which is what re-authorizing after
   a revocation is. Nothing accumulates.
 - **Being signed in is checked first.** The command resolves the deployment before it prompts or opens a browser, so
@@ -301,14 +301,14 @@ $ mfctl mailbox authorize --provider google --client-id <client-id> --account wo
 ```
 
 To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client. A stored
-token is held per owner and account rather than per account identifier — an identifier names one mailbox within the
-owner who declared it — so the statement names both, and reading the owner out of `settings_accounts` refuses rather
+token is held per user and account rather than per account identifier — an identifier names one mailbox within the
+user who declared it — so the statement names both, and reading the user out of `settings_accounts` refuses rather
 than guesses if a deployment ever holds more than one:
 
 ```sql
 DELETE FROM mailbox_refresh_tokens
 WHERE "MailboxAccountId" = 'workspace'
-  AND "OwnerId" = (SELECT "Id" FROM settings_accounts);
+  AND "UserId" = (SELECT "Id" FROM settings_accounts);
 ```
 
 The next token request then reads the reference again, and stores whatever the authorization server rotates to next.
@@ -330,7 +330,7 @@ the account eventually answers `invalid_grant`, and the repair is to authorize t
 | `answered … rather than storing the token` | The endpoint was reached and answered with neither an acceptance nor a refusal it explained. The token was not stored; nothing about the account changed. A `500` is most often a deployment with no key ring, since that is what a stored token seals under — configure `DataEncryption`, or provision the token at the configured reference instead. |
 | `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |
 | `The data-encryption key ring configures no key` | A stored token names a key the ring no longer holds. Restore that key entry; a stored value cannot be opened without it. |
-| A token request failing with a cryptographic error, and no `invalid_grant` | The stored token does not open. A sealed token is bound to the account it was stored for — the owner and the identifier together — so this is what a row copied between accounts, restored from another deployment, or altered in place meets, and it is also what a token sealed before the release that keyed the account by its owner meets. Nothing falls back to the configured reference. Authorize the account again with `--account`, which replaces what is stored. |
+| A token request failing with a cryptographic error, and no `invalid_grant` | The stored token does not open. A sealed token is bound to the account it was stored for — the user and the identifier together — so this is what a row copied between accounts, restored from another deployment, or altered in place meets, and it is also what a token sealed before the release that keyed the account by its user meets. Nothing falls back to the configured reference. Authorize the account again with `--account`, which replaces what is stored. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |
 | `non_json_response_http_…` | The authorization server's token endpoint, or its device authorization endpoint on `--mode device`, answered something that is not the response the flow expects, and the number is the HTTP status it answered with. A proxy, a login page, or an error page in front of the server looks like this, and so does an answer naming a character set this platform does not carry. Check that the endpoint the run was using came from the provider's own discovery document rather than being typed. |
 | `state_mismatch` | The redirect came from a different authorization run. Start the command again and use one browser tab. |

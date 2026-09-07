@@ -20,7 +20,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Kind = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Body = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
@@ -36,8 +36,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_notifications", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_notifications_settings_accounts_OwnerId",
-                        column: x => x.OwnerId,
+                        name: "FK_notifications_settings_accounts_UserId",
+                        column: x => x.UserId,
                         principalTable: "settings_accounts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -50,14 +50,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_notifications_owner_occurred",
+                name: "ix_notifications_user_occurred",
                 table: "notifications",
-                columns: new[] { "OwnerId", "OccurredAt", "Id" });
+                columns: new[] { "UserId", "OccurredAt", "Id" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_notifications_owner_unread_condition",
+                name: "ix_notifications_user_unread_condition",
                 table: "notifications",
-                columns: new[] { "OwnerId", "DeduplicationKey" },
+                columns: new[] { "UserId", "DeduplicationKey" },
                 unique: true,
                 filter: "NOT \"IsRead\"");
 

@@ -29,7 +29,7 @@ public sealed class InMemoryMailDraftStoreTests
     private static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly IPersistenceSession Session = new IgnoredPersistenceSession();
 
@@ -347,7 +347,7 @@ public sealed class InMemoryMailDraftStoreTests
         var mine = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")));
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")));
 
         // Act
         var outstanding = await store.ReadOutstandingAsync(
@@ -387,20 +387,20 @@ public sealed class InMemoryMailDraftStoreTests
         Assert.Equal(MailDraftStage.Composed, recorded.Stage);
     }
 
-    /// <summary>A reading for one owner answers with that owner's drafts, newest first, and with nobody else's.</summary>
+    /// <summary>A reading for one user answers with that user's drafts, newest first, and with nobody else's.</summary>
     [Fact]
-    public async Task ReadForOwnerAsync_DraftsOfSeveralOwners_AnswersTheOnesTheOwnerAskedForHolds()
+    public async Task ReadForUserAsync_DraftsOfSeveralUsers_AnswersTheOnesTheUserAskedForHolds()
     {
         // Arrange
         var store = new InMemoryMailDraftStore();
         var mine = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailOwner.Another, MailAccountId.Create("work")));
+            MailAccountIdentity.Create(SyntheticMailUser.Another, MailAccountId.Create("work")));
 
         // Act
-        var held = await store.ReadForOwnerAsync(
-            SyntheticMailOwner.Deployment,
+        var held = await store.ReadForUserAsync(
+            SyntheticMailUser.Deployment,
             account: null,
             maxCount: 10,
             TestContext.Current.CancellationToken);
@@ -411,18 +411,18 @@ public sealed class InMemoryMailDraftStoreTests
 
     /// <summary>A reading narrowed to one account answers with that account's drafts alone.</summary>
     [Fact]
-    public async Task ReadForOwnerAsync_NarrowedToOneAccount_AnswersWithThatAccountsDraftsAlone()
+    public async Task ReadForUserAsync_NarrowedToOneAccount_AnswersWithThatAccountsDraftsAlone()
     {
         // Arrange
         var store = new InMemoryMailDraftStore();
         var atWork = await OpenAsync(store);
         await OpenAsync(
             store,
-            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")));
+            MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")));
 
         // Act
-        var held = await store.ReadForOwnerAsync(
-            SyntheticMailOwner.Deployment,
+        var held = await store.ReadForUserAsync(
+            SyntheticMailUser.Deployment,
             Account.Id,
             maxCount: 10,
             TestContext.Current.CancellationToken);

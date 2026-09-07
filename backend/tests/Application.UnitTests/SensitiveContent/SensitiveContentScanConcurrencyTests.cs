@@ -7,7 +7,7 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.SensitiveContent;
 
-/// <summary>The one budget of scans a process runs at once, whichever owner's mail each of them is reading.</summary>
+/// <summary>The one budget of scans a process runs at once, whichever user's mail each of them is reading.</summary>
 public sealed class SensitiveContentScanConcurrencyTests
 {
     /// <summary>A bound of one is what makes the budget observable: the second acquisition waits for the first to release.</summary>

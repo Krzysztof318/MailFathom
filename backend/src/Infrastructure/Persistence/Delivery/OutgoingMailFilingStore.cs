@@ -71,8 +71,8 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             MailboxAccountId = record.MailboxAccountId,
 
             // Both halves copied off the record this copy is filed for, which is the row the caller's own resolution
-            // wrote. A filing cannot belong to an owner the message it files does not.
-            OwnerId = record.OwnerId,
+            // wrote. A filing cannot belong to a user the message it files does not.
+            UserId = record.UserId,
             FolderAlias = destination.Alias.Value,
             FolderPath = destination.RemotePath.Value,
             Stage = OutgoingMailFilingStage.Issued,
@@ -156,7 +156,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             return [];
         }
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var folderValue = folderPath.Value;
         var uidValidityValue = uidValidity.Value;
@@ -168,7 +168,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
 
         var entities = await readContext.OutgoingEmailFilings
             .AsNoTracking()
-            .Where(candidate => candidate.OwnerId == ownerValue
+            .Where(candidate => candidate.UserId == userValue
                 && candidate.MailboxAccountId == accountValue
                 && candidate.FolderPath == folderValue
                 && candidate.Stage == OutgoingMailFilingStage.Confirmed

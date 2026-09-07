@@ -12,13 +12,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves the contact book: the five acts an owner performs on it, and the three ways it is read.</summary>
+/// <summary>Serves the contact book: the five acts a user performs on it, and the three ways it is read.</summary>
 /// <remarks>
 /// <para>
-/// Every write here acts under <see cref="ContactOrigin.Asserted" />, because this surface is the owner's own: what
+/// Every write here acts under <see cref="ContactOrigin.Asserted" />, because this surface is the user's own: what
 /// somebody types into <c>mfctl</c> is a person they wrote down. That is what makes amending a collected contact answer
 /// <c>OriginRefusesWriter</c> rather than silently taking a record collection owns — promoting it is the act that makes
-/// it the owner's, and it is a command of its own.
+/// it the user's, and it is a command of its own.
 /// </para>
 /// <para>
 /// They are here rather than on the MCP surface because the book is the most concentrated personal data this system
@@ -68,7 +68,7 @@ internal static class ContactEndpoints
     /// <summary>The route the whole collected half of the book is erased at, relative to the administrative prefix.</summary>
     /// <remarks>
     /// A literal segment where the single-contact route takes an identifier, which routing prefers over a parameter, so
-    /// the two cannot be confused. It is also why the segment names the origin rather than an action: what the owner is
+    /// the two cannot be confused. It is also why the segment names the origin rather than an action: what the user is
     /// disposing of is the half of the book they did not write.
     /// </remarks>
     internal const string CollectedContactsRoute = "/contacts/collected";
@@ -87,8 +87,8 @@ internal static class ContactEndpoints
 
     /// <summary>The origin every write from this surface acts under.</summary>
     /// <remarks>
-    /// Named once rather than repeated per handler, because it is one decision about what this endpoint is: the owner's
-    /// own surface, whose writes are people the owner wrote down.
+    /// Named once rather than repeated per handler, because it is one decision about what this endpoint is: the user's
+    /// own surface, whose writes are people the user wrote down.
     /// </remarks>
     private const ContactOrigin AdministrativeWriter = ContactOrigin.Asserted;
 
@@ -311,7 +311,7 @@ internal static class ContactEndpoints
         return TypedResults.Ok(ContactWriteResponse.For(amended));
     }
 
-    /// <summary>Promotes a collected contact to one the owner has taken responsibility for.</summary>
+    /// <summary>Promotes a collected contact to one the user has taken responsibility for.</summary>
     /// <param name="contactId">The contact to promote.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
@@ -368,13 +368,13 @@ internal static class ContactEndpoints
             erasure.AddressesErased));
     }
 
-    /// <summary>Erases every contact this deployment collected, leaving the ones the owner asserted where they are.</summary>
+    /// <summary>Erases every contact this deployment collected, leaving the ones the user asserted where they are.</summary>
     /// <param name="book">Performs the erasure.</param>
     /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
     /// <returns><c>200</c> with what was removed, including a book that had collected nobody.</returns>
     /// <remarks>
-    /// The answer to an owner who changed their mind about collection. Everything collection produced is a contact of
-    /// its own origin, so taking that origin out is taking out the whole of what it built and nothing of what the owner
+    /// The answer to a user who changed their mind about collection. Everything collection produced is a contact of
+    /// its own origin, so taking that origin out is taking out the whole of what it built and nothing of what the user
     /// entered. It is behind the erasing grant rather than the operating one, because what it removes cannot be written
     /// back: switching collection on again rebuilds the book from mail that arrives afterwards rather than restoring
     /// what went.

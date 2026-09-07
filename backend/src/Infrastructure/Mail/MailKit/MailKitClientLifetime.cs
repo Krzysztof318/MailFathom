@@ -47,7 +47,7 @@ internal static class MailKitClientLifetime
                 sslPolicyErrors);
     }
 
-    /// <summary>Drops a client its owner has already declared unusable, without speaking the protocol again.</summary>
+    /// <summary>Drops a client its user has already declared unusable, without speaking the protocol again.</summary>
     /// <param name="client">The client to close without a farewell.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="client" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -65,7 +65,7 @@ internal static class MailKitClientLifetime
     /// makes a second attempt of its own.
     /// </para>
     /// <para>
-    /// Politeness belongs to the owner's disposal, where the session is ending in order and no attempt is racing it.
+    /// Politeness belongs to the user's disposal, where the session is ending in order and no attempt is racing it.
     /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A connection already being replaced or abandoned must not have its cleanup failure replace the failure that made it unusable.")]

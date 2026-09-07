@@ -20,7 +20,7 @@
     <!-- Every use case behind a protected surface takes the authorization, so the principal a test states is composed
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
-    <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
+    <Compile Include="..\shared\SyntheticMailUser.cs" Link="SyntheticMailUser.cs" />
     <Compile Include="..\shared\OwnedMailAccountCatalogs.cs" Link="OwnedMailAccountCatalogs.cs" />
     <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
     <Compile Include="..\shared\OutgoingMailGovernors.cs" Link="OutgoingMailGovernors.cs" />
@@ -57,10 +57,10 @@
     <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
     <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
     <Compile Include="..\shared\OutgoingMailScreenings.cs" Link="OutgoingMailScreenings.cs" />
-    <!-- Whose mail an account or a message is, and what one owner's payloads hold, are read by the synchronizer and by
+    <!-- Whose mail an account or a message is, and what one user's payloads hold, are read by the synchronizer and by
          the embedding run alike, so the two doubles that answer them are linked wherever either is arranged. -->
     <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
-    <Compile Include="..\shared\InMemoryOwnerStoredContentLedger.cs" Link="InMemoryOwnerStoredContentLedger.cs" />
+    <Compile Include="..\shared\InMemoryUserStoredContentLedger.cs" Link="InMemoryUserStoredContentLedger.cs" />
   </ItemGroup>
 
   <ItemGroup>

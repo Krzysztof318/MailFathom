@@ -33,7 +33,7 @@ namespace MailFathom.Host.Configuration;
 /// means something.
 /// </para>
 /// <para>
-/// Both persisted documents are patched with this — the deployment's own settings and one owner's record — because a
+/// Both persisted documents are patched with this — the deployment's own settings and one user's record — because a
 /// path is a path whichever document it addresses. Nothing here knows which of the two it was given, which is why every
 /// sentence it produces names a settings document rather than either one; a caller that has to say which one names it
 /// in the refusal it composes around this.
@@ -42,7 +42,7 @@ namespace MailFathom.Host.Configuration;
 internal static class SettingsDocumentPatch
 {
     /// <summary>Produces the document a write would persist.</summary>
-    /// <param name="json">The settings document as it stands, whether it is the deployment's own or one owner's record.</param>
+    /// <param name="json">The settings document as it stands, whether it is the deployment's own or one user's record.</param>
     /// <param name="edits">The changes, applied in the order given.</param>
     /// <returns>The candidate document.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>

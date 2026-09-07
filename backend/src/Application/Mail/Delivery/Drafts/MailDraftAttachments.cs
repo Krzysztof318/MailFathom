@@ -36,7 +36,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// one's, for the reason that class gives.
 /// </para>
 /// </remarks>
-/// <param name="directory">Resolves an identifier into a draft the caller's own owner holds.</param>
+/// <param name="directory">Resolves an identifier into a draft the caller's own user holds.</param>
 /// <param name="drafts">Holds the durable account of every draft and everything staged against one.</param>
 /// <param name="retryPolicy">Commits the row and the octets together.</param>
 /// <param name="bounds">States how many files a message may carry and how large one may be.</param>
@@ -50,14 +50,14 @@ public sealed class MailDraftAttachments(
     AccessAuthorization authorization,
     TimeProvider timeProvider)
 {
-    /// <summary>Stages one file against a draft the caller's owner is writing.</summary>
+    /// <summary>Stages one file against a draft the caller's user is writing.</summary>
     /// <param name="draftId">The draft the file is attached to.</param>
     /// <param name="file">What the file is called, what it declares itself to be, and the octets it is made of.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
     /// <returns>The staged file as the write left it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="file" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when the caller's owner holds no draft still being written under that identifier, when the draft already carries as many files as a message may, or when the file is larger than one this deployment composes.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when the caller's user holds no draft still being written under that identifier, when the draft already carries as many files as a message may, or when the file is larger than one this deployment composes.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write did not commit on any allowed attempt.</exception>
     /// <remarks>
     /// The draft's stored message is left exactly as it was: a staged file joins the message where the next revision
@@ -128,13 +128,13 @@ public sealed class MailDraftAttachments(
             cancellationToken);
     }
 
-    /// <summary>Takes one staged file back off a draft the caller's owner is writing.</summary>
+    /// <summary>Takes one staged file back off a draft the caller's user is writing.</summary>
     /// <param name="draftId">The draft the file was attached to.</param>
     /// <param name="attachmentId">The file to take off.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
     /// <returns><see langword="true" /> when a file was taken off; <see langword="false" /> when the draft carries none under that identifier.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when the caller's owner holds no draft still being written under that identifier.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when the caller's user holds no draft still being written under that identifier.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write did not commit on any allowed attempt.</exception>
     /// <remarks>
     /// Taking a file off twice is one removal, and the second answers that the draft carries no such file rather than
@@ -155,9 +155,9 @@ public sealed class MailDraftAttachments(
             cancellationToken);
     }
 
-    /// <summary>Requires that the identifier names a draft this caller's owner is still writing.</summary>
+    /// <summary>Requires that the identifier names a draft this caller's user is still writing.</summary>
     /// <remarks>
-    /// A draft of another owner, one already given up, one already promoted, and one nobody holds are one refusal, for
+    /// A draft of another user, one already given up, one already promoted, and one nobody holds are one refusal, for
     /// the reason revising a draft gives: telling them apart would let a caller learn which drafts exist by attaching
     /// a file to them.
     /// </remarks>

@@ -78,12 +78,12 @@ internal sealed class McpEndpointOptions
     /// </para>
     /// <para>
     /// An entry states which method is accepted and never who may use it. Every credential this endpoint judges names
-    /// the owner whose mail it reaches, and an owner is a record in this deployment's database — so the keys, the
+    /// the user whose mail it reaches, and a user is a record in this deployment's database — so the keys, the
     /// public keys, the subjects, and the grants that used to be written here are provisioned through the
     /// administrative endpoint instead, and a section still carrying one is refused by name at startup.
     /// </para>
     /// </remarks>
-    public IList<OwnerFacingAuthenticationOptions> Authentication { get; } = [];
+    public IList<UserFacingAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets the kinds of tool this endpoint publishes, empty to publish every one of them.</summary>
     /// <remarks>
@@ -130,18 +130,18 @@ internal sealed class McpEndpointOptions
     /// <remarks>Defaulted throughout like <see cref="RateLimiting" /> and separate from it, because how much traffic is admitted and how long an admitted request may hold its permit are different questions a deployment answers independently.</remarks>
     public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
 
-    /// <summary>Gets whether a client may authenticate with a key this deployment provisioned for an owner.</summary>
-    public bool AllowsApiKey => this.Accepts(OwnerCredentialMethod.ApiKey);
+    /// <summary>Gets whether a client may authenticate with a key this deployment provisioned for a user.</summary>
+    public bool AllowsApiKey => this.Accepts(UserCredentialMethod.ApiKey);
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.Accepts(OwnerCredentialMethod.OAuthSubject);
+    public bool AllowsOAuth => this.Accepts(UserCredentialMethod.OAuthSubject);
 
-    /// <summary>Gets whether a client may authenticate with an assertion signed by a public key an owner registered.</summary>
-    public bool AllowsClientAssertion => this.Accepts(OwnerCredentialMethod.PublicKey);
+    /// <summary>Gets whether a client may authenticate with an assertion signed by a public key a user registered.</summary>
+    public bool AllowsClientAssertion => this.Accepts(UserCredentialMethod.PublicKey);
 
-    /// <summary>Gets whether a client may authenticate with an owner's own username and password.</summary>
-    /// <remarks>What every one of these reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
-    public bool AllowsBasic => this.Accepts(OwnerCredentialMethod.Password);
+    /// <summary>Gets whether a client may authenticate with a user's own username and password.</summary>
+    /// <remarks>What every one of these reports is that the endpoint accepts the method; which users can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
+    public bool AllowsBasic => this.Accepts(UserCredentialMethod.Password);
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     /// <remarks>
@@ -192,7 +192,7 @@ internal sealed class McpEndpointOptions
         // Read before the strict bind rather than after it. A retired key is a key this type no longer declares, so
         // binding first would raise the framework's own message about an unknown property — which says nothing about the
         // credential that replaced the setting, and that is the whole of what an operator upgrading has to be told.
-        var retiredSettings = OwnerFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
+        var retiredSettings = UserFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
 
         if (retiredSettings.Count > 0)
         {
@@ -218,7 +218,7 @@ internal sealed class McpEndpointOptions
 
         // Which key each entry was written under is read the same way and for the same reason, and both mail-serving
         // endpoints ask it through one method so the reading exists once.
-        OwnerFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+        UserFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }
@@ -244,16 +244,16 @@ internal sealed class McpEndpointOptions
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
     /// <remarks>A method rather than a property, because it reads the same objects the list already holds and a second path to them would leave which one a refusal names decided by the order reflection reports them in.</remarks>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        OwnerFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+        UserFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
 
-    /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
+    /// <summary>Reports the entry that accepts a user's username and password, where the endpoint accepts one.</summary>
     /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
     /// <remarks>A method rather than a property, for the reason <see cref="OAuthMethods" /> is one.</remarks>
-    public OwnerFacingAuthenticationOptions? BasicMethod() =>
-        OwnerFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+    public UserFacingAuthenticationOptions? BasicMethod() =>
+        UserFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
 
-    private bool Accepts(OwnerCredentialMethod method) =>
-        OwnerFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
+    private bool Accepts(UserCredentialMethod method) =>
+        UserFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -291,7 +291,7 @@ internal sealed class McpEndpointOptions
             return [];
         }
 
-        var errors = new List<string>(OwnerFacingAuthenticationConfiguration.FindConfigurationErrors(
+        var errors = new List<string>(UserFacingAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
             [.. this.Authentication]));
 

@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// value, which is what lets one persisted setting change without restating everything a deployment provisioned.
 /// </para>
 /// <para>
-/// The relational envelope is the whole of what this type declares, for the reason the owner record's is. The
+/// The relational envelope is the whole of what this type declares, for the reason the user record's is. The
 /// singleton key, the version, and the two instants are what identity, concurrency, and update metadata are decided
 /// by; the document beside them is ordinary .NET configuration and is opaque here.
 /// </para>

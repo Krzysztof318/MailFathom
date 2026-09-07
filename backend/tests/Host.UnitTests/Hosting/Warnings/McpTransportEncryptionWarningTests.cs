@@ -50,7 +50,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
         var warning = WarningFor(settings, logs);
 
         // Act

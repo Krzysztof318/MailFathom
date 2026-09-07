@@ -19,13 +19,13 @@ namespace MailFathom.Host.UnitTests.Signals;
 public sealed class SignalRClientSignalChannelTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
-    /// <summary>A signal reaches its owner's group alone, under the one method name a client keys its handler by, as the payload rather than as itself.</summary>
+    /// <summary>A signal reaches its user's group alone, under the one method name a client keys its handler by, as the payload rather than as itself.</summary>
     [Fact]
-    public async Task PublishAsync_ASignal_SendsItsRenderingToTheOwnersGroupUnderTheOnePublishedMethod()
+    public async Task PublishAsync_ASignal_SendsItsRenderingToTheUsersGroupUnderTheOnePublishedMethod()
     {
         // Arrange
         var group = Substitute.For<IClientProxy>();
@@ -49,7 +49,7 @@ public sealed class SignalRClientSignalChannelTests
         await channel.PublishAsync(ClientSignal.MailArrived(Account, Inbox, newEmailCount: 3), CancellationToken.None);
 
         // Assert
-        clients.Received(1).Group(ClientSignalHub.GroupOf(Account.Owner));
+        clients.Received(1).Group(ClientSignalHub.GroupOf(Account.User));
         Assert.Equal(ClientSignalHub.SignalMethod, method);
         Assert.NotNull(sent);
         var payload = Assert.IsType<ClientSignalPayload>(Assert.Single(sent));

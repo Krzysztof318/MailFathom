@@ -35,7 +35,7 @@ public sealed class MailFolderDirectoryReaderTests
 
     /// <summary>The user story: several mailboxes and their folders arrive as one tree rather than as one request per mailbox.</summary>
     [Fact]
-    public async Task ReadAsync_AnOwnerWithSeveralMailboxes_AnswersEveryOneOfThemWithItsFoldersInOneRead()
+    public async Task ReadAsync_AnUserWithSeveralMailboxes_AnswersEveryOneOfThemWithItsFoldersInOneRead()
     {
         // Arrange
         var reader = ReaderOver(
@@ -186,9 +186,9 @@ public sealed class MailFolderDirectoryReaderTests
         Assert.Equal(MailSynchronizationState.Unreachable, Assert.Single(account.Folders).Freshness.State);
     }
 
-    /// <summary>An owner who owns no account reads an empty tree, and nothing counts mail on their behalf.</summary>
+    /// <summary>A user who owns no account reads an empty tree, and nothing counts mail on their behalf.</summary>
     [Fact]
-    public async Task ReadAsync_AnOwnerOwningNoAccount_AnswersAnEmptyTreeWithoutCountingAnything()
+    public async Task ReadAsync_AnUserOwningNoAccount_AnswersAnEmptyTreeWithoutCountingAnything()
     {
         // Arrange
         var storedFolders = StoredFolders();
@@ -222,7 +222,7 @@ public sealed class MailFolderDirectoryReaderTests
     }
 
     /// <summary>
-    /// Naming an owner's folders is the same disclosure as naming their mailboxes, so a credential without the mailbox
+    /// Naming a user's folders is the same disclosure as naming their mailboxes, so a credential without the mailbox
     /// grant is refused here exactly as it is there, and before anything is counted.
     /// </summary>
     [Fact]
@@ -247,7 +247,7 @@ public sealed class MailFolderDirectoryReaderTests
 
     private static MailSynchronizationRunLedger Ledger() => new(new FakeTimeProvider(Now));
 
-    /// <summary>Answers the accounts the caller's owner owns, and whether the deployment refreshes them.</summary>
+    /// <summary>Answers the accounts the caller's user owns, and whether the deployment refreshes them.</summary>
     private static ICallerMailAccountCatalog OwningAccounts(params ServedMailAccount[] ownedAccounts) =>
         OwningAccounts(synchronizationEnabled: true, ownedAccounts);
 

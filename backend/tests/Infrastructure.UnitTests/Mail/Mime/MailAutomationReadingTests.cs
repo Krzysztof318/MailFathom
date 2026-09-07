@@ -34,7 +34,7 @@ public sealed class MailAutomationReadingTests
     [Theory]
     [InlineData("auto-generated", EmailAutomation.AutomaticallySubmitted)]
     [InlineData("auto-replied", EmailAutomation.AutomaticallySubmitted)]
-    [InlineData("auto-notified; owner=postmaster@example.test", EmailAutomation.AutomaticallySubmitted)]
+    [InlineData("auto-notified; user=postmaster@example.test", EmailAutomation.AutomaticallySubmitted)]
     [InlineData("a-keyword-registered-later", EmailAutomation.AutomaticallySubmitted)]
     [InlineData("no", EmailAutomation.None)]
     [InlineData("NO", EmailAutomation.None)]

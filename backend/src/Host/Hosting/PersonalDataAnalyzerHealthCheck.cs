@@ -26,9 +26,9 @@ namespace MailFathom.Host.Hosting;
 /// answer requests it has already decided to refuse.
 /// </para>
 /// <para>
-/// <b>It asks whether anybody is scanned for before it asks the analyzer.</b> The scanner is switched on per owner, so
-/// a deployment that stood the analyzer up without scanning its own owners' mail with it is not made unready by that
-/// analyzer's silence — nothing is being refused — while one where a single owner switched it on for their own mail is.
+/// <b>It asks whether anybody is scanned for before it asks the analyzer.</b> The scanner is switched on per user, so
+/// a deployment that stood the analyzer up without scanning its own users' mail with it is not made unready by that
+/// analyzer's silence — nothing is being refused — while one where a single user switched it on for their own mail is.
 /// Registration cannot decide this, because it happens before the roster the answer is composed from exists.
 /// </para>
 /// <para>
@@ -122,9 +122,9 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        if (!this.postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii))
+        if (!this.postures.RunsForAnyUser(SensitiveContentScannerKind.Pii))
         {
-            // Forgotten rather than recorded as available, so an owner who switches the scanner on after an outage
+            // Forgotten rather than recorded as available, so a user who switches the scanner on after an outage
             // began meets a check that reports that outage instead of one holding a verdict about nobody's mail. The
             // transition out of an outage is still written: the probe flips to ready here, and an operator whose log
             // ends at the Error record would otherwise have nothing saying the instance is back in traffic.
@@ -134,7 +134,7 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
             }
 
             return HealthCheckResult.Healthy(
-                "No owner's mail is scanned for personal data, so nothing on this instance asks the analyzer.");
+                "No user's mail is scanned for personal data, so nothing on this instance asks the analyzer.");
         }
 
         try
@@ -202,6 +202,6 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
     /// <summary>Reports the other way an outage ends: nobody's mail is scanned for personal data any more, so the analyzer is not asked.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "No owner's mail is scanned for personal data any more, so this instance reports ready without asking the analyzer. The outage recorded above no longer holds it out of traffic, and it says nothing about whether the analyzer has recovered.")]
+        Message = "No user's mail is scanned for personal data any more, so this instance reports ready without asking the analyzer. The outage recorded above no longer holds it out of traffic, and it says nothing about whether the analyzer has recovered.")]
     private partial void LogAnalyzerNoLongerAsked();
 }

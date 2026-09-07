@@ -181,14 +181,14 @@ public sealed class DerivedWorkAdmittedEmailsTests
         Assert.Empty(admitted.AsEnumerable());
     }
 
-    /// <summary>The walk spans owners, so mail of an owner who classifies nothing passes every clause unscored.</summary>
+    /// <summary>The walk spans users, so mail of a user who classifies nothing passes every clause unscored.</summary>
     /// <remarks>
-    /// The isolation this feature turns on: one owner switching classification on must not hold another owner's mail out
+    /// The isolation this feature turns on: one user switching classification on must not hold another user's mail out
     /// of the index waiting on a verdict nothing will ever reach it, and must not withhold a message somebody else's
     /// server already filed as junk under a name their own account happens to share.
     /// </remarks>
     [Fact]
-    public void Admitting_MailOfAnOwnerWhoseAccountDoesNotClassify_LetsItThroughUnscored()
+    public void Admitting_MailOfAnUserWhoseAccountDoesNotClassify_LetsItThroughUnscored()
     {
         // Arrange
         var emails = Emails(
@@ -227,15 +227,15 @@ public sealed class DerivedWorkAdmittedEmailsTests
     {
         var email = new StoredEmailEntity
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                OwnerId = SyntheticMailOwner.Deployment.Value,
+                UserId = SyntheticMailUser.Deployment.Value,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = accountId },
             },
             StoredAt = storedAt,
             ContentAvailability = StoredEmailContentAvailability.Available,

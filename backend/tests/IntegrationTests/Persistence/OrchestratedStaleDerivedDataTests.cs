@@ -466,10 +466,10 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         },
         cancellationToken);
 
-    /// <summary>Builds the walk's store as a deployment with a scanner switched on for its owner would resolve it.</summary>
+    /// <summary>Builds the walk's store as a deployment with a scanner switched on for its user would resolve it.</summary>
     /// <remarks>
-    /// The posture belongs to the owner this suite's mail belongs to, because the walk judges each row against its own
-    /// owner's stamp: a posture stated for anybody else would leave every row of this owner's fresh.
+    /// The posture belongs to the user this suite's mail belongs to, because the walk judges each row against its own
+    /// user's stamp: a posture stated for anybody else would leave every row of this user's fresh.
     /// </remarks>
     private StoredEmailExtractionBackfillStore StoreIn(
         IServiceProvider scope,
@@ -493,7 +493,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
             });
     }
 
-    /// <summary>The postures of a deployment scanning this suite's owner's mail towards one stamp.</summary>
+    /// <summary>The postures of a deployment scanning this suite's user's mail towards one stamp.</summary>
     private FixedSensitiveContentPostures PosturesScanning(SensitiveContentDerivationStamp stamp)
     {
         var plan = SensitiveContentPlan.Create(
@@ -507,7 +507,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
         return FixedSensitiveContentPostures.Of(
             SensitiveContentPosture.ScanningNothing,
-            (SyntheticMailAccount.Owner,
+            (SyntheticMailAccount.User,
                 SensitiveContentPosture.Scanning(
                     [SensitiveContentScannerKind.Secrets],
                     new SensitiveContentRedactor(plan, [], TimeProvider.System, this.concurrency),
@@ -538,7 +538,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 var storedEmail = new StoredEmailEntity
                 {
                     Id = insertedId,
-                    OwnerId = folder.OwnerId,
+                    UserId = folder.UserId,
                     MailboxAccountId = folder.MailboxAccountId,
                     MailFolder = folder,
                     UidValidity = SyntheticEmail.UidValidity,
@@ -629,7 +629,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                     var storedEmail = new StoredEmailEntity
                     {
                         Id = Guid.CreateVersion7(SyntheticEmail.SentAt.AddSeconds(index)),
-                        OwnerId = folder.OwnerId,
+                        UserId = folder.UserId,
                         MailboxAccountId = folder.MailboxAccountId,
                         MailFolder = folder,
                         UidValidity = SyntheticEmail.UidValidity,

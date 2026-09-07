@@ -16,9 +16,9 @@ namespace MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 /// reference rather than to hold state of its own.
 /// </para>
 /// <para>
-/// It is keyed by the owner and the identifier together, which is what ADR 0014 decided an account is identified by.
+/// It is keyed by the user and the identifier together, which is what ADR 0014 decided an account is identified by.
 /// The identifier stays the readable string whoever declared the account wrote, and it names one account within its
-/// owner rather than across the deployment — so two people served by one instance may each call a mailbox
+/// user rather than across the deployment — so two people served by one instance may each call a mailbox
 /// <c>work</c> and neither is claiming the word from the other.
 /// </para>
 /// </remarks>
@@ -34,20 +34,20 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
         // alias binding index below is: the loser is recognized by the constraint it violated and reported as a
         // race to resolve rather than as a failure.
         //
-        // The owner leads it, so the key is also the structure that answers which mail accounts one owner owns —
+        // The user leads it, so the key is also the structure that answers which mail accounts one user owns —
         // the read the erasure performs before it takes the rows no cascade reaches, and the reason the foreign key
         // below needs no index of its own.
-        entity.HasKey(account => new { account.OwnerId, account.Id })
+        entity.HasKey(account => new { account.UserId, account.Id })
             .HasName(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName);
         entity.Property(account => account.Id).HasMaxLength(128);
 
-        // The owner is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
-        // moment something remembers to say so. The cascade is what makes erasing an owner one statement: the mail
+        // The user is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
+        // moment something remembers to say so. The cascade is what makes erasing a user one statement: the mail
         // graph hangs off this table, so the account rows take their folders, and the folders take everything derived
         // from the mail beneath them.
-        entity.HasOne<OwnerAccountEntity>()
+        entity.HasOne<UserAccountEntity>()
             .WithMany()
-            .HasForeignKey(account => account.OwnerId)
+            .HasForeignKey(account => account.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

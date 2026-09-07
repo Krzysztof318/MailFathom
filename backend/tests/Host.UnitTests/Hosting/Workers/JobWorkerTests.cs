@@ -290,7 +290,7 @@ public sealed class JobWorkerTests
         return new ScheduledJob(
             JobScheduleId.Create(identity),
             RunScheduledMailRulesJobPayload.For(
-                MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"))),
+                MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"))),
             recurrence!);
     }
 
@@ -300,7 +300,7 @@ public sealed class JobWorkerTests
         JobIdempotencyKey.Create($"account-a/inbox/1/{index}"),
         new ClassifyEmailSpamJobPayload
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
             FolderAlias = "inbox",
             FolderResolutionGeneration = 1,

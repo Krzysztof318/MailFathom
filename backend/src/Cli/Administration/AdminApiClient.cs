@@ -15,9 +15,9 @@ using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Outbox;
-using MailFathom.Cli.Administration.Owners;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
+using MailFathom.Cli.Administration.Users;
 using MailFathom.Cli.Transport;
 using MailFathom.Versioning;
 
@@ -716,7 +716,7 @@ internal sealed class AdminApiClient
     /// <returns>One page of the sends, and the cursor the next page is asked with where one exists.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
-    /// <remarks>The page names no recipient and no subject, because a listing of an outbox would otherwise be an export of who this owner writes to, a page at a time.</remarks>
+    /// <remarks>The page names no recipient and no subject, because a listing of an outbox would otherwise be an export of who this user writes to, a page at a time.</remarks>
     internal Task<OutboxPage> ReadOutboxAsync(
         string token,
         OutboxQuery query,
@@ -953,7 +953,7 @@ internal sealed class AdminApiClient
             JsonContent.Create(record, CliJsonContext.Default.ContactRecordRequest));
     }
 
-    /// <summary>Asks the deployment to promote a collected contact to one the owner has taken responsibility for.</summary>
+    /// <summary>Asks the deployment to promote a collected contact to one the user has taken responsibility for.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to promote.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -1155,235 +1155,235 @@ internal sealed class AdminApiClient
             JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
     }
 
-    /// <summary>The sentence an owner-record route answers with when the deployment holds no such owner.</summary>
+    /// <summary>The sentence a user-record route answers with when the deployment holds no such user.</summary>
     /// <remarks>
-    /// The owner-record routes answer <c>404</c> for an owner the deployment does not hold, so without this the
+    /// The user-record routes answer <c>404</c> for a user the deployment does not hold, so without this the
     /// operator would be sent after a listener and a port by a deployment that is answering perfectly well. It names
-    /// the owner as the thing that is absent and the listing the identifier comes from.
+    /// the user as the thing that is absent and the listing the identifier comes from.
     /// <para>
-    /// Not every route beneath one owner: the credential routes answer an unheld owner with an empty listing, because
-    /// what they address is a credential rather than the owner, and the erasure answers <c>200</c> with nothing erased.
-    /// A route that adopts this sentence is one whose <c>404</c> means the owner.
+    /// Not every route beneath one user: the credential routes answer an unheld user with an empty listing, because
+    /// what they address is a credential rather than the user, and the erasure answers <c>200</c> with nothing erased.
+    /// A route that adopts this sentence is one whose <c>404</c> means the user.
     /// </para>
     /// </remarks>
-    private const string NoSuchOwner =
-        "This deployment holds no owner under that identifier. Run 'mfctl owner list' and name one it holds.";
+    private const string NoSuchUser =
+        "This deployment holds no user under that identifier. Run 'mfctl user list' and name one it holds.";
 
-    /// <summary>Reads the owners a deployment holds records for.</summary>
+    /// <summary>Reads the users a deployment holds records for.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The owners, each with the label and the two states the deployment reports beside the identifier.</returns>
+    /// <returns>The users, each with the label and the two states the deployment reports beside the identifier.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a roster.</exception>
-    internal Task<MailOwnerList> ReadOwnersAsync(string token, CancellationToken cancellationToken) =>
+    internal Task<MailUserList> ReadUsersAsync(string token, CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.OwnersPath,
+            AdminEndpointRoutes.UsersPath,
             token,
-            CliJsonContext.Default.MailOwnerList,
+            CliJsonContext.Default.MailUserList,
             cancellationToken);
 
-    /// <summary>Records an owner the deployment did not hold.</summary>
+    /// <summary>Records a user the deployment did not hold.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="request">The label the owner is told apart by.</param>
+    /// <param name="request">The label the user is told apart by.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The identifier the deployment minted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an identifier.</exception>
-    internal Task<OwnerProvisioned> ProvisionOwnerAsync(
+    internal Task<UserProvisioned> ProvisionUserAsync(
         string token,
-        OwnerProvisioningRequest request,
+        UserProvisioningRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.OwnersPath,
+            AdminEndpointRoutes.UsersPath,
             token,
-            CliJsonContext.Default.OwnerProvisioned,
+            CliJsonContext.Default.UserProvisioned,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerProvisioningRequest));
+            JsonContent.Create(request, CliJsonContext.Default.UserProvisioningRequest));
     }
 
-    /// <summary>Replaces the label one owner is told apart by.</summary>
+    /// <summary>Replaces the label one user is told apart by.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner to relabel.</param>
-    /// <param name="request">The label the owner carries from now on.</param>
+    /// <param name="userId">The user to relabel.</param>
+    /// <param name="request">The label the user carries from now on.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes once the deployment has accepted the label.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, or could not be reached.</exception>
-    /// <remarks>Acceptance is the whole answer: the label the command sent is what the owner now carries, so a body echoing it would report the command's own argument back to it.</remarks>
-    internal Task RelabelOwnerAsync(
+    /// <remarks>Acceptance is the whole answer: the label the command sent is what the user now carries, so a body echoing it would report the command's own argument back to it.</remarks>
+    internal Task RelabelUserAsync(
         string token,
-        Guid ownerId,
-        OwnerRelabelRequest request,
+        Guid userId,
+        UserRelabelRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Put,
-            AdminEndpointRoutes.OwnerDisplayNamePath(ownerId),
+            AdminEndpointRoutes.UserDisplayNamePath(userId),
             token,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerRelabelRequest),
-            NoSuchOwner);
+            JsonContent.Create(request, CliJsonContext.Default.UserRelabelRequest),
+            NoSuchUser);
     }
 
-    /// <summary>Erases one owner and everything the deployment recorded for them.</summary>
+    /// <summary>Erases one user and everything the deployment recorded for them.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner to remove.</param>
+    /// <param name="userId">The user to remove.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What was removed, and whether the running deployment was serving them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<OwnerErasure> EraseOwnerAsync(string token, Guid ownerId, CancellationToken cancellationToken) =>
+    internal Task<UserErasure> EraseUserAsync(string token, Guid userId, CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Delete,
-            AdminEndpointRoutes.OwnerPath(ownerId),
+            AdminEndpointRoutes.UserPath(userId),
             token,
-            CliJsonContext.Default.OwnerErasure,
+            CliJsonContext.Default.UserErasure,
             cancellationToken);
 
-    /// <summary>Reads one owner's record whole, as the redacted document an editing session opens.</summary>
+    /// <summary>Reads one user's record whole, as the redacted document an editing session opens.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner asked about.</param>
+    /// <param name="userId">The user asked about.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The record and the version it was read at.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a record.</exception>
-    internal Task<OwnerRecord> ReadOwnerRecordAsync(
+    internal Task<UserRecord> ReadUserRecordAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.OwnerRecordPath(ownerId),
+            AdminEndpointRoutes.UserRecordPath(userId),
             token,
-            CliJsonContext.Default.OwnerRecord,
+            CliJsonContext.Default.UserRecord,
             cancellationToken,
-            absenceMessage: NoSuchOwner);
+            absenceMessage: NoSuchUser);
 
-    /// <summary>Declares one more mail account in an owner's record.</summary>
+    /// <summary>Declares one more mail account in a user's record.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <param name="userId">The user the mailbox belongs to.</param>
     /// <param name="request">The declaration and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the write did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<OwnerRecordWriteAnswer> AddOwnerMailAccountAsync(
+    internal Task<UserRecordWriteAnswer> AddUserMailAccountAsync(
         string token,
-        Guid ownerId,
-        OwnerMailAccountRequest request,
+        Guid userId,
+        UserMailAccountRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.OwnerMailAccountsPath(ownerId),
+            AdminEndpointRoutes.UserMailAccountsPath(userId),
             token,
-            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            CliJsonContext.Default.UserRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRequest),
-            NoSuchOwner);
+            JsonContent.Create(request, CliJsonContext.Default.UserMailAccountRequest),
+            NoSuchUser);
     }
 
-    /// <summary>Withdraws one mail account from an owner's record.</summary>
+    /// <summary>Withdraws one mail account from a user's record.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <param name="userId">The user the mailbox belongs to.</param>
     /// <param name="request">The identifier and the version the record was read at.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the write did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<OwnerRecordWriteAnswer> RemoveOwnerMailAccountAsync(
+    internal Task<UserRecordWriteAnswer> RemoveUserMailAccountAsync(
         string token,
-        Guid ownerId,
-        OwnerMailAccountRemovalRequest request,
+        Guid userId,
+        UserMailAccountRemovalRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.OwnerMailAccountRemovalPath(ownerId),
+            AdminEndpointRoutes.UserMailAccountRemovalPath(userId),
             token,
-            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            CliJsonContext.Default.UserRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRemovalRequest),
-            NoSuchOwner);
+            JsonContent.Create(request, CliJsonContext.Default.UserMailAccountRemovalRequest),
+            NoSuchUser);
     }
 
-    /// <summary>Reads what adopting one owner would move out of the deployment's files into their record.</summary>
+    /// <summary>Reads what adopting one user would move out of the deployment's files into their record.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner asked about.</param>
+    /// <param name="userId">The user asked about.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The preview and the version the adoption is composed over.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a preview.</exception>
-    internal Task<OwnerAdoptionPreview> ReadOwnerAdoptionAsync(
+    internal Task<UserAdoptionPreview> ReadUserAdoptionAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.OwnerAdoptionPath(ownerId),
+            AdminEndpointRoutes.UserAdoptionPath(userId),
             token,
-            CliJsonContext.Default.OwnerAdoptionPreview,
+            CliJsonContext.Default.UserAdoptionPreview,
             cancellationToken,
-            absenceMessage: NoSuchOwner);
+            absenceMessage: NoSuchUser);
 
-    /// <summary>Moves one owner's mail accounts out of the deployment's files and into their own record.</summary>
+    /// <summary>Moves one user's mail accounts out of the deployment's files and into their own record.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner being adopted.</param>
+    /// <param name="userId">The user being adopted.</param>
     /// <param name="request">The version the preview was read over.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the adoption did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<OwnerRecordWriteAnswer> AdoptOwnerAsync(
+    internal Task<UserRecordWriteAnswer> AdoptUserAsync(
         string token,
-        Guid ownerId,
-        OwnerAdoptionRequest request,
+        Guid userId,
+        UserAdoptionRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.OwnerAdoptionPath(ownerId),
+            AdminEndpointRoutes.UserAdoptionPath(userId),
             token,
-            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            CliJsonContext.Default.UserRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerAdoptionRequest),
-            NoSuchOwner);
+            JsonContent.Create(request, CliJsonContext.Default.UserAdoptionRequest),
+            NoSuchUser);
     }
 
-    /// <summary>Reads the credentials one owner's clients present.</summary>
+    /// <summary>Reads the credentials one user's clients present.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner being asked about.</param>
+    /// <param name="userId">The user being asked about.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The listing, which is empty for an owner holding none.</returns>
+    /// <returns>The listing, which is empty for a user holding none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
-    internal Task<OwnerCredentialList> ReadOwnerCredentialsAsync(
+    internal Task<UserCredentialList> ReadUserCredentialsAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.OwnerCredentialsPath(ownerId),
+            AdminEndpointRoutes.UserCredentialsPath(userId),
             token,
-            CliJsonContext.Default.OwnerCredentialList,
+            CliJsonContext.Default.UserCredentialList,
             cancellationToken);
 
-    /// <summary>Provisions a credential one owner's clients can present.</summary>
+    /// <summary>Provisions a credential one user's clients can present.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the credential authenticates.</param>
+    /// <param name="userId">The user the credential authenticates.</param>
     /// <param name="request">The method and whatever that method requires.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The new credential's identifier, what it is resolved by, and the key where the deployment minted one.</returns>
@@ -1394,90 +1394,90 @@ internal sealed class AdminApiClient
     /// reach a proxy log, a browser history, or the deployment's own request logging. A password is sent once and never
     /// echoed; a key is drawn by the deployment and carried back once, because that is the only moment it exists.
     /// </remarks>
-    internal Task<OwnerCredentialProvisioned> ProvisionOwnerCredentialAsync(
+    internal Task<UserCredentialProvisioned> ProvisionUserCredentialAsync(
         string token,
-        Guid ownerId,
-        OwnerCredentialProvisioningRequest request,
+        Guid userId,
+        UserCredentialProvisioningRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
-            AdminEndpointRoutes.OwnerCredentialsPath(ownerId),
+            AdminEndpointRoutes.UserCredentialsPath(userId),
             token,
-            CliJsonContext.Default.OwnerCredentialProvisioned,
+            CliJsonContext.Default.UserCredentialProvisioned,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerCredentialProvisioningRequest));
+            JsonContent.Create(request, CliJsonContext.Default.UserCredentialProvisioningRequest));
     }
 
     /// <summary>Replaces what one credential is presented as, which stops the previous material working at that instant.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential being rotated.</param>
     /// <param name="request">The method and its new material.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the credential is resolved by from now on, and the key where the deployment minted one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but the rotated credential.</exception>
-    internal Task<OwnerCredentialRotated> ReplaceOwnerCredentialMaterialAsync(
+    internal Task<UserCredentialRotated> ReplaceUserCredentialMaterialAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         Guid credentialId,
-        OwnerCredentialMaterialRequest request,
+        UserCredentialMaterialRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Put,
-            AdminEndpointRoutes.OwnerCredentialMaterialPath(ownerId, credentialId),
+            AdminEndpointRoutes.UserCredentialMaterialPath(userId, credentialId),
             token,
-            CliJsonContext.Default.OwnerCredentialRotated,
+            CliJsonContext.Default.UserCredentialRotated,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerCredentialMaterialRequest));
+            JsonContent.Create(request, CliJsonContext.Default.UserCredentialMaterialRequest));
     }
 
     /// <summary>Turns one credential on or off while it keeps what it is presented as.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential being written.</param>
     /// <param name="enabled">Whether it should authenticate requests.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes once the state stands.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
-    internal Task SetOwnerCredentialEnabledAsync(
+    internal Task SetUserCredentialEnabledAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         Guid credentialId,
         bool enabled,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Put,
-            AdminEndpointRoutes.OwnerCredentialEnablementPath(ownerId, credentialId),
+            AdminEndpointRoutes.UserCredentialEnablementPath(userId, credentialId),
             token,
             cancellationToken,
             JsonContent.Create(
-                new OwnerCredentialEnablementRequest(enabled),
-                CliJsonContext.Default.OwnerCredentialEnablementRequest));
+                new UserCredentialEnablementRequest(enabled),
+                CliJsonContext.Default.UserCredentialEnablementRequest));
 
     /// <summary>Removes one credential and frees what it was resolved by.</summary>
     /// <param name="token">The bearer credential to present.</param>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential being removed.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>A task that completes once the credential is gone.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
-    internal Task DeleteOwnerCredentialAsync(
+    internal Task DeleteUserCredentialAsync(
         string token,
-        Guid ownerId,
+        Guid userId,
         Guid credentialId,
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Delete,
-            AdminEndpointRoutes.OwnerCredentialPath(ownerId, credentialId),
+            AdminEndpointRoutes.UserCredentialPath(userId, credentialId),
             token,
             cancellationToken);
 
@@ -1496,7 +1496,7 @@ internal sealed class AdminApiClient
     /// <para>
     /// <c>404</c> means the port serves no administrative endpoint on most routes, because a route addressing a single
     /// record answers <c>200</c> with a nullable field where the deployment holds nothing. The exceptions are the
-    /// routes that address a thing by identity — one queued send, and the owner-record routes — and each says so
+    /// routes that address a thing by identity — one queued send, and the user-record routes — and each says so
     /// through <paramref name="absenceMessage" />: their absence is the absence of the thing addressed, and telling
     /// that operator to check the port would send them after a deployment that is answering perfectly well.
     /// </para>

@@ -12,7 +12,7 @@ namespace MailFathom.Domain.Delivery;
 /// identity is what lets an operator read a stuck send and know whether to look at a rule or at something they did.
 /// <para>
 /// Nothing composes a message on its own initiative, and every member here names an act somebody authored: a schedule
-/// asks on an occasion rather than on its own behalf, and what it repeats is a message its owner wrote once.
+/// asks on an occasion rather than on its own behalf, and what it repeats is a message its user wrote once.
 /// </para>
 /// </remarks>
 public enum OutgoingEmailOrigin
@@ -23,7 +23,7 @@ public enum OutgoingEmailOrigin
     /// <summary>Somebody asked for the message directly, through a tool call or an administrative command.</summary>
     Command = 1,
 
-    /// <summary>An occasion of a recurring send the owner declared came round, and asked for that occurrence.</summary>
+    /// <summary>An occasion of a recurring send the user declared came round, and asked for that occurrence.</summary>
     /// <remarks>
     /// The act was authored once and the occasion is what asks, which is why the identity is the declaration and the
     /// occasion together rather than a key somebody supplies per occurrence: nobody is present when the message is

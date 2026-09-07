@@ -39,7 +39,7 @@ namespace MailFathom.Host.Configuration.Access;
 /// surface it is the union of those entries' own configured ceilings, which is exactly what an operator has to create
 /// as scopes in their authorization server. On a mail-serving surface there is no configured ceiling to read — each
 /// credential record carries its own — so the whole published vocabulary of that surface is advertised, and a token
-/// still holds only the intersection of its scopes with the record that resolved its owner.
+/// still holds only the intersection of its scopes with the record that resolved its user.
 /// </para>
 /// </remarks>
 internal sealed record PublishedOAuthMetadata(
@@ -92,17 +92,17 @@ internal sealed record PublishedOAuthMetadata(
     /// <remarks>
     /// The permissions advertised are the surface's whole published vocabulary rather than a configured ceiling,
     /// because there is no ceiling in this section to read: what each admitted caller may do is recorded on the
-    /// credential that resolved their owner. Advertising the vocabulary is what an operator needs — those are the scope
+    /// credential that resolved their user. Advertising the vocabulary is what an operator needs — those are the scope
     /// names to create in their authorization server — and it widens nothing, since a token holds only the intersection
     /// of its own scopes with that record's grant.
     /// </remarks>
-    internal static PublishedOAuthMetadata ForOwnerFacing(
-        IReadOnlyList<OwnerFacingAuthenticationOptions> methods,
+    internal static PublishedOAuthMetadata ForUserFacing(
+        IReadOnlyList<UserFacingAuthenticationOptions> methods,
         ProtectedSurface surface)
     {
         ArgumentNullException.ThrowIfNull(methods);
 
-        var oauthMethods = OwnerFacingAuthenticationConfiguration.OAuthMethodsIn(methods);
+        var oauthMethods = UserFacingAuthenticationConfiguration.OAuthMethodsIn(methods);
 
         if (oauthMethods.Count == 0)
         {

@@ -7,7 +7,7 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.EmailContent.Storage;
 
-/// <summary>Bounds how much local storage stored mail content may occupy, for the deployment and for each owner.</summary>
+/// <summary>Bounds how much local storage stored mail content may occupy, for the deployment and for each user.</summary>
 /// <remarks>
 /// <para>
 /// The ceilings are one answer for one content store, so this is a single process-wide instance rather than a value
@@ -28,7 +28,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// </para>
 /// <para>
 /// The two ceilings are counted in different quantities, and that is deliberate rather than an inconsistency. The
-/// deployment's is what the operator's disk fills with, which only the database can report; an owner's is the payload
+/// deployment's is what the operator's disk fills with, which only the database can report; a user's is the payload
 /// their mail holds, which is the only figure attributable to one person at all — a catalogue answers for a table and
 /// never for a share of one. So the same payload counts once against a physical figure and once against a logical one,
 /// and the two are never expected to agree.
@@ -37,140 +37,140 @@ namespace MailFathom.Application.EmailContent.Storage;
 public sealed class StoredContentCeiling
 {
     private readonly ContentLevel deployment;
-    private readonly long ownerCeilingBytes;
-    private readonly ConcurrentDictionary<MailOwnerId, ContentLevel> ownerLevels = new();
+    private readonly long userCeilingBytes;
+    private readonly ConcurrentDictionary<MailUserId, ContentLevel> userLevels = new();
 
     /// <summary>Initializes the ceilings for the process.</summary>
     /// <param name="ceilingBytes">The configured deployment ceiling, or <see langword="null" /> when storage is bounded only by the disk.</param>
-    /// <param name="ownerCeilingBytes">The configured per-owner ceiling, or <see langword="null" /> when no owner is bounded separately.</param>
+    /// <param name="userCeilingBytes">The configured per-user ceiling, or <see langword="null" /> when no user is bounded separately.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either ceiling is not positive.</exception>
-    public StoredContentCeiling(long? ceilingBytes, long? ownerCeilingBytes = null)
+    public StoredContentCeiling(long? ceilingBytes, long? userCeilingBytes = null)
     {
         if (ceilingBytes is { } configured)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(configured);
         }
 
-        if (ownerCeilingBytes is { } configuredForOwner)
+        if (userCeilingBytes is { } configuredForUser)
         {
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(configuredForOwner);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(configuredForUser);
         }
 
         this.deployment = new ContentLevel(ceilingBytes ?? long.MaxValue);
-        this.ownerCeilingBytes = ownerCeilingBytes ?? long.MaxValue;
+        this.userCeilingBytes = userCeilingBytes ?? long.MaxValue;
         this.IsConfigured = ceilingBytes.HasValue;
-        this.IsConfiguredPerOwner = ownerCeilingBytes.HasValue;
+        this.IsConfiguredPerUser = userCeilingBytes.HasValue;
     }
 
     /// <summary>Gets whether a deployment-wide ceiling is configured at all.</summary>
     public bool IsConfigured { get; }
 
-    /// <summary>Gets whether a per-owner ceiling is configured at all.</summary>
-    public bool IsConfiguredPerOwner { get; }
+    /// <summary>Gets whether a per-user ceiling is configured at all.</summary>
+    public bool IsConfiguredPerUser { get; }
 
     /// <summary>Gets how much local storage the stored content is currently believed to occupy across the deployment.</summary>
     public long OccupiedBytes => this.deployment.OccupiedBytes;
 
     /// <summary>Gets the mark to capture before taking a measurement, so what is claimed during it is not lost.</summary>
-    /// <param name="owner">The owner whose measurement is about to be taken beside the deployment's.</param>
+    /// <param name="user">The user whose measurement is about to be taken beside the deployment's.</param>
     /// <returns>The marks both levels held before the measurement.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
-    public StoredContentMeasurementMark MarkBefore(MailOwnerId owner) =>
-        new(this.deployment.ClaimMark, this.LevelOf(owner).ClaimMark);
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    public StoredContentMeasurementMark MarkBefore(MailUserId user) =>
+        new(this.deployment.ClaimMark, this.LevelOf(user).ClaimMark);
 
-    /// <summary>Gets how much of local storage one owner's stored content is currently believed to occupy.</summary>
-    /// <param name="owner">The owner asked about.</param>
-    /// <returns>The bytes that owner's payloads are believed to hold.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
-    public long OccupiedBytesFor(MailOwnerId owner) => this.LevelOf(owner).OccupiedBytes;
+    /// <summary>Gets how much of local storage one user's stored content is currently believed to occupy.</summary>
+    /// <param name="user">The user asked about.</param>
+    /// <returns>The bytes that user's payloads are believed to hold.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    public long OccupiedBytesFor(MailUserId user) => this.LevelOf(user).OccupiedBytes;
 
-    /// <summary>Adopts a fresh measurement of what storage holds, for the deployment and for one owner.</summary>
-    /// <param name="owner">The owner the second figure was measured for.</param>
+    /// <summary>Adopts a fresh measurement of what storage holds, for the deployment and for one user.</summary>
+    /// <param name="user">The user the second figure was measured for.</param>
     /// <param name="measuredBytes">What the content store reported occupying in total.</param>
-    /// <param name="measuredOwnerBytes">What that owner's payloads were reported to hold.</param>
+    /// <param name="measuredUserBytes">What that user's payloads were reported to hold.</param>
     /// <param name="mark">The value <see cref="MarkBefore" /> returned before the measurements were taken.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either measurement is negative.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
     /// Bytes claimed after the measurement began are added on top of it, because the measurement cannot describe writes
     /// that had not happened when it was taken. A measurement older than one already adopted is discarded rather than
     /// applied, so two runs measuring at once cannot make the newer reading lose to the slower query. Each level is
-    /// judged against its own mark, so a stale owner reading cannot discard a fresh deployment one.
+    /// judged against its own mark, so a stale user reading cannot discard a fresh deployment one.
     /// </remarks>
     public void Observe(
-        MailOwnerId owner,
+        MailUserId user,
         long measuredBytes,
-        long measuredOwnerBytes,
+        long measuredUserBytes,
         StoredContentMeasurementMark mark)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(measuredBytes);
-        ArgumentOutOfRangeException.ThrowIfNegative(measuredOwnerBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(measuredUserBytes);
 
-        // Resolved before either level is written, for the reason the claim resolves it first: a refused owner would
+        // Resolved before either level is written, for the reason the claim resolves it first: a refused user would
         // otherwise leave the deployment holding a reading whose other half never arrived.
-        var ownerLevel = this.LevelOf(owner);
+        var userLevel = this.LevelOf(user);
 
         this.deployment.Observe(measuredBytes, mark.DeploymentClaimMark);
-        ownerLevel.Observe(measuredOwnerBytes, mark.OwnerClaimMark);
+        userLevel.Observe(measuredUserBytes, mark.UserClaimMark);
     }
 
-    /// <summary>Claims room for one payload of one owner, or reports which ceiling has none.</summary>
-    /// <param name="owner">The owner whose mail the payload is.</param>
+    /// <summary>Claims room for one payload of one user, or reports which ceiling has none.</summary>
+    /// <param name="user">The user whose mail the payload is.</param>
     /// <param name="bytes">What the payload is expected to occupy.</param>
     /// <returns>The claim, or the bound that refused it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bytes" /> is not positive.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
     /// Both levels have to admit the payload, and the deployment's is taken first so that a refusal by it never leaves
-    /// an owner charged for a payload nothing will fetch. The owner's refusal gives the deployment's claim straight
-    /// back, which is what keeps one owner meeting their share from consuming the instance's.
+    /// a user charged for a payload nothing will fetch. The user's refusal gives the deployment's claim straight
+    /// back, which is what keeps one user meeting their share from consuming the instance's.
     /// </remarks>
-    public StoredContentClaimAttempt TryClaim(MailOwnerId owner, long bytes)
+    public StoredContentClaimAttempt TryClaim(MailUserId user, long bytes)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
 
-        // Resolved before anything is taken, because the resolution is what refuses an owner naming nobody: taking the
+        // Resolved before anything is taken, because the resolution is what refuses a user naming nobody: taking the
         // deployment's bytes first would leave them claimed by a call that then threw, and nothing releases a claim
         // whose scope was never handed back.
-        var ownerLevel = this.LevelOf(owner);
+        var userLevel = this.LevelOf(user);
 
         if (!this.deployment.TryTake(bytes))
         {
             return StoredContentClaimAttempt.Refused(StoredContentBound.Deployment);
         }
 
-        if (!ownerLevel.TryTake(bytes))
+        if (!userLevel.TryTake(bytes))
         {
             this.deployment.Release(bytes);
 
-            return StoredContentClaimAttempt.Refused(StoredContentBound.Owner);
+            return StoredContentClaimAttempt.Refused(StoredContentBound.User);
         }
 
-        return StoredContentClaimAttempt.Granted(new StoredContentClaim(this.deployment, ownerLevel, bytes));
+        return StoredContentClaimAttempt.Granted(new StoredContentClaim(this.deployment, userLevel, bytes));
     }
 
-    /// <summary>Finds the level one owner is measured and bounded against, creating it on first mention.</summary>
+    /// <summary>Finds the level one user is measured and bounded against, creating it on first mention.</summary>
     /// <remarks>
     /// The guard is the whole reason this is a method rather than an indexer. Every public member here routes through
-    /// it, and an owner naming nobody would otherwise be given a level of its own: bytes would be tracked and admitted
+    /// it, and a user naming nobody would otherwise be given a level of its own: bytes would be tracked and admitted
     /// against a ceiling for "nobody", which reads as a working bound right up until somebody asks whose it was. The
     /// spend gate refuses the same argument for the same reason, and this is the storage half of that rule.
     /// </remarks>
-    private ContentLevel LevelOf(MailOwnerId owner)
+    private ContentLevel LevelOf(MailUserId user)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
             throw new ArgumentException(
-                "A stored-content ceiling is measured and claimed for a named owner, so an owner naming nobody cannot be bounded.",
-                nameof(owner));
+                "A stored-content ceiling is measured and claimed for a named user, so a user naming nobody cannot be bounded.",
+                nameof(user));
         }
 
-        return this.ownerLevels.GetOrAdd(owner, _ => new ContentLevel(this.ownerCeilingBytes));
+        return this.userLevels.GetOrAdd(user, _ => new ContentLevel(this.userCeilingBytes));
     }
 
     /// <summary>One population's believed occupancy, and the room it still has.</summary>
     /// <remarks>
-    /// The deployment and each owner are the same arithmetic over different measurements, so they are one type used
+    /// The deployment and each user are the same arithmetic over different measurements, so they are one type used
     /// twice rather than two sets of fields that would drift. Each instance guards itself, because the two are taken in
     /// order and a lock spanning both would be held across the dictionary lookup between them.
     /// </remarks>

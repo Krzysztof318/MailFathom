@@ -22,7 +22,7 @@ public sealed class ContactCollectionPolicyTests
         Assert.True(policy.Admits(AddressOf("anna@example.test")));
     }
 
-    /// <summary>The structural rule holds without an owner writing anything, which is the point of it being structural.</summary>
+    /// <summary>The structural rule holds without a user writing anything, which is the point of it being structural.</summary>
     [Fact]
     public void Admits_AnAutomatedMailbox_IsRefusedWithNoExclusionWritten()
     {
@@ -33,19 +33,19 @@ public sealed class ContactCollectionPolicyTests
         Assert.False(policy.Admits(AddressOf("no-reply@example.test")));
     }
 
-    /// <summary>A book holding its owner would answer "who is this from" with the person asking.</summary>
+    /// <summary>A book holding its user would answer "who is this from" with the person asking.</summary>
     [Fact]
     public void Admits_TheDeploymentsOwnAddress_IsRefused()
     {
         // Arrange
-        var policy = ContactCollectionPolicy.Create([], [AddressOf("owner@example.test")]);
+        var policy = ContactCollectionPolicy.Create([], [AddressOf("user@example.test")]);
 
         // Act & Assert
-        Assert.False(policy.Admits(AddressOf("Owner@Example.test")));
+        Assert.False(policy.Admits(AddressOf("User@Example.test")));
         Assert.True(policy.Admits(AddressOf("anna@example.test")));
     }
 
-    /// <summary>The owner's list is held against every address, whichever of the two shapes each entry took.</summary>
+    /// <summary>The user's list is held against every address, whichever of the two shapes each entry took.</summary>
     [Fact]
     public void Admits_AnExcludedAddress_IsRefused()
     {

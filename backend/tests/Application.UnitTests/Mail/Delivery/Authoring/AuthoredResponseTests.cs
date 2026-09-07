@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Authoring;
 public sealed class AuthoredResponseTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
 
     /// <summary>An authored answer carries the message and the account it is sent as, and no refusal.</summary>
     [Fact]

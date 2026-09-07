@@ -224,7 +224,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var unstoredAccountId = MailAccountId.Create(UnstoredAccountId);
-        var unstoredAccount = MailAccountIdentity.Create(SyntheticMailAccount.Owner, unstoredAccountId);
+        var unstoredAccount = MailAccountIdentity.Create(SyntheticMailAccount.User, unstoredAccountId);
         var firstBinding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(FolderAlias),
             RemoteFolderPath.Create(FolderAlias, hierarchyDelimiter: '.'));
@@ -405,7 +405,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
