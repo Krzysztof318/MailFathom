@@ -72,7 +72,9 @@ public sealed class ClientTransportSecurityExtensionsTests
 
         // Assert
         Assert.False(policy.AllowAnyOrigin);
-        Assert.Equal(["tauri://localhost", "http://tauri.localhost"], policy.Origins);
+        Assert.Equal(
+            ["http://tauri.localhost", "tauri://localhost"],
+            policy.Origins.Order(StringComparer.Ordinal));
     }
 
     /// <summary>An emptied list advertises nothing to a browser, which is what a deployment whose only client is the page it serves itself wants.</summary>

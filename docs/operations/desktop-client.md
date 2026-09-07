@@ -1,6 +1,6 @@
 # The desktop client
 
-<!-- describes: .github/workflows/build-desktop-client.yml, frontend/src-tauri/**, frontend/src/Client.App/src/shellOperations/configuredConnection.ts, frontend/src/Client.App/src/deployment/adoptedDeployment.ts -->
+<!-- describes: .github/workflows/build-desktop-client.yml, frontend/src-tauri/**, frontend/src/Client.App/src/shellOperations/configuredConnection.ts, frontend/src/Client.App/src/deployment/adoptedDeployment.ts, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs -->
 
 What a release publishes for somebody who wants MailFathom's client as an application on their own machine rather than
 as a page a deployment serves: which platforms, in which formats, what each installer does, and what none of them does.
