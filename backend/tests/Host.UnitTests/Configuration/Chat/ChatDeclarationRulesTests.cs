@@ -252,6 +252,26 @@ public sealed class ChatDeclarationRulesTests
         Assert.Single(errors);
     }
 
+    /// <summary>
+    /// Which enricher the arrival pipeline resolves is decided while the container is built, so a reload that flipped
+    /// this would report the setting as taken while every arriving message went on being told the deployment has not
+    /// turned enrichment on.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_EnrichmentTurnedOn_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.Enrichment.Enabled = true;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(errors, error => error.StartsWith("Chat:Enrichment:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
     [Fact]
     public void FindChangesNeedingRestart_WithoutADeclarationToCompare_IsRefused()
     {

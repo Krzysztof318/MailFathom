@@ -37,6 +37,9 @@
 - name: Embedding backfill
   href: embedding-backfill.md
   description: How mail stored before a profile existed is embedded afterwards, and what a backfill reports while it runs.
+- name: Message enrichment
+  href: message-enrichment.md
+  description: How a message's sense, why it may matter, and any commitment in it are derived once on arrival, what backs each mark, and what tells a rule's verdict from a model's.
 - name: Chat generation
   href: chat-generation.md
   description: What a deployment declares to make a chat call, what one call is allowed to spend, and how an operator sees whether the provider is working.

@@ -4,7 +4,11 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Locator, type Page, type Route } from '@playwright/test';
+
+import * as deployment from './fixtures/deployment';
+import * as mail from './fixtures/mail';
+import * as messages from './fixtures/messages';
 
 // What the unit suite structurally cannot answer, asked of the directory of static files `pnpm build` writes, in a
 // browser: the bundle is the built one rather than the source, the document is a real one with a history, the window
@@ -25,223 +29,23 @@ const narrowWindow = { width: 380, height: 720 };
 // breakpoint, so what is measured against it is what the artboard shows.
 const phoneWindow = { width: 390, height: 844 };
 
-// What the deployment the preview server stands in for answers. It accepts any credential presented to it, because
-// what this suite proves about signing in is the composing, the sending, and the keeping — which of two passwords a
-// service accepts is the service's own decision and is proven where that decision is made.
-// The grant it reports is what decides which spaces the client offers, so it names both the client acts on: a session
-// answer without them would open a frame with Discover and the intent field absent, which is a different screen from
-// the one every test below is about.
-const sessionAnswer = {
-    service: 'MailFathom',
-    version: declaredVersion,
-    permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
-    telemetry: true,
-};
-
-const mailAccounts = {
-    synchronizationEnabled: true,
-    accounts: [
-        {
-            id: 'work',
-            displayName: 'Work',
-            synchronizationState: 'Synchronized',
-            lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
-            behind: false,
-        },
-    ],
-};
-
-// The tree the Mail space is scoped by, standing in for what the folders route answers. One mailbox with an inbox and
-// a folder nested where a mail server nests one, which is what the reload below is read against.
-const mailFolders = {
-    synchronizationEnabled: true,
-    accounts: [
-        {
-            account: mailAccounts.accounts[0],
-            folders: [
-                {
-                    alias: 'INBOX',
-                    role: 'Inbox',
-                    path: ['INBOX'],
-                    storedEmailCount: 4213,
-                    unreadEmailCount: 12,
-                    synchronizationState: 'Synchronized',
-                    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
-                    behind: false,
-                },
-                {
-                    alias: 'ARCHIVE-2024',
-                    role: null,
-                    path: ['Archive', '2024'],
-                    storedEmailCount: 980,
-                    unreadEmailCount: 0,
-                    synchronizationState: 'Synchronized',
-                    lastSynchronizedAt: '2026-08-31T09:00:00+00:00',
-                    behind: false,
-                },
-            ],
-        },
-    ],
-};
-
-// The password this suite signs in with, and the RFC 7617 value the client is expected to compose out of it. Neither
-// belongs to anybody: the deployment is the preview server, and nothing here reaches a machine holding real mail.
-const userName = 'owner';
-const password = 'open sesame';
-const expectedAuthorization = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
-
-// The message the Mail space draws, standing in for one a deployment would hold, and the closest thing this suite has
-// to a mailbox. Nothing in it comes from a real one and nothing in it names a host this page could actually reach: the
-// blocks are chosen so that each the catalogue holds is drawn at least once, and so that the two things a sender may
-// try are visible — markup written as text, and a link whose words name one place while its target names another.
+// What this suite answers the client with is the corpus under `frontend/tests/fixtures/`, imported rather than
+// declared here: it is the same example mail every client check reads, so a shape that drifts from the service is
+// wrong in one place rather than in as many places as have written their own. `frontend/tests/AGENTS.md` § *The
+// corpus* holds what belongs in it, and this suite importing it is the first proof that it is sufficient.
 //
-// A one-pixel transparent picture stands in for a part the message carried itself; `pictures.invalid` stands in for one
-// it asked to be fetched, and is the host the assertions below watch for.
-const transparentPicture = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+// The session answer is the one value with anything spread over it. Its version is the one field only a build knows,
+// so the corpus states a placeholder and this suite substitutes what it read above; everything else is taken as the
+// corpus states it, the grant that decides which spaces the client offers included.
+const sessionAnswer = { ...deployment.sessionAnswer, version: declaredVersion };
 
-function run(text: string, overrides: Readonly<Record<string, unknown>> = {}) {
-    return { text, emphasis: 'None', foreground: null, link: null, ...overrides };
-}
+// The heading the corpus message carries. The sender wrote it as their own first-level heading, and two levels above
+// it are already taken — the space's own title and the subject the reading pane draws — so the pane draws it two
+// deeper, which is the assertion in the level rather than an accident of the fixture.
+const messageHeading = { name: messages.newsletterHeading, level: 3 } as const;
 
-function messageBlocks(pictureSource: string) {
-    return [
-        { type: 'heading', version: 1, level: 1, content: [run('This week at Example')], alignment: 'Start' },
-        {
-            type: 'paragraph',
-            version: 1,
-            content: [
-                run('A sender may write '),
-                run('<script>alert(1)</script>', { emphasis: 'Bold, Monospace' }),
-                run(' and it stays words.'),
-            ],
-            alignment: 'Inherited',
-        },
-        {
-            type: 'paragraph',
-            version: 1,
-            content: [
-                run('example.invalid', {
-                    link: {
-                        target: 'https://offers.invalid/claim',
-                        host: 'offers.invalid',
-                        asciiHost: null,
-                        deception: 'DisplayedHostDiffers',
-                        isWorthWarningAbout: true,
-                    },
-                }),
-            ],
-            alignment: 'Inherited',
-        },
-        {
-            type: 'image',
-            version: 1,
-            image: { source: pictureSource, alternativeText: 'The Example mark', width: 32, height: 32 },
-            link: null,
-            alignment: 'Center',
-        },
-        {
-            type: 'quote',
-            version: 1,
-            depth: 1,
-            blocks: [
-                { type: 'paragraph', version: 1, content: [run('You wrote: send me the list.')], alignment: 'Start' },
-            ],
-        },
-        { type: 'separator', version: 1 },
-        { type: 'preformatted', version: 1, text: '  order  quantity\n  kettle 1' },
-    ];
-}
-
-// The sender's own markup, as the self-contained representation serves it: the pictures inlined and every remote
-// address gone, unless the reader asked for this one message's pictures.
-//
-// It carries a script deliberately, which the representation itself never would. What that stands in for is the second
-// mechanism ADR 0024 keeps on this surface: the frame permits no script whatever the markup holds, so a representation
-// that ever stopped removing one would still not run it. The script fetches from a host of its own, so a browser says
-// whether it ran without anything having to read inside a frame it cannot reach into.
-function senderMarkup(remoteImages: boolean): string {
-    const picture = remoteImages ? 'https://pictures.invalid/mark.png' : transparentPicture;
-
-    return (
-        '<html><body><h1>This week at Example</h1>' +
-        '<script>new Image().src = "https://ranscript.invalid/beacon.png";</script>' +
-        `<img src="${picture}" alt="A mark">` +
-        '</body></html>'
-    );
-}
-
-function messageBody(remoteImages: boolean, fullHtml: boolean): string {
-    return JSON.stringify({
-        storedEmailId: '00000000-0000-4000-8000-000000000000',
-        availability: 'Readable',
-        plainText: {
-            text: 'A newsletter, as words.\n\nRead it at example.invalid.',
-            originalCharacterCount: 48,
-            truncation: 'None',
-        },
-        document: {
-            schemaVersion: 1,
-            blocks: messageBlocks(remoteImages ? 'https://pictures.invalid/mark.png' : transparentPicture),
-            refusal: 'None',
-            removedRemoteReferenceCount: remoteImages ? 0 : 3,
-            retainedRemoteImageCount: remoteImages ? 1 : 0,
-            inlineImageCount: remoteImages ? 0 : 1,
-            undrawnInlineImageCount: 0,
-            truncated: false,
-        },
-        selfContainedHtml: fullHtml
-            ? { text: senderMarkup(remoteImages), originalCharacterCount: 320, truncation: 'None' }
-            : null,
-        remoteImagesRequested: remoteImages,
-    });
-}
-
-// The heading the message below carries. The sender wrote it as their own first-level heading, and two levels above it
-// are already taken — the space's own title and the subject the reading pane draws — so the pane draws it two deeper,
-// which is the assertion in the level rather than an accident of the fixture.
-const messageHeading = { name: 'This week at Example', level: 3 } as const;
-
-/** The subject the message below carries, which is what names the region the pane draws it in. */
-const messageRegion = { name: 'A newsletter from Example' } as const;
-
-/** What the attachment below holds, small enough to state here and large enough to arrive in more than nothing. */
-const attachedOctets = 'order,quantity\nkettle,1\n';
-
-/** What the message route answers with: everything the pane draws around a body it never carries. */
-const messageDescription = JSON.stringify({
-    storedEmailId: '00000000-0000-4000-8000-000000000000',
-    account: 'work',
-    folder: 'INBOX',
-    threadId: null,
-    sizeOctets: 40_960,
-    headers: {
-        subject: messageRegion.name,
-        sentAt: '2026-08-31T09:41:00+00:00',
-        receivedAt: '2026-08-31T09:41:10+00:00',
-        participants: [
-            { role: 'From', address: 'news@example.invalid', displayName: 'Example' },
-            { role: 'To', address: 'reader@example.invalid', displayName: null },
-        ],
-        messageId: 'abc@example.invalid',
-        inReplyTo: null,
-        references: [],
-    },
-    body: { availability: 'Readable', plainText: true, html: true },
-    sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
-    attachments: [
-        {
-            position: 0,
-            fileName: 'orders.csv',
-            wasFileNameNormalized: false,
-            mediaType: 'text/csv',
-            sizeOctets: attachedOctets.length,
-        },
-    ],
-    carried: null,
-    unread: true,
-    flagged: false,
-    answered: false,
-});
+/** The subject that message carries, which is what names the region the pane draws it in. */
+const messageRegion = { name: messages.newsletterSubject } as const;
 
 interface Box {
     readonly x: number;
@@ -271,9 +75,7 @@ async function boxOf(element: Locator): Promise<Box> {
  * bundle exactly as it would be against a service.
  */
 async function servedByADeployment(page: Page): Promise<void> {
-    await page.route('**/api/client/messages/*', (route) =>
-        route.fulfill({ status: 200, contentType: 'application/json', body: messageDescription }),
-    );
+    await page.route('**/api/client/messages/*', (route) => answering(route, messages.newsletterMessage));
 
     // The one route that answers with octets rather than with JSON, which is what makes a real download something this
     // suite can watch: the built bundle composes the request, sends it with the credential it holds, reads the stream,
@@ -282,22 +84,16 @@ async function servedByADeployment(page: Page): Promise<void> {
         route.fulfill({
             status: 200,
             contentType: 'text/csv',
-            body: attachedOctets,
+            body: messages.attachedOctets,
         }),
     );
 
-    // The one route this fixture answers from state rather than from a constant. What the client is asked to prove
+    // The one route this suite answers from state rather than from the corpus. What the client is asked to prove
     // about the two preferences held on the deployment is that a choice made in one session is in force in the next,
     // and a route answering a fixed document would prove the read alone while quietly passing a client that wrote
-    // nothing at all.
-    let held = {
-        telemetryEnabled: true,
-        theme: 'system',
-        openMailInTabs: false,
-        markReadOnOpen: true,
-        expandWholeThread: false,
-        embeddedHtmlMessages: false,
-    };
+    // nothing at all — so the corpus states what a deployment holds before anything was chosen, and this holds what
+    // was chosen since.
+    let held = { ...deployment.clientPreferences };
 
     await page.route('**/api/client/preferences', (route) => {
         if (route.request().method() === 'POST') {
@@ -310,92 +106,45 @@ async function servedByADeployment(page: Page): Promise<void> {
     // Who the signed-in person is, which the frame reads for the account menu and the settings screen. The portrait is
     // answered as none: what a stored one costs this suite is a second binary fixture, and every assertion below is
     // about the name and the screen around it rather than about the octets.
-    await page.route('**/api/client/display-name', (route) =>
-        route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
-        }),
-    );
+    await page.route('**/api/client/display-name', (route) => answering(route, deployment.ownDisplayName));
 
     await page.route('**/api/client/portrait', (route) => route.fulfill({ status: 204 }));
 
-    await page.route('**/api/client/session', (route) =>
-        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sessionAnswer) }),
-    );
+    await page.route('**/api/client/session', (route) => answering(route, sessionAnswer));
 
-    await page.route('**/api/client/accounts', (route) =>
-        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailAccounts) }),
-    );
+    await page.route('**/api/client/accounts', (route) => answering(route, deployment.mailAccounts));
 
-    await page.route('**/api/client/folders', (route) =>
-        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailFolders) }),
-    );
+    await page.route('**/api/client/folders', (route) => answering(route, deployment.mailFolders));
 
-    await page.route('**/api/client/emails*', (route) =>
-        route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: timelinePage(new URL(route.request().url())),
-        }),
-    );
+    // Where in the folder the client asked to read is in the query and nowhere else, so this is where it is read: the
+    // corpus states a page of the mailbox given the row it starts at, and reading a request is this suite's half.
+    await page.route('**/api/client/emails*', (route) => {
+        const asked = new URL(route.request().url()).searchParams;
+        const cursor = Number(asked.get('cursor') ?? '0');
+        const from = asked.get('direction') === 'backward' ? cursor - mail.rowsPerPage : cursor;
 
-    // The one route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
-    // in the query and nowhere else, so answering it here is what lets this suite watch a request leave for the
-    // sender's host — and watch it not leave before the ask.
-    await page.route('**/api/client/messages/*/body*', (route) =>
-        route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: messageBody(
-                new URL(route.request().url()).searchParams.get('remoteImages') === 'true',
-                new URL(route.request().url()).searchParams.get('fullHtml') === 'true',
-            ),
-        }),
-    );
+        return answering(route, mail.timelinePage(from));
+    });
+
+    // The other route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
+    // in the query too, so answering it here is what lets this suite watch a request leave for the sender's host — and
+    // watch it not leave before the ask.
+    await page.route('**/api/client/messages/*/body*', (route) => {
+        const asked = new URL(route.request().url()).searchParams;
+
+        return answering(
+            route,
+            messages.newsletterBody({
+                remoteImages: asked.get('remoteImages') === 'true',
+                fullHtml: asked.get('fullHtml') === 'true',
+            }),
+        );
+    });
 }
 
-// How many messages the mailbox behind the routing holds, which is the number `frontend/src/AGENTS.md` names as the
-// one the client actually has to render. Nothing here is anybody's mail: every row is generated from its own number.
-const mailboxSize = 214_000;
-const rowsPerPage = 100;
-
-/**
- * One page of the mailbox, keyset-paged the way the client surface pages it.
- *
- * The cursor is the row the page starts at, written as text, because what this suite proves about a cursor is that the
- * client holds one and continues from it — what a deployment encodes in one is the deployment's own business.
- */
-function timelinePage(url: URL): string {
-    const asked = Number(url.searchParams.get('cursor') ?? '0');
-    const backward = url.searchParams.get('direction') === 'backward';
-    const from = Math.max(backward ? asked - rowsPerPage : asked, 0);
-    const rows = Math.min(rowsPerPage, mailboxSize - from);
-
-    return JSON.stringify({
-        emails: Array.from({ length: rows }, (_, at) => ({
-            id: `message-${String(from + at)}`,
-            account: 'work',
-            folder: 'INBOX',
-            threadId: null,
-            subject: `Message ${String(from + at)}`,
-            receivedAt: '2026-08-31T09:41:00+00:00',
-            sentAt: null,
-            senderAddress: `writer-${String(from + at)}@nordwind.example`,
-            senderDisplayName: `Writer ${String(from + at)}`,
-            toAddresses: ['owner@example.invalid'],
-            unread: at % 3 === 0,
-            flagged: false,
-            answered: false,
-            hasAttachments: at % 5 === 0,
-            attachmentCount: at % 5 === 0 ? 1 : 0,
-            sizeOctets: 4_096,
-            preview: `The opening of message ${String(from + at)}.`,
-        })),
-        nextCursor: from + rows >= mailboxSize ? null : String(from + rows),
-        previousCursor: from === 0 ? null : String(from),
-        pageSize: rowsPerPage,
-    });
+/** One value of the corpus put on the wire as the deployment behind the preview server would answer with it. */
+function answering(route: Route, answered: unknown): Promise<void> {
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answered) });
 }
 
 /**
@@ -443,8 +192,8 @@ async function readOnward(page: Page, list: Locator): Promise<void> {
 }
 
 async function signIn(page: Page): Promise<void> {
-    await page.getByRole('textbox', { name: 'Login' }).fill(userName);
-    await page.getByLabel('Password', { exact: true }).fill(password);
+    await page.getByRole('textbox', { name: 'Login' }).fill(deployment.userName);
+    await page.getByLabel('Password', { exact: true }).fill(deployment.password);
     await page.getByRole('button', { name: 'Connect' }).click();
 
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
@@ -577,7 +326,7 @@ test('sends the password as one Basic header the bundle composed, on every reque
     // the bundler has been over it, and what a screen sends is not what a component was handed in jsdom.
     expect(presented.length).toBeGreaterThan(0);
     for (const [route, authorization] of presented) {
-        expect(authorization, `no credential on ${route}`).toBe(expectedAuthorization);
+        expect(authorization, `no credential on ${route}`).toBe(deployment.expectedAuthorization);
     }
 });
 
@@ -1180,14 +929,14 @@ test('presents the credential the bundle composed when it fetches an attached fi
     await page.route('**/api/client/messages/*/attachments/*', async (route) => {
         presented.push(route.request().headers()['authorization']);
 
-        await route.fulfill({ status: 200, contentType: 'text/csv', body: attachedOctets });
+        await route.fulfill({ status: 200, contentType: 'text/csv', body: messages.attachedOctets });
     });
 
     const offered = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download orders.csv' }).click();
     await offered;
 
-    expect(presented).toStrictEqual([expectedAuthorization]);
+    expect(presented).toStrictEqual([deployment.expectedAuthorization]);
 });
 
 test('fetches nothing from the sender until the reader asks, and asks again next time', async ({ page }) => {
@@ -1202,14 +951,14 @@ test('fetches nothing from the sender until the reader asks, and asks again next
     const askForPictures = page.getByRole('button', { name: 'Load pictures from the sender' });
     await expect(askForPictures).toBeVisible();
     await expect(page.getByText('References removed: 3')).toBeVisible();
-    expect([...hosts]).not.toContain('pictures.invalid');
+    expect([...hosts]).not.toContain(messages.senderPictureHost);
 
     await askForPictures.click();
 
     // Asking is what makes the request, and it is the only thing that does. The address never reached the document
     // before this click, so there was nothing for a rendering defect to fetch.
     await expect(page.getByText('Pictures are being loaded from the sender for this message.')).toBeVisible();
-    await expect.poll(() => [...hosts]).toContain('pictures.invalid');
+    await expect.poll(() => [...hosts]).toContain(messages.senderPictureHost);
 
     await page.reload();
 
@@ -1255,16 +1004,16 @@ test('runs nothing the markup carries, and reaches no host but its own until the
     // The picture's host is the other half: the representation carries no address for it until the reader asks, so a
     // frame that fetched one would be drawing markup this client composed rather than the one it was served.
     await expect(page.getByText(/permits no script at all/)).toBeVisible();
-    expect([...hosts]).not.toContain('ranscript.invalid');
-    expect([...hosts]).not.toContain('pictures.invalid');
+    expect([...hosts]).not.toContain(messages.senderScriptHost);
+    expect([...hosts]).not.toContain(messages.senderPictureHost);
 
     await page.getByRole('button', { name: 'Load pictures from the sender' }).click();
 
     // Asking is what makes the request, on this surface exactly as in the pane. The script is unaffected by it: the
     // consent restores addresses and never restores anything that runs.
     await expect(page.getByText(/their servers can tell it was opened/)).toBeVisible();
-    await expect.poll(() => [...hosts]).toContain('pictures.invalid');
-    expect([...hosts]).not.toContain('ranscript.invalid');
+    await expect.poll(() => [...hosts]).toContain(messages.senderPictureHost);
+    expect([...hosts]).not.toContain(messages.senderScriptHost);
 });
 
 test('leaves the markup surface for the message it was opened from, and asks again next time', async ({ page }) => {

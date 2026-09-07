@@ -1,0 +1,158 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+// What a deployment says about itself, about the person signed in to it, and about the mailboxes it reads for them —
+// everything the client asks for before it has drawn a single message.
+//
+// `frontend/tests/AGENTS.md` § *The corpus* holds what the whole of it is and what may go in it. What this file adds
+// is the two states an account can be looked at in beside the resting one: a mailbox whose synchronization is failing,
+// and a mailbox the deployment has not caught up with. They are a page of their own rather than extra entries in the
+// resting page, because the resting page is what a screen is looked at in when nothing is wrong, and an account in
+// trouble changes what every summary above it says.
+
+/** The name typed into the sign-in screen, which belongs to nobody: it reaches a preview server or a fake transport. */
+export const userName = 'owner';
+
+/** @see userName */
+export const password = 'open sesame';
+
+/** The RFC 7617 value a client composes out of the two above, which is what a request on this surface presents. */
+export const expectedAuthorization = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
+
+/**
+ * What the session route answers, which is what decides how much of the client is offered at all.
+ *
+ * The grant names both permissions the client acts on: an answer without them opens a frame with Discover and the
+ * intent field absent, which is a different screen from the one most checks are about.
+ *
+ * **`version` is the one field a consumer replaces rather than reads.** Only a build knows what version it was built
+ * from, and a corpus stating one would be a second copy of `Version.props` going stale in a directory nothing reads it
+ * from — so a check proving anything about the version spreads the number it read over this value, and every other
+ * check takes it as it stands.
+ */
+export const sessionAnswer = {
+    service: 'MailFathom',
+    version: '0.0.0',
+    permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+    telemetry: true,
+};
+
+/** Who the signed-in person is, as the frame reads it for the account menu and the settings screen. */
+export const ownDisplayName = { displayName: 'Iris Marlow', changeable: true };
+
+/** What the preferences route answers before anything has been chosen, which is every default the deployment holds. */
+export const clientPreferences = {
+    telemetryEnabled: true,
+    theme: 'system',
+    openMailInTabs: false,
+    markReadOnOpen: true,
+    expandWholeThread: false,
+    embeddedHtmlMessages: false,
+};
+
+/** The mailbox everything else in the corpus belongs to, up to date and with nothing to say about itself. */
+export const workAccount = {
+    id: 'work',
+    displayName: 'Work',
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+/** A mailbox whose synchronization is failing, which is what a screen draws its own failure sentence from. */
+export const failingAccount = {
+    id: 'club',
+    displayName: 'Club',
+    synchronizationState: 'Failing',
+    lastSynchronizedAt: '2026-08-30T18:12:00+00:00',
+    behind: true,
+};
+
+/**
+ * A mailbox that is reachable and not up to date, which is the state the resting one and the failing one both miss.
+ *
+ * It is worth its own entry because a screen says something different about it: nothing is wrong with the account, so
+ * what a reader is owed is that some of their mail has not arrived yet rather than that the deployment cannot reach it.
+ */
+export const accountBehind = {
+    id: 'personal',
+    displayName: 'Personal',
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T06:02:00+00:00',
+    behind: true,
+};
+
+/** What the accounts route answers at rest: one mailbox, up to date, with nothing to report. */
+export const mailAccounts = {
+    synchronizationEnabled: true,
+    accounts: [workAccount],
+};
+
+/** What the accounts route answers when the deployment has something to say about two of the three mailboxes. */
+export const troubledAccounts = {
+    synchronizationEnabled: true,
+    accounts: [workAccount, failingAccount, accountBehind],
+};
+
+const inbox = {
+    alias: 'INBOX',
+    role: 'Inbox',
+    path: ['INBOX'],
+    storedEmailCount: 4213,
+    unreadEmailCount: 12,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+// A folder nested where a mail server nests one, which is what a tree that has been expanded and collapsed is read
+// against. It carries no role, because most folders on a real server carry none.
+const archive2024 = {
+    alias: 'ARCHIVE-2024',
+    role: null,
+    path: ['Archive', '2024'],
+    storedEmailCount: 980,
+    unreadEmailCount: 0,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:00:00+00:00',
+    behind: false,
+};
+
+/** A folder holding nothing, which is the state a message list has to be looked at in and cannot reach by scrolling. */
+export const emptyFolder = {
+    alias: 'RECEIPTS',
+    role: null,
+    path: ['Receipts'],
+    storedEmailCount: 0,
+    unreadEmailCount: 0,
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+/** What the folders route answers at rest: one mailbox with an inbox and a folder nested under another. */
+export const mailFolders = {
+    synchronizationEnabled: true,
+    accounts: [{ account: workAccount, folders: [inbox, archive2024] }],
+};
+
+/**
+ * What the folders route answers for {@link troubledAccounts}, so a tree can be looked at in the states above.
+ *
+ * The failing mailbox carries a folder that is behind as well as an account that is: a tree draws both, and a fixture
+ * that only set the account's state would leave the row a reader actually points at saying nothing.
+ */
+export const troubledFolders = {
+    synchronizationEnabled: true,
+    accounts: [
+        { account: workAccount, folders: [inbox, archive2024, emptyFolder] },
+        {
+            account: failingAccount,
+            folders: [
+                { ...inbox, storedEmailCount: 61, unreadEmailCount: 4, synchronizationState: 'Failing', behind: true },
+            ],
+        },
+        { account: accountBehind, folders: [{ ...inbox, storedEmailCount: 812, unreadEmailCount: 0, behind: true }] },
+    ],
+};

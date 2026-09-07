@@ -240,10 +240,11 @@ What that means in practice:
   and whether the credential reference still resolves. A refused candidate is logged with the key an operator has to
   fix, the previous declaration goes on answering, and the process stays up — which is what makes correcting a mistake
   in a correction possible at all.
-- **Two things still take a restart**, because each decided which services this deployment registered: whether `Alias`
-  names an endpoint at all, and whether the relevance filter runs. Going from no chat section to one is therefore a
-  restart, and so is turning the second pass on or off. Both are refused with that message rather than adopted and
-  quietly ignored. *Renaming* a declared alias is not one of them — the credential and the circuit are looked up by
+- **Three things still take a restart**, because each decided which services this deployment registered: whether `Alias`
+  names an endpoint at all, whether the relevance filter runs, and whether arriving mail is derived from — the switch
+  [message enrichment](message-enrichment.md) is turned on with. Going from no chat section to one is therefore a
+  restart, and so is turning the second pass or the arrival derivation on or off. Each is refused with that message
+  rather than adopted and quietly ignored. *Renaming* a declared alias is not one of them — the credential and the circuit are looked up by
   whatever the declaration in force calls the endpoint.
 
 [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)

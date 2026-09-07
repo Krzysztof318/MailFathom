@@ -455,6 +455,42 @@ Only a message that yielded text has rows here, and deleting a message cascades 
 
 `stored_emails.AttachmentTextDerivedAt` is what takes a message out of the walk that reads attachments. It is written in the same statement as the rows above and the passages cut from them: a message stamped without its readings would never be offered to a parser again, and readings without the stamp would be taken a second time on the next run — and, for a picture, paid for again.
 
+## What a derivation concluded about a message
+
+`email_enrichments` holds one row per message a derivation has settled, keyed on `StoredEmailId` alone — one derivation
+per message, so the key is the message. It carries only `DerivedAt` and the `xmin` row version, because everything the
+derivation concluded is in the rows beneath it and a message it concluded nothing about is a real answer rather than a
+missing row.
+
+**The row existing is what takes the message out of the enrichment pass's selection**, which is why nothing is written
+for a derivation that was withheld: a spent period allowance or an unreachable provider would otherwise remove a
+message from the queue permanently for a condition that lasts an hour. [Message
+enrichment](../features/message-enrichment.md#what-is-written-down-and-what-is-not) records which conditions withhold
+and which settle.
+
+`email_enrichment_marks` holds what it concluded, at most one row per aspect. `Aspect` is one of `Sense`,
+`Significance`, or `Commitment`, stored as text of at most 64 characters rather than as an ordinal, and
+`ix_email_enrichment_marks_enrichment_aspect` is unique over the message and the aspect — which is what makes "one
+reading of each kind" a constraint the database holds rather than a rule a writer follows. `Text` and `Reason` are each
+bounded at 240 characters, about two lines of a list row, and the mark that produced a longer one was shortened before
+it reached here rather than refused. `DueAt` is null on every aspect but a commitment, and on a commitment that named
+no date.
+
+`Source` and `Origin` are the pair that makes a rule's verdict and a model's **distinguishable in the data**: the first
+says which kind of producer wrote the mark, and the second names it — a rule identity, or the name the agent was
+composed under. Both are text, and both are on every row rather than on the enrichment above them, because one
+message's marks may come from different producers and a record naming only the derivation would leave a reader unable
+to say which of them a particular mark rests on.
+
+`Evidence` is a `uuid[]` of the passage identifiers the reading rests on, in the order the producer named them and at
+most four. It is an array column rather than a join table because nothing queries by it: it is read with the mark it
+belongs to and resolved through the same reader a Discover run's citations use, so a table would buy a join and an
+index nobody would use. There is no foreign key to `email_chunks` for the same reason a citation carries none — a
+passage a re-cut replaced resolves to nothing, which is a mark whose message was re-cut rather than a broken row.
+
+Deleting a message cascades to the enrichment, and the enrichment to its marks, so a reading never outlives the mail it
+was derived from.
+
 ## Embedding profiles
 
 `embedding_profiles` holds one row per vector space this deployment has embedded into. The row is written by the activation that takes a declared model up and starts spending against it, and its columns are what a stored vector's attribution points at.

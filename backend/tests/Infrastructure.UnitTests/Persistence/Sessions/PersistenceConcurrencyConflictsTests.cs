@@ -28,6 +28,8 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.EmailSpamClassificationPrimaryKeyConstraintName,
         PersistenceConstraintNames.EmailChunkOrdinalUniqueIndexName,
         PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName,
+        PersistenceConstraintNames.EmailEnrichmentPrimaryKeyConstraintName,
+        PersistenceConstraintNames.EmailEnrichmentMarkAspectUniqueIndexName,
         PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName,
         PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName,
         PersistenceConstraintNames.ContactAddressUniqueIndexName,
