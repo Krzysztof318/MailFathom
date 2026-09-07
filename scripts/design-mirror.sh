@@ -49,11 +49,25 @@ design_directory="$repository_root/artifacts/design"
 manifest="$design_directory/manifest.json"
 mirror="$(realpath -m -- "$design_directory/files")"
 
-# A screen source is an HTML file, and everything else the project holds is an asset, a generated
-# runtime or a thumbnail. Mirroring is therefore one rule rather than a list nobody updates: the
-# manifest still covers every file, so an asset appearing or disappearing stays visible without
-# several megabytes of it being carried into every worktree.
-is_mirrored='(.path | endswith(".html"))'
+# A screen source is an HTML file, and everything else the project holds is an asset, a copied
+# slide-deck starter or a thumbnail. Mirroring is therefore one rule rather than a list nobody
+# updates: the manifest still covers every file, so an asset appearing or disappearing stays visible
+# without several megabytes of it being carried into every worktree.
+is_screen_source='(.path | endswith(".html"))'
+
+# The generated runtime is mirrored beside them, and it is the one file that is not a screen source
+# and is still read. An artboard is a component that runtime boots rather than a document a browser
+# draws, so a mirror without it renders nothing at all — which is what `scripts/capture-design.sh`
+# needs it for. It is text, so it travels the way a screen source does; the project's images are not
+# text and none of them is mirrored.
+is_runtime='(.path == "support.js")'
+
+is_mirrored="($is_screen_source or $is_runtime)"
+
+# The stamp stays over the screen sources alone. It is what the state inventory records itself
+# against, and the inventory describes what a screen has rather than what draws it — so a runtime
+# rebuilt upstream must not read as the design having moved.
+is_stamped="$is_screen_source"
 
 # A path in the listing is a value a remote server chose, and every command below expands one into a
 # filesystem path. `..` in it walks out of the mirror, an absolute one ignores it entirely, and either
@@ -103,7 +117,7 @@ read_listing() {
 }
 
 stamp_of() {
-  jq -r "map(select($is_mirrored)) | sort_by(.path) | .[] | \"\(.etag) \(.path)\"" \
+  jq -r "map(select($is_stamped)) | sort_by(.path) | .[] | \"\(.etag) \(.path)\"" \
     | sha256sum \
     | cut -c1-16
 }
@@ -115,7 +129,7 @@ case "$command" in
     listing="$(read_listing "${2:-}")"
 
     if [[ ! -f "$manifest" ]]; then
-      printf 'No manifest yet — every screen source has to be read:\n'
+      printf 'No manifest yet — every screen source and the runtime have to be read:\n'
       jq -r "map(select($is_mirrored)) | .[] | \"  read  \(.path)\"" <<<"$listing"
       exit 0
     fi
@@ -140,7 +154,7 @@ case "$command" in
       | \$now
       | map(select($is_mirrored))
       | map(select((\$before[.path] | not) or (\$before[.path].etag != .etag)))
-      | if length == 0 then \"  none — what moved is not a screen source\" else .[] | \"  \(.path)\" end" -r
+      | if length == 0 then \"  none — what moved is neither a screen source nor the runtime\" else .[] | \"  \(.path)\" end" -r
     ;;
 
   record)
@@ -177,8 +191,8 @@ case "$command" in
     fi
 
     printf '%s\n' "$listing" >"$manifest"
-    printf 'Mirror recorded, %s screen sources, stamp %s.\n' \
-      "$(jq -r "map(select($is_mirrored)) | length" <<<"$listing")" \
+    printf 'Mirror recorded, %s screen sources and the runtime, stamp %s.\n' \
+      "$(jq -r "map(select($is_stamped)) | length" <<<"$listing")" \
       "$(stamp_of <<<"$listing")"
     ;;
 

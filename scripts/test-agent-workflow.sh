@@ -8744,13 +8744,13 @@ no_two_tracked_paths_differ_only_by_case() {
 # The listing is written rather than fetched here for the same reason: what is under test is the
 # comparison, and a fixture listing states the etags a server would have.
 write_design_listing() {
-  local target="$1" prototype_etag="$2"
+  local target="$1" prototype_etag="$2" runtime_etag="${3:-200}"
 
   cat >"$target" <<LISTING
 [
   { "path": "Screen.dc.html", "size": 6, "etag": "$prototype_etag" },
   { "path": "avatars/somebody.png", "size": 4, "etag": "100" },
-  { "path": "support.js", "size": 3, "etag": "200" }
+  { "path": "support.js", "size": 3, "etag": "$runtime_etag" }
 ]
 LISTING
 }
@@ -8762,16 +8762,18 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
   mkdir -p "$work"
   write_design_listing "$work/listing.json" "300"
 
-  # With no manifest yet every screen source has to be read, and only a screen source: the avatar and
-  # the generated runtime are covered by the manifest and copied by nothing.
+  # With no manifest yet every screen source and the generated runtime have to be read, and nothing
+  # else: the avatar is covered by the manifest and copied by nothing, because it is an image rather
+  # than text and no screen is built from it.
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     plan "$work/listing.json") >"$output"
   assert_contains 'Screen.dc.html' "$output"
+  assert_contains 'support.js' "$output"
   assert_excludes 'avatars/somebody.png' "$output"
-  assert_excludes 'support.js' "$output"
 
   mkdir -p "$repository_root/artifacts/design/files"
   printf 'screen' >"$repository_root/artifacts/design/files/Screen.dc.html"
+  printf 'run' >"$repository_root/artifacts/design/files/support.js"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output"
   assert_contains 'stamp' "$output"
@@ -8781,12 +8783,31 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
     plan "$work/listing.json") >"$output"
   assert_contains 'Nothing moved' "$output"
 
+  local stamp
+  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
+
   # A moved etag names the one path that moved, and the assets around it stay quiet.
   write_design_listing "$work/listing.json" "301"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     plan "$work/listing.json") >"$output"
   assert_contains 'changed   Screen.dc.html' "$output"
   assert_excludes 'avatars/somebody.png' "$output"
+
+  # The runtime is read like a screen source and stamped unlike one. It is mirrored because an
+  # artboard is a component it boots, so a mirror without it renders nothing — but the stamp is what
+  # the state inventory records itself against, and that describes what a screen has rather than what
+  # draws it. A runtime rebuilt upstream is therefore a file to re-read and not a design that moved.
+  write_design_listing "$work/listing.json" "300" "201"
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing.json") >"$output"
+  assert_contains 'changed   support.js' "$output"
+
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    record "$work/listing.json") >"$output"
+  if [[ "$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)" != "$stamp" ]]; then
+    printf 'A rebuilt runtime moved the stamp the state inventory records itself against\n' >&2
+    return 1
+  fi
 
   rm -rf "$repository_root/artifacts/design"
 }
@@ -8894,6 +8915,252 @@ SAVED
 <span>&amp;lt;</span>' "$target"
 
   rm -rf "$repository_root/artifacts/design"
+}
+
+# The design-parity loop: two capture scripts and a comparison. What is asserted here is everything
+# they decide before a browser is involved — where a capture may be written, how many pairs one
+# invocation produces, whether the design half of the pairing still describes the mirror beside it,
+# and what the comparison prints. Driving a browser is not one of those things and is not faked: a
+# contract that stubbed Chromium would prove that the stub answered.
+write_parity_fixture() {
+  local screens="${1:-2}"
+
+  mkdir -p "$repository_root/frontend/design-parity" "$repository_root/artifacts/design/files"
+
+  # Two screens at three compositions, which is six pairs and past what one invocation produces, and
+  # one screen at three, which is inside it. The bound is therefore exercised from either side of it
+  # by naming one screen or none.
+  cat >"$repository_root/frontend/design-parity/screens.json" <<'MANIFEST'
+{
+    "compositions": [
+        { "name": "telefon", "width": 390, "height": 844, "touch": true },
+        { "name": "tablet", "width": 1024, "height": 768, "touch": true },
+        { "name": "desktop", "width": 1440, "height": 900, "touch": false }
+    ],
+    "screens": [
+        {
+            "id": "first",
+            "route": "/#/first",
+            "signIn": true,
+            "steps": [],
+            "compositions": ["telefon", "tablet", "desktop"]
+        },
+        {
+            "id": "second",
+            "route": "/#/second",
+            "signIn": true,
+            "steps": [],
+            "compositions": ["telefon", "tablet", "desktop"]
+        }
+    ]
+}
+MANIFEST
+
+  if ((screens == 1)); then
+    cat >"$repository_root/frontend/design-parity/screens.json" <<'MANIFEST'
+{
+    "compositions": [
+        { "name": "telefon", "width": 390, "height": 844, "touch": true },
+        { "name": "tablet", "width": 1024, "height": 768, "touch": true },
+        { "name": "desktop", "width": 1440, "height": 900, "touch": false }
+    ],
+    "screens": [
+        {
+            "id": "first",
+            "route": "/#/first",
+            "signIn": true,
+            "steps": [],
+            "compositions": ["telefon", "tablet", "desktop"]
+        }
+    ]
+}
+MANIFEST
+  fi
+
+  printf 'screen' >"$repository_root/artifacts/design/files/Screen.dc.html"
+  printf 'run' >"$repository_root/artifacts/design/files/support.js"
+  write_design_listing "$test_directory/parity-listing.json" "300"
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    record "$test_directory/parity-listing.json") >/dev/null
+}
+
+write_parity_pairing() {
+  local stamp="$1"
+
+  cat >"$repository_root/artifacts/design/parity.json" <<PAIRING
+{
+  "stamp": "$stamp",
+  "screens": {
+    "first": { "file": "Screen.dc.html", "properties": { "theme": null }, "steps": [] },
+    "second": { "file": "Screen.dc.html", "properties": { "theme": null }, "steps": [] }
+  }
+}
+PAIRING
+}
+
+a_capture_refuses_a_destination_in_the_tree() {
+  local output="$test_directory/capture.out" stamp
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  write_parity_fixture 1
+  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
+  write_parity_pairing "$stamp"
+
+  # Both sides of a pair are material that does not belong in a public tree: the design side is the
+  # source of truth for screens that have not shipped, and the client side is a capture of a running
+  # client. So the destination is checked rather than trusted, and it is checked before anything else
+  # a capture needs — a refusal here costs no browser and no development server.
+  for script in capture-design capture-client; do
+    if (cd "$repository_root" && bash "$source_repository_root/scripts/$script.sh" \
+      --out "$repository_root/frontend/captures") >"$output" 2>&1; then
+      printf '%s wrote captures into the tree\n' "$script" >&2
+      return 1
+    fi
+    assert_contains 'Refusing to write captures to' "$output"
+  done
+
+  # Under `artifacts/` it proceeds, which is the other half of the same rule.
+  (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
+    --out "$repository_root/artifacts/parity" --screen first --composition desktop) >"$output" 2>&1
+  assert_excludes 'Refusing' "$output"
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/artifacts/parity" \
+    "$repository_root/frontend/design-parity"
+}
+
+a_capture_refuses_more_pairs_than_one_invocation_produces() {
+  local output="$test_directory/capture.out" stamp
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  write_parity_fixture 2
+  stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
+  write_parity_pairing "$stamp"
+
+  # A screenshot costs a session context by its pixel dimensions, so a run that captured everything
+  # would spend a context window before anything had been compared. Naming no screen means every
+  # screen, which is where an unbounded invocation would come from.
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
+    --out "$test_directory/parity-captures") >"$output" 2>&1; then
+    printf 'The design capture produced more pairs than one invocation may\n' >&2
+    return 1
+  fi
+  # It refuses rather than truncating, which is the part that would otherwise be invisible: a run
+  # that quietly captured the first four would report on a set nobody asked for.
+  assert_contains 'asks for 6 pairs' "$output"
+  assert_contains 'nothing was captured' "$output"
+
+  # One screen at all three compositions is inside the bound and proceeds.
+  (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
+    --out "$test_directory/parity-captures" --screen first) >"$output" 2>&1
+  assert_excludes 'asks for' "$output"
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+}
+
+the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror() {
+  local output="$test_directory/capture.out"
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  write_parity_fixture 1
+  write_parity_pairing 'written-for-an-older-design'
+
+  # A pairing recorded against a design that has since moved points every capture at an artboard that
+  # is no longer the one it names, and the comparison would then report the design having changed as
+  # the client being wrong. The stamp is what makes that visible rather than plausible.
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
+    --out "$test_directory/parity-captures" --screen first --composition desktop) >"$output" 2>&1; then
+    printf 'The design capture ran against a pairing written for an older design\n' >&2
+    return 1
+  fi
+  assert_contains 'was written for stamp written-for-an-older-design' "$output"
+
+  # A mirror carrying no runtime is the other way a design capture cannot mean anything: an artboard
+  # is a component that runtime boots, so what would be captured is an empty document.
+  rm -f "$repository_root/artifacts/design/files/support.js"
+  if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
+    --out "$test_directory/parity-captures" --screen first --composition desktop) >"$output" 2>&1; then
+    printf 'The design capture ran against a mirror with no runtime in it\n' >&2
+    return 1
+  fi
+  assert_contains 'no design runtime' "$output"
+
+  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+}
+
+the_comparison_reports_where_a_pair_differs_before_any_image_is_opened() {
+  local work="$test_directory/parity-compare" output="$test_directory/compare.out"
+  local stub="$test_directory/parity-stubs"
+
+  rm -rf "$work" "$stub"
+  mkdir -p "$work" "$stub"
+  printf 'design' >"$work/first-desktop.design.png"
+  printf 'client' >"$work/first-desktop.client.png"
+
+  # ImageMagick stands in here, because what is under test is the report rather than the pixels: the
+  # sizes agree, some pixels differ, and the connected components are two regions. The real thing
+  # measures all three; this states them so the shape of the answer can be asserted.
+  #
+  # The two differing regions are spelled differently on purpose. What ImageMagick calls white in a
+  # component listing depends on the build and the version — 7.1.2 prints `gray(255)` for a grayscale
+  # mask at any quantum depth, and a build scaling it to the quantum range would print `gray(65535)` —
+  # so the filter is written as "not the ground" rather than as an equality, and this fixture is what
+  # holds it to that.
+  cat >"$stub/magick" <<'FAKE_MAGICK'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    '%wx%h') printf '20x10\n'; exit 0 ;;
+    '%[fx:int(mean*w*h+0.5)]') printf '30\n'; exit 0 ;;
+  esac
+done
+
+for argument in "$@"; do
+  if [[ "$argument" == 'null:' ]]; then
+    printf 'Objects (id: bounding-box centroid area mean-color):\n'
+    printf '  0: 20x10+0+0 9.0,4.0 170 gray(0)\n'
+    printf '  1: 6x4+2+3 4.0,4.0 24 gray(255)\n'
+    printf '  2: 3x2+11+6 12.0,6.0 6 gray(65535)\n'
+    exit 0
+  fi
+done
+
+# Anything else is the pass that writes the difference mask, which is the last argument.
+printf 'mask' >"${*: -1}"
+FAKE_MAGICK
+  chmod +x "$stub/magick"
+
+  PATH="$stub:$PATH" bash "$source_repository_root/scripts/compare-captures.sh" "$work" >"$output" 2>&1
+
+  # The count first, then where — as regions with the crop that opens one, which is the whole reason
+  # this answers in text: an image costs a session by its pixel dimensions, so the region a number
+  # flagged is what gets opened rather than the frame around it.
+  assert_contains 'first' "$output"
+  assert_contains '30' "$output"
+  assert_contains '6x4+2+3' "$output"
+  assert_contains '3x2+11+6' "$output"
+  assert_contains '-crop <geometry>' "$output"
+
+  # The background is a component too, and it is not a difference. Only the white ones are.
+  assert_excludes '20x10+0+0' "$output"
+
+  # A pair whose halves are different sizes is not a pair, and scaling one to fit would report the
+  # resize as a difference in the design.
+  cat >"$stub/magick" <<'FAKE_MAGICK'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  if [[ "$argument" == '%wx%h' ]]; then
+    if [[ "$*" == *design* ]]; then printf '20x10\n'; else printf '20x11\n'; fi
+    exit 0
+  fi
+done
+FAKE_MAGICK
+  chmod +x "$stub/magick"
+
+  PATH="$stub:$PATH" bash "$source_repository_root/scripts/compare-captures.sh" "$work" >"$output" 2>&1
+  assert_contains 'not a pair' "$output"
+  assert_contains 'a capture run to repeat' "$output"
+
+  rm -rf "$work" "$stub"
 }
 
 # The client's example mail, held against the HTTP surface the service actually publishes.
@@ -9544,6 +9811,10 @@ run_test the_design_mirror_reads_only_what_the_etags_say_moved
 run_test the_design_mirror_refuses_a_transcription_that_lost_a_window
 run_test the_design_mirror_refuses_a_path_that_leaves_the_mirror
 run_test the_design_mirror_decodes_a_read_result_without_retyping_it
+run_test a_capture_refuses_a_destination_in_the_tree
+run_test a_capture_refuses_more_pairs_than_one_invocation_produces
+run_test the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror
+run_test the_comparison_reports_where_a_pair_differs_before_any_image_is_opened
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
 run_test no_two_tracked_paths_differ_only_by_case

@@ -80,10 +80,12 @@ Four steps, and an unchanged project stops at the second.
      bash scripts/design-mirror.sh decode "artifacts/design/files/<path>"
      ```
 
-   The mirror copies screen sources only, which is every `.html` file. The project's assets, its
-   generated runtime and its thumbnail are not read when a screen is built and carrying several
-   megabytes of them into every worktree buys nothing — but the manifest covers **every** file, so
-   one appearing or disappearing is still visible.
+   The mirror copies every `.html` screen source and `support.js`, the generated runtime that boots
+   them — without it an artboard renders nothing at all, which is what `scripts/capture-design.sh`
+   needs it for. The project's assets and its thumbnail are not read: they are images rather than
+   text, carrying several megabytes of them into every worktree buys nothing, and a screen is built
+   from the source rather than from them. The manifest covers **every** file, so one appearing or
+   disappearing is still visible.
 
 4. **Record.** `bash scripts/design-mirror.sh record "$WORK_DIR/listing.json"` writes the manifest
    and checks every mirrored file against the byte count the project states. A mismatch is a
@@ -93,6 +95,36 @@ Four steps, and an unchanged project stops at the second.
 Then re-extract the inventory for whatever moved, and put the new stamp at the top of it. An
 inventory whose stamp disagrees with `bash scripts/design-mirror.sh stamp` is describing an older
 design, which is the one failure this whole arrangement exists to make visible.
+
+## The design half of the parity pairing
+
+`artifacts/design/parity.json` sits beside the inventory and holds the other thing a mirror is read
+for: which artboard each screen in `frontend/design-parity/screens.json` is drawn on, the component
+properties it takes, and what is pressed to reach the state that manifest names. It is what
+`scripts/capture-design.sh` reads, and it lives here rather than in the tree because every one of
+those is design content — the manifest in `frontend/` describes the client and carries none.
+
+It records the stamp it was written against, and the capture script refuses a stamp that disagrees
+with the mirror's. So a refresh that moves a screen source is not finished until this file has been
+read against what moved, exactly as the inventory is:
+
+```json
+{
+  "stamp": "<the stamp record printed>",
+  "screens": {
+    "<screen id from the client manifest>": {
+      "file": "<mirrored artboard>",
+      "properties": { "theme": null },
+      "steps": [{ "click": { "text": "<what is pressed>" } }]
+    }
+  }
+}
+```
+
+`theme` is set to `null` rather than left out, because an artboard declaring a default theme would
+otherwise be captured in it whatever the browser was told — and both sides of a pair are captured
+under one `prefers-color-scheme`. Beyond that, a step names an element by its `text`, or by `role`
+and `name` where the artboard has an accessibility tree; `nth` picks one of several.
 
 ## What the inventory holds
 
@@ -110,8 +142,10 @@ it goes to the owner as a correction to make in the project — never into the c
 
 - It never writes to the design project. `write_files`, `copy_files` and `delete_files` are not
   called, whatever a task's acceptance says and however small the change looks.
-- It takes no screenshots. Holding a running screen against the design as two images is its own step,
-  and it reads this mirror rather than replacing it.
+- It takes no screenshots. Holding a running screen against the design is its own step and reads this
+  mirror rather than replacing it: `scripts/capture-design.sh`, `scripts/capture-client.sh` and
+  `scripts/compare-captures.sh`, in that order, with `frontend/AGENTS.md` § *Holding a screen against
+  the design* as the rule.
 - It stages nothing. `artifacts/` is ignored, and a change that puts a design file in the tree is the
   defect this arrangement is built to prevent.
 - It does not run in the fork role. The project belongs to the owner and is reached through a server

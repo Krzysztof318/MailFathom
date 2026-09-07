@@ -1,0 +1,37 @@
+{
+  "compositions": [
+    { "name": "telefon", "width": 390, "height": 844, "touch": true },
+    { "name": "fold", "width": 884, "height": 832, "touch": true },
+    { "name": "tablet", "width": 1024, "height": 768, "touch": true },
+    { "name": "desktop", "width": 1440, "height": 900, "touch": false }
+  ],
+  "screens": [
+    {
+      "id": "sign-in",
+      "route": "/",
+      "signIn": false,
+      "steps": [
+        { "expect": { "role": "heading", "name": "Connect your mailbox" } }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
+      "id": "mail-list",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [{ "expect": { "role": "listbox", "name": "Messages" } }],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
+      "id": "mail-thread",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        { "expect": { "role": "listbox", "name": "Messages" } },
+        { "click": { "role": "option", "nth": 0 } },
+        { "expect": { "role": "article" } }
+      ],
+      "compositions": ["telefon", "fold", "tablet", "desktop"]
+    }
+  ]
+}

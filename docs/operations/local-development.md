@@ -1176,7 +1176,7 @@ pnpm format                      # rewrite; pnpm format:check reports instead
 lock file being regenerated fails here rather than resolving to something nobody reviewed. Regenerate it by running
 `pnpm install` without the flag, as part of the change that moved the pin.
 
-Four things around those commands are worth knowing before they are discovered:
+Six things around those commands are worth knowing before they are discovered:
 
 - **Both verification gates run this flow**, through `scripts/resolve-changed-stacks.sh`, for any change that reaches
   the client stack. The fast loop restores, lints, type-checks, runs the suite, and formats — repairing, the way
@@ -1198,6 +1198,13 @@ Four things around those commands are worth knowing before they are discovered:
   port its preview server binds is derived from the workspace's own path rather than fixed, so two worktrees on one
   machine do not contend for it. What that suite covers, and what belongs in `pnpm test` instead, is
   `frontend/tests/AGENTS.md`.
+- **Holding a screen against its design needs three more things on the machine**, and none of them is a gate.
+  `scripts/capture-design.sh`, `scripts/capture-client.sh` and `scripts/compare-captures.sh` want the same Chromium
+  `pnpm test:browser` installs, **ImageMagick** for the comparison, and a network the browser can reach: the design's
+  artboards fetch their runtime's React and their web fonts, and a capture taken without them is a comparison of two
+  fallback renderings. Behind an authenticating proxy the scripts pass `HTTPS_PROXY` through to the browser, which is
+  the one thing a session would otherwise diagnose as an artboard that never boots. `frontend/AGENTS.md` § _Holding a
+  screen against the design_ is the rule the three implement.
 - **`pnpm test` is the whole of the client suite.** It is Vitest, one project per package — `Client.Backend` without a
   DOM and `Client.App` in jsdom with React Testing Library — and a test file sits beside the source it covers rather
   than under `frontend/tests/`, which holds the suite's contract and no test. `frontend/tests/AGENTS.md` is that
