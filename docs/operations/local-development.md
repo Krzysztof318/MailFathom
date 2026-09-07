@@ -1066,6 +1066,7 @@ cd frontend
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
 pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm dev                         # the development server
+pnpm dev:fixtures                # the same server, answered from the example corpus with no service behind it
 pnpm typecheck                   # both packages, plus the workspace's own configuration
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm test                        # both packages' suites, once, non-interactively

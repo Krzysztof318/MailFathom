@@ -12,7 +12,7 @@ import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { attachmentExchange, AttachmentExchangeContext } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, uploadAttachment } from './deployment/attachmentUpload';
 import { portraitExchange } from './deployment/portraitExchange';
-import { sendToDeployment } from './deployment/sendToDeployment';
+import { transportForThisRun } from './deployment/transportForThisRun';
 import { LocalizationProvider } from './localization/Localization';
 import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
@@ -73,6 +73,7 @@ async function open(root: HTMLElement): Promise<void> {
     const adopted = deployment.outcome === 'resolved' ? deployment.adopted : null;
     const credentials = await credentialStore();
     const signedInWith = adopted === null ? null : await credentials.read(adopted.deployment);
+    const send = await transportForThisRun();
 
     // The root is where what the deployment is told about a failed render is composed, which is why the boundaries
     // below report nothing themselves: one more region is one more boundary rather than one more reporter. React
@@ -113,7 +114,7 @@ async function open(root: HTMLElement): Promise<void> {
                                                         deployment={deployment}
                                                         openSignals={openSignalChannel}
                                                         portraits={portraitExchange}
-                                                        send={sendToDeployment}
+                                                        send={send}
                                                         signalSchedule={browserSchedule}
                                                         signedInWith={signedInWith}
                                                     />
