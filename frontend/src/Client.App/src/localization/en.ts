@@ -510,6 +510,13 @@ export const en = {
     'search.matchedByMeaning': 'Found by what it means rather than by these words.',
     'search.matchedInMail': 'Matched what this message is about rather than anything in its text.',
     'search.matchedBothWays': 'Matched these words and what this message is about.',
+    'search.matchedInFile': 'Found in {file}:',
+    'search.matchedInFileAt': 'Found in {file}, {place}:',
+    'search.matchedInPicture': 'Described in the picture {file}:',
+    'search.inFilePage': 'page {number}',
+    'search.inFileSlide': 'slide {number}',
+    'search.inFileSheet': 'sheet {number}',
+    'search.unnamedFile': 'a file the sender left unnamed',
     'search.wordsOnlyInactive':
         'This deployment does not search by meaning, so these results carry the words you typed and nothing found by meaning alone.',
     'search.wordsOnlyDegraded':

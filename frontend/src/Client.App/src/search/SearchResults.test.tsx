@@ -38,8 +38,29 @@ function result(at: number, carried: Record<string, unknown> = {}): Record<strin
         preview: `The opening of message ${String(at)}.`,
         snippets: [`The **invoice** for August, number ${String(at)}`],
         matchedBy: 'LexicalRanking',
+        attachmentMatches: [],
+        isDepictedMatch: false,
         ...carried,
     };
+}
+
+function citedFile(carried: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        attachmentPosition: 1,
+        fileName: 'invoice-4471.pdf',
+        mediaType: 'application/pdf',
+        source: 'Document',
+        segmentKind: 'Page',
+        segmentNumber: 2,
+        extracts: ['**Invoice** 4471 is payable within 30 days'],
+        ...carried,
+    };
+}
+
+// A result whose only claim on the query is a file it carries, which is what the citation exists to explain: the
+// deployment cut no extract of the message's own words, so nothing else in the row could say where the words were.
+function matchedInAFile(carried: Record<string, unknown> = {}): Record<string, unknown> {
+    return result(1, { snippets: [], attachmentMatches: [citedFile(carried)] });
 }
 
 function pageOf(results: readonly unknown[], page: Record<string, unknown> = {}): string {
@@ -195,6 +216,109 @@ describe('SearchResults', () => {
         const [found] = await rows();
 
         expect(found?.textContent).toContain('Matched these words and what this message is about.');
+    });
+
+    it('names the file and the page a result was reached inside, rather than leaving the row unexplained', async () => {
+        render(resultsUnder(answering(pageOf([matchedInAFile()]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Found in invoice-4471.pdf, page 2:');
+        expect(found?.textContent).toContain('Invoice 4471 is payable within 30 days');
+    });
+
+    it('counts a slide and a sheet in the file\u2019s own unit rather than calling either a page', async () => {
+        const slides = matchedInAFile({ fileName: 'plan.pptx', segmentKind: 'Slide', segmentNumber: 7 });
+
+        render(resultsUnder(answering(pageOf([slides]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Found in plan.pptx, slide 7:');
+    });
+
+    it('names a file alone where the reading of it recorded no boundaries to place the match in', async () => {
+        const unplaced = matchedInAFile({ segmentKind: null, segmentNumber: null });
+
+        render(resultsUnder(answering(pageOf([unplaced]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Found in invoice-4471.pdf:');
+        expect(found?.textContent).not.toContain('page');
+    });
+
+    it('says a picture was described rather than quoting the description as the file\u2019s own words', async () => {
+        const depicted = result(1, {
+            snippets: [],
+            matchedBy: 'SemanticRanking',
+            isDepictedMatch: true,
+            attachmentMatches: [
+                citedFile({
+                    fileName: 'delivery.jpg',
+                    mediaType: 'image/jpeg',
+                    source: 'ImageDescription',
+                    segmentKind: null,
+                    segmentNumber: null,
+                    extracts: ['A signed delivery note on a counter'],
+                }),
+            ],
+        });
+
+        render(resultsUnder(answering(pageOf([depicted]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Described in the picture delivery.jpg:');
+        expect(found?.textContent).toContain('A signed delivery note on a counter');
+    });
+
+    it('leads with the words somebody wrote where a document and a described picture both matched', async () => {
+        const both = result(1, {
+            snippets: [],
+            attachmentMatches: [
+                citedFile({ fileName: 'photo.jpg', source: 'ImageDescription', attachmentPosition: 0 }),
+                citedFile({ fileName: 'terms.pdf', attachmentPosition: 3 }),
+            ],
+        });
+
+        render(resultsUnder(answering(pageOf([both]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Found in terms.pdf');
+        expect(found?.textContent).not.toContain('photo.jpg');
+    });
+
+    it('shows the message\u2019s own extract rather than a file where the deployment cut one', async () => {
+        const alsoInAFile = result(1, { attachmentMatches: [citedFile()] });
+
+        render(resultsUnder(answering(pageOf([alsoInAFile]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('The invoice for August, number 1');
+        expect(found?.textContent).not.toContain('invoice-4471.pdf');
+    });
+
+    it('cites the file for the pane to open when a result explained by one is opened', async () => {
+        render(resultsUnder(answering(pageOf([matchedInAFile()]))));
+
+        const [found] = await rows();
+
+        fireEvent.pointerDown(found ?? document.body);
+
+        expect(carried().citedAttachment).toStrictEqual({ storedEmailId: 'message-1', position: 1 });
+    });
+
+    it('cites no file when a result explained by the message\u2019s own words is opened', async () => {
+        render(resultsUnder(answering(pageOf([result(1, { attachmentMatches: [citedFile()] })]))));
+
+        const [found] = await rows();
+
+        fireEvent.pointerDown(found ?? document.body);
+
+        expect(carried().citedAttachment).toBeNull();
     });
 
     it('says a deployment that has activated no embedding profile searched by words alone', async () => {

@@ -140,11 +140,14 @@ export {
     mostSearchResults,
     readMailSearch,
     searchQueryString,
+    type MailSearchAttachmentMatch,
+    type MailSearchAttachmentSource,
     type MailSearchPage,
     type MailSearchQuery,
     type MailSearchRanking,
     type MailSearchResult,
     type MailSearchRetrieval,
+    type MailSearchSegmentKind,
     type MailSemanticSearch,
 } from './mailSearch';
 export {

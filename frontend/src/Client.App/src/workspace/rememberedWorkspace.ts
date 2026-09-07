@@ -79,13 +79,14 @@ export function rememberedWorkspace(): Workspace {
  * remembered. So a reload returns to the message with the surface closed, and pressing the control asks again. A file
  * is left out because it is the sender's own name for something a reader asked to see once, and returning to it would
  * fetch the file again on a reload nobody meant as a request for it — so a reload returns to the message, which is
- * where the file was opened from and is one press away.
+ * where the file was opened from and is one press away. A file a search result cited goes with it, being the same act
+ * half finished.
  */
 export function rememberWorkspace(workspace: Workspace): void {
     try {
         window.sessionStorage.setItem(
             storageKey,
-            JSON.stringify({ ...workspace, fragment: null, fullHtml: null, attachment: null }),
+            JSON.stringify({ ...workspace, fragment: null, fullHtml: null, attachment: null, citedAttachment: null }),
         );
     } catch {
         // A browser refusing storage still runs the client; what a person was looking at then lasts the run rather
@@ -144,6 +145,7 @@ function workspaceIn(value: unknown): Workspace | null {
         conversation,
         fullHtml: null,
         attachment: null,
+        citedAttachment: null,
         fragment: null,
         selected,
         question,

@@ -515,6 +515,13 @@ export const pl: Catalogue = {
     'search.matchedByMeaning': 'Znalezione po znaczeniu, a nie po tych słowach.',
     'search.matchedInMail': 'Pasuje to, czego dotyczy ta wiadomość, a nie cokolwiek w jej treści.',
     'search.matchedBothWays': 'Pasują te słowa i to, czego dotyczy ta wiadomość.',
+    'search.matchedInFile': 'Znalezione w {file}:',
+    'search.matchedInFileAt': 'Znalezione w {file}, {place}:',
+    'search.matchedInPicture': 'Opisane na obrazku {file}:',
+    'search.inFilePage': 'strona {number}',
+    'search.inFileSlide': 'slajd {number}',
+    'search.inFileSheet': 'arkusz {number}',
+    'search.unnamedFile': 'plik bez nazwy nadanej przez nadawcę',
     'search.wordsOnlyInactive':
         'To wdrożenie nie wyszukuje po znaczeniu, więc te wyniki zawierają wpisane przez ciebie słowa i nic, co zostałoby znalezione wyłącznie po znaczeniu.',
     'search.wordsOnlyDegraded':

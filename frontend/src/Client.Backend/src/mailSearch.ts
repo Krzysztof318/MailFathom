@@ -26,6 +26,53 @@ export const mailSearchRoute = '/emails/search';
 /** Which ranking found a result. */
 export type MailSearchRanking = 'LexicalRanking' | 'SemanticRanking' | 'BothRankings';
 
+/**
+ * Who wrote the words an attachment matched on.
+ *
+ * The two are separated rather than counted together because they are different kinds of evidence. `Document` is the
+ * file's own text, written by whoever sent it. `ImageDescription` is a model's account of what a picture shows, which
+ * nobody wrote — so a screen showing one owes the reader that difference rather than presenting a guess as a quotation.
+ */
+export type MailSearchAttachmentSource = 'Document' | 'ImageDescription';
+
+/** The counted place inside a file a match sits at, in the three shapes a reading records boundaries in. */
+export type MailSearchSegmentKind = 'Page' | 'Slide' | 'Sheet';
+
+/**
+ * One file of a result the search reached, and where inside it.
+ *
+ * A citation rather than a payload: nothing here carries the file's octets or the whole of its text. The position is
+ * the coordinate the attachment route is addressed with, which is what lets a screen name what it found and send
+ * somebody to it — a citation a reader cannot go and check is an extract with nothing behind it.
+ */
+export interface MailSearchAttachmentMatch {
+    /** The file's place in the order a read of the message lists its attachments in. */
+    readonly attachmentPosition: number;
+
+    /** The name the sender gave the file, or `null` where the part carried none that could be used. */
+    readonly fileName: string | null;
+
+    /** What the part declared itself to be, which is the sender's claim rather than a reading of the octets. */
+    readonly mediaType: string;
+
+    readonly source: MailSearchAttachmentSource;
+
+    /** What the counted place inside the file is, or `null` where the reading recorded no boundaries. */
+    readonly segmentKind: MailSearchSegmentKind | null;
+
+    /** That place's one-based number in reading order, or `null` where {@link segmentKind} is. */
+    readonly segmentNumber: number | null;
+
+    /**
+     * The extracts of the file's text, each marking the matched words with `**`, and never none of them.
+     *
+     * Text cut from untrusted mail rather than markup to render, exactly as {@link MailSearchResult.snippets} is. An
+     * `ImageDescription` carries the description itself rather than fragments cut around the query, because there are
+     * no query words in it to cut around.
+     */
+    readonly extracts: readonly string[];
+}
+
 /** How a page was ranked: by words alone, or by words and meaning together. */
 export type MailSearchRetrieval = 'Lexical' | 'Hybrid';
 
@@ -92,6 +139,23 @@ export interface MailSearchResult extends MailTimelineEntry {
 
     /** Which ranking found this result. */
     readonly matchedBy: MailSearchRanking;
+
+    /**
+     * The files this message carries that the search reached, each naming the file and the place inside it.
+     *
+     * Never folded into {@link MailSearchResult.snippets}, which are extracts of the message's own text: quoting a file
+     * into one would report words the body never carried and leave a reader unable to say which file they came from. An
+     * attachment MailFathom could not read is absent rather than present and empty.
+     */
+    readonly attachmentMatches: readonly MailSearchAttachmentMatch[];
+
+    /**
+     * Whether a description of an attached picture is the whole of this message's claim on the query.
+     *
+     * `true` only where nothing anybody wrote was near what was asked for, which is why every such result sits below
+     * every written match. A screen drawing one owes the reader that the source is a guess about an image.
+     */
+    readonly isDepictedMatch: boolean;
 }
 
 /** One page of ranked results, and what says how it was ranked. */
@@ -140,7 +204,17 @@ const longestCursor = 4_096;
 const longestSnippet = 4_096;
 const mostSnippets = 32;
 
+// The file's two fields are bounded the way `mailMessage.ts` bounds the same two: this is the same file described
+// twice, so a name one read admits and the other refuses would be a message whose own attachment strip disagreed with
+// the search row above it. The count is a ceiling well clear of what the service's own passage bound per message can
+// group into files, so an honest answer is never refused and a dishonest one is still bounded.
+const mostAttachmentMatches = 64;
+const longestFileName = 1_024;
+const longestMediaType = 256;
+
 const rankings: readonly MailSearchRanking[] = ['LexicalRanking', 'SemanticRanking', 'BothRankings'];
+const attachmentSources: readonly MailSearchAttachmentSource[] = ['Document', 'ImageDescription'];
+const segmentKinds: readonly MailSearchSegmentKind[] = ['Page', 'Slide', 'Sheet'];
 const retrievals: readonly MailSearchRetrieval[] = ['Lexical', 'Hybrid'];
 const semantics: readonly MailSemanticSearch[] = ['Inactive', 'Available', 'Degraded'];
 
@@ -312,14 +386,92 @@ function parseResult(value: unknown): MailSearchResult | null {
 
     const entry = parseTimelineEntry(value);
     const matchedBy = record['matchedBy'];
+    const isDepictedMatch = record['isDepictedMatch'];
 
-    if (entry === null || !isOneOf(matchedBy, rankings)) {
+    if (entry === null || !isOneOf(matchedBy, rankings) || typeof isDepictedMatch !== 'boolean') {
         return null;
     }
 
     const snippets = parseSnippets(record['snippets']);
+    const attachmentMatches = parseAttachmentMatches(record['attachmentMatches']);
 
-    return snippets === null ? null : { ...entry, snippets, matchedBy };
+    if (snippets === null || attachmentMatches === null) {
+        return null;
+    }
+
+    return { ...entry, snippets, matchedBy, attachmentMatches, isDepictedMatch };
+}
+
+function parseAttachmentMatches(value: unknown): readonly MailSearchAttachmentMatch[] | null {
+    if (!Array.isArray(value) || value.length > mostAttachmentMatches) {
+        return null;
+    }
+
+    const matches: MailSearchAttachmentMatch[] = [];
+    for (const cited of value) {
+        const match = parseAttachmentMatch(cited);
+
+        if (match === null) {
+            return null;
+        }
+
+        matches.push(match);
+    }
+
+    return matches;
+}
+
+function parseAttachmentMatch(value: unknown): MailSearchAttachmentMatch | null {
+    const record = asRecord(value);
+    if (record === null) {
+        return null;
+    }
+
+    const attachmentPosition = record['attachmentPosition'];
+    const fileName = record['fileName'] ?? null;
+    const mediaType = record['mediaType'];
+    const source = record['source'];
+    const segmentKind = record['segmentKind'] ?? null;
+    const segmentNumber = record['segmentNumber'] ?? null;
+
+    if (!isCount(attachmentPosition) || !isOneOf(source, attachmentSources)) {
+        return null;
+    }
+
+    if (fileName !== null && (typeof fileName !== 'string' || fileName.length > longestFileName)) {
+        return null;
+    }
+
+    if (typeof mediaType !== 'string' || mediaType.length > longestMediaType) {
+        return null;
+    }
+
+    // The place inside the file is one fact rather than two, so half of it is an answer this client refuses rather than
+    // one it draws as a citation naming a page nothing counted.
+    if ((segmentKind === null) !== (segmentNumber === null)) {
+        return null;
+    }
+
+    if (segmentKind !== null && !isOneOf(segmentKind, segmentKinds)) {
+        return null;
+    }
+
+    if (segmentNumber !== null && (!isCount(segmentNumber) || segmentNumber < 1)) {
+        return null;
+    }
+
+    const extracts = parseSnippets(record['extracts']);
+
+    // A citation with nothing behind it is refused rather than drawn: what makes this a citation instead of a bare
+    // coordinate is the words it quotes, and a row naming a file with nothing under it would state the file as a reason
+    // a reader has no way to check.
+    return extracts === null || extracts.length === 0
+        ? null
+        : { attachmentPosition, fileName, mediaType, source, segmentKind, segmentNumber, extracts };
+}
+
+function isCount(value: unknown): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function parseSnippets(value: unknown): readonly string[] | null {

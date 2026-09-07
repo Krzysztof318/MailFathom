@@ -93,9 +93,12 @@ const rackingQuote = {
 /**
  * What the search route answers, ranked both ways.
  *
- * The three rows are the three things `matchedBy` separates, because a screen draws each differently: a result found by
- * its words carries the extracts around them, one found by meaning alone carries none and would otherwise read as an
- * unexplained row, and one both rankings found carries both claims.
+ * The three rows are the three things a screen draws differently, which is what makes them worth three rows: a result
+ * the query reached inside a file it carries names the file and where in it, one found by its words carries the
+ * extracts around them, and one found by meaning alone carries neither and would otherwise read as an unexplained row.
+ *
+ * The file the first of them cites is the one the newsletter message in `messages.ts` actually carries, at the position
+ * that message publishes it at, because a citation nothing behind it answers for is a coordinate a reader cannot follow.
  */
 export const searchResults = {
     results: [
@@ -106,8 +109,20 @@ export const searchResults = {
             senderAddress: 'news@example.invalid',
             senderDisplayName: 'Example',
             preview: 'A newsletter, as words.',
-            snippets: ['The **renewal** falls due at the end of the month'],
+            snippets: [],
             matchedBy: 'BothRankings',
+            attachmentMatches: [
+                {
+                    attachmentPosition: 0,
+                    fileName: 'orders.csv',
+                    mediaType: 'text/csv',
+                    source: 'Document',
+                    segmentKind: null,
+                    segmentNumber: null,
+                    extracts: ['The **renewal** falls due at the end of the month'],
+                },
+            ],
+            isDepictedMatch: false,
         },
         {
             ...timelineRow(1),
@@ -118,6 +133,8 @@ export const searchResults = {
             preview: 'Your order left this morning and should reach you on Thursday.',
             snippets: ['what the **renewal** covers'],
             matchedBy: 'LexicalRanking',
+            attachmentMatches: [],
+            isDepictedMatch: false,
         },
         {
             ...timelineRow(2),
@@ -129,6 +146,8 @@ export const searchResults = {
             preview: rackingQuote.preview,
             snippets: [],
             matchedBy: 'SemanticRanking',
+            attachmentMatches: [],
+            isDepictedMatch: false,
         },
     ],
     nextCursor: null,

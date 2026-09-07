@@ -28,6 +28,20 @@ export interface OpenedAttachment {
 }
 
 /**
+ * A file a search result cited, named the only way a citation can name one.
+ *
+ * The position rather than the description, because a search row has nothing else: the row is served without the file's
+ * declared size, and that size is the bound the download is read under. So a citation says which file of which message,
+ * and the pane that reads the message turns it into an {@link OpenedAttachment}.
+ */
+export interface CitedAttachment {
+    readonly storedEmailId: string;
+
+    /** The file's place in the order a read of the message lists its attachments in. */
+    readonly position: number;
+}
+
+/**
  * The file's identity as one string, which is what a tab holding it is keyed by.
  *
  * The position rather than the name, because that is the only identity a message's parts have — two files a message

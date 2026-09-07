@@ -4,7 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import { everything, type MailScope } from './mailScope';
-import type { OpenedAttachment } from './openAttachment';
+import type { CitedAttachment, OpenedAttachment } from './openAttachment';
 import type { OpenConversation } from './openConversation';
 
 // What a person carries between the spaces. Discover, Mail, and Cases are one application rather than three, and this
@@ -68,6 +68,18 @@ export interface Workspace {
     readonly attachment: OpenedAttachment | null;
 
     /**
+     * The file a search result cited, waiting for the message it belongs to to be read, or `null` where nothing is.
+     *
+     * A search row cites a file by its position and knows nothing else about it: what a citation carries is a
+     * coordinate, and opening a file needs the size the message declared for it, which only a read of that message
+     * publishes. So following a citation is two steps rather than one — the message opens, and the pane that read it
+     * opens the file — and this is the half-finished act between them. Any message read spends it, so one abandoned by
+     * reading something else opens nothing later, and it is not remembered across a reload for the same reason the open
+     * file is not.
+     */
+    readonly citedAttachment: CitedAttachment | null;
+
+    /**
      * The part of what is open that a question would be asked about, or `null` where the whole of it is.
      *
      * It is the words a person selected rather than a position in anything, because what the intent field does with it
@@ -114,6 +126,7 @@ export const emptyWorkspace: Workspace = {
     conversation: null,
     fullHtml: null,
     attachment: null,
+    citedAttachment: null,
     fragment: null,
     selected: [],
     question: '',
