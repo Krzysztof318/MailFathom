@@ -309,7 +309,11 @@ and, through them, the vectors the replacement cascades away.
   that pass ever saw it. Such a message is cut by the account's next run instead. Both stages are waited for a *first*
   cut alone, so a message that already carries passages is re-cut whatever they say: this walk is the only path that
   can replace a passage, and withholding one here would leave the passages — and the vectors built from them — derived
-  under exactly the configuration a rebuild exists to replace, beside stored text reporting the new one.
+  under exactly the configuration a rebuild exists to replace, beside stored text reporting the new one. What a rebuild
+  does to a message's attachments is different in one respect: it discards the readings taken under an older posture,
+  removes the passages cut from them, and clears the reading marker rather than parsing anything itself, so the words are
+  taken again by the attachment stage above, under that run's octet budget and whichever image provider the deployment
+  still has.
 - **The embedding backfill** sweeps for messages with extracted text and no passages, and for passages with no vector.
   It cuts through the same writer and is narrowed by the same classification predicate, the same rule stamp, the same
   reading of a relocation still converging, and the same folder switch, so it reaches whatever one account run's batch

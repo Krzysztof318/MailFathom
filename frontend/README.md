@@ -11,6 +11,7 @@ the command for it. It shares no build file and no configuration file with the s
 ```bash
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
 pnpm dev                         # the development server
+pnpm dev:fixtures                # the same server, answered from the example corpus with no service behind it
 pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm desktop:dev                 # the desktop shell around that server, rebuilt as the shell changes
 pnpm desktop:build               # the desktop application and its installers
@@ -335,7 +336,38 @@ pull request that reaches this stack. Its configuration is `playwright.config.ts
 `tests/fixtures/` beside them is one corpus of example mail — the session, the accounts and folders, the mail, the
 conversations, the drafts, the notifications, and what a change answers with — imported by whatever needs a populated
 screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite reaches
-it with `page.route`, and a unit test would hand it to a transport function.
+it with `page.route`, a unit test hands it to a transport function, and the development server below answers from it.
+
+## Looking at a screen with mail in it, with nothing behind the client
+
+`pnpm dev:fixtures` serves this client out of that corpus: a populated mailbox, three accounts in three different
+states, a conversation, a search, and a notification centre, with no database, no mail server and no service running.
+It signs in with any name and password, because the credential reaches nothing.
+
+The seam is `MailFathomTransport` and nothing else. `src/Client.App/src/development/fixtureDeployment.ts` is a second
+implementation of the one function the composition root hands the client, so no component learns that a fake exists and
+nothing is patched, intercepted or served on a second port. **It never ships**: `main.tsx` reaches it through a dynamic
+import behind `import.meta.env.DEV` and a Vite mode nothing else uses, a production build folds that condition away,
+and the browser suite asserts that neither the module nor the corpus is in `dist/`. `pnpm dev` is unchanged, so a run
+against a service somebody is running is what it always was.
+
+**The states that are not the resting one are reached by changing an option while the client runs**, in the browser's
+own console, and the next thing a screen asks for is answered under it — nothing is edited and nothing is rebuilt:
+
+```js
+mailfathomFixtures.latency = 1500; // every surface that waits, waiting
+mailfathomFixtures.failureRate = 1; // every failure sentence and its way out
+mailfathomFixtures.emptyCollections = true; // the empty folder, the search that found nothing, the empty centre
+mailfathomFixtures.expiredSession = true; // the client asking for the password again
+mailfathomFixtures.unreachable = true; // the offline state, which is not an empty answer
+```
+
+Two things about a run against the corpus are worth knowing before they read as defects. The grant is every permission
+the client acts on rather than the reading-and-asking one the corpus states for the suites, so the composer, the filing
+controls and the flags are reachable. And three requests do not go through the transport — the picture a person is
+drawn by, the octets of a file a message carries, and the signal channel, each of which reaches the network in
+`deployment/` or opens a connection of its own — so they answer as a deployment that is not there, which every screen
+drawing one already has a state for. What the client's own telemetry export reports in the console is the same thing.
 
 [`tests/AGENTS.md`](tests/AGENTS.md) is where both suites' policy is decided, including which check belongs to which,
 and where the corpus's own rules are.

@@ -2,7 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
@@ -73,7 +75,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var notRebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: false, cancellationToken);
         var staleCount = await services.InScopeAsync(
             (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
-                .CountEmailsWithStaleDerivedDataAsync(token),
+                .CountStaleDerivedDataAsync(token),
             cancellationToken);
 
         // Assert
@@ -87,7 +89,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
         // The figure an operator is shown counts the same rows the rebuild would re-derive, and this class's are at
         // least two of them; other classes in the suite write documents with no stamp of their own.
-        Assert.True(staleCount >= 2);
+        Assert.True(staleCount.EmailCount >= 2);
     }
 
     /// <summary>A cursor left where another configuration's walk finished would sit past every row this one must revisit.</summary>
@@ -187,7 +189,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
         var staleCount = await services.InScopeAsync(
             (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
-                .CountEmailsWithStaleDerivedDataAsync(token),
+                .CountStaleDerivedDataAsync(token),
             cancellationToken);
         var countedWithoutTheExclusion = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailSearchDocuments
@@ -203,7 +205,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
         // The control the assertion above needs: the row is there, it carries no current stamp, and the only reason it
         // is absent from both answers is the text source rather than an arrangement that wrote nothing.
-        Assert.True(countedWithoutTheExclusion > staleCount);
+        Assert.True(countedWithoutTheExclusion > staleCount.EmailCount);
     }
 
     /// <summary>A message the rules have not reached gets its extraction and none of its passages.</summary>
@@ -271,6 +273,137 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         Assert.NotEmpty(afterTheRebuild);
         Assert.Empty(afterTheRebuild.Intersect(afterTheFirstCut, StringComparer.Ordinal));
     }
+
+    /// <summary>An attachment read under an older posture is walked, counted, and discarded, whatever the body's stamp says.</summary>
+    /// <remarks>
+    /// The body and the attachments are read by different stages, so this arrangement — a document carrying the current
+    /// stamp above a reading carrying an older one — is what a posture republished between the two leaves behind. Before
+    /// the rebuild reached it, the message was absent from the walk, absent from the figure an operator reads, and its
+    /// contract's extracted text stayed redacted to a configuration nobody runs.
+    /// </remarks>
+    [Fact]
+    public async Task ApplyExtractionAsync_AnAttachmentReadUnderAnOlderPosture_DiscardsItAndOffersTheMessageUpAgain()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3050, cancellationToken);
+        var readUnderAnOlderPosture = stored.WrittenUnderTheCurrentConfiguration;
+
+        await RecordAttachmentReadingAsync(services, readUnderAnOlderPosture, OlderStamp, cancellationToken);
+        var beforeTheRebuild = await ReadAttachmentReadingAsync(services, readUnderAnOlderPosture, cancellationToken);
+
+        // Act
+        var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
+        var counted = await services.InScopeAsync(
+            (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false).CountStaleDerivedDataAsync(token),
+            cancellationToken);
+
+        await this.ApplyExtractionAsync(services, binding, readUnderAnOlderPosture, uid: 3050, "rebuilt", cancellationToken);
+
+        // Assert
+        Assert.Contains(readUnderAnOlderPosture, rebuilding);
+        Assert.True(counted.AttachmentReadingCount >= 1);
+        Assert.Equal([OlderStamp.Value], beforeTheRebuild.Stamps);
+        Assert.NotEqual(0, beforeTheRebuild.PassageCount);
+
+        var afterTheRebuild = await ReadAttachmentReadingAsync(services, readUnderAnOlderPosture, cancellationToken);
+
+        Assert.Empty(afterTheRebuild.Stamps);
+        Assert.Equal(0, afterTheRebuild.PassageCount);
+        Assert.Null(afterTheRebuild.ReadAt);
+    }
+
+    /// <summary>An attachment already read under the current posture is left exactly as it is, so a rebuild reads no file twice.</summary>
+    [Fact]
+    public async Task ApplyExtractionAsync_AnAttachmentAlreadyReadUnderTheCurrentPosture_LeavesItAndItsMarkerAlone()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3060, cancellationToken);
+        var current = stored.WrittenUnderAnOlderConfiguration;
+
+        await RecordAttachmentReadingAsync(services, current, CurrentStamp, cancellationToken);
+        var beforeTheRebuild = await ReadAttachmentReadingAsync(services, current, cancellationToken);
+
+        // Act
+        await this.ApplyExtractionAsync(services, binding, current, uid: 3061, "kept", cancellationToken);
+
+        // Assert
+        var afterTheRebuild = await ReadAttachmentReadingAsync(services, current, cancellationToken);
+
+        Assert.Equal([CurrentStamp.Value], afterTheRebuild.Stamps);
+        Assert.NotEqual(0, beforeTheRebuild.PassageCount);
+        Assert.Equal(beforeTheRebuild.PassageCount, afterTheRebuild.PassageCount);
+        Assert.Equal(beforeTheRebuild.ReadAt, afterTheRebuild.ReadAt);
+        Assert.NotNull(afterTheRebuild.ReadAt);
+    }
+
+    /// <summary>Records one attachment reading against a message, as the account run's attachment stage leaves it.</summary>
+    /// <remarks>
+    /// Committed through <see cref="IStoredEmailAttachmentTextStore" /> rather than assembled in the tables, so the
+    /// rebuild is held against the row shape the account run actually writes — the reading, the passages cut from it,
+    /// and the marker that takes the message out of the walk, each written by the code that owns it.
+    /// </remarks>
+    private static async Task RecordAttachmentReadingAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        SensitiveContentDerivationStamp stamp,
+        CancellationToken cancellationToken)
+    {
+        var reading = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "contract.pdf",
+            AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(
+                SyntheticEmail.BodyTextContaining("contract", wordCount: 120),
+                PageCount: 1,
+                [],
+                [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 1, Label: null, StartOffset: 0)])));
+
+        var commitResult = await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IStoredEmailAttachmentTextStore>()
+                .SaveAttachmentTextAsync(
+                    session,
+                    storedEmailId,
+                    new EmailAttachmentTextDerivation([reading], RedactedUnder: stamp),
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+    }
+
+    /// <summary>Reads back what one message's attachments hold, as the three values the rebuild moves.</summary>
+    private static Task<AttachmentReading> ReadAttachmentReadingAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+        async (scope, token) =>
+        {
+            var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+
+            return new AttachmentReading(
+                await dbContext.EmailAttachmentTexts
+                    .AsNoTracking()
+                    .Where(reading => reading.StoredEmailId == storedEmailId.Value)
+                    .OrderBy(reading => reading.AttachmentPosition)
+                    .Select(reading => reading.SensitiveContentStamp)
+                    .ToArrayAsync(token),
+                await dbContext.EmailChunks
+                    .AsNoTracking()
+                    .CountAsync(
+                        chunk => chunk.StoredEmailId == storedEmailId.Value && chunk.AttachmentPosition != null,
+                        token),
+                await dbContext.StoredEmails
+                    .AsNoTracking()
+                    .Where(email => email.Id == storedEmailId.Value)
+                    .Select(email => email.AttachmentTextDerivedAt)
+                    .SingleAsync(token));
+        },
+        cancellationToken);
 
     /// <summary>Applies one extraction through the rebuilding walk's own store, in a session of its own.</summary>
     private async Task ApplyExtractionAsync(
@@ -534,6 +667,9 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
 
     /// <summary>The derived document of one message, as the two values a rebuild is judged by.</summary>
     private sealed record DerivedDocument(string? Stamp, string? BodyText);
+
+    /// <summary>What one message's attachments hold: the stamp of each reading, the passages cut from them, and the marker that keeps the message out of the walk.</summary>
+    private sealed record AttachmentReading(IReadOnlyList<string?> Stamps, int PassageCount, DateTimeOffset? ReadAt);
 
     /// <summary>The three emails one arrangement stored, named by the configuration their text was written under.</summary>
     private sealed record StoredDocuments(

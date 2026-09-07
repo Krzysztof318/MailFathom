@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { execFileSync } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test, type Browser, type Locator, type Page, type Route } from '@playwright/test';
 
@@ -1349,4 +1350,25 @@ test('puts a reader back where they were reading, across a reload', async ({ pag
     await expect(after.getByRole('option').first()).toBeVisible();
 
     expect(await after.getByRole('option').first().textContent()).toBe(before);
+});
+
+test('carries no example mail and no fixture deployment in what it publishes', async () => {
+    // `pnpm dev:fixtures` serves this same client out of the corpus above, so the one thing that has to be proved
+    // about that convenience is that it is a convenience: a production build folds away the condition
+    // `src/Client.App/src/main.tsx` reaches it behind, and nothing under `dist/` may therefore mention either the
+    // corpus or the options a development run publishes on `window`. This suite is where it is asserted because this
+    // suite is the one that builds — `pnpm test` never does, so it could only assert it about the source.
+    const published = resolve(import.meta.dirname, '../src/Client.App/dist');
+    const files = await readdir(published, { recursive: true, withFileTypes: true });
+    const written = await Promise.all(
+        files.filter((entry) => entry.isFile()).map((file) => readFile(resolve(file.parentPath, file.name), 'utf8')),
+    );
+    const bundle = written.join('\n');
+
+    // The version the build stamped in, asserted present before anything is asserted absent: an absence read off a
+    // directory nothing was read from would pass whatever the build had written.
+    expect(bundle).toContain(declaredVersion);
+
+    expect(bundle).not.toContain(messages.newsletterSubject);
+    expect(bundle).not.toContain('mailfathomFixtures');
 });
