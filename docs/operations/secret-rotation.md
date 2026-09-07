@@ -109,9 +109,9 @@ Renew before the certificate expires rather than after. Startup reports the expi
 that line into a warning within thirty days:
 
 ```
-warn: The MCP HTTPS profile public presents a server certificate that expires at 2027-01-31 00:00:00Z. Renew it before
-      then: once it expires the profile stops starting, because a certificate outside its validity period is refused
-      rather than served.
+warn: The HTTPS profile public configured under McpEndpoint:Https presents a server certificate that expires at
+      2027-01-31 00:00:00Z. Renew it before then: once it expires the profile stops starting, because a certificate
+      outside its validity period is refused rather than served.
 ```
 
 Connections already accepted finish on the certificate they negotiated; the restart is what ends them, as it ends every

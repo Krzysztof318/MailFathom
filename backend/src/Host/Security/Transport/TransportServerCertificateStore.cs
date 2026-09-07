@@ -197,12 +197,12 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
 
         if (ServerCertificateExpiry.IsExpiringSoon(expiration, this.timeProvider.GetUtcNow()))
         {
-            this.LogServerCertificateExpiringSoon(this.configurationSectionPath, profileName, expiration);
+            this.LogServerCertificateExpiringSoon(profileName, this.configurationSectionPath, expiration);
 
             return;
         }
 
-        this.LogServerCertificateLoaded(this.configurationSectionPath, profileName, expiration);
+        this.LogServerCertificateLoaded(profileName, this.configurationSectionPath, expiration);
     }
 
     /// <inheritdoc />
@@ -226,8 +226,8 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
         Message = "The HTTPS profile {HttpsProfileName} configured under {HttpsConfigurationSection} presents a server "
             + "certificate valid until {ServerCertificateExpiration:u}.")]
     private partial void LogServerCertificateLoaded(
-        string httpsConfigurationSection,
         string httpsProfileName,
+        string httpsConfigurationSection,
         DateTimeOffset serverCertificateExpiration);
 
     [LoggerMessage(
@@ -237,7 +237,7 @@ internal sealed partial class TransportServerCertificateStore : IDisposable
             + "Renew it before then: once it expires the profile stops starting, because a certificate outside its validity "
             + "period is refused rather than served.")]
     private partial void LogServerCertificateExpiringSoon(
-        string httpsConfigurationSection,
         string httpsProfileName,
+        string httpsConfigurationSection,
         DateTimeOffset serverCertificateExpiration);
 }

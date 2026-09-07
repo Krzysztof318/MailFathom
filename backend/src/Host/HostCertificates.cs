@@ -26,16 +26,17 @@ internal static class HostCertificates
     /// <summary>Names the certificate store of every surface this deployment terminates TLS on.</summary>
     /// <param name="surfaces">What the composition settled about the surfaces this deployment serves.</param>
     /// <returns>One service key per store, <see langword="null" /> naming the unkeyed store the protocol surface owns.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="surfaces" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Separate from <see cref="LoadAsync" /> so that a test can hold this list against the stores
     /// <see cref="HostComposition" /> actually registered. That comparison is the whole guard: a surface added to the
     /// registration and to the handshake lookup but not here fails the suite instead of shipping a mute listener.
+    /// <para>
+    /// The argument is guarded by <see cref="LoadAsync" /> rather than here, because an iterator defers its own guard to
+    /// the first enumeration and would therefore report the fault at whichever line happened to enumerate it.
+    /// </para>
     /// </remarks>
     internal static IEnumerable<object?> TlsTerminatingStoreKeys(ComposedHostSurfaces surfaces)
     {
-        ArgumentNullException.ThrowIfNull(surfaces);
-
         if (surfaces.Mcp is { Enabled: true, TerminatesTls: true })
         {
             yield return null;
@@ -69,6 +70,7 @@ internal static class HostCertificates
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(surfaces);
 
         foreach (var storeKey in TlsTerminatingStoreKeys(surfaces))
         {

@@ -1371,11 +1371,15 @@ Startup records what each profile presents and when it stops working:
 
 ```text
 info: MailFathom.Host.Security.Transport.TransportServerCertificateStore
-      The MCP HTTPS profile public presents a server certificate valid until 2027-01-31 00:00:00Z.
+      The HTTPS profile public configured under McpEndpoint:Https presents a server certificate valid until
+      2027-01-31 00:00:00Z.
 ```
 
 Within thirty days of expiry the same line is a warning instead. Neither carries the certificate's subject, serial
 number, or thumbprint: an operator renewing it needs to know which profile and by when, not which certificate it was.
+The section is named beside the profile because each endpoint that terminates TLS has profiles of its own, and a
+profile name is an operator's own word rather than one that identifies a surface — so the line an operator reads while
+diagnosing the administrative or the client endpoint names that endpoint's own section.
 
 **Replacing certificate material takes a restart.** The profiles are read once while the host is composed, like the rest
 of this section, and the loaded certificates are held for the process lifetime. Renew the material, then restart; startup
