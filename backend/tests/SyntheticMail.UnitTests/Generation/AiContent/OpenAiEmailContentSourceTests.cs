@@ -234,6 +234,23 @@ public sealed class OpenAiEmailContentSourceTests
     }
 
     [Fact]
+    public void ParseContent_AFileWithNoLineEndingInsideTheBound_IsCutAtAWord()
+    {
+        // Arrange
+        var note = "The harbour office confirmed the berth is free from the fourteenth onwards and nothing else changed.";
+
+        // Act
+        var content = OpenAiEmailContentSource.ParseContent(
+            $$"""{ "subject": "Berth", "body": "Body.", "html": "<p>Body.</p>", "attachment": "{{note}}" }""",
+            attachmentBound: 40);
+
+        // Assert
+        // An unbroken paragraph in a .txt note has no row to end on, and ending it on a whole word is the most a cut
+        // can preserve there.
+        Assert.Equal("The harbour office confirmed the berth", content.Attachment);
+    }
+
+    [Fact]
     public void ParseContent_AFileLongerThanItWasAskedFor_IsCutAtALineEnding()
     {
         // Arrange, Act

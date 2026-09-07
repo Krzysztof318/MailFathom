@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Generation;
+using MailFathom.SyntheticMail.UnitTests.TestDoubles;
 
 using Xunit;
 
@@ -222,7 +223,7 @@ public sealed class SendingAccountFileTests
         var path = Path.Combine(AppContext.BaseDirectory, $"nothing-writes-this-{Guid.NewGuid():N}.local.json");
 
         // Act
-        var failure = Assert.Throws<SyntheticMailFailure>(() => SendingAccountFile.Read(path));
+        var failure = Assert.Throws<SyntheticMailFailure>(() => SendingAccountFile.Read(path, UnconfiguredUserSecrets.Store()));
 
         // Assert
         Assert.Contains(path, failure.Message, StringComparison.Ordinal);

@@ -150,7 +150,7 @@ public sealed class SyntheticMailRunnerTests
 
         // Act
         var exitCode = await SyntheticMailRunner.RunAsync(
-            Context(console, transport, SendingAccountFile.Read),
+            Context(console, transport, path => SendingAccountFile.Read(path, UnconfiguredUserSecrets.Store())),
             ["developer@example.com", "--config", missing],
             TestContext.Current.CancellationToken);
 
@@ -391,6 +391,46 @@ public sealed class SyntheticMailRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_AnExportWhoseGenerationFails_LeavesNoFileBehindForTheRetryToTripOver()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        using var written = new MemoryStream();
+        var discarded = new List<string>();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(
+                console,
+                transport,
+                mailbox: mailbox,
+                aiContentSource: new ScriptedAiEmailContentSource(
+                    new SyntheticMailFailure("The model's answer carried no attachment.")),
+                createCorpus: _ => new UnclosedStream(written),
+                discardCorpus: discarded.Add),
+            [
+                "owner@example.test",
+                "--conversation",
+                "--sensitive-percentage",
+                "0",
+                "--count",
+                "6",
+                "--ai",
+                "--export",
+                "corpus.zip",
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // The file is reserved before generation so a typo cannot cost a paid batch, and that reservation must not
+        // outlive the run: the identical command retried would otherwise be refused for a corpus that never existed.
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Equal(["corpus.zip"], discarded);
+    }
+
+    [Fact]
     public async Task RunAsync_AnExportToAPathThatCannotBeWritten_IsRefusedBeforeAnythingIsGenerated()
     {
         // Arrange
@@ -398,6 +438,7 @@ public sealed class SyntheticMailRunnerTests
         await using var transport = new RecordingSyntheticMailTransport();
         await using var mailbox = new RecordingWatchedMailbox();
         var source = new ScriptedAiEmailContentSource(new AiEmailContent("Subject", "Body", "<p>Body</p>"));
+        var discarded = new List<string>();
 
         // Act
         var exitCode = await SyntheticMailRunner.RunAsync(
@@ -406,7 +447,8 @@ public sealed class SyntheticMailRunnerTests
                 transport,
                 mailbox: mailbox,
                 aiContentSource: source,
-                createCorpus: path => throw new SyntheticMailFailure($"'{path}' already exists.")),
+                createCorpus: path => throw new SyntheticMailFailure($"'{path}' already exists."),
+                discardCorpus: discarded.Add),
             [
                 "owner@example.test",
                 "--conversation",
@@ -426,6 +468,10 @@ public sealed class SyntheticMailRunnerTests
         Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
         Assert.Empty(source.Requests);
         Assert.Contains("already exists", string.Join("\n", console.Diagnostics), StringComparison.Ordinal);
+
+        // And nothing is discarded, because the file that refused the reservation is somebody else's corpus rather
+        // than this run's: deleting it is the loss the refusal exists to prevent.
+        Assert.Empty(discarded);
     }
 
     [Fact]
@@ -576,13 +622,14 @@ public sealed class SyntheticMailRunnerTests
         Func<string, WatchedMailboxAccount>? readWatchedMailbox = null,
         IWatchedMailbox? mailbox = null,
         Func<string, Stream>? createCorpus = null,
+        Action<string>? discardCorpus = null,
         Func<string, Stream>? openCorpus = null)
     {
         // A path named by a test is read by the real reader, which is what makes the missing-file message the one a
         // developer actually gets; a run that names none is handed a configuration that is never used, because a
         // test that reaches for content supplies the source rather than the file it would come from.
         Func<string, AiProviderConfiguration> readAiProvider = aiConfigurationPath is not null
-            ? SyntheticAiProviderFile.Read
+            ? path => SyntheticAiProviderFile.Read(path, UnconfiguredUserSecrets.Store())
             : _ => new AiProviderConfiguration("not-a-real-key", "gpt-test", null);
 
         Func<AiProviderConfiguration, IAiEmailContentSource> openAiContentSource = aiContentSource is { } source
@@ -598,6 +645,7 @@ public sealed class SyntheticMailRunnerTests
             _ => mailbox ?? new RecordingWatchedMailbox(),
             openAiContentSource,
             createCorpus ?? (_ => throw new SyntheticMailFailure("the test has not configured a corpus to write")),
+            discardCorpus ?? (_ => { }),
             openCorpus ?? (_ => throw new SyntheticMailFailure("the test has not configured a corpus to read")),
             new FakeTimeProvider(Today));
     }

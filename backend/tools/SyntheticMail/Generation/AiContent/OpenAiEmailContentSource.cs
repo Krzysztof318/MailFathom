@@ -292,7 +292,9 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
     /// Refused rather than delivered without the file, on the same terms as a missing body: the envelope the seed drew
     /// says this message encloses one, and a corpus quietly missing the attachments it reports is one whose listing
     /// lies. The bound is enforced here as well as asked for, because what a model was told to write and what it wrote
-    /// are two things; the cut is taken at a line ending so a file ends on a whole row rather than mid-value.
+    /// are two things. The cut is taken at the last line ending inside the bound so a file ends on a whole row, and at
+    /// the last space where an answer holds no line ending inside it — an unbroken paragraph in a <c>.txt</c> note has
+    /// no row to end on, and ending it on a whole word is the most a cut can preserve there.
     /// </remarks>
     private static string? ReadableAttachment(string? attachment, int bound)
     {
@@ -314,9 +316,16 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
             return contents;
         }
 
-        var cut = contents.LastIndexOf('\n', bound - 1);
+        var row = contents.LastIndexOf('\n', bound - 1);
 
-        return cut > 0 ? contents[..cut] : contents[..bound];
+        if (row > 0)
+        {
+            return contents[..row];
+        }
+
+        var word = contents.LastIndexOf(' ', bound - 1);
+
+        return word > 0 ? contents[..word] : contents[..bound];
     }
 
     /// <summary>Reduces an answer to the JSON object in it, which is the whole of it unless the model wrapped one.</summary>

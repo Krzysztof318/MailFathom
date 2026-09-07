@@ -862,9 +862,11 @@ planted in both, because which alternative a reader extracts from is the extract
 attachment, what it is called, and how large it may be; where the drawn file is a text one, the model writes its
 contents in the same answer as the subject and the body, so a file named `tide-table.csv` holds a tide table that says
 what the message says. An attachment drawn as opaque bytes stays opaque bytes, because a binary part exercises the
-extractor's refusal rather than the search behind it, and the written text is truncated at a line ending to whichever
-is smaller of the drawn size and four thousand characters — an answer is bounded in tokens, and a request for a large
-file would be cut off mid-word by the endpoint rather than by this tool. A size is drawn anywhere between one byte and
+extractor's refusal rather than the search behind it, and the written text is bounded at whichever is smaller of the
+drawn size and four thousand characters — an answer is bounded in tokens, and a request for a large file would be cut
+off mid-word by the endpoint rather than by this tool. An answer past that bound is cut at the last line ending inside
+it, so a table ends on a whole row; at the last space where it holds no line ending, which is what an unbroken
+paragraph in a `.txt` note gets; and at the bound itself where it holds neither. A size is drawn anywhere between one byte and
 whatever `--attachment-bytes` allows, so the other end is bounded too: below a couple of hundred characters the part
 keeps the drawn bytes, a file that small holding nothing anybody could search for. Without `--ai` nothing changes: an
 attachment is drawn bytes, as it has always been.
@@ -965,6 +967,17 @@ public, so four conditions are checked before anything is generated rather than 
 - The recipient is under the reserved `.test` top-level domain. Every invented participant already is; the recipient is
   the one real address an invocation supplies, so it is the one that could be somebody's.
 - `--dry-run` is refused alongside it, a listing and an archive being two answers to the same request.
+
+**One corpus is committed already.** `backend/tools/SyntheticMail/corpora/office-en.zip` is 100 English messages in 26
+exchanges of two to six turns, generated on 2026-09-07 through the content mode reaching a model, carrying no
+fabricated sensitive material and twenty readable text attachments beside five opaque ones. Replaying it is the
+shortest way to a mailbox that reads like somebody's:
+
+```bash
+dotnet run --project backend/tools/SyntheticMail -- replay backend/tools/SyntheticMail/corpora/office-en.zip <recipient>
+```
+
+`THIRD_PARTY_LICENSES.md` records it as content an external model produced, under the terms it was produced under.
 
 **A committed corpus lives in `backend/tools/SyntheticMail/corpora/` and is bounded at one megabyte.** Every clone of
 this repository carries it forever, so the ceiling is checked by

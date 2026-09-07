@@ -269,6 +269,45 @@ public sealed class CorpusArchiveTests
     }
 
     [Fact]
+    public void Write_AMessageDatedBeforeAnArchiveCanCarryIt_IsRefusedNamingTheDateAndTheRange()
+    {
+        // Arrange
+        using var destination = new MemoryStream();
+
+        var conversation = Conversation(2) with { };
+        var dated = new SyntheticConversation(
+            conversation.Correspondent,
+            [.. conversation.Messages.Select(message => message with { SentAt = new DateTimeOffset(1975, 4, 2, 9, 0, 0, TimeSpan.Zero) })]);
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(
+            () => CorpusArchive.Write(destination, "owner@example.test", [dated], Mailbox));
+
+        // Assert
+        // A zip timestamp is a DOS date and reaches from 1980 to 2107, while '--until' and '--days' together draw a
+        // corpus dated wherever a DateOnly reaches. The setter's own exception names neither the date nor the option.
+        Assert.Contains("1975-04-02", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("--until", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_AnEntryThatDecompressesPastTheBound_IsRefusedBeforeItIsAllHeld()
+    {
+        // Arrange
+        // Compressed the entry is a few kilobytes, which is what makes the bound something to measure on what comes
+        // out of the stream rather than on the size the archive states about itself.
+        using var source = HandWrittenCorpus.Build(
+            """{ "invocation": "written by hand", "exchanges": [["a.eml"]] }""",
+            ("a.eml", new string('\0', (16 * 1024 * 1024) + 1)));
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => CorpusArchive.Read(source));
+
+        // Assert
+        Assert.Contains("decompresses past", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Write_ANullArgument_IsRefused()
     {
         // Arrange

@@ -366,6 +366,34 @@ public sealed class SyntheticEmailGeneratorAiModeTests
     }
 
     [Fact]
+    public async Task GenerateAsync_AnOpaqueAttachment_KeepsItsDrawnBytesWhateverTheSourceAnswered()
+    {
+        // Arrange
+        // This source answers every request with a file, which the real one never does for an opaque part. That is
+        // the point: the guarantee is enforced where the two are merged rather than only by the caller that asks.
+        var source = new ScriptedAiEmailContentSource(Answer with { Attachment = "marker,depth\n7,4.2" });
+
+        // Act
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(
+            Plan(["en"], [SyntheticMailTopic.Business], count: 40),
+            source,
+            1,
+            CancellationToken.None);
+
+        // Assert
+        // A binary part exercises the extractor's refusal, so text written into one would be delivered as UTF-8 and
+        // stop testing the thing it exists for.
+        var opaque = corpus
+            .Select(message => message.Attachment)
+            .OfType<SyntheticEmailAttachment>()
+            .Where(attachment => !attachment.IsText)
+            .ToArray();
+
+        Assert.NotEmpty(opaque);
+        Assert.All(opaque, attachment => Assert.Null(attachment.Text));
+    }
+
+    [Fact]
     public async Task GenerateAsync_AnAnsweredFile_BecomesWhatTheMessageEncloses()
     {
         // Arrange

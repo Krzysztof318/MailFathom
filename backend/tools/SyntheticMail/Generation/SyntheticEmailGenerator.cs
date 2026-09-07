@@ -616,7 +616,7 @@ internal sealed class SyntheticEmailGenerator
             parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}",
             envelope.SentAt,
             ComposeAiBody(envelope, content),
-            envelope.Attachment is { } attachment && content.Attachment is { } written
+            envelope.Attachment is { IsText: true } attachment && content.Attachment is { } written
                 ? attachment.Carrying(written)
                 : envelope.Attachment,
             envelope.Origin);

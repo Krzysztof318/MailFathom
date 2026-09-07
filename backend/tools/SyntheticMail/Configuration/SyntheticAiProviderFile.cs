@@ -39,11 +39,21 @@ internal static class SyntheticAiProviderFile
     /// <returns>The configuration, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the file is missing, unreadable, or incomplete, with a message naming what to write.</exception>
-    internal static AiProviderConfiguration Read(string path)
+    internal static AiProviderConfiguration Read(string path) => Read(path, ConfigurationSource.UserSecretsPath());
+
+    /// <summary>Reads the provider configuration, from the named file or from the named store.</summary>
+    /// <param name="path">The file to read.</param>
+    /// <param name="storePath">Where the user-secrets store the run falls back to is.</param>
+    /// <returns>What the file or the store says, with every value checked.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="SyntheticMailFailure">Thrown when neither exists, or what does is unreadable or incomplete, with a message naming what to write.</exception>
+    /// <remarks>The store's path is an argument for the reason <see cref="ConfigurationSource.Open" /> gives.</remarks>
+    internal static AiProviderConfiguration Read(string path, string storePath)
     {
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(storePath);
 
-        var configured = ConfigurationSource.Open(path)
+        var configured = ConfigurationSource.Open(path, storePath)
             ?? throw new SyntheticMailFailure(
                 $"No AI provider is configured. Write '{path}' as {{ \"apiKey\": \"…\", \"model\": \"…\" }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and treat the key as one that reaches a third party: this mode sends the generation prompt to the endpoint and reads the message content back. The file is git-ignored.");
 
@@ -58,7 +68,7 @@ internal static class SyntheticAiProviderFile
     /// <returns>The configuration, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the contents are not a complete provider configuration.</exception>
-    /// <remarks>Separate from <see cref="Read" /> so every rule about what the file must say is exercised without a test writing one.</remarks>
+    /// <remarks>Separate from <see cref="Read(string, string)" /> so every rule about what the file must say is exercised without a test writing one.</remarks>
     internal static AiProviderConfiguration ReadFrom(Stream contents, string origin)
     {
         ArgumentNullException.ThrowIfNull(contents);

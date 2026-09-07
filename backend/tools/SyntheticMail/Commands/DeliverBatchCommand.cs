@@ -239,29 +239,14 @@ internal static class DeliverBatchCommand
             ? ExchangeDelivery.ReadAccounts(context, arguments.ConfigurationPath, arguments.Recipient)
             : null;
 
-        // The corpus file is opened before anything is generated, on the same terms as the accounts: a path that is
-        // already taken, misspelled, or not writable would otherwise be found after a provider has written a hundred
-        // messages, which is a paid batch lost to a typo.
-        using var destination = arguments.ExportPath is { } reserved ? context.CreateCorpus(reserved) : null;
+        if (arguments.ExportPath is { } path)
+        {
+            return await ExportAsync(context, arguments, path, cancellationToken);
+        }
 
-        var mailboxParticipant = ParticipantOf(arguments.Recipient);
-        var conversations = arguments.AiContent
-            ? await SyntheticEmailGenerator.GenerateConversationsAsync(
-                arguments.ToPlan(),
-                mailboxParticipant,
-                OpenReportingContentSource(context, arguments),
-                arguments.Concurrency,
-                cancellationToken)
-            : SyntheticEmailGenerator.GenerateConversations(arguments.ToPlan(), mailboxParticipant);
+        var conversations = await GenerateConversationsAsync(context, arguments, cancellationToken);
 
         ReportPlan(context, arguments);
-
-        if (destination is not null && arguments.ExportPath is { } path)
-        {
-            ExportConversations(context, arguments, destination, path, conversations);
-
-            return SyntheticMailExitCode.Success;
-        }
 
         if (accounts is not { } delivering)
         {
@@ -281,6 +266,67 @@ internal static class DeliverBatchCommand
             cancellationToken);
 
         return ExchangeDelivery.Report(context.Console, arguments.Recipient, report);
+    }
+
+    private static async Task<IReadOnlyList<SyntheticConversation>> GenerateConversationsAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var mailboxParticipant = ParticipantOf(arguments.Recipient);
+
+        return arguments.AiContent
+            ? await SyntheticEmailGenerator.GenerateConversationsAsync(
+                arguments.ToPlan(),
+                mailboxParticipant,
+                OpenReportingContentSource(context, arguments),
+                arguments.Concurrency,
+                cancellationToken)
+            : SyntheticEmailGenerator.GenerateConversations(arguments.ToPlan(), mailboxParticipant);
+    }
+
+    /// <summary>Reserves the corpus file, generates the batch into it, and leaves nothing behind if it never finishes.</summary>
+    /// <remarks>
+    /// The file is opened before anything is generated, on the same terms as the accounts are read: a path already
+    /// taken, misspelled, or not writable would otherwise be found after a provider has written a hundred messages,
+    /// which is a paid batch lost to a typo. What that reservation must not do is outlive a run that failed — a
+    /// half-second's generation failure would leave an empty file, and the identical command retried would then be
+    /// refused for a corpus that does not exist. So the reservation is discarded unless the archive was written.
+    /// </remarks>
+    private static async Task<int> ExportAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        // Reserved outside the block that discards, because the refusal this most often raises is that the path
+        // already holds a corpus — and discarding then would delete the very file `CorpusFile.Create` refused to
+        // write over, which is the loss the refusal exists to prevent. What may be discarded is this run's own
+        // reservation and nothing else.
+        var destination = context.CreateCorpus(path);
+        var written = false;
+
+        try
+        {
+            using (destination)
+            {
+                var conversations = await GenerateConversationsAsync(context, arguments, cancellationToken);
+
+                ReportPlan(context, arguments);
+                ExportConversations(context, arguments, destination, path, conversations);
+
+                written = true;
+            }
+        }
+        finally
+        {
+            if (!written)
+            {
+                context.DiscardCorpus(path);
+            }
+        }
+
+        return SyntheticMailExitCode.Success;
     }
 
     /// <summary>Writes the generated exchanges as a corpus, which is what makes generation something paid for once.</summary>

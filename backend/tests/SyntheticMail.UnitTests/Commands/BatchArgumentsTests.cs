@@ -535,6 +535,22 @@ public sealed class BatchArgumentsTests
         Assert.False(arguments.Submits);
     }
 
+    [Fact]
+    public void Parse_AnExportAlongsideADryRun_IsRefusedNamingBothAnswersToOneRequest()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(
+            recipient: "owner@example.test",
+            conversation: true,
+            sensitivePercentage: 0,
+            exportPath: "corpus.zip",
+            dryRun: true));
+
+        // Assert
+        // A listing and an archive are two answers to the same request, and neither is the one the other asked for.
+        Assert.Contains("--dry-run", failure.Message, StringComparison.Ordinal);
+    }
+
     private static BatchArguments Parse(
         string recipient = "developer@example.com",
         int? seed = null,
@@ -551,7 +567,8 @@ public sealed class BatchArgumentsTests
         bool conversation = false,
         int? deliveryTimeoutSeconds = null,
         int? concurrency = null,
-        string? exportPath = null) => BatchArguments.Parse(
+        string? exportPath = null,
+        bool dryRun = false) => BatchArguments.Parse(
             recipient,
             seed,
             count,
@@ -561,7 +578,7 @@ public sealed class BatchArgumentsTests
             sensitivePercentage,
             intervalMilliseconds,
             configurationPath: null,
-            dryRun: false,
+            dryRun,
             ai,
             language,
             topic,

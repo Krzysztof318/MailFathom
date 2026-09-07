@@ -48,6 +48,26 @@ internal static class CorpusFile
         }
     }
 
+    /// <summary>Removes a corpus file an export reserved and never filled.</summary>
+    /// <param name="path">The corpus that was reserved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Nothing is reported when the file cannot be removed, and that is deliberate: this runs while a run is already
+    /// failing for its own reason, and a second line about a stray file would displace the one the developer needs.
+    /// </remarks>
+    internal static void Discard(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     /// <summary>Opens the archive a replay reads.</summary>
     /// <param name="path">The corpus to read.</param>
     /// <returns>The stream, which the caller disposes.</returns>

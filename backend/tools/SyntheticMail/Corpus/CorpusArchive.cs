@@ -52,6 +52,8 @@ internal static class CorpusArchive
 
     private const long MostBytesPerMessage = 16L * 1024 * 1024;
 
+    private const int BlockBytes = 64 * 1024;
+
     /// <summary>Writes one generated batch of exchanges as a corpus.</summary>
     /// <param name="destination">Where the archive is written; the caller owns and closes it.</param>
     /// <param name="invocation">The invocation that produced the batch.</param>
@@ -121,6 +123,14 @@ internal static class CorpusArchive
         try
         {
             using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
+
+            // Before the manifest, because the manifest bounds only what it names: an archive padded with entries no
+            // exchange mentions would otherwise be read as a corpus of three messages.
+            if (archive.Entries.Count > MostMessages + 1)
+            {
+                throw new SyntheticMailFailure($"The archive holds {archive.Entries.Count} entries, past the {MostMessages} messages and one manifest a corpus may hold.");
+            }
+
             var manifest = ReadManifest(archive);
 
             if (manifest.Invocation is not { Length: > 0 } invocation)
@@ -157,7 +167,7 @@ internal static class CorpusArchive
         var name = string.Create(CultureInfo.InvariantCulture, $"{ordinal:0000}.eml");
         var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
 
-        entry.LastWriteTime = email.SentAt;
+        Stamp(entry, email.SentAt);
 
         using var message = SyntheticMimeComposer.ComposeAuthored(email);
 
@@ -175,11 +185,29 @@ internal static class CorpusArchive
         return name;
     }
 
+    /// <summary>Dates one entry as the message it holds is dated, refusing a date the archive format cannot carry.</summary>
+    /// <remarks>
+    /// A zip timestamp is a DOS date, which reaches from 1980 to 2107 and no further, while <c>--until</c> and
+    /// <c>--days</c> together will draw a corpus dated anywhere a <see cref="DateOnly" /> reaches. The setter answers
+    /// that with an <see cref="ArgumentOutOfRangeException" /> naming neither the date nor the option that produced
+    /// it, so the range is checked here instead and reported as everything else in this class is.
+    /// </remarks>
+    private static void Stamp(ZipArchiveEntry entry, DateTimeOffset date)
+    {
+        if (date.Year is < 1980 or > 2107)
+        {
+            throw new SyntheticMailFailure(
+                $"'{entry.FullName}' is dated {date:yyyy-MM-dd}, which an archive cannot carry: a corpus is dated between 1980 and 2107, so name an '--until' inside that range.");
+        }
+
+        entry.LastWriteTime = date;
+    }
+
     private static void WriteManifest(ZipArchive archive, CorpusManifest manifest, DateTimeOffset writtenAt)
     {
         var entry = archive.CreateEntry(ManifestEntryName, CompressionLevel.Optimal);
 
-        entry.LastWriteTime = writtenAt;
+        Stamp(entry, writtenAt);
 
         using var contents = entry.Open();
 
@@ -195,7 +223,7 @@ internal static class CorpusArchive
         var entry = archive.GetEntry(ManifestEntryName)
             ?? throw new SyntheticMailFailure($"The archive holds no '{ManifestEntryName}', so it is not an exported corpus.");
 
-        using var contents = entry.Open();
+        using var contents = new MemoryStream(ReadEntry(entry), writable: false);
 
         try
         {
@@ -244,19 +272,36 @@ internal static class CorpusArchive
         }
     }
 
+    /// <summary>Reads one entry, refusing the moment it decompresses past what a message may be.</summary>
+    /// <remarks>
+    /// The bound is measured on what comes out of the stream rather than on <see cref="ZipArchiveEntry.Length" />,
+    /// which is a number the archive states about itself: a crafted corpus under-reports it and expands to whatever
+    /// it likes, which is the one thing the bound exists to stop. Read in blocks so the refusal arrives after a
+    /// bounded read rather than after the whole entry is in memory.
+    /// </remarks>
     private static byte[] ReadEntry(ZipArchiveEntry entry)
     {
-        if (entry.Length > MostBytesPerMessage)
-        {
-            throw new SyntheticMailFailure($"'{entry.FullName}' is {entry.Length} bytes, past the {MostBytesPerMessage} a message may be.");
-        }
-
         using var contents = entry.Open();
         using var buffer = new MemoryStream();
 
-        contents.CopyTo(buffer);
+        var block = new byte[BlockBytes];
 
-        return buffer.ToArray();
+        while (true)
+        {
+            var read = contents.Read(block, 0, block.Length);
+
+            if (read == 0)
+            {
+                return buffer.ToArray();
+            }
+
+            if (buffer.Length + read > MostBytesPerMessage)
+            {
+                throw new SyntheticMailFailure($"'{entry.FullName}' decompresses past the {MostBytesPerMessage} bytes a corpus entry may be.");
+            }
+
+            buffer.Write(block, 0, read);
+        }
     }
 
     private static MimeMessage Parse(byte[] contents, string name)

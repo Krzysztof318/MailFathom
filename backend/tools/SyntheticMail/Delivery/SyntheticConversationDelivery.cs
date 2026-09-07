@@ -113,6 +113,15 @@ internal sealed class SyntheticConversationDelivery(
         string exchange,
         CancellationToken cancellationToken)
     {
+        // A corpus is a file this tool did not necessarily write, and everything below reads the opening turn as the
+        // correspondent's. An exchange the mailbox itself opens would address its own reply back to itself, which is
+        // a thread that assembles nowhere and reports nothing, so it is refused rather than delivered.
+        if (string.Equals(turns[0].Author.Address, watchedMailbox.Address, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SyntheticMailFailure(
+                $"{exchange} opens with a turn written by {watchedMailbox.Address}, which is the mailbox itself. An exchange opens with the correspondent, so a corpus whose first turn is the mailbox's own is one nothing could thread.");
+        }
+
         // An exchange opens with the correspondent, so the first turn's author is the person on the other side of it.
         // Whichever address the correspondent's half was authored from is the one the mailbox writes back to, so a
         // reply is addressed to the person a reader would have replied to rather than to a participant the inbound

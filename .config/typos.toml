@@ -82,7 +82,14 @@
 # no NUL byte in it — so the file arrives as prose and a dictionary reports two-letter runs out of compressed bytes.
 # Excluding the one file rather than the directory around it keeps the Gradle build scripts, the Kotlin sources, and
 # the manifest comments beside it checked, which is where that project's actual prose is.
+#
+# `backend/tools/SyntheticMail/corpora/` holds the exported mail corpora, which are zip archives for the reason the
+# wrapper above is excluded and then one more: what a corpus carries is checked, but before it is committed and by
+# reading the messages inside it rather than the container around them. The directory rather than the files in it,
+# because a second corpus is committed by whoever needs different mail and would otherwise fail a check nobody
+# expected. `docs/operations/local-development.md` says how one is read.
 extend-exclude = [
+  'backend/tools/SyntheticMail/corpora/',
   'frontend/pnpm-lock.yaml',
   'frontend/src/Client.App/src/localization/pl.ts',
   'frontend/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.jar',

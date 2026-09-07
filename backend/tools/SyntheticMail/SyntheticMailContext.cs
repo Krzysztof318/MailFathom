@@ -18,6 +18,7 @@ namespace MailFathom.SyntheticMail;
 /// <param name="OpenWatchedMailbox">Opens an IMAP session against one mailbox; the caller disposes it.</param>
 /// <param name="OpenAiContentSource">Opens a content source over one provider configuration.</param>
 /// <param name="CreateCorpus">Opens the archive an export writes; the caller disposes it.</param>
+/// <param name="DiscardCorpus">Removes a corpus file an export reserved and never filled.</param>
 /// <param name="OpenCorpus">Opens the archive a replay reads; the caller disposes it.</param>
 /// <param name="Clock">What resolves today's date, what the pacing waits on, and what bounds a delivery wait.</param>
 /// <remarks>
@@ -34,6 +35,7 @@ internal sealed record SyntheticMailContext(
     Func<WatchedMailboxAccount, IWatchedMailbox> OpenWatchedMailbox,
     Func<AiProviderConfiguration, IAiEmailContentSource> OpenAiContentSource,
     Func<string, Stream> CreateCorpus,
+    Action<string> DiscardCorpus,
     Func<string, Stream> OpenCorpus,
     TimeProvider Clock)
 {
@@ -48,6 +50,7 @@ internal sealed record SyntheticMailContext(
         watched => new ImapWatchedMailbox(watched),
         provider => new OpenAiEmailContentSource(provider),
         CorpusFile.Create,
+        CorpusFile.Discard,
         CorpusFile.Open,
         TimeProvider.System);
 }
