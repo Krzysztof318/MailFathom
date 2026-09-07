@@ -10,6 +10,8 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// <param name="AuthorName">The display name the message is written as, drawn from the corpus's participant pool.</param>
 /// <param name="ParentSubject">The subject of the message this one answers, or <see langword="null" /> when it opens a thread.</param>
 /// <param name="ParentOpening">The opening of the message this one answers, bounded in length, or <see langword="null" /> when it opens a thread.</param>
+/// <param name="AttachmentFileName">The name of the text file the message carries, or <see langword="null" /> when it carries none or carries an opaque one.</param>
+/// <param name="AttachmentCharacterBound">The longest that file may be, and zero when none was asked for.</param>
 /// <remarks>
 /// <para>
 /// What the deterministic generator decides arrives here, and only that: the envelope — who writes, to which thread,
@@ -24,10 +26,20 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// buys is a reply that answers something — a request carrying a subject alone produces a second message about the
 /// same topic, which reads as a thread only in the headers.
 /// </para>
+/// <para>
+/// The last two move together and are the file the message carries. A corpus exists to be searched, and an attachment
+/// filled with drawn bytes has nothing in it to find: the name says <c>tide-table.csv</c> and the part says nothing,
+/// so the extractor is exercised and the search behind it is not. Naming the file to the same request that writes the
+/// message is what makes the two say the same thing. Only a text attachment is asked for — an opaque one is opaque on
+/// purpose and stays the drawn bytes it always was — and the bound is the size the seed drew for it, so how large the
+/// files in a corpus are is still the seed's decision.
+/// </para>
 /// </remarks>
 internal sealed record AiEmailContentRequest(
     string LanguageCode,
     SyntheticMailTopic Topic,
     string AuthorName,
     string? ParentSubject,
-    string? ParentOpening);
+    string? ParentOpening,
+    string? AttachmentFileName,
+    int AttachmentCharacterBound);

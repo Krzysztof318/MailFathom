@@ -222,7 +222,7 @@ public sealed class SyntheticConversationDeliveryTests
 
         // Act
         await new SyntheticConversationDelivery(transport, mailbox, console, new FakeTimeProvider(Now)).DeliverAsync(
-            [Conversation(2)],
+            [DeliverableTurn.From(Conversation(2))],
             Account(),
             WatchedMailbox,
             TimeSpan.Zero,
@@ -285,7 +285,7 @@ public sealed class SyntheticConversationDeliveryTests
         IReadOnlyList<SyntheticConversation> conversations,
         SendingAccount? account = null) =>
         new SyntheticConversationDelivery(transport, mailbox, new RecordingSyntheticMailConsole(), new FakeTimeProvider(Now)).DeliverAsync(
-            conversations,
+            [.. conversations.Select(DeliverableTurn.From)],
             account ?? Account(),
             WatchedMailbox,
             TimeSpan.Zero,

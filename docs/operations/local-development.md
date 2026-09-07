@@ -656,6 +656,7 @@ touches, and it is the only one the envelope ever carries.
 | `--ai-config` | The AI provider file to read, when it is not the one beside the built command. |
 | `--conversation` | Generate exchanges between the recipient and invented correspondents instead of a flat corpus, delivering one turn at a time. Needs the `mailbox` block below, and at least two messages. |
 | `--delivery-timeout` | Seconds to wait for one submitted message to appear in the recipient's mailbox, 1..600. Defaults to 120. Requires `--conversation`. |
+| `--export` | Write the exchanges to a corpus archive instead of delivering them, so the mail is generated once and replayed afterwards. Requires `--conversation`. |
 
 ### Threads that are exchanges rather than headers
 
@@ -857,6 +858,17 @@ things in the same order. Which of them a message emits is still the seed's draw
 `multipart/alternative`, so the axis is unchanged and only what fills it is new. The fabricated sensitive material is
 planted in both, because which alternative a reader extracts from is the extractor's choice rather than the corpus's.
 
+**A text attachment is written by the same call as the message.** The seed still decides whether a message carries an
+attachment, what it is called, and how large it may be; where the drawn file is a text one, the model writes its
+contents in the same answer as the subject and the body, so a file named `tide-table.csv` holds a tide table that says
+what the message says. An attachment drawn as opaque bytes stays opaque bytes, because a binary part exercises the
+extractor's refusal rather than the search behind it, and the written text is truncated at a line ending to whichever
+is smaller of the drawn size and four thousand characters — an answer is bounded in tokens, and a request for a large
+file would be cut off mid-word by the endpoint rather than by this tool. A size is drawn anywhere between one byte and
+whatever `--attachment-bytes` allows, so the other end is bounded too: below a couple of hundred characters the part
+keeps the drawn bytes, a file that small holding nothing anybody could search for. Without `--ai` nothing changes: an
+attachment is drawn bytes, as it has always been.
+
 **Model markup is untrusted, and an answer carrying an executable construct is refused.** The endpoint is one a
 developer named rather than one this tool chose, and what it answers is delivered to a real mailbox — so an answer
 whose document holds a `<script>`, an `<iframe>`, an `<object>`, an `<embed>`, a `javascript:` URL, or an inline
@@ -891,6 +903,79 @@ diff <(dotnet run --project backend/tools/SyntheticMail -- a@example.test --dry-
 A batch reports how many were delivered and names each message the server refused rather than stopping at the first
 one, and it exits non-zero when any failed — a mailbox holding an unknown prefix of a corpus is worse than one that
 finished and said which messages are missing from it.
+
+### A corpus generated once and replayed afterwards
+
+Everything above regenerates the mail on every run, which the default mode does for nothing and `--ai` does for money:
+a model answer costs per message and takes about twenty seconds to write, so a pipeline that fills a mailbox by
+generating is paying again for mail it already had, and paying once more for every rerun of a flake. The model's words
+are also the one thing the seed does not reproduce, so a corpus a provider wrote exists once and cannot be asked for
+again.
+
+`--export` splits the two halves apart. One run generates the exchanges and writes them to an archive instead of
+delivering them, and every run after that replays that archive into whatever mailbox it needs:
+
+```bash
+dotnet run --project backend/tools/SyntheticMail -- <recipient> --conversation --sensitive-percentage 0 \
+  --ai --language en --count 100 --attachment-bytes 4096 --export backend/tools/SyntheticMail/corpora/<name>.zip
+
+dotnet run --project backend/tools/SyntheticMail -- replay backend/tools/SyntheticMail/corpora/<name>.zip <recipient>
+```
+
+**An export reaches no mail server and needs no credential.** It generates, writes the archive, and stops, so the only
+configuration a generating run reads is the AI provider's when `--ai` is named. Replay is the run that authenticates,
+and it needs the same sending account and `mailbox` block a `--conversation` run needs, for the same reasons: the
+correspondent's turns are submitted and the recipient's own are appended to its Sent folder.
+
+**The archive is `.eml` files and a manifest.** Each message is stored as the RFC 5322 document any mail tool reads,
+numbered in delivery order, and `corpus.json` beside them records the invocation that produced it and which messages
+belong to which exchange. Reading one before committing it needs nothing but a zip tool:
+
+```bash
+unzip -p backend/tools/SyntheticMail/corpora/<name>.zip '*.eml' | less
+```
+
+**A message carries what it was written as and nothing about the run that wrote it.** The `From` is the author, the
+`To` is the other side of the exchange, and the date is the one the seed drew — but `Sender`, `Reply-To`, and the
+`X-MailFathom-Synthetic` marker are absent, because those are a submitting account's headers and the account that
+replays a corpus is not the one that exported it. The ancestry is the same story: `In-Reply-To` and `References` are
+rewritten during delivery from the identifiers the server actually assigned, exactly as they are in a run that
+generates and delivers in one pass, so a corpus replayed into two mailboxes threads correctly in both.
+
+**Replay says what it is doing and what produced it**, then reports delivery the way any `--conversation` run does:
+
+```text
+Replaying 100 messages in 34 exchanges from 'backend/tools/SyntheticMail/corpora/office-en.zip', waiting up to 120 seconds per delivery.
+The corpus was generated with: owner@example.test --seed 481923 --count 100 --conversation --ai --language en
+Delivered 100 of 100 to owner@example.test.
+```
+
+Two replays of one corpus into two fresh mailboxes fill them identically, which is what makes a difference between two
+pipeline runs a change in the code rather than in the mail.
+
+**An export is refused unless it can be committed.** The archive outlives the run that wrote it and this repository is
+public, so four conditions are checked before anything is generated rather than by a reader afterwards:
+
+- `--conversation` is required. A flat batch's threading holds only while the submission server leaves `Message-Id`
+  alone, which is the defect that mode exists to avoid, and a corpus carrying it would read as an import wherever it
+  was replayed.
+- `--sensitive-percentage 0` is required. Every decoy is fabricated and structurally valid, and a file shaped like a
+  credential is one that gets committed — a decoy belongs in a running process and in the mailbox it was delivered to,
+  which is where an ordinary run leaves it.
+- The recipient is under the reserved `.test` top-level domain. Every invented participant already is; the recipient is
+  the one real address an invocation supplies, so it is the one that could be somebody's.
+- `--dry-run` is refused alongside it, a listing and an archive being two answers to the same request.
+
+**A committed corpus lives in `backend/tools/SyntheticMail/corpora/` and is bounded at one megabyte.** Every clone of
+this repository carries it forever, so the ceiling is checked by
+`a_committed_corpus_stays_within_its_size_bound` in `scripts/test-agent-workflow.sh`, which is also where the number
+and the reasoning behind it are, for whoever comes to raise it. A corpus that does not fit was generated with `--count`
+or `--attachment-bytes` too high rather than against a bound too low.
+
+**Generating a second one is the same three steps.** Configure the AI provider as above, run the export against a
+`.test` recipient with the content you want, read the archive with `unzip -p` to confirm the model invented everything
+in it, and commit it beside the first — then record it in `THIRD_PARTY_LICENSES.md` as content an external model
+produced, naming the provider, the model, and the terms it was produced under, exactly as the first one is recorded.
 
 The integration suite composes its own mail through the same generator, in `OrchestratedMailbox`, so there is one
 implementation of *build a synthetic message* rather than two that would drift.

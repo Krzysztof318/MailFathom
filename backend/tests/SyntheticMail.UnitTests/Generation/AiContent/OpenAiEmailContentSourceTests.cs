@@ -6,6 +6,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net.Sockets;
 using MailFathom.SyntheticMail.Configuration;
+using MailFathom.SyntheticMail.Generation;
 using MailFathom.SyntheticMail.Generation.AiContent;
 
 using Xunit;
@@ -22,6 +23,30 @@ namespace MailFathom.SyntheticMail.UnitTests.Generation.AiContent;
 public sealed class OpenAiEmailContentSourceTests
 {
     private static readonly AiProviderConfiguration Provider = new("not-a-real-key", "gpt-test", null);
+
+    [Theory]
+    [InlineData(null, 4096, 0)]
+    [InlineData("survey-notes.txt", 0, 0)]
+    [InlineData("survey-notes.txt", 64, 0)]
+    [InlineData("survey-notes.txt", 512, 512)]
+    [InlineData("tide-table.csv", 65536, 4000)]
+    public void AttachmentBoundOf_ADrawnAttachment_AsksForAFileOnlyWhereOneIsWorthWriting(
+        string? fileName,
+        int drawn,
+        int expected)
+    {
+        // Arrange
+        var request = new AiEmailContentRequest("en", SyntheticMailTopic.Business, "Ada Kowalska", null, null, fileName, drawn);
+
+        // Act
+        var bound = OpenAiEmailContentSource.AttachmentBoundOf(request);
+
+        // Assert
+        // A size is drawn anywhere between one byte and the batch's ceiling, so the two ends are both ordinary: a file
+        // of a few dozen bytes holds nothing to search for and stays the drawn bytes, and one of sixty-four kilobytes
+        // is more than an answer can hold beside the message written twice.
+        Assert.Equal(expected, bound);
+    }
 
     [Theory]
     [InlineData(401, "refused the API key")]
@@ -180,6 +205,60 @@ public sealed class OpenAiEmailContentSourceTests
     }
 
     /// <summary>The one member of a provider response the mapping reads, over a type with no public constructor.</summary>
+    [Fact]
+    public void ParseContent_AnAnswerCarryingTheFileItWasAskedFor_ReadsItAsTheAttachment()
+    {
+        // Arrange, Act
+        var content = OpenAiEmailContentSource.ParseContent(
+            """{"subject":"Depths","body":"Attached.","html":"<p>Attached.</p>","attachment":"marker,depth\n7,4.2\n"}""",
+            attachmentBound: 100);
+
+        // Assert
+        // A corpus exists to be searched, so what the message encloses is written by the same call that wrote the
+        // message rather than filled with drawn bytes nothing can find.
+        Assert.Equal("marker,depth\n7,4.2", content.Attachment);
+    }
+
+    [Fact]
+    public void ParseContent_AnAnswerOmittingTheFileItWasAskedFor_IsRefusedAsARetry()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => OpenAiEmailContentSource.ParseContent(
+            """{"subject":"Depths","body":"Attached.","html":"<p>Attached.</p>"}""",
+            attachmentBound: 100));
+
+        // Assert
+        // The envelope the seed drew says this message encloses a file, so a corpus whose listing reports one the
+        // message does not carry is a corpus that lies about itself.
+        Assert.Contains("no attachment", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParseContent_AFileLongerThanItWasAskedFor_IsCutAtALineEnding()
+    {
+        // Arrange, Act
+        var content = OpenAiEmailContentSource.ParseContent(
+            """{"subject":"Depths","body":"Attached.","html":"<p>Attached.</p>","attachment":"marker,depth\n7,4.2\n8,9.9\n"}""",
+            attachmentBound: 20);
+
+        // Assert
+        // What a model was told to write and what it wrote are two things, and a file cut mid-value is one a reader
+        // of the corpus finds broken rather than short.
+        Assert.Equal("marker,depth\n7,4.2", content.Attachment);
+    }
+
+    [Fact]
+    public void ParseContent_AFileNobodyAskedFor_IsLeftOutOfTheMessage()
+    {
+        // Arrange, Act
+        var content = OpenAiEmailContentSource.ParseContent(
+            """{"subject":"Depths","body":"Nothing attached.","html":"<p>Nothing attached.</p>","attachment":"marker,depth"}""");
+
+        // Assert
+        // A message the seed gave no attachment carries none, whatever the model volunteered.
+        Assert.Null(content.Attachment);
+    }
+
     private sealed class FakeClientResponse(int status) : PipelineResponse
     {
         public override int Status => status;

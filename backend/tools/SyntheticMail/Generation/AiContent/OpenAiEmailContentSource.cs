@@ -46,6 +46,26 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
     /// </remarks>
     private const int MaximumOutputTokens = 6000;
 
+    /// <summary>The longest attached file this source will ask for, whatever size the seed drew.</summary>
+    /// <remarks>
+    /// The attachment shares the output ceiling above with the message written twice over, so a batch generated with a
+    /// megabyte attachment ceiling would ask for a file no answer could hold and every message would come back cut off
+    /// at the ceiling — which reads as a model that cannot write the answer rather than as a size nobody could have
+    /// meant. A few thousand characters is a plausible spreadsheet or note and leaves the message its share. A run
+    /// wanting larger files wants them filled with drawn bytes, which is what the default mode does.
+    /// </remarks>
+    private const int MostAttachmentCharacters = 4000;
+
+    /// <summary>The shortest file worth asking for, below which the part is left as the bytes the seed draws.</summary>
+    /// <remarks>
+    /// An attachment's size is drawn anywhere between one byte and the batch's ceiling, so a corpus generated with a
+    /// four-kilobyte ceiling draws plenty of files of a few dozen bytes. A file that small holds no row anybody could
+    /// search for and costs a request to write, and asking for one anyway would either produce a truncated line or
+    /// break the ceiling the invocation named. Below this the drawn printable bytes are what the part carries, which
+    /// is what every text attachment carried before this source wrote any of them.
+    /// </remarks>
+    private const int LeastAttachmentCharacters = 200;
+
     /// <summary>The constructs an answered document is refused for carrying.</summary>
     /// <remarks>
     /// The endpoint is one a developer named rather than one this tool chose, and what comes back is delivered to a
@@ -114,17 +134,37 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var text = await this.RequestContentAsync(request, cancellationToken);
+        var attachmentBound = AttachmentBoundOf(request);
+        var text = await this.RequestContentAsync(request, attachmentBound, cancellationToken);
 
-        return ParseContent(text);
+        return ParseContent(text, attachmentBound);
+    }
+
+    /// <summary>Resolves how long a file this request may ask for, and nothing when it asks for none.</summary>
+    /// <param name="request">What the message is being written from.</param>
+    /// <returns>The longest file to ask for, and zero to ask for none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    internal static int AttachmentBoundOf(AiEmailContentRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return request.AttachmentFileName is null || request.AttachmentCharacterBound < LeastAttachmentCharacters
+            ? 0
+            : Math.Min(request.AttachmentCharacterBound, MostAttachmentCharacters);
     }
 
     /// <summary>Sends one request and returns exactly what the provider answered, in text.</summary>
-    private async Task<string> RequestContentAsync(AiEmailContentRequest request, CancellationToken cancellationToken)
+    private async Task<string> RequestContentAsync(
+        AiEmailContentRequest request,
+        int attachmentBound,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var result = await this.chatClient.CompleteChatAsync(BuildMessages(request), BuildOptions(), cancellationToken);
+            var result = await this.chatClient.CompleteChatAsync(
+                BuildMessages(request, attachmentBound),
+                BuildOptions(),
+                cancellationToken);
             var completion = result.Value;
 
             // A refusal is the model declining rather than the call failing, so it is reported as its own line
@@ -195,10 +235,11 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 
     /// <summary>Reads the model's JSON answer into the content it carries, refusing an answer that is not one.</summary>
     /// <param name="text">The answer, as the provider sent it.</param>
-    /// <returns>The subject and the body.</returns>
+    /// <param name="attachmentBound">The longest attached file the request asked for, and zero when it asked for none.</param>
+    /// <returns>The subject, the body, and the attached file when one was asked for.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the answer is not the JSON object it was asked for, or carries nothing in it.</exception>
-    internal static AiEmailContent ParseContent(string text)
+    internal static AiEmailContent ParseContent(string text, int attachmentBound = 0)
     {
         ArgumentNullException.ThrowIfNull(text);
 
@@ -243,7 +284,39 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
                 "The model's answer carried an inline event handler in its html, which this tool will not deliver to a mailbox. Retry; if it persists, name a different model in the AI provider file.");
         }
 
-        return new AiEmailContent(subject, body, html);
+        return new AiEmailContent(subject, body, html, ReadableAttachment(content?.Attachment, attachmentBound));
+    }
+
+    /// <summary>Reduces the answered file to what the attachment may carry, and refuses an answer that omitted it.</summary>
+    /// <remarks>
+    /// Refused rather than delivered without the file, on the same terms as a missing body: the envelope the seed drew
+    /// says this message encloses one, and a corpus quietly missing the attachments it reports is one whose listing
+    /// lies. The bound is enforced here as well as asked for, because what a model was told to write and what it wrote
+    /// are two things; the cut is taken at a line ending so a file ends on a whole row rather than mid-value.
+    /// </remarks>
+    private static string? ReadableAttachment(string? attachment, int bound)
+    {
+        if (bound <= 0)
+        {
+            return null;
+        }
+
+        var contents = ReadableBody(attachment);
+
+        if (contents.Length == 0)
+        {
+            throw new SyntheticMailFailure(
+                "The model's answer carried no attachment, which the message it was asked for encloses. Retry; if it persists, name a different model in the AI provider file.");
+        }
+
+        if (contents.Length <= bound)
+        {
+            return contents;
+        }
+
+        var cut = contents.LastIndexOf('\n', bound - 1);
+
+        return cut > 0 ? contents[..cut] : contents[..bound];
     }
 
     /// <summary>Reduces an answer to the JSON object in it, which is the whole of it unless the model wrapped one.</summary>
@@ -274,7 +347,7 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
             ? string.Empty
             : new string([.. body.Where(static character => !char.IsControl(character) || char.IsWhiteSpace(character))]).Trim();
 
-    private static List<ChatMessage> BuildMessages(AiEmailContentRequest request)
+    private static List<ChatMessage> BuildMessages(AiEmailContentRequest request, int attachmentBound)
     {
         var user = new List<string>
         {
@@ -282,6 +355,12 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
             $"Topic: {request.Topic.PromptDescription}",
             $"Write as {request.AuthorName}.",
         };
+
+        if (request.AttachmentFileName is { } fileName && attachmentBound > 0)
+        {
+            user.Add(
+                $"This message encloses a file named \"{fileName}\". Add an \"attachment\" key holding its contents as text, at most {attachmentBound} characters, written in the format its extension names and saying what the message says it encloses. Refer to it in the body the way somebody attaching a file does.");
+        }
 
         if (request.ParentSubject is { } subject)
         {
@@ -309,13 +388,15 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 
     /// <summary>The fixed contract every generation is asked under.</summary>
     private const string SystemPrompt = """
-        You write the content of one realistic email for a synthetic test corpus. Answer with a single JSON object and nothing else, with exactly three keys.
+        You write the content of one realistic email for a synthetic test corpus. Answer with a single JSON object and nothing else, carrying these three keys, and a fourth only when the request asks for an enclosed file.
 
         "subject": one subject line.
 
         "body": the message as plain text, with paragraphs separated by blank lines, opening with a natural greeting and closing with a short signature.
 
         "html": the same message as an HTML document, carrying the structure real business mail carries rather than one paragraph per line. Use a mixture appropriate to what the message says, drawn from headings, paragraphs, ordered and unordered lists, a table with a header row where the message reports figures or items, links, bold and italic emphasis, blockquotes for anything being quoted back, a horizontal rule, and a signature block. Inline style attributes are welcome and so are simple font, colour, and spacing choices. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, an inline event-handler attribute such as onclick or onerror, a remote image, or a tracking pixel.
+
+        "attachment": present only when the request names an enclosed file, holding that file's contents as text. Write it in the format the file's extension names — a .csv as a header row and data rows, a .txt as the notes or the log the name describes — and make it say what the message says it encloses, with the same invented names, figures, and dates. Nothing else goes in this key: no explanation, no code fence, no repeat of the body.
 
         The email is fiction: every name, company, number, and reference in it is invented, and it must not contain any real personal data, any credential, or anything that identifies a real person or organization. Write exclusively in the language the request names.
         """;

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.SyntheticMail.Configuration;
+using MailFathom.SyntheticMail.Corpus;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation.AiContent;
 
@@ -16,10 +17,13 @@ namespace MailFathom.SyntheticMail;
 /// <param name="OpenTransport">Opens a submission session for one account; the caller disposes it.</param>
 /// <param name="OpenWatchedMailbox">Opens an IMAP session against one mailbox; the caller disposes it.</param>
 /// <param name="OpenAiContentSource">Opens a content source over one provider configuration.</param>
+/// <param name="CreateCorpus">Opens the archive an export writes; the caller disposes it.</param>
+/// <param name="OpenCorpus">Opens the archive a replay reads; the caller disposes it.</param>
 /// <param name="Clock">What resolves today's date, what the pacing waits on, and what bounds a delivery wait.</param>
 /// <remarks>
-/// One seam rather than six, so a test drives the command end to end without a mail server, without a credential
-/// file, and without the wall clock. Everything this tool reaches outside its own process is behind it.
+/// One seam rather than several, so a test drives the command end to end without a mail server, without a credential
+/// file, without a corpus on disk, and without the wall clock. Everything this tool reaches outside its own process is
+/// behind it.
 /// </remarks>
 internal sealed record SyntheticMailContext(
     ISyntheticMailConsole Console,
@@ -29,6 +33,8 @@ internal sealed record SyntheticMailContext(
     Func<SendingAccount, ISyntheticMailTransport> OpenTransport,
     Func<WatchedMailboxAccount, IWatchedMailbox> OpenWatchedMailbox,
     Func<AiProviderConfiguration, IAiEmailContentSource> OpenAiContentSource,
+    Func<string, Stream> CreateCorpus,
+    Func<string, Stream> OpenCorpus,
     TimeProvider Clock)
 {
     /// <summary>Builds the context the command runs under for a developer at a terminal.</summary>
@@ -41,5 +47,7 @@ internal sealed record SyntheticMailContext(
         account => new SmtpSyntheticMailTransport(account),
         watched => new ImapWatchedMailbox(watched),
         provider => new OpenAiEmailContentSource(provider),
+        CorpusFile.Create,
+        CorpusFile.Open,
         TimeProvider.System);
 }
