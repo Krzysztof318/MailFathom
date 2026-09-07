@@ -570,7 +570,7 @@ what is judged is the message leaving rather than when it was composed.
 exactly as they would be transmitted. Each attached document is opened through
 [attachment text extraction](attachment-text-extraction.md) under that feature's own bounds, so what a scanner sees is
 the words of the file rather than its octets; nothing is executed and nothing is written to disk. A file no reader
-*recognizes* — an image, a recording, an archive, a plain-text note, anything outside the ten formats
+*recognizes* — an image, a recording, an archive, a `.json` file, anything outside the thirteen formats
 `AttachmentDocumentFormats` names — is passed over rather than refused, because no text scanner ever undertook to read
 one. A file whose format is recognized and which yields no text is the opposite: a `.doc`, `.xls`, or `.ppt`, or any
 format an operator excluded from `Embeddings:AttachmentText:Formats`, stops the act with `59003` exactly as an

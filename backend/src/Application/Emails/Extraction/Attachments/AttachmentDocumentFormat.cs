@@ -42,4 +42,13 @@ public enum AttachmentDocumentFormat
 
     /// <summary>An OpenDocument presentation, the format an <c>.odp</c> file carries.</summary>
     OpenDocumentPresentation = 9,
+
+    /// <summary>A plain-text file, the format a <c>.txt</c> file carries.</summary>
+    PlainText = 10,
+
+    /// <summary>A Markdown file, the format a <c>.md</c> file carries, read as the characters it was written with.</summary>
+    Markdown = 11,
+
+    /// <summary>A delimiter-separated data file, the format a <c>.csv</c> file carries, read as the characters it holds.</summary>
+    Csv = 12,
 }

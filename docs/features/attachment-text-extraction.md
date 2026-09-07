@@ -44,9 +44,33 @@ for every other media type the file name alone decides which parser is offered t
 | OpenDocument text document (`.odt`) | yes | the same, over the single content part the format packages |
 | OpenDocument spreadsheet (`.ods`) | yes | the same, one page per sheet |
 | OpenDocument presentation (`.odp`) | yes | the same, one page per drawing page |
+| Plain text (`.txt`) | yes | decoded rather than parsed, under the byte-order mark it opens with or as UTF-8 |
+| Markdown (`.md`, `.markdown`) | yes | the same reader, keeping the markup as the characters it is |
+| Delimiter-separated data (`.csv`) | yes | the same reader, keeping the delimiters and the quoting as written |
 | Legacy binary Word document (`.doc`) | no | — |
 | Legacy binary Excel workbook (`.xls`) | no | — |
 | Legacy binary PowerPoint presentation (`.ppt`) | no | — |
+
+**A plain-text, Markdown, or `.csv` attachment is the one family whose octets already are the text**, so no parser
+reads one and none is wanted. Nothing is rendered, no markup is interpreted, no HTML is parsed out of a Markdown
+file, no field is split out of a delimited row, and no link or image reference is resolved or fetched — a heading
+marker, a list bullet, a link's own target, and the comma between two cells are characters somebody typed and are
+as searchable as the prose around them, so stripping any of them would lose words and would put the reader in the
+business of deciding what a file means. A `.csv` is therefore searched by what it says and not by its columns: a
+row matches on the values in it, and no header, no field boundary, and no cell coordinate is recorded. That same
+restraint is what keeps the reader clear of the parsing surface an HTML attachment would carry, which is why
+`.html` is recognized as nothing and stays so.
+
+The octets still get no benefit of the doubt, a sender having written both the media type and the file name. The
+reader decodes strictly: a byte-order mark decides the encoding — UTF-8, either UTF-16, or either UTF-32 — and
+everything without one is read as UTF-8, so octets that are not text answer `Malformed` rather than arriving as a
+page of replacement characters an owner would then be told matched. A NUL is refused on the same rule and is
+worth stating separately, because it decodes cleanly: it is the one shape of binary a strict decoder would
+otherwise admit, so a photograph renamed `notes.txt` ends as a stated reason instead of as indexed noise. Nothing
+else about the file is guessed — not its language, not a legacy code page, and not its line-ending convention.
+The container ceilings do not apply to any of the three, there being no package to inflate, no part to count, and no
+element tree to descend; `MaxInputOctets`, `MaxExtractedTextCharacters`, and the timeout hold exactly as they do
+everywhere else.
 
 The three legacy binary formats are recognized deliberately rather than left unknown. They are OLE compound files, and
 no permissively licensed .NET parser reads all three — so an attachment carrying one is reported as a format MailFathom
@@ -120,7 +144,9 @@ number. #1682 is where that is tracked. An OpenDocument file holds one content p
 
 A "page" is what the format has one of: a PDF page, a presentation slide, an OpenDocument drawing page, and a sheet of
 either spreadsheet format each count as one. A word-processing document counts as one page whatever it prints as,
-because neither office format records pagination and reading one would mean laying the document out.
+because neither office format records pagination and reading one would mean laying the document out. A text file
+counts as one page for the same reason, so a citation into a `.txt` or a `.md` resolves through the same
+coordinate scheme as one into a `.docx`.
 
 ## What a described picture reports, and what a message's own ceiling reports
 
