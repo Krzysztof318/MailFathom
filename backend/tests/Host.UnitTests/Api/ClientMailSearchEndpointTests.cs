@@ -4,10 +4,13 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
@@ -144,7 +147,15 @@ public sealed class ClientMailSearchEndpointTests
     {
         // Arrange
         var page = new BrowsedSearchPage(
-            [new BrowsedSearchResult(SyntheticMatchedEmail(), "the invoice is attached", ["**invoice**"], SearchMatchOrigin.BothRankings)],
+            [
+                new BrowsedSearchResult(
+                    SyntheticMatchedEmail(),
+                    "the invoice is attached",
+                    ["**invoice**"],
+                    SearchMatchOrigin.BothRankings,
+                    AttachmentMatches: [],
+                    IsDepictedMatch: false),
+            ],
             NextCursor: "after",
             PageSize: 20,
             EmailSearchRetrievalMode.Hybrid,
@@ -162,6 +173,104 @@ public sealed class ClientMailSearchEndpointTests
         Assert.True(response.IncludedJunkMail);
         Assert.Equal(nameof(SearchMatchOrigin.BothRankings), Assert.Single(response.Results).MatchedBy);
     }
+
+    /// <summary>A result a file put in the list names the file and the page of it, so a screen can say why the row is there.</summary>
+    [Fact]
+    public void For_AResultAnAttachmentMatched_NamesTheFileThePlaceInsideItAndItsExtracts()
+    {
+        // Arrange
+        var page = PageOf(new BrowsedSearchResult(
+            SyntheticMatchedEmail(),
+            Preview: null,
+            Snippets: [],
+            SearchMatchOrigin.LexicalRanking,
+            [
+                new EmailAttachmentMatch(
+                    AttachmentPosition: 2,
+                    "terms.pdf",
+                    "application/pdf",
+                    AttachmentTextKind.Document,
+                    new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 4, Label: null, StartOffset: 900),
+                    ["the **invoice** is payable within 30 days"]),
+            ],
+            IsDepictedMatch: false));
+
+        // Act
+        var response = ClientMailSearchResponse.For(page);
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(response.Results).AttachmentMatches);
+        Assert.Equal(2, attachment.AttachmentPosition);
+        Assert.Equal("terms.pdf", attachment.FileName);
+        Assert.Equal("application/pdf", attachment.MediaType);
+        Assert.Equal(nameof(AttachmentTextKind.Document), attachment.Source);
+        Assert.Equal(nameof(AttachmentTextSegmentKind.Page), attachment.SegmentKind);
+        Assert.Equal(4, attachment.SegmentNumber);
+        Assert.Equal(["the **invoice** is payable within 30 days"], attachment.Extracts);
+        Assert.False(Assert.Single(response.Results).IsDepictedMatch);
+    }
+
+    /// <summary>A picture is published as a description rather than as words somebody wrote, and the result says a picture is its whole claim.</summary>
+    [Fact]
+    public void For_AResultAPictureAlonePlaced_PublishesItAsADescriptionAndMarksTheResultDepicted()
+    {
+        // Arrange
+        var page = PageOf(new BrowsedSearchResult(
+            SyntheticMatchedEmail(),
+            Preview: null,
+            Snippets: [],
+            SearchMatchOrigin.SemanticRanking,
+            [
+                new EmailAttachmentMatch(
+                    AttachmentPosition: 0,
+                    "photo.jpg",
+                    "image/jpeg",
+                    AttachmentTextKind.ImageDescription,
+                    Segment: null,
+                    ["A whiteboard covered in a sprint plan."]),
+            ],
+            IsDepictedMatch: true));
+
+        // Act
+        var response = ClientMailSearchResponse.For(page);
+
+        // Assert
+        var result = Assert.Single(response.Results);
+        var attachment = Assert.Single(result.AttachmentMatches);
+        Assert.Equal(nameof(AttachmentTextKind.ImageDescription), attachment.Source);
+        Assert.Null(attachment.SegmentKind);
+        Assert.Null(attachment.SegmentNumber);
+        Assert.True(result.IsDepictedMatch);
+    }
+
+    /// <summary>A result no attachment matched publishes an empty list rather than a field a screen has to interpret.</summary>
+    [Fact]
+    public void For_AResultNoAttachmentMatched_PublishesNoAttachmentMatches()
+    {
+        // Arrange
+        var page = PageOf(new BrowsedSearchResult(
+            SyntheticMatchedEmail(),
+            "the invoice is attached",
+            ["**invoice**"],
+            SearchMatchOrigin.LexicalRanking,
+            AttachmentMatches: [],
+            IsDepictedMatch: false));
+
+        // Act
+        var response = ClientMailSearchResponse.For(page);
+
+        // Assert
+        Assert.Empty(Assert.Single(response.Results).AttachmentMatches);
+    }
+
+    /// <summary>Wraps one result in the page a response is described from, so a shape assertion arranges only what it is about.</summary>
+    private static BrowsedSearchPage PageOf(BrowsedSearchResult result) => new(
+        [result],
+        NextCursor: null,
+        PageSize: 20,
+        EmailSearchRetrievalMode.Hybrid,
+        SemanticSearchCapability.Available,
+        IncludedJunkMail: false);
 
     private static EmailSummary SyntheticMatchedEmail() => new()
     {
@@ -261,6 +370,7 @@ public sealed class ClientMailSearchEndpointTests
 
         return new MailSearchBrowser(
             this.index,
+            NoAttachmentMatches(),
             LexicalOnlySemanticSearch(),
             previews,
             new MailboxScopeResolver(
@@ -272,6 +382,28 @@ public sealed class ClientMailSearchEndpointTests
             SensitiveContentEgressGuards.Inactive(),
             readTelemetry,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+    }
+
+    /// <summary>Builds an attachment reader answering for no message, which is what this suite's transport assertions need.</summary>
+    /// <remarks>What an attachment contributes is decided in the use case and asserted there; here it only has to not be the reason a request fails.</remarks>
+    private static IEmailAttachmentMatchReader NoAttachmentMatches()
+    {
+        var reader = Substitute.For<IEmailAttachmentMatchReader>();
+        reader.ReadWrittenMatchesAsync(
+                Arg.Any<MailboxEmailSelection>(),
+                Arg.Any<EmailSearchQueryText>(),
+                Arg.Any<EmailSearchSnippetBounds>(),
+                Arg.Any<IReadOnlyList<StoredEmailId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAttachmentMatches>>([]));
+        reader.ReadDepictedMatchesAsync(
+                Arg.Any<MailboxEmailSelection>(),
+                Arg.Any<EmailSearchSnippetBounds>(),
+                Arg.Any<IReadOnlyList<StoredEmailId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAttachmentMatches>>([]));
+
+        return reader;
     }
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

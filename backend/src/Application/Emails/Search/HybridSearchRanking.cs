@@ -12,11 +12,9 @@ namespace MailFathom.Application.Emails.Search;
 /// The one step a surface calls, rather than a rule each of them remembers.
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
 /// requires exactly that: a guarantee that has to be remembered in two places is one that holds in one of them after the
-/// next change to the other. <c>search_emails</c> and an answering run's retrieval publish through it today, both
-/// reaching it through <c>MailboxSearchReader</c>. The client's search route does not yet: <c>MailSearchBrowser</c>
-/// fuses the written ranking alone and withholds the depicted tail, because a client row a description put there needs
-/// a way to say so and <see href="https://github.com/Krzysztof318/MailFathom/issues/1559">#1559</see> owns that shape.
-/// It joins this step when it gains one.
+/// next change to the other. Every surface that publishes a ranked result composes it here: <c>search_emails</c> and an
+/// answering run's retrieval through <c>MailboxSearchReader</c>, and the client's search route through
+/// <c>MailSearchBrowser</c>.
 /// </para>
 /// <para>
 /// What it guarantees is stronger than "a picture never outranks words" and simpler to test: <b>a picture never improves

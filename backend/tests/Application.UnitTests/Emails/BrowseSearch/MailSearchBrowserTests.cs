@@ -5,10 +5,13 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -370,6 +373,144 @@ public sealed class MailSearchBrowserTests
         Assert.Equal(RankedSearchList.MaximumRankedDepth, Assert.Single(vectors.Calls).Limit);
     }
 
+    /// <summary>A row a word inside a file put in the list carries the file, the place inside it, and what it said, which is the whole of why the row is there.</summary>
+    [Fact]
+    public async Task SearchPageAsync_AMessageAWordInsideADocumentReached_CarriesTheAttachmentMatchThatExplainsIt()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, attachmentCount: 1);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: Query);
+        var attachments = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, DocumentMatch("terms.pdf", "the **invoice** is payable in 30 days"));
+        var browser = BrowserOver(index, attachmentMatchReader: attachments);
+
+        // Act
+        var page = await browser.SearchPageAsync(RequestFor(Query), TestContext.Current.CancellationToken);
+
+        // Assert
+        var result = Assert.Single(page.Results);
+        var attachment = Assert.Single(result.AttachmentMatches);
+        Assert.Equal("terms.pdf", attachment.FileName);
+        Assert.Equal(AttachmentTextKind.Document, attachment.Kind);
+        Assert.Equal(4, attachment.Segment?.Number);
+        Assert.Equal(["the **invoice** is payable in 30 days"], attachment.Extracts);
+        Assert.False(result.IsDepictedMatch);
+    }
+
+    /// <summary>A picture only ever adds a row nothing else found, and that row says a picture is the whole of its claim on the query.</summary>
+    [Fact]
+    public async Task SearchPageAsync_AMessageOnlyADescribedPictureReached_IsAppendedBelowTheWrittenResultsAndMarkedDepicted()
+    {
+        // Arrange
+        var words = SyntheticEmailSummaries.Create(FirstJuly);
+        var picture = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1), attachmentCount: 1);
+        var index = new InMemoryEmailSearchIndex()
+            .With(words, relevanceRank: 0.9f, matchedText: Query)
+            .With(picture, relevanceRank: 0.9f, matchedText: "nothing this query carries");
+        var vectors = new InMemoryEmailVectorSearchIndex().WithDepiction(picture, distance: 0.1f);
+        var attachments = new InMemoryEmailAttachmentMatchIndex()
+            .WithDepicted(picture.StoredEmailId, DepictionMatch("whiteboard.jpg", "A whiteboard covered in a sprint plan."));
+        var browser = BrowserOver(index, semanticSearch: SemanticSearchOver(vectors), attachmentMatchReader: attachments);
+
+        // Act
+        var page = await browser.SearchPageAsync(RequestFor(Query), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [words.StoredEmailId, picture.StoredEmailId],
+            page.Results.Select(result => result.Email.StoredEmailId));
+        var depicted = page.Results[^1];
+        Assert.True(depicted.IsDepictedMatch);
+        Assert.Equal(SearchMatchOrigin.SemanticRanking, depicted.MatchedBy);
+        Assert.Equal(AttachmentTextKind.ImageDescription, Assert.Single(depicted.AttachmentMatches).Kind);
+        Assert.False(page.Results[0].IsDepictedMatch);
+    }
+
+    /// <summary>A picture attached to a message a written passage already placed contributes nothing to where it sits, so the row is never marked depicted.</summary>
+    [Fact]
+    public async Task SearchPageAsync_AMessageAWrittenPassageAlsoReached_IsNeverMarkedDepictedHoweverManyPicturesItCarries()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, attachmentCount: 1);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: Query);
+        var vectors = new InMemoryEmailVectorSearchIndex().WithDepiction(matched, distance: 0.1f);
+        var attachments = new InMemoryEmailAttachmentMatchIndex();
+        var browser = BrowserOver(index, semanticSearch: SemanticSearchOver(vectors), attachmentMatchReader: attachments);
+
+        // Act
+        var page = await browser.SearchPageAsync(RequestFor(Query), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(Assert.Single(page.Results).IsDepictedMatch);
+        Assert.Equal([matched.StoredEmailId], Assert.Single(attachments.WrittenRequests));
+        Assert.Empty(attachments.DepictedRequests);
+    }
+
+    /// <summary>The two filters this route must never conflate: mail carrying a file, and mail a file matched.</summary>
+    [Fact]
+    public async Task SearchPageAsync_AFilterOnAttachmentPresence_StillConstrainsByPresenceRatherThanByWhetherAnAttachmentMatched()
+    {
+        // Arrange
+        var carriesAFile = SyntheticEmailSummaries.Create(FirstJuly, attachmentCount: 1);
+        var carriesNone = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1));
+        var index = new InMemoryEmailSearchIndex()
+            .With(carriesAFile, relevanceRank: 0.9f, matchedText: Query)
+            .With(carriesNone, relevanceRank: 0.8f, matchedText: Query);
+
+        // No attachment of either message matched anything, which is what separates the two meanings of the filter.
+        var browser = BrowserOver(index, attachmentMatchReader: new InMemoryEmailAttachmentMatchIndex());
+
+        // Act
+        var page = await browser.SearchPageAsync(
+            RequestFor(Query) with { HasAttachments = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var result = Assert.Single(page.Results);
+        Assert.Equal(carriesAFile.StoredEmailId, result.Email.StoredEmailId);
+        Assert.Empty(result.AttachmentMatches);
+        Assert.True(Assert.Single(index.RankedCandidatesCalls).Selection.HasAttachments);
+    }
+
+    /// <summary>What a file contributed leaves the deployment with the rest of the page, so it is scanned with the rest of the page.</summary>
+    [Fact]
+    public async Task SearchPageAsync_ASwitchedOnScanner_RedactsTheFileNameAndTheExtractsAnAttachmentContributed()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, attachmentCount: 1);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: Query);
+        var attachments = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, DocumentMatch($"{Marker}.pdf", $"sign in with {Marker}"));
+        var browser = BrowserOver(index, egressGuard: egress.Guard, attachmentMatchReader: attachments);
+
+        // Act
+        var page = await browser.SearchPageAsync(RequestFor(Query), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(page.Results).AttachmentMatches);
+        Assert.Equal("[redacted:CloudKey].pdf", attachment.FileName);
+        Assert.Equal(["sign in with [redacted:CloudKey]"], attachment.Extracts);
+    }
+
+    /// <summary>What a document attachment contributed, cited to a page of the file it was read from.</summary>
+    private static EmailAttachmentMatch DocumentMatch(string fileName, string extract) => new(
+        AttachmentPosition: 0,
+        fileName,
+        "application/pdf",
+        AttachmentTextKind.Document,
+        new AttachmentTextSegment(AttachmentTextSegmentKind.Page, Number: 4, Label: null, StartOffset: 900),
+        [extract]);
+
+    /// <summary>What a described picture contributed, which is the whole description and no place inside a file.</summary>
+    private static EmailAttachmentMatch DepictionMatch(string fileName, string description) => new(
+        AttachmentPosition: 0,
+        fileName,
+        "image/jpeg",
+        AttachmentTextKind.ImageDescription,
+        Segment: null,
+        [description]);
+
     /// <summary>A result is drawn from one request, so it carries the opening of the message beside the extracts.</summary>
     [Fact]
     public async Task SearchPageAsync_AMessageThisDeploymentHasExtracted_CarriesItsPreviewBesideTheExtracts()
@@ -507,8 +648,10 @@ public sealed class MailSearchBrowserTests
         IStoredEmailPreviewReader? previewReader = null,
         ICallerMailAccountCatalog? accountCatalog = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        AccessAuthorization? authorization = null) => new(
+        AccessAuthorization? authorization = null,
+        IEmailAttachmentMatchReader? attachmentMatchReader = null) => new(
         index,
+        attachmentMatchReader ?? new InMemoryEmailAttachmentMatchIndex(),
         semanticSearch ?? LexicalOnlySemanticSearch(),
         previewReader ?? new InMemoryStoredEmailPreviews(),
         new MailboxScopeResolver(

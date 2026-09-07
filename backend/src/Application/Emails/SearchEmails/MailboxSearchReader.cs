@@ -12,7 +12,6 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.SearchEmails;
 
@@ -238,7 +237,13 @@ public sealed class MailboxSearchReader
             ranking.Candidates,
             cancellationToken);
 
-        matches = await this.WithAttachmentMatchesAsync(selection, queryText, ranking, matches, cancellationToken);
+        matches = await this.attachmentMatchReader.ReadWindowMatchesAsync(
+            selection,
+            queryText,
+            this.snippetBounds,
+            matches,
+            ranking.DepictedOnly,
+            cancellationToken);
 
         // Read after the window rather than beside it: both reads reach the same scoped EF Core context, which serves
         // one operation at a time, so starting them together would fault instead of overlapping.
@@ -250,82 +255,6 @@ public sealed class MailboxSearchReader
             semanticSearchCapability,
             folderFreshness,
             selection.Scope.IncludesJunkMail);
-    }
-
-    /// <summary>Reads what the window's attachments contributed and hangs it on the matches they belong to.</summary>
-    /// <remarks>
-    /// <para>
-    /// Two reads because the two kinds of contribution are found by different means. A document's own words were reached
-    /// by the query's words, so every result in the window is asked about; a description was never matched lexically at
-    /// all, so only the results a description alone placed are, and what they show is the description itself.
-    /// </para>
-    /// <para>
-    /// Sequential rather than concurrent, and after the window rather than beside it, for the reason the freshness read
-    /// is: all three reach the same scoped EF Core context, which serves one operation at a time.
-    /// </para>
-    /// <para>
-    /// A message the depicted read answered for keeps the extracts that read found and is marked as depicted, which is
-    /// what says a picture is the whole of its claim on the query. A message the fused ranking carried is never marked,
-    /// however many pictures are attached to it: its place was earned by something somebody wrote.
-    /// </para>
-    /// </remarks>
-    private async Task<IReadOnlyList<EmailSearchMatch>> WithAttachmentMatchesAsync(
-        MailboxEmailSelection selection,
-        EmailSearchQueryText queryText,
-        RankedSearchSequence ranking,
-        IReadOnlyList<EmailSearchMatch> matches,
-        CancellationToken cancellationToken)
-    {
-        if (matches.Count is 0)
-        {
-            return matches;
-        }
-
-        StoredEmailId[] writtenIds =
-        [
-            .. matches
-                .Select(static match => match.Summary.StoredEmailId)
-                .Where(storedEmailId => !ranking.DepictedOnly.Contains(storedEmailId)),
-        ];
-
-        StoredEmailId[] depictedIds =
-        [
-            .. matches
-                .Select(static match => match.Summary.StoredEmailId)
-                .Where(ranking.DepictedOnly.Contains),
-        ];
-
-        var written = writtenIds.Length is 0
-            ? []
-            : await this.attachmentMatchReader.ReadWrittenMatchesAsync(
-                selection,
-                queryText,
-                this.snippetBounds,
-                writtenIds,
-                cancellationToken);
-
-        var depicted = depictedIds.Length is 0
-            ? []
-            : await this.attachmentMatchReader.ReadDepictedMatchesAsync(
-                selection,
-                this.snippetBounds,
-                depictedIds,
-                cancellationToken);
-
-        var byEmail = written
-            .Concat(depicted)
-            .ToDictionary(
-                static found => found.StoredEmailId,
-                static found => found.Matches);
-
-        return
-        [
-            .. matches.Select(match => match with
-            {
-                AttachmentMatches = byEmail.GetValueOrDefault(match.Summary.StoredEmailId, []),
-                IsDepictedMatch = ranking.DepictedOnly.Contains(match.Summary.StoredEmailId),
-            }),
-        ];
     }
 
     /// <summary>Scans the mail content of a window before the window becomes somebody else's.</summary>
@@ -376,7 +305,10 @@ public sealed class MailboxSearchReader
                 SensitiveContentEgressPoint.McpSnippet,
                 match.Snippets,
                 cancellationToken);
-            var attachmentMatches = await this.GuardedAttachmentsAsync(match.AttachmentMatches, cancellationToken);
+            var attachmentMatches = await this.egressGuard.GuardAttachmentMatchesAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                match.AttachmentMatches,
+                cancellationToken);
 
             guarded.Add(match with
             {
@@ -387,42 +319,6 @@ public sealed class MailboxSearchReader
         }
 
         scan.Completed();
-
-        return guarded;
-    }
-
-    /// <summary>Scans what a result's attachments publish, which is their extracts and the names their senders chose.</summary>
-    /// <remarks>
-    /// The file name is scanned for the reason a sender's display name is: it is free text somebody wrote, and a
-    /// document called after the person it concerns discloses as much as a sentence about them. The walk position and
-    /// the declared media type are not scanned, being a coordinate a caller acts on and a parser's input rather than
-    /// text to read, and a page number is neither.
-    /// </remarks>
-    private async Task<IReadOnlyList<EmailAttachmentMatch>> GuardedAttachmentsAsync(
-        IReadOnlyList<EmailAttachmentMatch> attachmentMatches,
-        CancellationToken cancellationToken)
-    {
-        if (attachmentMatches.Count is 0)
-        {
-            return attachmentMatches;
-        }
-
-        var guarded = new List<EmailAttachmentMatch>(attachmentMatches.Count);
-
-        foreach (var attachmentMatch in attachmentMatches)
-        {
-            guarded.Add(attachmentMatch with
-            {
-                FileName = await this.egressGuard.GuardOptionalAsync(
-                    SensitiveContentEgressPoint.McpSnippet,
-                    attachmentMatch.FileName,
-                    cancellationToken),
-                Extracts = await this.egressGuard.GuardAllAsync(
-                    SensitiveContentEgressPoint.McpSnippet,
-                    attachmentMatch.Extracts,
-                    cancellationToken),
-            });
-        }
 
         return guarded;
     }

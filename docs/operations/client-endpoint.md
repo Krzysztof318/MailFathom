@@ -496,7 +496,19 @@ It answers with one page of the owner's mail ranked against what they are lookin
       "sizeOctets": 48213,
       "preview": "The invoice for August is attached and due at the end of the month.",
       "snippets": [ "The **invoice** for August is attached" ],
-      "matchedBy": "BothRankings"
+      "matchedBy": "BothRankings",
+      "attachmentMatches": [
+        {
+          "attachmentPosition": 0,
+          "fileName": "invoice-4471.pdf",
+          "mediaType": "application/pdf",
+          "source": "Document",
+          "segmentKind": "Page",
+          "segmentNumber": 2,
+          "extracts": [ "**Invoice** 4471 is payable within 30 days" ]
+        }
+      ],
+      "isDepictedMatch": false
     }
   ],
   "nextCursor": "AbCd...",
@@ -522,6 +534,31 @@ for one matching by meaning, and `BothRankings` for one both rankings found. It 
 the second of those: a semantically ranked message carries no `snippets`, because there is no extract of it that shows
 the query's words, and a row with nothing under it would otherwise read as unexplained. On a lexically ranked page
 every result is `LexicalRanking` by construction.
+
+**`attachmentMatches` is the other half of that answer**: what the query matched inside a file the message carries.
+Attachment text is never folded into `snippets`, which are extracts of the message body alone — quoting a file into one
+would report words the body never carried and leave a reader unable to say which file they came from. Each entry names
+the file and the place inside it: `attachmentPosition` is the coordinate
+[the attachment route](#the-attachment-route) is addressed with, `fileName` and `mediaType` are what the sender
+declared, `segmentKind` is `Page`, `Slide`, or `Sheet` with `segmentNumber` beside it, and `extracts` are bounded
+extracts of that file's text marked the same way `snippets` are. `segmentKind` and `segmentNumber` are `null` together
+for an attachment read before boundaries were recorded, which is a citation naming the file and not a place inside it.
+An attachment MailFathom could not read — encrypted, corrupt, unsupported, or carrying no text layer — is absent rather
+than present and empty, exactly as it is from the MCP tools.
+
+**`source` says who wrote the words, and `isDepictedMatch` says whether that is the whole story.** `Document` is the
+file's own text, read out of it by a parser and reachable by word and by meaning alike; `ImageDescription` is a model's
+account of what a picture shows, which nobody wrote and which is reachable by meaning alone, so its `extracts` carry
+the description itself rather than fragments cut around the query. `isDepictedMatch` is `true` only when a description
+is the entire reason the message is in the list: every such result sits below every result a query word or written text
+reached, so a picture never displaces a written match and only ever adds a message that would not have been in the list
+at all. A screen showing one owes the reader that distinction — the source is a guess about an image.
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+is the decision, and the same partition serves the MCP tools.
+
+**`hasAttachments` is unchanged by any of this.** It constrains by attachment *presence* — mail carrying a file — and
+never by whether a file matched. The two are different questions, and a filter that quietly became the second would
+hide every message whose attachment the query never reached.
 
 **`retrievalMode` and `semanticSearch` are how a narrower answer says it is narrower.** `Lexical` means this page was
 ranked by words alone; `Hybrid` means both rankings took part. What separates a deployment that deliberately does not
