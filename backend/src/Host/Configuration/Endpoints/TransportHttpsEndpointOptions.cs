@@ -50,8 +50,8 @@ internal sealed class TransportHttpsEndpointOptions
     /// <summary>Gets or sets the HTTP versions this profile serves, or <see langword="null" /> to serve the default HTTP/1.1 and HTTP/2.</summary>
     /// <remarks>
     /// Nullable rather than a pre-filled list, because the configuration binder adds to a collection it finds rather
-    /// than replacing it: a default of HTTP/1.1 and HTTP/2 written here would leave an operator who configured HTTP/3
-    /// alone serving all three. Absent therefore means the default and an explicitly empty list is a configuration
+    /// than replacing it: a default of HTTP/1.1 and HTTP/2 written here would leave an operator who named HTTP/1.1 and
+    /// HTTP/3 serving all three. Absent therefore means the default and an explicitly empty list is a configuration
     /// error, which are two different mistakes and are reported as such.
     /// </remarks>
     public IList<TransportHttpProtocol>? HttpProtocols { get; set; }
@@ -158,6 +158,18 @@ internal sealed class TransportHttpsEndpointOptions
         if (configured.Distinct().Count() != configured.Count)
         {
             yield return $"{settingPath} — an HTTP version is listed more than once; each version is served or it is not, so a repeat says nothing a single entry does not.";
+        }
+
+        // HTTP/3 is a version a client arrives at rather than one it dials: Kestrel advertises the QUIC socket in an
+        // alt-svc header carried on a TCP connection, and the client moves across on a later request. A profile serving
+        // it alone has no such connection to advertise from, so nothing discovers the endpoint — and it has no version
+        // left to answer on where a network drops UDP, which is the fallback the advertisement exists to preserve.
+        if (undefined.Length == 0
+            && configured.Contains(TransportHttpProtocol.Http3)
+            && !configured.Contains(TransportHttpProtocol.Http1)
+            && !configured.Contains(TransportHttpProtocol.Http2))
+        {
+            yield return $"{settingPath} — '{nameof(TransportHttpProtocol.Http3)}' is the only version this profile serves, and a client reaches HTTP/3 by upgrading from a connection that advertised it rather than by dialling it; name '{nameof(TransportHttpProtocol.Http1)}' or '{nameof(TransportHttpProtocol.Http2)}' beside it, so the endpoint can be discovered and still answers where QUIC does not get through.";
         }
 
         // Reported rather than silently dropped: an operator who asked for HTTP/3 and got HTTP/2 would read a working

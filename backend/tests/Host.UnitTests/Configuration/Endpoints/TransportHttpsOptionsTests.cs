@@ -210,7 +210,47 @@ public sealed class TransportHttpsOptionsTests
     {
         // Arrange
         var profile = Profile();
+        profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http2, TransportHttpProtocol.Http3];
+
+        // Act, Assert
+        Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+    }
+
+    /// <summary>Nothing would advertise the QUIC socket, so the profile binds a listener no client can arrive at and has no version left when UDP is dropped.</summary>
+    [Fact]
+    public void FindConfigurationErrors_Http3WithNoVersionBesideIt_IsRefused()
+    {
+        // Arrange
+        var profile = Profile();
         profile.HttpProtocols = [TransportHttpProtocol.Http3];
+
+        // Act
+        var error = Assert.Single(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+
+        // Assert
+        Assert.StartsWith($"{SectionPath}:Endpoints:0:HttpProtocols", error, StringComparison.Ordinal);
+        Assert.Contains("Http3", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>One connection a client can start on is all the advertisement needs, so HTTP/1.1 alone discharges the requirement.</summary>
+    [Fact]
+    public void FindConfigurationErrors_Http3BesideHttp1Alone_IsAccepted()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.HttpProtocols = [TransportHttpProtocol.Http1, TransportHttpProtocol.Http3];
+
+        // Act, Assert
+        Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
+    }
+
+    /// <summary>And so does HTTP/2 alone, which is the version the advertisement most often travels on.</summary>
+    [Fact]
+    public void FindConfigurationErrors_Http3BesideHttp2Alone_IsAccepted()
+    {
+        // Arrange
+        var profile = Profile();
+        profile.HttpProtocols = [TransportHttpProtocol.Http2, TransportHttpProtocol.Http3];
 
         // Act, Assert
         Assert.Empty(With(profile).FindConfigurationErrors(SectionPath, http3Supported: true));
