@@ -2,8 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { describe, expect, it } from 'vitest';
-import { attachmentOctetsOf, deliveryFailureOf, drawnFrom, showingFailureOf } from './attachmentExchange';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+    attachmentExchange,
+    attachmentOctetsOf,
+    deliveryFailureOf,
+    drawnFrom,
+    showingFailureOf,
+} from './attachmentExchange';
 
 // Three things are proven here. What an answer to the attachment route amounts to, asked of an answer this file
 // constructed; what a screen draws those octets as, asked of the octets themselves; and what each outcome becomes in
@@ -11,9 +17,12 @@ import { attachmentOctetsOf, deliveryFailureOf, drawnFrom, showingFailureOf } fr
 // because that reading is what an operator's own dimension is built from, and an outcome mapped to the wrong reason is
 // a dashboard saying a deployment is refusing what it delivered.
 //
-// The `fetch` that produces an answer is not called here and nothing patches it, which `frontend/tests/AGENTS.md`
-// § *What is faked, and where* holds as a rule and `attachmentUpload.ts` beside this module already follows. A real
-// exchange over the wire belongs to the browser suite, which drives the built bundle against a served deployment.
+// Nothing here stands a fake network in front of the `fetch` that produces an answer, which
+// `frontend/tests/AGENTS.md` § *What is faked, and where* holds as a rule and `attachmentUpload.ts` beside this module
+// already follows. A real exchange over the wire belongs to the browser suite, which drives the built bundle against a
+// served deployment. One thing beside those three is asked of the request instead of the answer: the credentials mode the
+// request goes out under, which is a property of what went out rather than of what came back, so `fetch` itself is
+// watched for it — `sendToDeployment.test.ts` states why.
 
 /** An answer whose octets arrive over a stream, which is the shape a ceiling has to hold during rather than after. */
 function answering(status: number, body: Uint8Array = new Uint8Array(0)): Response {
@@ -142,5 +151,30 @@ describe('showingFailureOf', () => {
     // than a person stopping the download is. Counting it would report a working policy as a deployment at fault.
     it('reports a screened file as an answer the client acted on rather than as a failure', () => {
         expect(showingFailureOf({ outcome: 'refused', refusal: 'screened' })).toBeNull();
+    });
+});
+
+describe('attachmentExchange', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('omits the credentials, as every request this client puts on the wire does', async () => {
+        const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(answering(200));
+
+        await attachmentExchange.read(
+            {
+                method: 'GET',
+                path: 'https://mail.example/api/client/messages/m1/attachments/a1',
+                headers: { Accept: 'application/octet-stream' },
+            },
+            { as: 'text', charset: 'utf-8' },
+            new AbortController().signal,
+        );
+
+        expect(sent).toHaveBeenCalledWith(
+            'https://mail.example/api/client/messages/m1/attachments/a1',
+            expect.objectContaining({ credentials: 'omit' }),
+        );
     });
 });

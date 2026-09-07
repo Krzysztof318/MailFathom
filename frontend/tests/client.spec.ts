@@ -5,7 +5,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { expect, test, type Browser, type Locator, type Page, type Route } from '@playwright/test';
+import { expect, test, type Browser, type Locator, type Page, type Request, type Route } from '@playwright/test';
 
 import * as deployment from './fixtures/deployment';
 import * as mail from './fixtures/mail';
@@ -361,6 +361,60 @@ test('asks for the credential again after signing out, including across a reload
 
     await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toHaveCount(0);
+});
+
+test('reads a refused password itself rather than letting the browser ask for one', async ({
+    page,
+    context,
+    baseURL,
+}) => {
+    if (baseURL === undefined) {
+        throw new Error('The suite is configured with no base address to set a cookie against.');
+    }
+
+    const prompted: string[] = [];
+    const asked: Request[] = [];
+
+    page.on('dialog', (dialog) => prompted.push(dialog.type()));
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client/session') {
+            asked.push(request);
+        }
+    });
+
+    // A cookie on the origin the bundle was served from, which is what makes the assertion below about the request's
+    // credentials mode rather than about an origin that happened to have nothing to send. The Fetch Standard gates the
+    // user agent's own credential prompt on the same flag that decides whether this cookie travels, so a request that
+    // carried it is a request the browser would have prompted for.
+    await context.addCookies([{ name: 'mailfathom-probe', value: 'set', url: baseURL }]);
+
+    await servedByADeployment(page);
+
+    // The deployment refuses the password and challenges as MailFathom does wherever it accepts one — Basic named
+    // first, which is what tells the client a password may be sent at all and what separates this refusal from a
+    // deployment offering no password method.
+    await page.route('**/api/client/session', (route) =>
+        route.fulfill({
+            status: 401,
+            headers: { 'www-authenticate': 'Basic realm="MailFathom", charset="UTF-8"' },
+        }),
+    );
+
+    await page.goto('/');
+    await page.getByRole('textbox', { name: 'Login' }).fill(deployment.userName);
+    await page.getByLabel('Password', { exact: true }).fill(deployment.password);
+    await page.getByRole('button', { name: 'Connect' }).click();
+
+    // The screen says what the deployment decided, which is the whole point of the client reading the challenge: a
+    // dialog standing in front of this sentence is one nobody can get past to the form behind it.
+    await expect(page.getByText('The login or the password is not accepted by this deployment.')).toBeVisible();
+
+    expect(asked.length).toBeGreaterThan(0);
+    for (const request of asked) {
+        expect((await request.allHeaders())['cookie']).toBeUndefined();
+    }
+
+    expect(prompted).toStrictEqual([]);
 });
 
 test('opens in Discover, under the version it was built from and the one the deployment answered', async ({ page }) => {

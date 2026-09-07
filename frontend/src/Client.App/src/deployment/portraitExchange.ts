@@ -15,6 +15,7 @@ import {
 } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
 import { asDataUrl } from './dataUrl';
+import { deploymentCredentials } from './sendToDeployment';
 
 // The third module in this directory that calls `fetch`, and the third for the same reason: `Client.Backend` declares
 // no DOM, so a `Blob`, a `File`, and a `FileReader` can only be named on this side of the boundary. What that package
@@ -87,6 +88,7 @@ async function readPicture(request: ClientRequest, abandoned: AbortSignal): Prom
         response = await fetch(request.path, {
             method: request.method,
             headers: { ...request.headers },
+            credentials: deploymentCredentials,
             signal: abandoned,
         });
     } catch {
@@ -129,7 +131,12 @@ async function stated(request: ClientRequest, body: Blob | null): Promise<Portra
     let response: Response;
 
     try {
-        response = await fetch(request.path, { method: request.method, headers: { ...request.headers }, body });
+        response = await fetch(request.path, {
+            method: request.method,
+            headers: { ...request.headers },
+            credentials: deploymentCredentials,
+            body,
+        });
     } catch {
         return { outcome: 'refused', reason: 'unavailable' };
     }
