@@ -264,9 +264,11 @@ same screen sits on the two paths that hand an attachment's octets to somebody o
 [client's own attachment route](../operations/client-endpoint.md#the-attachment-route).
 
 - **The rule is the one above.** The file's text is extracted afresh — nothing here depends on what a derived pass
-  stored, on the format being one a search stage indexes, or on the message having been read yet — and judged by the
-  owner's own posture. A finding refuses the download; a document nothing could read refuses it; a file no reader
-  recognizes as a document is served as it always was.
+  stored or on the message having been read yet — and judged by the owner's own posture. A finding refuses the
+  download; a document nothing could read refuses it; a file no reader recognizes as a document is served as it always
+  was. What the read *is* bounded by is `Embeddings:AttachmentText:Formats`, the same set the search stage is
+  configured with, so a format an operator excluded from it answers `FormatNotExtracted` and is refused rather than
+  served — which is the paragraph above's rule reaching a key that reads like an indexing choice and is not one here.
 - **Nothing is redacted and nothing partial is served.** Replacing a region inside a byte stream produces a file its
   author never composed and whose reader has no way of knowing it was changed, so the answer is the whole file or none
   of it.

@@ -101,8 +101,11 @@ export type MailDraftComposition = {
  *
  * Seven rather than one because a screen says something different about each, and each names what would change the
  * outcome: turning sending on for the account, addressing somebody the policy admits, waiting for the window a ceiling
- * is counted over, rewriting what a scanner found, sending without the file a screen could not read or attaching it in
- * a form that can be read, and — for the last of the seven alone — trying again.
+ * is counted over, rewriting what a scanner found, and — for three of the seven — trying again. Those three are
+ * `screeningUnavailable`, whose scanner may answer in a moment, and `notFullyScanned` and `attachmentNotRead`, each of
+ * which a loaded host can produce with nothing wrong with the message: a read that ran out of time is one of the
+ * outcomes behind both. So a retry is the first thing offered for either, ahead of shortening the message or sending
+ * without the file, and a screen built from this comment offers one.
  */
 export type MailSendRefusal =
     | 'sendingNotEnabled'

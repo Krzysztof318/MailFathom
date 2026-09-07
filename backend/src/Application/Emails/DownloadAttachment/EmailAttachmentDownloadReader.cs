@@ -54,8 +54,10 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// <b>The screen is here rather than at either route</b>, for the reason every check above is: a deployment that
 /// redacts what a read publishes and serves the unredacted original beside it is not a screened deployment, and one
 /// rule in one place is what stops the two endpoints from each having to remember. What it screens is the attachment's
-/// own extracted text, read afresh — nothing here depends on what a derived pass stored, on the format being one a
-/// search stage indexes, or on the message having been read yet.
+/// own extracted text, read afresh — nothing here depends on what a derived pass stored or on the message having been
+/// read yet. It does depend on the format set the extractor is configured with, which an operator writes for the
+/// search stage: a format excluded there is read out of nothing, and a file whose text nobody established is refused
+/// rather than served.
 /// </para>
 /// <para>
 /// Nothing is redacted, because there is nothing a redaction could honestly do to a byte stream: replacing a region

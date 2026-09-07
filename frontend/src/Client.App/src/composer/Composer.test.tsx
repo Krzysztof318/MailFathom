@@ -355,7 +355,7 @@ describe('Composer, a message of its own', () => {
         ],
         [
             59_002,
-            'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
+            'Part of this message could not be screened, so it was not sent. Try again in case the read ran out of time; if it is refused again, taking off what could not be read is what would change that.',
         ],
         [
             59_003,

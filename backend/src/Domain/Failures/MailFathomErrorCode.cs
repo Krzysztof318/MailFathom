@@ -880,10 +880,20 @@ public readonly record struct MailFathomErrorCode
     /// through a message for material no scanner ever reported.
     /// </para>
     /// <para>
-    /// Two ceilings reach it, and the author acts on both the same way. One value of the message may be longer than a
-    /// single scan analyzes; and the documents attached to it may together exhaust what a whole message is read within,
-    /// which stops the read with files still unopened. Neither is about any one file — every attachment may have been
-    /// read successfully — which is why the code beside this one is not the answer to either.
+    /// Three ceilings reach it, and none of them is about any one file — every attachment may have been read
+    /// successfully — which is why the code beside this one is not the answer to any of them. One value of the message
+    /// may be longer than a single scan analyzes; the documents attached to it may together exhaust the octets a whole
+    /// message is read within, or come to more documents than one is read from; and the walk across those documents may
+    /// run past the budget it is held to. Either of the first two is about what the message carries, and the author
+    /// acts on both the same way.
+    /// </para>
+    /// <para>
+    /// <b>The third is not, which is why the answer offers asking again first.</b> That budget is wall-clock time
+    /// against a host under whatever load it was under, so a message of perfectly ordinary documents can reach it once
+    /// and never again, and telling its author to send less would name a length that was never the problem. Which of
+    /// the three it was is not published, for the reason none of the others is: it is a fact about this deployment's
+    /// configuration and its load rather than about the message. So the one remedy is ordered to cost least — ask
+    /// again, then shorten — which is right for all three and misleads for none.
     /// </para>
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailNotFullyScanned { get; } = new(59002);
