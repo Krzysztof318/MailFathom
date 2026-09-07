@@ -29,6 +29,19 @@ question is answered again rather than reworded.
   Playwright supplies.
 - Neither runner is given an `include` glob, so what makes a file part of a suite is its name and nothing else. A helper
   either suite imports is an ordinary module and carries neither marker in its name.
+- **A subject too large for one file is split by the concern each group of tests exercises**, into files named
+  `<Subject>.<concern>.test.tsx` beside the source, and the arrangement they share moves into one `<Subject>.harness.tsx`
+  next to them. `App.tsx` is the worked example and the reason the rule exists: ninety-two tests in one file each
+  mounting the whole application meant a timeout had two thousand lines of setup to look at rather than one screen's,
+  and the file was where a new test went to inherit whatever the nearest one did. So the frame, the session, sign-in,
+  the deployment, language, telemetry, and the shell's layers are seven files over one `App.harness.tsx`. The threshold
+  is the same judgement the root instructions ask of a directory rather than a line count: a file stops being one thing
+  when its `describe` blocks no longer read as one subject.
+- **A harness is a module and not a suite.** It exports the doubles, the render, and the helpers, and it carries no
+  `describe` and no `it` — the hooks a family shares are exported as one function each file calls at its top level, so
+  a reader of that file can see what its tests are given rather than having to know what an import did to them.
+  `frontend/vitest.config.ts` leaves a `.harness.tsx` out of the coverage report, because it runs only under a test and
+  asserts nothing itself.
 
 ## The unit runner
 
@@ -74,6 +87,38 @@ question is answered again rather than reworded.
   by looking at it.
 - An absence is asserted with the query that would have found the thing — `queryBy*` returning `null` — beside a test
   that produces it, so a selector that stopped matching anything fails rather than passing everything.
+
+## Every assertion waits for the condition it reads
+
+This is the rule both suites are held to, and it is written out because getting it wrong produces a test that passes on
+the machine it was written on and fails on a loaded one — which reads as a defect in whatever change was in the tree
+rather than as a defect in the test. It has been the whole of this suite's flakiness: the same handful of tests failing
+under a second gate running beside them, passing alone, and passing on the re-run.
+
+- **An `await` is not a barrier.** `await screen.findByText(…)` resolves the moment _that_ text is on the screen and
+  says nothing about anything else — a second read that has not answered, an effect that has not run, a record a double
+  has not been handed. So a `getBy*`, a `queryBy*`, or a read of a double placed after it is reading a moment that has
+  no relationship to the state it asserts on, and a machine loaded enough to put the two commits apart is where it
+  stops holding. `findBy*` for something that will be on the screen, `waitFor` around the exact condition otherwise.
+- **Three shapes are where it always is**, and each of them is an `await` for one thing followed by a read of another.
+  An assertion on which routes were asked for, after awaiting the screen the _first_ of them drew. An assertion on what
+  a double was last handed, after awaiting something a different answer produced. And an assertion on
+  `document.activeElement` after a view changed, because placing focus is an effect and an effect runs after the commit
+  that inserted the thing it is placed on — the two are the same screen and not the same moment.
+- **A gesture is not one of them.** Focus a handler moves — a key that walks a list, a press that closes a dialog — is
+  in place when the event returns, and waiting for it would say a synchronous thing is asynchronous. What is waited for
+  is what a _render_ produced.
+- **An absence cannot be waited for**, so a `queryBy*` asserting `null` is written after the thing that would have
+  produced the element has been waited for. The test that proves the element does appear is what keeps that assertion
+  honest.
+- **Where a fake clock is installed, the wait drives it.** Advancing by exactly a timer's own duration assumes the
+  effect that scheduled it has already run; `waitFor` after the advance is what makes that true rather than assumed,
+  because it advances the clock again on each attempt.
+- **Neither of the two budgets is a substitute for any of this.** `frontend/vitest.config.ts` bounds a test and
+  `src/Client.App/vitest.setup.ts` bounds one wait, both above what the largest tests here measure, and each carries the
+  measurement it was set from. They exist so that a slow screen is not reported as a broken one — a test that is only
+  green because of them is a test with a race still in it, and raising either to make one pass, retrying a test, or
+  marking one flaky is refused.
 
 ## The two packages are covered differently
 
@@ -186,9 +231,12 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
   started with `--localstorage-file`, which makes a browser API read as absent; `sessionStorage` answers a store
   belonging to the worker rather than to the document, which is worse, because it is present, it works, and it is
   shared by every file that worker runs. jsdom's own two are there under other names and are reinstated under the
-  right ones. **A test that writes to either clears it afterwards**, and that holds for the pair rather than for
-  `localStorage` alone: each store is one per file, not one per test, so a credential kept by one test is still there
-  when the next one renders.
+  right ones. **That file also empties both in front of every test**, which is where the emptying belongs rather than
+  behind it: each store is one per file and not one per test, and a test that cleared on the way out would be clearing
+  too early to be sure. A component writes to storage in an effect, and a read resolving between a file's own teardown
+  and the unmount commits once more — so that write lands after the clear and the next test opens holding it. Emptying
+  on the way in cannot race anything. A test therefore states what it wants in the store and never has to put it back,
+  and a file that still clears on the way out is doing something already done for it.
 - The rule above is why an application test supplies a `CredentialStore` rather than writing to storage: what is kept
   is then a map the test holds, and nothing has to be cleared. Storage itself is asserted where it is the subject — the
   store's own test — and the bound the web head's keeping actually has is the browser suite's, a second tab being a

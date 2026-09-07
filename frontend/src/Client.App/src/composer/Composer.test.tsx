@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
@@ -192,10 +192,6 @@ function confirmSend(): void {
 
     fireEvent.click(within(sendQuestion()).getByRole('button', { name: /^Send( anyway)?$/u }));
 }
-
-afterEach(() => {
-    window.sessionStorage.clear();
-});
 
 describe('Composer, a message of its own', () => {
     it('opens empty, named for what is being written', () => {

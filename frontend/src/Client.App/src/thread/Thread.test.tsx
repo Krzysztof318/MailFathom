@@ -463,7 +463,13 @@ describe('Thread', () => {
             await vi.advanceTimersByTimeAsync(2_200);
         });
 
-        expect(screen.queryByText('Brought here from a search result')).toBeNull();
+        // Waited for rather than read once the clock has been advanced: what clears the mark is a timer an effect
+        // starts, and an effect runs after the commit that put the mark on the screen — so the advance can be spent
+        // before the timer it was meant to fire has been scheduled, which leaves the mark up and reads as the client
+        // never having cleared it. `waitFor` drives the fake clock on until it has been.
+        await waitFor(() => {
+            expect(screen.queryByText('Brought here from a search result')).toBeNull();
+        });
         expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 

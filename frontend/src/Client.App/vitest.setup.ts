@@ -2,13 +2,37 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { cleanup, configure } from '@testing-library/react';
+import { afterEach, beforeEach } from 'vitest';
+
+// How long `findBy*` and `waitFor` may wait for the condition they were given. React Testing Library's own default is
+// one second, which is not a budget this suite can meet: a test that mounts the whole application over a fake
+// deployment waits on a screen that arrives after two answers and several commits, and one second of that is what a
+// machine running at four times its cores spends before the first of them. So the wait expired rather than the
+// condition failing, and the report — `Unable to find an element with the text` — read as the client no longer drawing
+// what the test asked for.
+//
+// It is a ceiling rather than a duration anything sleeps for: every wait here still ends the moment its condition
+// holds, and nothing in this suite is slower for the number being larger. What it bounds is how long a test waits
+// before saying the screen never arrived, and `frontend/vitest.config.ts` bounds the test around it.
+configure({ asyncUtilTimeout: 5_000 });
 
 // React Testing Library unmounts what a test rendered by itself only when the test framework's hooks are globals, and
 // this suite imports them instead. Without this the document survives from one test to the next, so a query matching
 // one element would match the last three renders of it and report an ambiguity rather than the assertion that failed.
 afterEach(cleanup);
+
+// Both stores emptied in front of every test rather than only behind it. A clear on the way out has to be ordered
+// against everything that can still write after it — the unmount above, a read that resolves while the teardown hooks
+// are running, an effect that commits with either — and it cannot be, so what it leaves behind reaches the next test
+// as something that test never asked for. `Composer.test.tsx` is where that was found: a message another test had
+// been writing was restored into a composer that then refused to close without asking, which is a screen the client
+// draws correctly for a state the suite invented. Emptying on the way in orders against nothing, because whatever the
+// last test left, this one has not started yet.
+beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+});
 
 // Node publishes a Web Storage implementation of its own, and the jsdom window this suite runs in is the worker's
 // global object — so Node's getters are the ones on it: `localStorage` answers `undefined` unless the process was
