@@ -30,6 +30,7 @@ internal static class KnowledgePassages
     /// stated for the reason the verdict above is: the reading reaches no provider either, and a passage carrying the
     /// default could not tell that guarantee from a reading that was dropped.
     /// </param>
+    /// <param name="attachmentExtracts">What the message's files contributed, which is nothing for most passages.</param>
     /// <returns>The passage.</returns>
     public static EmailKnowledgePassage Create(
         string text,
@@ -38,8 +39,10 @@ internal static class KnowledgePassages
         string folderAlias = "INBOX",
         string? subject = null,
         SenderVerification? senderVerification = null,
-        MachineAuthorshipAssessment? machineAuthorship = null) => new()
+        MachineAuthorshipAssessment? machineAuthorship = null,
+        params EmailKnowledgeAttachmentExtract[] attachmentExtracts) => new()
         {
+            AttachmentExtracts = attachmentExtracts,
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
             FolderAlias = MailFolderAlias.Create(folderAlias),

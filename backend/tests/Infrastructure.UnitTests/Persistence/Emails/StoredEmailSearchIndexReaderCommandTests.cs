@@ -84,8 +84,11 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         var command = CommandBody(GeneratedCommand(QueryTextFor("invoice")));
 
         // Assert
-        Assert.Contains("ORDER BY ts_rank", command, StringComparison.Ordinal);
-        Assert.Contains("LIMIT", command, StringComparison.Ordinal);
+        var ordering = command[command.IndexOf("ORDER BY", StringComparison.Ordinal)..];
+
+        Assert.Contains("ts_rank", ordering, StringComparison.Ordinal);
+        Assert.Contains(nameof(StoredEmailEntity.ReceivedAt), ordering, StringComparison.Ordinal);
+        Assert.Contains("LIMIT", ordering, StringComparison.Ordinal);
     }
 
     /// <summary>The ranking query reads no body at all: it decides an order, and an order needs no extract.</summary>
@@ -204,6 +207,23 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         // Assert
         Assert.Contains(nameof(StoredEmailEntity.SenderNormalizedAddress), command, StringComparison.Ordinal);
         Assert.Contains(nameof(StoredEmailEntity.AttachmentCount), command, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A document's own words are lexically searchable on the same terms the body is, so the ranking matches the
+    /// attachment vector beside the message's and ranks against both. A statement reading only the message's vector
+    /// would return nothing for a query whose words live in a file, which is the defect #1557 exists to close.
+    /// </summary>
+    [Fact]
+    public void RankedHitsQuery_AnyQuery_MatchesAndRanksTheAttachmentVectorBesideTheMessageVector()
+    {
+        // Act
+        var statement = CommandBody(GeneratedCommand(QueryTextFor("invoice")));
+
+        // Assert
+        Assert.Contains(nameof(EmailAttachmentTextEntity.SearchVector), statement, StringComparison.Ordinal);
+        Assert.Contains(nameof(EmailSearchDocumentEntity.SearchVector), statement, StringComparison.Ordinal);
+        Assert.Contains("max(", statement, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Gets the selection that narrows nothing, which is what a command test uses unless the filters are its subject.</summary>

@@ -37,6 +37,7 @@ using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
@@ -674,6 +675,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailPreviewReader, StoredEmailPreviewReader>();
         services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
+        services.AddScoped<IEmailAttachmentMatchReader, EmailAttachmentMatchReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
         // The one read-path service built by hand, because its embedding generator is the one dependency a supported
         // deployment may not have: an instance that declared no endpoint chain registers no `ITextEmbeddingGenerator`,

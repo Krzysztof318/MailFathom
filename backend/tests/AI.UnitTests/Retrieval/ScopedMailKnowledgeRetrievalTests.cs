@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
@@ -275,6 +276,47 @@ public sealed class ScopedMailKnowledgeRetrievalTests
         Assert.Equal(
             "re: [redacted:CloudKey]",
             message.Element(RetrievedMailContextFormatter.SubjectElementName)?.Value);
+    }
+
+    /// <summary>
+    /// A clause a scanner would redact out of a covering note is not less sensitive for having been written in the file
+    /// the note attached, and both reach the same provider by the same tool call.
+    /// </summary>
+    [Fact]
+    public async Task SearchTool_ASwitchedOnScanner_RedactsAnAttachmentExtractAndItsFileNameBeforeTheyReachTheModel()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var actingFor = egress.ActingForOwner();
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
+            Query,
+            KnowledgePassages.Create(
+                "an ordinary extract",
+                attachmentExtracts: new EmailKnowledgeAttachmentExtract(
+                    AttachmentPosition: 1,
+                    FileName: $"{Marker}.pdf",
+                    Kind: AttachmentTextKind.Document,
+                    Segment: null,
+                    Text: $"sign in with {Marker} today")));
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            egress.Guard);
+
+        // Act
+        var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
+
+        // Assert
+        var extract = Assert.Single(
+            Assert.Single(RootOf(envelope).Elements(RetrievedMailContextFormatter.MessageElementName))
+                .Elements(RetrievedMailContextFormatter.AttachmentExtractElementName));
+
+        Assert.Equal("sign in with [redacted:CloudKey] today", extract.Value);
+        Assert.Equal(
+            "[redacted:CloudKey].pdf",
+            extract.Attribute(RetrievedMailContextFormatter.AttachmentFileNameAttributeName)?.Value);
+        Assert.DoesNotContain(Marker, envelope, StringComparison.Ordinal);
     }
 
     /// <summary>Handing a model mail a scanner could not read would be the leak the switch was turned on to prevent.</summary>

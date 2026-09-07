@@ -6,6 +6,8 @@ using System.Globalization;
 using System.Xml.Linq;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
@@ -265,6 +267,93 @@ public sealed class RetrievedMailContextFormatterTests
         // Assert
         Assert.Equal(envelope, RetrievedMailContextFormatter.Format(passages, EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false));
     }
+
+    /// <summary>
+    /// A claim drawn from a file has to be citable to the file, so the extract carries the coordinate a citation names
+    /// rather than being folded into the message's own words.
+    /// </summary>
+    [Fact]
+    public void Format_APassageCarryingAnAttachmentExtract_WritesItWithTheFileAndThePlaceInsideIt()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create(
+            "the invoice is attached",
+            attachmentExtracts: DocumentExtract("the total is 42 euro"));
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
+
+        // Assert
+        var extract = Assert.Single(
+            Assert.Single(MessagesIn(envelope))
+                .Elements(RetrievedMailContextFormatter.AttachmentExtractElementName));
+
+        Assert.Equal("1", Attribute(extract, RetrievedMailContextFormatter.AttachmentPositionAttributeName));
+        Assert.Equal("statement.pdf", Attribute(extract, RetrievedMailContextFormatter.AttachmentFileNameAttributeName));
+        Assert.Equal("Page", Attribute(extract, RetrievedMailContextFormatter.AttachmentSegmentKindAttributeName));
+        Assert.Equal("2", Attribute(extract, RetrievedMailContextFormatter.AttachmentSegmentNumberAttributeName));
+        Assert.Equal("the total is 42 euro", extract.Value);
+    }
+
+    /// <summary>
+    /// Nobody wrote a description, so a model reading one has to be able to tell it from mail. The element name is what
+    /// carries that: a description arriving under the same name as a document's own words would be reasoned from as if
+    /// somebody had typed it.
+    /// </summary>
+    [Fact]
+    public void Format_APassageCarryingAPictureDescription_WritesItUnderItsOwnElementRatherThanAsAnExtract()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create(
+            string.Empty,
+            attachmentExtracts: new EmailKnowledgeAttachmentExtract(
+                AttachmentPosition: 2,
+                FileName: "photo.jpg",
+                Kind: AttachmentTextKind.ImageDescription,
+                Segment: null,
+                Text: "a photograph of a handwritten invoice"));
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
+
+        // Assert
+        var message = Assert.Single(MessagesIn(envelope));
+
+        Assert.Empty(message.Elements(RetrievedMailContextFormatter.AttachmentExtractElementName));
+        Assert.Equal(
+            "a photograph of a handwritten invoice",
+            Assert.Single(message.Elements(RetrievedMailContextFormatter.ImageDescriptionElementName)).Value);
+    }
+
+    /// <summary>
+    /// A message whose words live only in a file yields no body extract, and writing an empty one would tell a model the
+    /// message was read and said nothing.
+    /// </summary>
+    [Fact]
+    public void Format_APassageWhoseWordsAreAllInAFile_WritesNoMessageExtractAtAll()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create(
+            string.Empty,
+            attachmentExtracts: DocumentExtract("the total is 42 euro"));
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
+
+        // Assert
+        var message = Assert.Single(MessagesIn(envelope));
+
+        Assert.Empty(message.Elements(RetrievedMailContextFormatter.ExtractElementName));
+        Assert.Single(message.Elements(RetrievedMailContextFormatter.AttachmentExtractElementName));
+    }
+
+    /// <summary>Builds an extract read out of the second page of a document attachment.</summary>
+    private static EmailKnowledgeAttachmentExtract DocumentExtract(string text) => new(
+        AttachmentPosition: 1,
+        FileName: "statement.pdf",
+        Kind: AttachmentTextKind.Document,
+        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 2, Label: null, StartOffset: 0),
+        Text: text);
 
     private static IReadOnlyList<XElement> MessagesIn(string envelope) =>
         [.. RootOf(envelope).Elements(RetrievedMailContextFormatter.MessageElementName)];

@@ -113,7 +113,7 @@ public sealed class SemanticEmailSearch
     /// <param name="queryText">The validated free text to place in the vector space.</param>
     /// <param name="limit">The greatest number of candidates to return, at least one.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>What semantic retrieval could do for this query, and the ranking when it could produce one.</returns>
+    /// <returns>What semantic retrieval could do for this query, and the two orderings when it could produce them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="selection" /> or <paramref name="queryText" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is below one.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels or the host is shutting down, which is neither a provider failure nor an absence of semantic retrieval.</exception>
@@ -130,7 +130,7 @@ public sealed class SemanticEmailSearch
         var (capability, profile, generator) = await this.ResolveCapabilityAsync(cancellationToken);
         if (profile is null || generator is null)
         {
-            return new SemanticEmailSearchOutcome(capability, Candidates: null);
+            return new SemanticEmailSearchOutcome(capability, Rankings: null);
         }
 
         var queryVector = await PlaceQueryAsync(generator, queryText, cancellationToken);
@@ -139,17 +139,17 @@ public sealed class SemanticEmailSearch
             // This call is the freshest evidence there is, so it is what the query reports against rather than the state
             // it was admitted under — whether that was a provider believed to be serving or one whose last failure had
             // aged past the recheck interval.
-            return new SemanticEmailSearchOutcome(SemanticSearchCapability.Degraded, Candidates: null);
+            return new SemanticEmailSearchOutcome(SemanticSearchCapability.Degraded, Rankings: null);
         }
 
-        var candidates = await this.vectorSearchIndexReader.ReadNearestCandidatesAsync(
+        var rankings = await this.vectorSearchIndexReader.ReadNearestCandidatesAsync(
             selection,
             profile,
             queryVector,
             limit,
             cancellationToken);
 
-        return new SemanticEmailSearchOutcome(SemanticSearchCapability.Available, candidates);
+        return new SemanticEmailSearchOutcome(SemanticSearchCapability.Available, rankings);
     }
 
     /// <summary>Decides what semantic retrieval can do, and hands back what a ranking would need to run.</summary>

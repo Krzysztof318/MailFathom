@@ -39,7 +39,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Inactive, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Empty(vectorIndex.Calls);
     }
 
@@ -55,7 +55,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Inactive, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
     }
 
     /// <summary>Vectors exist and nothing can place a query beside them, which is a state an operator has to settle.</summary>
@@ -71,7 +71,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Empty(vectorIndex.Calls);
     }
 
@@ -91,7 +91,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Empty(vectorIndex.Calls);
     }
 
@@ -112,7 +112,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Empty(vectorIndex.Calls);
     }
 
@@ -135,7 +135,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Empty(generator.RequestedBatches);
     }
 
@@ -154,7 +154,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Available, outcome.Capability);
-        Assert.Equal(nearest.StoredEmailId, Assert.Single(outcome.Candidates!).StoredEmailId);
+        Assert.Equal(nearest.StoredEmailId, Assert.Single(outcome.Rankings!.Written).StoredEmailId);
         Assert.Equal(["water damage"], Assert.Single(generator.RequestedBatches));
         Assert.Equal(ProfileId, Assert.Single(vectorIndex.Calls).Profile.Id);
     }
@@ -174,7 +174,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Available, outcome.Capability);
-        Assert.Empty(outcome.Candidates!);
+        Assert.Empty(outcome.Rankings!.Written);
     }
 
     /// <summary>Recovery needs no restart: the state the workers' own calls wrote is what the next search reads.</summary>
@@ -204,7 +204,7 @@ public sealed class SemanticEmailSearchTests
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, whileUnhealthy.Capability);
         Assert.Equal(SemanticSearchCapability.Available, afterRecovery.Capability);
-        Assert.Equal(nearest.StoredEmailId, Assert.Single(afterRecovery.Candidates!).StoredEmailId);
+        Assert.Equal(nearest.StoredEmailId, Assert.Single(afterRecovery.Rankings!.Written).StoredEmailId);
     }
 
     /// <summary>
@@ -231,7 +231,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Available, outcome.Capability);
-        Assert.Equal(nearest.StoredEmailId, Assert.Single(outcome.Candidates!).StoredEmailId);
+        Assert.Equal(nearest.StoredEmailId, Assert.Single(outcome.Rankings!.Written).StoredEmailId);
         Assert.Single(generator.RequestedBatches);
     }
 
@@ -256,7 +256,7 @@ public sealed class SemanticEmailSearchTests
 
         // Assert
         Assert.Equal(SemanticSearchCapability.Degraded, outcome.Capability);
-        Assert.Null(outcome.Candidates);
+        Assert.Null(outcome.Rankings);
         Assert.Single(generator.RequestedBatches);
     }
 

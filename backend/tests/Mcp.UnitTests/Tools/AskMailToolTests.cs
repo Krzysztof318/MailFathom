@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
@@ -13,6 +15,7 @@ using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.Tools.Senders;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -373,6 +376,60 @@ public sealed class AskMailToolTests
             AnsweringDeployment.QuestionReader(answerer, answerBounds),
             answerBounds,
             AnsweringDeployment.AccountCatalog());
+    }
+
+    /// <summary>
+    /// A claim drawn from a file is checked against the file, so the citation names the attachment and the page. It
+    /// carries no extract, on the rule the citation around it follows: the passage has already reached a model, and
+    /// putting mail into the response as well would return content from a tool whose result is an answer.
+    /// </summary>
+    [Fact]
+    public async Task AskMailAsync_ARunThatDrewOnAnAttachment_PublishesTheFileAndThePlaceOnTheCitation()
+    {
+        // Arrange
+        var answerer = new StubMailQuestionAnswerer().Answering(
+            "The total was 42 euro.",
+            PassageOf(1) with
+            {
+                AttachmentExtracts =
+                [
+                    new EmailKnowledgeAttachmentExtract(
+                        AttachmentPosition: 1,
+                        FileName: "statement.pdf",
+                        Kind: AttachmentTextKind.Document,
+                        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 2, Label: null, StartOffset: 0),
+                        Text: "the total is 42 euro"),
+                ],
+            });
+        var tool = ToolOver(answerer);
+
+        // Act
+        var result = await tool.AskMailAsync(Question, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(result.Citations).Attachments);
+
+        Assert.Equal(1, attachment.AttachmentPosition);
+        Assert.Equal("statement.pdf", attachment.FileName);
+        Assert.Equal(AttachmentMatchSource.Document, attachment.Source);
+        Assert.Equal(AttachmentSegmentKind.Page, attachment.SegmentKind);
+        Assert.Equal(2, attachment.SegmentNumber);
+        Assert.DoesNotContain("the total is 42 euro", result.Answer, StringComparison.Ordinal);
+    }
+
+    /// <summary>An answer drawn from the message itself names no file, rather than an empty one that reads as searched.</summary>
+    [Fact]
+    public async Task AskMailAsync_ARunThatDrewOnTheMessageItself_PublishesACitationNamingNoAttachment()
+    {
+        // Arrange
+        var answerer = new StubMailQuestionAnswerer().Answering("They agreed to pay 400.", PassageOf(1));
+        var tool = ToolOver(answerer);
+
+        // Act
+        var result = await tool.AskMailAsync(Question, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(Assert.Single(result.Citations).Attachments);
     }
 
     private static EmailKnowledgePassage PassageOf(

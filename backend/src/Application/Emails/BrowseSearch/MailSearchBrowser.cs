@@ -19,9 +19,19 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// <remarks>
 /// <para>
 /// It is the search a screen is drawn from, beside <see cref="SearchEmails.MailboxSearchReader" />, which is the one a
-/// tool calls. The two share the scope, the filters, both rankings, the fusion, and the extracts — a search and a search
-/// are the same question over the same mail — and differ in the two things a screen needs and a tool does not: the
-/// results continue past the first window, and each one says why it is in the list.
+/// tool calls. The two share the scope, the filters, both rankings, the fusion, and the body extracts — a search and a
+/// search are the same question over the same mail — and differ in the two things a screen needs and a tool does not:
+/// the results continue past the first window, and each one says why it is in the list.
+/// </para>
+/// <para>
+/// One thing the tool's reader publishes and this one does not: what a query matched inside an attached file. Every
+/// result here carries an empty <c>AttachmentMatches</c> and is never marked depicted, because a client row a
+/// description put there needs a way to say so and
+/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1559">#1559</see> owns that shape. The eligibility the
+/// lexical ranking reads is shared, though, so a message this route returns may be one whose only claim on the query is
+/// a word inside a document — and such a result publishes no snippet, because the body extract it would quote has no
+/// highlight in it. An empty snippet on a result nothing visible explains is what that issue closes; until it does,
+/// this route reports the message and not the reason.
 /// </para>
 /// <para>
 /// The filters constrain and never rank. <see cref="RankedSearchList" /> carries them into both rankings as the
@@ -258,7 +268,7 @@ public sealed class MailSearchBrowser
             depth,
             cancellationToken);
 
-        if (semantic.Candidates is not { } semanticCandidates)
+        if (semantic.Rankings is not { } semanticRankings)
         {
             ranking.Completed(lexicalCandidates.Count);
 
@@ -269,6 +279,12 @@ public sealed class MailSearchBrowser
                 EmailSearchRetrievalMode.Lexical,
                 semantic.Capability);
         }
+
+        // The written ranking alone, which is the whole of what this route published before descriptions existed. The
+        // depicted ranking is deliberately left out until the client's result shape can say a picture placed a row:
+        // appending a tail of messages no word and no written passage reached, with nothing on the row to explain them,
+        // would publish an unexplained result. Issue #1559 is where this route takes the shared partition step whole.
+        var semanticCandidates = semanticRankings.Written;
 
         ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
 

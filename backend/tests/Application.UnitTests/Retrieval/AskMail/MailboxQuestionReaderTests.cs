@@ -6,7 +6,9 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
@@ -670,6 +672,61 @@ public sealed class MailboxQuestionReaderTests
 
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
+
+    /// <summary>A claim drawn from a file is checked against the file, so the citation names it and the page inside it.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ACitationDrawnFromAnAttachment_NamesTheFileAndThePlaceInsideIt()
+    {
+        // Arrange
+        var cited = PassageOf(1, "the invoice is attached") with
+        {
+            AttachmentExtracts = [AttachmentExtract("the total is 42 euro")],
+        };
+        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", cited);
+        var reader = ReaderOver(answerer);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was the total" });
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(result.Citations).Attachments);
+
+        Assert.Equal(1, attachment.AttachmentPosition);
+        Assert.Equal("statement.pdf", attachment.FileName);
+        Assert.Equal(AttachmentTextKind.Document, attachment.Kind);
+        Assert.Equal(AttachmentTextSegmentKind.Page, attachment.Segment?.Kind);
+        Assert.Equal(2, attachment.Segment?.Number);
+    }
+
+    /// <summary>The name a sender gave a file is text they chose, so it is scanned like the subject beside it.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ASwitchedOnScanner_RedactsTheAttachmentNameEveryCitationCarries()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var cited = PassageOf(1, "the invoice is attached") with
+        {
+            AttachmentExtracts = [AttachmentExtract("a total") with { FileName = $"{Marker}.pdf" }],
+        };
+        var answerer = new RecordingMailQuestionAnswerer().Answering("an answer", cited);
+        var reader = ReaderOver(answerer, egressGuard: egress.Guard);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was the total" });
+
+        // Assert
+        Assert.Equal(
+            "[redacted:CloudKey].pdf",
+            Assert.Single(Assert.Single(result.Citations).Attachments).FileName);
+    }
+
+    /// <summary>Builds an extract read out of the second page of a document attachment.</summary>
+    private static EmailKnowledgeAttachmentExtract AttachmentExtract(string text) => new(
+        AttachmentPosition: 1,
+        FileName: "statement.pdf",
+        Kind: AttachmentTextKind.Document,
+        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 2, Label: null, StartOffset: 0),
+        Text: text);
 
     private static EmailKnowledgePassage PassageOf(
         int position,
