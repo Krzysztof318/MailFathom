@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
 import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
@@ -295,7 +295,12 @@ describe('SignIn', () => {
 
         // Starting an attempt disables the submit button, which drops focus to the document — so without placing it
         // the refusal is announced with focus nowhere and a keyboard reader tabs in from the top of the page.
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Connect' }));
+        //
+        // Waited for rather than read once the refusal is on the screen: placing focus is an effect, and an effect
+        // runs after the commit that inserted the text this awaited.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Connect' }));
+        });
     });
 
     it('puts focus back on the control that started an attempt when the attempt is given up on', () => {
