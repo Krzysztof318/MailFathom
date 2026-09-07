@@ -44,6 +44,24 @@ public sealed class AttachmentTextOptionsTests
         Assert.Equal([AttachmentDocumentFormat.Pdf], bounds.Formats);
     }
 
+    /// <summary>A format this deployment reads is one an operator may name, which is what makes a narrowed list a choice.</summary>
+    [Theory]
+    [InlineData(AttachmentDocumentFormat.PlainText)]
+    [InlineData(AttachmentDocumentFormat.Markdown)]
+    [InlineData(AttachmentDocumentFormat.Csv)]
+    public void Validate_AFormatMailFathomReads_IsAccepted(AttachmentDocumentFormat format)
+    {
+        // Arrange
+        var settings = new AttachmentTextOptions();
+        settings.Formats.Add(format);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.DoesNotContain(errors, error => error.MemberNames.Contains(nameof(AttachmentTextOptions.Formats)));
+    }
+
     /// <summary>Every ceiling an operator writes is the one the port applies, or the block would be a set of keys nobody reads.</summary>
     [Fact]
     public void ToExtractionOptions_ABlockWritingEveryCeiling_CarriesEachOfThemOntoThePort()

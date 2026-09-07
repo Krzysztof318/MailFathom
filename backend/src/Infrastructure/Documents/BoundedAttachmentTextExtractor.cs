@@ -20,7 +20,9 @@ namespace MailFathom.Infrastructure.Documents;
 /// The timeout is observed between units of work rather than imposed on one: no parser here accepts a cancellation
 /// token, and .NET cannot abort a thread, so a parser that never returns from one page or one part is bounded by what
 /// its own path bounds instead. For a package format that is the inflation total, the per-part ratio, and the element
-/// depth, none of which is optional for that reason. For a PDF it is the input ceiling alone, because the library
+/// depth, none of which is optional for that reason. A text file has no such parser at all — it is decoded a block at a
+/// time and the deadline is read between blocks — so the input ceiling is the whole of what bounds it. For a PDF it is
+/// the input ceiling alone as well, because the library
 /// inflates a page's content streams itself with no ceiling this code can set — <see cref="PdfAttachmentTextReader" />
 /// states that and issue #1684 is where it is tracked.
 /// </para>
@@ -35,6 +37,7 @@ internal sealed class BoundedAttachmentTextExtractor(
     private readonly PdfAttachmentTextReader pdf = new(options);
     private readonly OpenXmlAttachmentTextReader openXml = new(options);
     private readonly OpenDocumentAttachmentTextReader openDocument = new(options);
+    private readonly PlainTextAttachmentTextReader plainText = new(options);
 
     /// <inheritdoc />
     public async Task<AttachmentTextExtractionResult> ExtractTextAsync(
@@ -80,7 +83,7 @@ internal sealed class BoundedAttachmentTextExtractor(
 
         var content = buffer.ToReadableStream();
 
-        if (format is not AttachmentDocumentFormat.Pdf && IsCompoundFile(content))
+        if (IsPackaged(format) && IsCompoundFile(content))
         {
             return AttachmentTextExtractionResult.Encrypted();
         }
@@ -114,12 +117,30 @@ internal sealed class BoundedAttachmentTextExtractor(
         CancellationToken cancellationToken) => format switch
         {
             AttachmentDocumentFormat.Pdf => this.pdf.Read(content, cancellationToken),
+            AttachmentDocumentFormat.PlainText
+                or AttachmentDocumentFormat.Markdown
+                or AttachmentDocumentFormat.Csv =>
+                this.plainText.Read(content, cancellationToken),
             AttachmentDocumentFormat.OpenDocumentText
                 or AttachmentDocumentFormat.OpenDocumentSpreadsheet
                 or AttachmentDocumentFormat.OpenDocumentPresentation =>
                 this.openDocument.Read(content, format, cancellationToken),
             _ => this.openXml.Read(content, format, cancellationToken),
         };
+
+    /// <summary>States whether a format is one of the six this reads out of a zip archive.</summary>
+    /// <remarks>
+    /// Asked positively rather than as everything but a PDF, because the compound-file check below is a fact about a
+    /// package and about nothing else: a text file wearing a renamed <c>.doc</c>'s octets is a file that does not
+    /// decode, which is <c>Malformed</c>, and reporting it as a locked package would name a remedy that does not exist.
+    /// </remarks>
+    private static bool IsPackaged(AttachmentDocumentFormat format) => format
+        is AttachmentDocumentFormat.WordOpenXml
+        or AttachmentDocumentFormat.SpreadsheetOpenXml
+        or AttachmentDocumentFormat.PresentationOpenXml
+        or AttachmentDocumentFormat.OpenDocumentText
+        or AttachmentDocumentFormat.OpenDocumentSpreadsheet
+        or AttachmentDocumentFormat.OpenDocumentPresentation;
 
     /// <summary>States whether octets a package format was expected in are an OLE compound file instead.</summary>
     /// <remarks>

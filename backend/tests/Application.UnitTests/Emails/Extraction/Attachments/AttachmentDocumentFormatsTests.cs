@@ -28,6 +28,10 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData("application/vnd.oasis.opendocument.text", AttachmentDocumentFormat.OpenDocumentText)]
     [InlineData("application/vnd.oasis.opendocument.spreadsheet", AttachmentDocumentFormat.OpenDocumentSpreadsheet)]
     [InlineData("application/vnd.oasis.opendocument.presentation", AttachmentDocumentFormat.OpenDocumentPresentation)]
+    [InlineData("text/plain", AttachmentDocumentFormat.PlainText)]
+    [InlineData("text/markdown", AttachmentDocumentFormat.Markdown)]
+    [InlineData("text/x-markdown", AttachmentDocumentFormat.Markdown)]
+    [InlineData("text/csv", AttachmentDocumentFormat.Csv)]
     public void Recognize_ADeclaredDocumentMediaType_NamesTheFormatItDeclares(
         string mediaType,
         AttachmentDocumentFormat expected)
@@ -52,6 +56,10 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData("terms.odt", AttachmentDocumentFormat.OpenDocumentText)]
     [InlineData("ledger.ods", AttachmentDocumentFormat.OpenDocumentSpreadsheet)]
     [InlineData("deck.odp", AttachmentDocumentFormat.OpenDocumentPresentation)]
+    [InlineData("errors.txt", AttachmentDocumentFormat.PlainText)]
+    [InlineData("agenda.md", AttachmentDocumentFormat.Markdown)]
+    [InlineData("README.MARKDOWN", AttachmentDocumentFormat.Markdown)]
+    [InlineData("ledger.csv", AttachmentDocumentFormat.Csv)]
     public void Recognize_AGenericMediaTypeOverANamedFile_FallsBackToTheExtension(
         string fileName,
         AttachmentDocumentFormat expected)
@@ -101,7 +109,7 @@ public sealed class AttachmentDocumentFormatsTests
         Assert.Null(recognized);
     }
 
-    /// <summary>PDF and both office families are read; the three legacy binary ones are named and not read.</summary>
+    /// <summary>PDF, both office families, and all three text formats are read; the three legacy binary ones are named and not read.</summary>
     [Theory]
     [InlineData(AttachmentDocumentFormat.Pdf, true)]
     [InlineData(AttachmentDocumentFormat.WordOpenXml, true)]
@@ -113,6 +121,9 @@ public sealed class AttachmentDocumentFormatsTests
     [InlineData(AttachmentDocumentFormat.OpenDocumentText, true)]
     [InlineData(AttachmentDocumentFormat.OpenDocumentSpreadsheet, true)]
     [InlineData(AttachmentDocumentFormat.OpenDocumentPresentation, true)]
+    [InlineData(AttachmentDocumentFormat.PlainText, true)]
+    [InlineData(AttachmentDocumentFormat.Markdown, true)]
+    [InlineData(AttachmentDocumentFormat.Csv, true)]
     public void IsExtracted_EveryRecognizedFormat_SeparatesWhatIsReadFromWhatIsOnlyNamed(
         AttachmentDocumentFormat format,
         bool expected)

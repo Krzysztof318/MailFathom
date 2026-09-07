@@ -1264,6 +1264,207 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.All(segments, segment => Assert.Equal(AttachmentTextSegmentKind.Sheet, segment.Kind));
     }
 
+    /// <summary>A text file's octets already are its text, so what comes back is what somebody typed.</summary>
+    [Theory]
+    [InlineData("text/plain", "errors.txt")]
+    [InlineData("text/markdown", "agenda.md")]
+    [InlineData("text/x-markdown", "agenda.markdown")]
+    [InlineData("text/csv", "ledger.csv")]
+    [InlineData("application/octet-stream", "errors.txt")]
+    public async Task ExtractTextAsync_ATextAttachment_ReadsTheCharactersItWasWrittenWith(
+        string mediaType,
+        string fileName)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            fileName,
+            Encoding.UTF8.GetBytes("The roof is replaced by March\nPayment falls due on completion"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("The roof is replaced by March\nPayment falls due on completion", result.Text?.Text);
+        Assert.Equal(1, result.Text?.PageCount);
+        Assert.Empty(result.Text?.PagesWithoutText ?? [0]);
+    }
+
+    /// <summary>
+    /// Markdown is read as it was written. A heading marker, a list item's bullet, and a link's target are all
+    /// characters a person typed, and each of them is as searchable as the prose beside it — so nothing is rendered,
+    /// nothing is stripped, and no reference is resolved.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AMarkdownAttachment_KeepsItsOwnMarkupRatherThanRenderingIt()
+    {
+        // Arrange
+        const string Written = "# Agenda\n\n- Site visit at [the yard](https://example.test/yard)\n- **Costs** to follow";
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/markdown",
+            "agenda.md",
+            Encoding.UTF8.GetBytes(Written));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(Written, result.Text?.Text);
+    }
+
+    /// <summary>
+    /// A delimited file is searched by what it says rather than by its columns, so the delimiters and the quoting come
+    /// back as written. Splitting a row into fields would be a reading of what the file means, which is a decision of
+    /// its own and deliberately not taken here.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_ACsvAttachment_KeepsItsDelimitersRatherThanSplittingRows()
+    {
+        // Arrange
+        const string Written = "Invoice,Amount,Note\n2026-014,1250.00,\"Roof repair, second stage\"";
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/csv",
+            "ledger.csv",
+            Encoding.UTF8.GetBytes(Written));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(Written, result.Text?.Text);
+    }
+
+    /// <summary>The mark is the only statement a text file makes about its own encoding, and it is not part of the text.</summary>
+    [Theory]
+    [InlineData("utf-8")]
+    [InlineData("utf-16le")]
+    [InlineData("utf-16be")]
+    [InlineData("utf-32le")]
+    public async Task ExtractTextAsync_ATextAttachmentOpeningWithAByteOrderMark_DecodesItAndKeepsNoMark(string encoding)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "notes.txt",
+            MarkedText(encoding, "Zażółć gęślą jaźń"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Zażółć gęślą jaźń", result.Text?.Text);
+    }
+
+    /// <summary>
+    /// A sender writes the media type and the file name, so <c>document.txt</c> may hold anything. Octets that do not
+    /// decode are a stated reason rather than a page of replacement characters somebody would then be told matched.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_ATextAttachmentOfOctetsThatDoNotDecode_ReportsItAsMalformed()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "photo.txt",
+            [0x80, 0x81, 0xC0, 0xC1, 0xF5, 0x9C]);
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
+    /// <summary>A run of NUL decodes cleanly and is the one shape of binary a strict decoder would otherwise admit.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ATextAttachmentCarryingANul_ReportsItAsMalformed()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "dump.txt",
+            Encoding.UTF8.GetBytes("Header\0\0\0record"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
+    /// <summary>The output ceiling holds over a format with no container to inflate, because the file itself is the text.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ATextAttachmentPastTheCharacterCeiling_ReportsTheTextAsTooLarge()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxExtractedTextCharacters = 64 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "log.txt",
+            Encoding.UTF8.GetBytes(new string('a', 4096)));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ExtractedTextTooLarge, result.Outcome);
+    }
+
+    /// <summary>An empty note is a page that carried nothing, on the same reading a scanned page gets.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnEmptyTextAttachment_NamesItsOnePageAsCarryingNoText()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment("text/plain", "empty.txt", []);
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal(string.Empty, result.Text?.Text);
+        Assert.Equal([1], result.Text?.PagesWithoutText);
+    }
+
+    /// <summary>A citation into a text file resolves through the same coordinate scheme a word-processing document uses.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ATextAttachment_RecordsOnePageBeginningAtTheStart()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "notes.txt",
+            Encoding.UTF8.GetBytes("Roof repair invoice"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        var segment = Assert.Single(result.Text?.Segments ?? []);
+        Assert.Equal(AttachmentTextSegmentKind.Page, segment.Kind);
+        Assert.Equal(1, segment.Number);
+        Assert.Equal(0, segment.StartOffset);
+    }
+
+    /// <summary>Writes one text in the named encoding, opened by that encoding's own byte-order mark.</summary>
+    private static byte[] MarkedText(string encoding, string text)
+    {
+        Encoding written = encoding switch
+        {
+            "utf-8" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: true),
+            "utf-16le" => new UnicodeEncoding(bigEndian: false, byteOrderMark: true),
+            "utf-16be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: true),
+            _ => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
+        };
+
+        return [.. written.GetPreamble(), .. written.GetBytes(text)];
+    }
+
     /// <summary>Builds the same one-paragraph document in whichever format the media type names.</summary>
     private static byte[] SingleParagraphOf(string mediaType) => mediaType switch
     {

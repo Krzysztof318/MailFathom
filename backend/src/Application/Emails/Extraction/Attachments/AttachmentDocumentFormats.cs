@@ -36,6 +36,10 @@ public static class AttachmentDocumentFormats
             ["application/vnd.oasis.opendocument.text"] = AttachmentDocumentFormat.OpenDocumentText,
             ["application/vnd.oasis.opendocument.spreadsheet"] = AttachmentDocumentFormat.OpenDocumentSpreadsheet,
             ["application/vnd.oasis.opendocument.presentation"] = AttachmentDocumentFormat.OpenDocumentPresentation,
+            ["text/plain"] = AttachmentDocumentFormat.PlainText,
+            ["text/markdown"] = AttachmentDocumentFormat.Markdown,
+            ["text/x-markdown"] = AttachmentDocumentFormat.Markdown,
+            ["text/csv"] = AttachmentDocumentFormat.Csv,
         };
 
     private static readonly Dictionary<string, AttachmentDocumentFormat> FormatsByExtension =
@@ -51,6 +55,10 @@ public static class AttachmentDocumentFormats
             [".odt"] = AttachmentDocumentFormat.OpenDocumentText,
             [".ods"] = AttachmentDocumentFormat.OpenDocumentSpreadsheet,
             [".odp"] = AttachmentDocumentFormat.OpenDocumentPresentation,
+            [".txt"] = AttachmentDocumentFormat.PlainText,
+            [".md"] = AttachmentDocumentFormat.Markdown,
+            [".markdown"] = AttachmentDocumentFormat.Markdown,
+            [".csv"] = AttachmentDocumentFormat.Csv,
         };
 
     /// <summary>Gets the formats text is extracted from, as opposed to those recognition only names.</summary>
@@ -63,6 +71,9 @@ public static class AttachmentDocumentFormats
         AttachmentDocumentFormat.OpenDocumentText,
         AttachmentDocumentFormat.OpenDocumentSpreadsheet,
         AttachmentDocumentFormat.OpenDocumentPresentation,
+        AttachmentDocumentFormat.PlainText,
+        AttachmentDocumentFormat.Markdown,
+        AttachmentDocumentFormat.Csv,
     ];
 
     /// <summary>Recognizes what an attachment declares itself to be.</summary>

@@ -60,8 +60,8 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     /// <remarks>
     /// Writing nothing reads every format MailFathom parses, and naming any narrows to exactly those. The list starts
     /// empty rather than pre-filled because the configuration binder adds to a collection it finds rather than
-    /// replacing it, so a pre-filled default would leave an operator naming one format with that one and the six they
-    /// were narrowing away from. Naming a format nothing here parses is refused at startup rather than ignored.
+    /// replacing it, so a pre-filled default would leave an operator naming one format with that one and the nine
+    /// they were narrowing away from. Naming a format nothing here parses is refused at startup rather than ignored.
     /// </remarks>
     public IList<AttachmentDocumentFormat> Formats { get; } = [];
 

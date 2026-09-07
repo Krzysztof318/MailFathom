@@ -223,14 +223,14 @@ parse as what they declare, and one whose reading ran past a ceiling all mean th
 nobody established what is in it. Treating that as clean would make the whole screen a property of the format a sender
 chose.
 
-**What is not read is what falls outside a closed set of ten formats**, and the page says so rather than implying
+**What is not read is what falls outside a closed set of thirteen formats**, and the page says so rather than implying
 coverage. Recognition is decided by `AttachmentDocumentFormats` from the media type the sender declared and the file
-name's extension, so what is screened is a PDF, the three Office Open XML families, and the three OpenDocument ones —
-and everything else is sent and served unread. That is a photograph, a recording, and an archive, which carry no text a
-scanner reads. **It is also a plain-text note, a `.csv` export, a `.json` file, and a source file, which plainly do**:
-a credential in an attached `.txt` leaves a screened deployment exactly as it did before, and nothing here pretends
-otherwise. The same is true of a recognized document whose every page is a scan of paper, which is read successfully
-and yields nothing.
+name's extension, so what is screened is a PDF, the three Office Open XML families, the three OpenDocument ones, and
+a plain-text, Markdown, or `.csv` file — and everything else is sent and served unread. That is a photograph, a
+recording, and an archive, which carry no text a scanner reads. **It is also a `.json` file, an `.html` page, and a
+source file, which plainly do**: a credential in an attached `.json` leaves a screened deployment exactly as it did
+before, and nothing here pretends otherwise. The same is true of a recognized document whose every page is a scan of
+paper, which is read successfully and yields nothing.
 
 **Two of those are worth stating apart**, because they are not the same fact. A format outside the set is not read and
 not refused. A format *inside* it that yields no text — a `.doc`, `.xls`, or `.ppt`, or one an operator excluded from
