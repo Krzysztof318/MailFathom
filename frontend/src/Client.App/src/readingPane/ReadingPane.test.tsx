@@ -224,10 +224,15 @@ describe('ReadingPane', () => {
         drawing(deploymentDescribing());
         await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
 
-        expect([...new Set(asked.map((request) => request.path))]).toEqual([
-            `https://mail.example.invalid/api/client/messages/${messageId}`,
-            `https://mail.example.invalid/api/client/messages/${messageId}/body`,
-        ]);
+        // Waited for rather than read once the heading is on the screen: the heading is the description arriving, and
+        // the body is a second read that has not necessarily been made by then. Reading the record at that moment is
+        // what reports one route where there are two, on a machine loaded enough to put the two commits apart.
+        await waitFor(() => {
+            expect([...new Set(asked.map((request) => request.path))]).toEqual([
+                `https://mail.example.invalid/api/client/messages/${messageId}`,
+                `https://mail.example.invalid/api/client/messages/${messageId}/body`,
+            ]);
+        });
     });
 
     it('says what failed and offers the way out where reading again is one', async () => {
