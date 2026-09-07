@@ -131,6 +131,18 @@ const refusalsByCode: Readonly<Record<number, MailSendRefusal>> = {
     81_001: 'screeningUnavailable',
 };
 
+/**
+ * What became of a draft write: the draft the deployment now holds, or a rule of this deployment refusing it.
+ *
+ * The same shape a send answers with, and for the same reason: the draft book is screened exactly as the outbox is, so
+ * a save and a revision are refused by the same rules with the same codes. Folding that into a transport failure would
+ * tell somebody whose attached document could not be read that the deployment did not answer, and offer them a retry
+ * instead of the remedy.
+ */
+export type MailDraftWriteOutcome =
+    | { readonly written: true; readonly draft: MailDraft }
+    | { readonly written: false; readonly refusal: MailSendRefusal };
+
 /** What became of a send: a message queued, or a rule of this deployment refusing the one the author wrote. */
 export type MailSendOutcome =
     | { readonly queued: true; readonly outgoingEmailId: string }
@@ -165,7 +177,7 @@ export function writeMailDraft(
     session: ClientSession,
     transport: MailFathomTransport,
     composition: MailDraftComposition,
-): Promise<ClientResult<MailDraft>> {
+): Promise<ClientResult<MailDraftWriteOutcome>> {
     return spanned(`POST ${mailDraftsRoute}`, async () =>
         draftIn(
             await send(transport, {
@@ -190,7 +202,7 @@ export function reviseMailDraft(
     transport: MailFathomTransport,
     draftId: string,
     composition: MailDraftComposition,
-): Promise<ClientResult<MailDraft>> {
+): Promise<ClientResult<MailDraftWriteOutcome>> {
     // A template rather than the composed route: an identifier in a span name is one name per draft.
     return spanned('PUT /drafts/{draftId}', async () =>
         draftIn(
@@ -337,18 +349,31 @@ function stated(composition: MailDraftComposition): Readonly<Record<string, unkn
         : { ...written, answeredEmailId: composition.answeredEmailId, answers: composition.answers };
 }
 
-function draftIn(response: ClientResponse | null): ClientResult<MailDraft> {
+function draftIn(response: ClientResponse | null): ClientResult<MailDraftWriteOutcome> {
     if (response === null) {
         return failed('unavailable', null);
     }
 
-    if (response.status !== 200) {
+    if (response.status === 200) {
+        const draft = parseDraft(bodyIn(response));
+
+        return draft === null ? failed('unreadable', response.status) : read({ written: true, draft });
+    }
+
+    // The same two statuses a send reads as outcomes rather than as failures, for the same reason: the draft book is
+    // screened by the same rules and answers the same codes, so a `409` here is a rule of this deployment about what
+    // was written and a `503` is its one temporary refusal.
+    if (response.status !== 409 && response.status !== 503) {
         return failed(failureReasonForStatus(response.status), response.status);
     }
 
-    const draft = parseDraft(bodyIn(response));
+    // An answer this client cannot read as a refusal is read as the failure its status names, which is what a `503`
+    // carrying no body at all is: a proxy in front of the deployment rather than a screen that could not answer.
+    const refused = refusalIn(response);
 
-    return draft === null ? failed('unreadable', response.status) : read(draft);
+    return refused === null
+        ? failed(failureReasonForStatus(response.status), response.status)
+        : read({ written: false, refusal: refused });
 }
 
 function stagedIn(response: ClientResponse | null): ClientResult<MailStagedAttachment> {
@@ -397,19 +422,25 @@ function outcomeOf(response: ClientResponse | null): ClientResult<MailSendOutcom
         return failed(failureReasonForStatus(response.status), response.status);
     }
 
+    const refused = refusalIn(response);
+
+    return refused === null ? failed('unreadable', response.status) : read({ queued: false, refusal: refused });
+}
+
+// Which rule refused it, or null for an answer this client could not read as one. A refusal whose body is not a record
+// is a body this client could not read, exactly as at `200`: reading it as a rule of the deployment would put a
+// sentence about the message on the screen for what is a page from something in the way.
+function refusalIn(response: ClientResponse): MailSendRefusal | null {
     const body = bodyIn(response);
 
     if (body === null) {
-        // A refusal whose body is not a record is a body this client could not read, exactly as at `200`. Reading it
-        // as a rule of the deployment would put a sentence about the message on the screen for what is a page from
-        // something in the way.
-        return failed('unreadable', response.status);
+        return null;
     }
 
     const code = body['errorCode'];
     const refusal = typeof code === 'number' ? refusalsByCode[code] : undefined;
 
-    return read({ queued: false, refusal: refusal ?? 'refusedForAnotherReason' });
+    return refusal ?? 'refusedForAnotherReason';
 }
 
 function bodyIn(response: ClientResponse): Readonly<Record<string, unknown>> | null {

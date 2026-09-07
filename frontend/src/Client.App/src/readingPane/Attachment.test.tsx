@@ -134,7 +134,7 @@ describe('Attachment', () => {
         ['unavailable', 'The deployment did not answer, so the file was not downloaded. Try again.'],
         [
             'screened',
-            'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Asking again will not change that.',
+            'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Try again in case the read ran out of time or the screen was momentarily not answering.',
         ],
         [
             'largerThanDescribed',

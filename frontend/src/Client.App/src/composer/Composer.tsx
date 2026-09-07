@@ -65,6 +65,22 @@ const refusalSaid = {
     refusedForAnotherReason: 'compose.refusedForAnotherReason',
 } as const satisfies Readonly<Record<string, MessageKey>>;
 
+// The same rules said in the words of a save. The draft book is screened exactly as the outbox is, so the same codes
+// reach a save and a revision — and only the four a screen produces can, a deployment that refuses a recipient or has
+// sending switched off refusing nothing that is merely written down. The other four are still named, because the type
+// is what makes this exhaustive and a saved draft refused for a reason this client does not know is still a refusal
+// rather than an outage.
+const saveRefusalSaid = {
+    sendingNotEnabled: 'compose.saveRefusedForAnotherReason',
+    recipientRefused: 'compose.saveRefusedForAnotherReason',
+    ceilingReached: 'compose.saveRefusedForAnotherReason',
+    contentRefused: 'compose.saveRefusedContent',
+    notFullyScanned: 'compose.saveRefusedNotScanned',
+    attachmentNotRead: 'compose.saveRefusedAttachmentNotRead',
+    screeningUnavailable: 'compose.saveRefusedScreeningUnavailable',
+    refusedForAnotherReason: 'compose.saveRefusedForAnotherReason',
+} as const satisfies Readonly<Record<string, MessageKey>>;
+
 // What became of a send somebody took back, which is four answers rather than a success and a failure: a message
 // already going out cannot be recalled, and saying so is the answer.
 const withdrawalSaid = {
@@ -586,6 +602,8 @@ function WhatIsHappening({
             return <Said text={translate('compose.sending')} />;
         case 'refused':
             return <Said text={translate(refusalSaid[standing.refusal])} warning />;
+        case 'refusedSave':
+            return <Said text={translate(saveRefusalSaid[standing.refusal])} warning />;
         case 'failed':
             return <Said text={translate(failureSaid[standing.reason])} warning />;
         case 'withdrawn':

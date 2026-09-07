@@ -60,6 +60,14 @@ namespace MailFathom.Application.Emails.DownloadAttachment;
 /// rather than served.
 /// </para>
 /// <para>
+/// <b>What decides whether the screen runs at all is <c>SensitiveContent:ScreenOutgoingMailFor</c></b>, the same key
+/// that decides whether a send is screened, read through the owner's posture before an attachment is opened. So the
+/// asymmetry this closes is closed exactly where that key names a scanner: a deployment that wrote an empty list keeps
+/// its scanners redacting every read and serves every attachment whole, which is a deliberate configuration rather
+/// than a gap here — but it is the same shape as the one above, and an operator writing that list is deciding about
+/// downloads as well as about sends.
+/// </para>
+/// <para>
 /// Nothing is redacted, because there is nothing a redaction could honestly do to a byte stream: replacing a region
 /// inside one produces a file its author never composed and whose reader has no way of knowing it was changed. So the
 /// download is refused whole, and no partial stream is ever written.

@@ -42,6 +42,7 @@ export type DraftStanding =
     | { readonly kind: 'queued'; readonly outgoingEmailId: string }
     | { readonly kind: 'withdrawn'; readonly withdrawal: MailSendWithdrawal }
     | { readonly kind: 'refused'; readonly refusal: MailSendRefusal }
+    | { readonly kind: 'refusedSave'; readonly refusal: MailSendRefusal }
     | { readonly kind: 'failed'; readonly reason: ClientFailureReason };
 
 /** The draft the deployment holds for what is being written, and what a person does to it. */
@@ -133,13 +134,24 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return null;
         }
 
-        draftId.current = answer.value.draftId;
+        // A refusal is said in the words of the act that met it. The deployment screens the draft book by the same
+        // rules as the outbox and answers the same codes, so the same refusal reaches a save — and telling its author
+        // the message was not sent, when they pressed save, names an act nobody performed.
+        if (!answer.value.written) {
+            setStanding({ kind: 'refusedSave', refusal: answer.value.refusal });
 
-        if (at === staging.current) {
-            setStaged(answer.value.attachments);
+            return null;
         }
 
-        return answer.value.draftId;
+        const written = answer.value.draft;
+
+        draftId.current = written.draftId;
+
+        if (at === staging.current) {
+            setStaged(written.attachments);
+        }
+
+        return written.draftId;
     }
 
     // Every act ends by saying what happened, and a failure says which of the four it was rather than that something

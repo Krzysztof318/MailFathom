@@ -280,8 +280,13 @@ same screen sits on the two paths that hand an attachment's octets to somebody o
   could not answer at all — and the answer says which of the four it was no more than it names a category. Telling them
   apart would say that this file holds a credential, or that this deployment's analyzer is down, to somebody the
   deployment has just decided may not have the file.
-- **An owner who screens nothing pays for none of it.** The posture is read before anything is opened, so a deployment
-  that switched no scanner on serves a download at exactly the cost it did before.
+- **An owner who screens nothing pays for none of it, and serves attachments unscreened.** The posture is read before
+  anything is opened, so a deployment this is inactive for serves a download at exactly the cost it did before. Which
+  deployments those are is `SensitiveContent:ScreenOutgoingMailFor` and nothing else — the same key that decides
+  whether a send is screened. A deployment that switched no scanner on is one of them; so is one running every scanner
+  that wrote `[]` to that key, which keeps redacting every read and serves every attachment whole beside it. That
+  combination is the asymmetry this section exists to close, so an operator writing that list is deciding about
+  downloads as well as about sends.
 
 ### What it screens for, and why the default is secrets alone
 

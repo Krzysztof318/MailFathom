@@ -380,6 +380,25 @@ describe('Composer, a message of its own', () => {
         expect(await screen.findByText(/no longer signed in/u)).toBeDefined();
     });
 
+    // The deployment screens the draft book by the same rules as the outbox and answers the same codes, so a save can
+    // meet a refusal rather than a failure of the request — and the words have to be a save's, not a send's.
+    it.each([
+        [
+            59_003,
+            'One of the attached files could not be read, so nothing screened what would have been filed with it and the message was not filed. Try again in case the read ran out of time; if it is refused again, saving without that file, or attaching it in a form that can be read, is what would change that.',
+        ],
+        [
+            59_001,
+            'Screening refused what this message carries, so it was not filed. Changing what it says, or what it attaches, is what would change that. Nothing you wrote has been lost.',
+        ],
+    ])('says a refused save in the words of a save rather than of a send: %i', async (code, said) => {
+        drawComposer({ kind: 'new' }, { save: { status: 409, body: JSON.stringify({ errorCode: code }) } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        expect(await screen.findByText(said)).toBeDefined();
+    });
+
     it('says what is kept while the machine is offline rather than offering a send that cannot happen', () => {
         drawComposer({ kind: 'new' }, {}, [work], false);
 
