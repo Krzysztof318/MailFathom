@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.Summaries;
 
 namespace MailFathom.Application.Emails.BrowseSearch;
@@ -11,6 +12,8 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// <param name="Preview">The opening of the message's own text, or <see langword="null" /> where nothing has extracted the message yet.</param>
 /// <param name="Snippets">The highlighted extracts around what the query matched, in the order the body carries them, and empty where the message matched by meaning or on its headers alone.</param>
 /// <param name="MatchedBy">Which ranking found this result.</param>
+/// <param name="AttachmentMatches">What the message's attachments contributed, each naming its file and the place inside it, and empty where the query reached none of them.</param>
+/// <param name="IsDepictedMatch">Whether a model's description of an attached picture is the whole of this message's claim on the query.</param>
 /// <remarks>
 /// <para>
 /// The summary and the preview are the same two values a list row is drawn from, composed the same way, so a result and
@@ -29,9 +32,24 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// searches that means nothing. The order of the results is what the ranking has to say, and
 /// <see cref="MatchedBy" /> is what a person can act on.
 /// </para>
+/// <para>
+/// What an attachment contributed stays out of the extracts and travels in <see cref="AttachmentMatches" /> instead. A
+/// snippet is an extract of what the message says, so quoting a file into one would report words the body never carried
+/// and leave a reader unable to say which file they came from — and a row explained by neither is exactly the
+/// unexplained result the extracts and <see cref="MatchedBy" /> exist to prevent.
+/// </para>
+/// <para>
+/// <see cref="IsDepictedMatch" /> is never true of a message any word of the query or any passage somebody wrote
+/// reached, because such a message is placed by that passage and the picture contributes nothing to where it sits —
+/// which is the guarantee
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// states as a partition of the result rather than as a weight inside it.
+/// </para>
 /// </remarks>
 public sealed record BrowsedSearchResult(
     EmailSummary Email,
     string? Preview,
     IReadOnlyList<string> Snippets,
-    SearchMatchOrigin MatchedBy);
+    SearchMatchOrigin MatchedBy,
+    IReadOnlyList<EmailAttachmentMatch> AttachmentMatches,
+    bool IsDepictedMatch);

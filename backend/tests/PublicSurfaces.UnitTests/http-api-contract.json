@@ -762,6 +762,61 @@
         ],
         "type": "object"
       },
+      "ClientMailAttachmentMatchResponse": {
+        "properties": {
+          "attachmentPosition": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "extracts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "segmentKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "segmentNumber": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentPosition",
+          "fileName",
+          "mediaType",
+          "source",
+          "segmentKind",
+          "segmentNumber",
+          "extracts"
+        ],
+        "type": "object"
+      },
       "ClientMailAttachmentResponse": {
         "properties": {
           "fileName": {
@@ -1623,6 +1678,12 @@
               "string"
             ]
           },
+          "attachmentMatches": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailAttachmentMatchResponse"
+            },
+            "type": "array"
+          },
           "flagged": {
             "type": "boolean"
           },
@@ -1635,6 +1696,9 @@
           "id": {
             "format": "uuid",
             "type": "string"
+          },
+          "isDepictedMatch": {
+            "type": "boolean"
           },
           "matchedBy": {
             "type": "string"
@@ -1727,7 +1791,9 @@
           "sizeOctets",
           "preview",
           "snippets",
-          "matchedBy"
+          "matchedBy",
+          "attachmentMatches",
+          "isDepictedMatch"
         ],
         "type": "object"
       },
