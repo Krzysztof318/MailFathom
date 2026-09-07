@@ -14,9 +14,9 @@ export const pl: Catalogue = {
     'shell.language': 'Język',
     'shell.theme': 'Motyw',
     'shell.spaces': 'Przestrzenie',
-    'shell.signOut': 'Wyloguj się',
-    'shell.clientVersion': 'Klient {client}',
-    'shell.versions': 'Klient {client}, wdrożenie {deployment}',
+    'shell.signOut': 'Wyloguj',
+    'shell.clientVersion': 'v{client}',
+    'shell.versions': 'v{client} · wdrożenie {deployment}',
     'shell.account': 'Konto i ustawienia',
     'shell.accountMenu': 'Konto',
     'shell.more': 'Więcej',
@@ -60,14 +60,17 @@ export const pl: Catalogue = {
 
     'signIn.claim': 'Twoja poczta zostaje na Twoim serwerze.',
     'signIn.claimExplanation':
-        'Podaj adres serwera MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do chmury bez Twojej zgody.',
+        'Łączysz się z serwerem MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do chmury bez Twojej zgody.',
     'signIn.revealPassword': 'Pokaż',
     'signIn.hidePassword': 'Ukryj',
     'signIn.revealPasswordControl': 'Pokaż hasło',
     'signIn.hidePasswordControl': 'Ukryj hasło',
 
+    'signIn.viaProvider': 'Logowanie przez dostawcę',
+    'signIn.orWithPassword': 'lub hasłem',
+    'signIn.forgotPassword': 'Nie pamiętasz hasła?',
+    'signIn.itHelp': 'Pomoc IT',
     'signIn.title': 'Połącz skrzynkę',
-    'signIn.explanation': 'Dane logowania trafiają wyłącznie do wskazanego serwera.',
     'signIn.userName': 'Login',
     'signIn.userNameExample': 'k.kowalska@example.com',
     'signIn.password': 'Hasło',
@@ -101,8 +104,6 @@ export const pl: Catalogue = {
         'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
 
     'connect.address': 'Serwer',
-    'connect.addressConfigured':
-        'Adres serwera został podany przy instalacji tego klienta, więc nie można go tutaj zmienić.',
     'connect.addressExample': 'mailfathom.example.com:8443',
     'connect.addressHint': 'Port opcjonalny — bez niego ten klient łączy się na porcie {port}.',
     'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
@@ -113,6 +114,7 @@ export const pl: Catalogue = {
     'connect.clearTextInForce':
         'TLS jest wyłączony. Login, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
     'connect.portHint': 'port {port}',
+    'connect.changeServer': 'Zmień serwer',
     'connect.advanced': 'Zaawansowane',
     'connect.withoutTls': 'bez TLS',
     'connect.protocol': 'Protokół',
@@ -198,9 +200,6 @@ export const pl: Catalogue = {
     'settings.telemetryUnanswered':
         'Czekamy, aż to wdrożenie powie, czy przekazuje telemetrię. Dopóki nie odpowie, obowiązuje Twoja własna decyzja.',
 
-    'deployment.reachedAt': 'Odczyt z {address}',
-    'deployment.change': 'Wskaż inne wdrożenie',
-
     'accounts.reading': 'Odczytywanie kont…',
     'accounts.notRefreshing':
         'To wdrożenie nie odświeża lokalnej kopii tych kont, więc widzisz je w takim stanie, w jakim zostawił je jego ostatni przebieg. To ustawienie wdrożenia, a nie brakujące Ci uprawnienie.',
@@ -248,6 +247,7 @@ export const pl: Catalogue = {
     'menu.markUnread': 'Oznacz jako nieprzeczytaną',
     'menu.move': 'Przenieś…',
     'mail.backToList': 'Wróć do listy',
+    'mail.hidePanels': 'Ukryj panele — sama korespondencja',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
     'mail.listWidth': 'Szerokość listy wiadomości',
@@ -654,7 +654,13 @@ export const pl: Catalogue = {
     'message.authorThenWhen': ' · ',
     'message.sentAtUnknown': 'Nadawca nie zapisał daty, którą ten klient potrafi odczytać.',
     'message.receivedAt': 'Odebrano {when}',
-    'message.otherParticipants': 'Pozostałe osoby wskazane w tej wiadomości ({count})',
+    'message.otherParticipants': 'pozostałe osoby ({count})',
+    'message.addressDetails': 'Pozostałe osoby wskazane w tej wiadomości',
+    'message.collapseAddressDetails': 'Zwiń szczegóły adresowe',
+    'message.ask': 'Zapytaj',
+    'message.askTitle': 'Przejdź do agenta z kontekstem wątku',
+    'message.forward': 'Przekaż',
+    'message.flag': 'Oflaguj',
 
     'participant.sender': 'Nadane przez',
     'participant.replyTo': 'Odpowiedź do',
@@ -778,7 +784,7 @@ export const pl: Catalogue = {
     'notifications.all': 'Wszystkie',
     'notifications.unreadTab': 'Nieprzeczytane',
     'notifications.unreadWithCount': 'Nieprzeczytane · {count}',
-    'notifications.markAll': 'Oznacz wszystkie jako przeczytane',
+    'notifications.markAll': 'Oznacz wszystkie',
     'notifications.markRead': 'Oznacz jako przeczytane',
     'notifications.markUnread': 'Oznacz jako nieprzeczytane',
     'notifications.unreadMark': 'Nieprzeczytane',

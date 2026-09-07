@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -26,7 +26,7 @@ const headers: MailMessageHeaders = {
 // Found by the words a person reads and then read as the element it is, because whether a disclosure is open is a
 // property of that element rather than something jsdom expresses by hiding what is inside it.
 function disclosure(): HTMLDetailsElement {
-    const opened = screen.getByText(/^Everybody else this message names/u).closest('details');
+    const opened = screen.getByText(/^everybody else \(/u).closest('details');
 
     if (opened === null) {
         throw new Error('The summary naming the other participants is not inside a disclosure.');
@@ -155,7 +155,7 @@ describe('MessageHeaders', () => {
     it('names everybody else under the header each address appeared in, once the disclosure is opened', () => {
         drawing();
 
-        fireEvent.click(screen.getByText('Everybody else this message names (2)'));
+        fireEvent.click(screen.getByText('everybody else (2)'));
 
         expect(disclosure().open).toBe(true);
         expect(screen.getByText('To')).toBeDefined();
@@ -207,6 +207,31 @@ describe('MessageHeaders at the width its column has', () => {
         drawing();
 
         expect(screen.queryByRole('button', { name: 'Back to the list' })).toBeNull();
+    });
+
+    it('offers handing the conversation to the agent only where the head has a column to itself', () => {
+        atWorkspaceWidth(true);
+        drawing();
+
+        expect(screen.getByText('Ask')).toBeDefined();
+
+        cleanup();
+        atWorkspaceWidth(false);
+        drawing();
+
+        expect(screen.queryByText('Ask')).toBeNull();
+    });
+
+    it('offers the address details from the sender line itself, and names what pressing it does either way', () => {
+        atWorkspaceWidth(true);
+        drawing();
+
+        const line = screen.getByText('everybody else (2)').closest('summary');
+
+        expect(line?.title).toBe('Everybody else this message names');
+
+        fireEvent(disclosure(), new Event('toggle', { bubbles: false }));
+        expect(disclosure().open).toBe(false);
     });
 
     it('names each act the same way at either width, so nothing is reachable at one and nameless at the other', () => {

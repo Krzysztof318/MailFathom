@@ -124,7 +124,10 @@ read against what moved, exactly as the inventory is:
 `theme` is set to `null` rather than left out, because an artboard declaring a default theme would
 otherwise be captured in it whatever the browser was told — and both sides of a pair are captured
 under one `prefers-color-scheme`. Beyond that, a step names an element by its `text`, or by `role`
-and `name` where the artboard has an accessibility tree; `nth` picks one of several.
+and `name` where the artboard has an accessibility tree; `nth` picks one of several, and `exact` holds
+a `name` to the whole accessible name rather than a substring of one — which a name that is also the
+tail of another control's name needs, *Ustawienia* being a menu item and the end of *Konto i
+ustawienia*, the control that opens the menu it is in.
 
 ## What the inventory holds
 

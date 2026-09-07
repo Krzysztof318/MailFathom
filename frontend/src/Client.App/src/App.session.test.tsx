@@ -200,13 +200,13 @@ describe('App session', () => {
         await framed();
         fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
 
-        expect(screen.getByText(`MailFathom Client ${__MAILFATHOM_VERSION__}, deployment 0.8.7`)).toBeDefined();
+        expect(screen.getByText(`MailFathom v${__MAILFATHOM_VERSION__} · deployment 0.8.7`)).toBeDefined();
     });
 
     it('names the client it is running on the sign-in screen, no deployment having answered yet', () => {
         renderApp(nothingAdopted, null);
 
-        expect(screen.getByText(`MailFathom Client ${__MAILFATHOM_VERSION__}`)).toBeDefined();
+        expect(screen.getByText(`MailFathom v${__MAILFATHOM_VERSION__}`)).toBeDefined();
     });
 
     it('names each account and what its last attempt did, behind the line that summarizes them', async () => {

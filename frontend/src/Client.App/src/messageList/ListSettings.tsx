@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MailTimelineOrder } from '@mailfathom/client-backend';
 import { CheckControl } from '../controls/CheckControl';
 import { chip } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useListHeadRow } from '../mailSpace/listHeadRow';
 import {
     dateRanges,
     narrowedToRange,
@@ -27,6 +29,12 @@ import {
 //
 // Each toggle keeps one answer or both, and never only the other: "read", "unflagged", and "without attachments" are
 // not lists anybody asks for, and offering three states per filter would triple the controls to reach one nobody wants.
+//
+// The control that opens the panel stands at the end of the column's head row, beside the search field, which is where
+// the design project draws it; the panel opens underneath the row, across the column. The row is the search's and the
+// panel is this component's, so the control is rendered into the place the row offers — `mailSpace/listHeadRow.ts` —
+// and drawn here only where no row offers one. A button rather than a disclosure element for that reason: a `summary`
+// has to stand inside the `details` it opens, and the two stand in different components.
 
 const orderNames: Readonly<Record<MailTimelineOrder, MessageKey>> = {
     newestFirst: 'list.newestFirst',
@@ -68,6 +76,10 @@ export function ListSettings({
     // The radio group's name has to be unique in the document rather than in this file: a second list rendered beside
     // this one would otherwise share the group, and picking an order in one would take it off in the other.
     const orderGroup = useId();
+    const panel = useId();
+    const headRow = useListHeadRow();
+
+    const [open, setOpen] = useState(false);
 
     // The pair as typed, held only while it selects nothing. A refused range is still what the reader is looking at, so
     // it stays in the two controls and is what the next keystroke is judged against — a control that snapped back to
@@ -114,176 +126,189 @@ export function ListSettings({
         narrow({ dateRange: null, ...moved });
     }
 
+    const opener = (
+        <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={panel}
+            title={translate(inForce === 0 ? 'list.filters' : 'list.filtersInForce', { count: String(inForce) })}
+            className={`flex h-8.5 shrink-0 cursor-pointer items-center justify-center gap-0.75 rounded-lg px-1.75 transition hover:bg-hover ${
+                inForce === 0 ? 'text-muted' : 'bg-accent-soft text-accent-deep'
+            }`}
+            onClick={() => {
+                setOpen(!open);
+            }}
+        >
+            <Icon name={inForce === 0 ? 'tune' : 'filter_alt'} className="size-4.75" />
+            <span className="sr-only">{translate('list.filters')}</span>
+            {inForce === 0 ? null : <span className="text-2xs font-semibold">{inForce}</span>}
+        </button>
+    );
+
     return (
-        <details>
-            <summary
-                className={`flex w-fit cursor-pointer items-center gap-1 px-2 py-0.75 ${chip} ${
-                    inForce === 0 ? '' : chosen
-                }`}
-            >
-                <Icon name={inForce === 0 ? 'tune' : 'filter_alt'} className="size-4" />
-                <span className="sr-only">{translate('list.filters')}</span>
-                {inForce === 0 ? null : <span className="text-sm font-semibold">{inForce}</span>}
-            </summary>
+        <>
+            {headRow === null ? opener : createPortal(opener, headRow)}
 
             {/* Drawn out to the edges of the column the way the design project draws it, rather than as a card inset
                 inside the header: what is disclosed is a band the list starts underneath, and the line along its foot
                 is what says where the list begins again. */}
-            <div className="-mx-3 mt-1.5 flex flex-col gap-2.75 border-b border-line bg-sunken px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-1.75">
-                    <CheckControl
-                        label={translate('list.onlyUnread')}
-                        on={filters.unread === true}
-                        onChange={(on) => {
-                            narrow({ unread: on ? true : null });
-                        }}
-                    />
-
-                    <CheckControl
-                        label={translate('list.onlyFlagged')}
-                        on={filters.flagged === true}
-                        onChange={(on) => {
-                            narrow({ flagged: on ? true : null });
-                        }}
-                    />
-
-                    <CheckControl
-                        label={translate('list.onlyWithAttachments')}
-                        on={filters.hasAttachments === true}
-                        onChange={(on) => {
-                            narrow({ hasAttachments: on ? true : null });
-                        }}
-                    />
-
-                    {/* Offered only where the list spans folders. A reader who has pointed at one folder is already
-                        reading that folder and nothing else, so a control saying whether junk takes part would be one
-                        that changes nothing — which says less about why than not offering it does. */}
-                    {junkAskable ? (
+            {open ? (
+                <div id={panel} className="flex flex-col gap-2.75 border-b border-line bg-sunken px-3 py-2.75">
+                    <div className="flex flex-wrap items-center gap-1.75">
                         <CheckControl
-                            label={translate('list.includeJunk')}
-                            on={filters.includeJunk}
+                            label={translate('list.onlyUnread')}
+                            on={filters.unread === true}
                             onChange={(on) => {
-                                narrow({ includeJunk: on });
+                                narrow({ unread: on ? true : null });
                             }}
                         />
-                    ) : null}
-                </div>
 
-                {/* Radio buttons rather than pressable chips, for the reason `shell/Preferences.tsx` gives about the
+                        <CheckControl
+                            label={translate('list.onlyFlagged')}
+                            on={filters.flagged === true}
+                            onChange={(on) => {
+                                narrow({ flagged: on ? true : null });
+                            }}
+                        />
+
+                        <CheckControl
+                            label={translate('list.onlyWithAttachments')}
+                            on={filters.hasAttachments === true}
+                            onChange={(on) => {
+                                narrow({ hasAttachments: on ? true : null });
+                            }}
+                        />
+
+                        {/* Offered only where the list spans folders. A reader who has pointed at one folder is already
+                        reading that folder and nothing else, so a control saying whether junk takes part would be one
+                        that changes nothing — which says less about why than not offering it does. */}
+                        {junkAskable ? (
+                            <CheckControl
+                                label={translate('list.includeJunk')}
+                                on={filters.includeJunk}
+                                onChange={(on) => {
+                                    narrow({ includeJunk: on });
+                                }}
+                            />
+                        ) : null}
+                    </div>
+
+                    {/* Radio buttons rather than pressable chips, for the reason `shell/Preferences.tsx` gives about the
                     theme: the platform announces them as one group, moves between them with the arrow keys, and leaves
                     one tab stop for a choice that is always exactly one of its offerings. */}
-                <fieldset className="flex flex-col gap-1.25">
-                    <legend className={sectionLabel}>{translate('list.order')}</legend>
+                    <fieldset className="flex flex-col gap-1.25">
+                        <legend className={sectionLabel}>{translate('list.order')}</legend>
 
-                    <div className="flex flex-wrap gap-1.5">
-                        {orders.map((offered) => (
-                            <label
-                                key={offered}
-                                className={`${choice} has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
-                                    listing.order === offered ? chosen : ''
-                                }`}
-                            >
-                                <input
-                                    type="radio"
-                                    name={orderGroup}
-                                    value={offered}
-                                    checked={listing.order === offered}
-                                    className="sr-only"
-                                    onChange={() => {
-                                        onRead({ ...listing, order: offered });
-                                    }}
-                                />
-                                {translate(orderNames[offered])}
-                            </label>
-                        ))}
-                    </div>
-                </fieldset>
+                        <div className="flex flex-wrap gap-1.5">
+                            {orders.map((offered) => (
+                                <label
+                                    key={offered}
+                                    className={`${choice} has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
+                                        listing.order === offered ? chosen : ''
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name={orderGroup}
+                                        value={offered}
+                                        checked={listing.order === offered}
+                                        className="sr-only"
+                                        onChange={() => {
+                                            onRead({ ...listing, order: offered });
+                                        }}
+                                    />
+                                    {translate(orderNames[offered])}
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
 
-                <div className="flex flex-col gap-1.25">
-                    <p className={sectionLabel}>{translate('list.dateRange')}</p>
+                    <div className="flex flex-col gap-1.25">
+                        <p className={sectionLabel}>{translate('list.dateRange')}</p>
 
-                    {/* Pressable rather than radio buttons, unlike the order above: each span can be taken off again
+                        {/* Pressable rather than radio buttons, unlike the order above: each span can be taken off again
                         by pressing it, and a radio group a reader cannot uncheck would leave the list narrowed by date
                         for as long as it was open. */}
-                    <div className="flex flex-wrap gap-1.5">
-                        {dateRanges.map((offered) => (
+                        <div className="flex flex-wrap gap-1.5">
+                            {dateRanges.map((offered) => (
+                                <button
+                                    key={offered}
+                                    type="button"
+                                    aria-pressed={filters.dateRange === offered}
+                                    className={`${choice} ${filters.dateRange === offered ? chosen : ''}`}
+                                    onClick={() => {
+                                        pickRange(offered);
+                                    }}
+                                >
+                                    {translate(rangeNames[offered])}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* The browser's own date control rather than a picker of ours: it is localized, keyboard operable,
+                        and understood by every assistive technology already. */}
+                        <div className="flex flex-wrap items-end gap-2">
+                            <label className="flex flex-col gap-0.5 text-sm text-muted">
+                                {translate('list.receivedFromField')}
+                                <input
+                                    type="datetime-local"
+                                    className={dateField}
+                                    value={typed.receivedFrom ?? ''}
+                                    onChange={(event) => {
+                                        received({ receivedFrom: event.target.value || null });
+                                    }}
+                                />
+                            </label>
+
+                            <label className="flex flex-col gap-0.5 text-sm text-muted">
+                                {translate('list.receivedToField')}
+                                <input
+                                    type="datetime-local"
+                                    className={dateField}
+                                    value={typed.receivedTo ?? ''}
+                                    onChange={(event) => {
+                                        received({ receivedTo: event.target.value || null });
+                                    }}
+                                />
+                            </label>
+                        </div>
+
+                        {refusedRange === null ? null : (
+                            <p className="text-sm text-warning" role="alert">
+                                {translate('list.rangeSelectsNothing')}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5 border-t border-line-soft pt-2">
+                        <p className="text-sm text-muted">
+                            {inForce === 0
+                                ? translate('list.noFiltersInForce')
+                                : translate('list.filtersInForce', { count: String(inForce) })}
+                        </p>
+
+                        {inForce === 0 ? null : (
                             <button
-                                key={offered}
                                 type="button"
-                                aria-pressed={filters.dateRange === offered}
-                                className={`${choice} ${filters.dateRange === offered ? chosen : ''}`}
+                                className="ms-auto cursor-pointer text-sm text-accent-deep underline-offset-2 hover:underline"
                                 onClick={() => {
-                                    pickRange(offered);
+                                    setRefusedRange(null);
+
+                                    // What the reader chose about junk is not one of the narrowings this clears: it widens
+                                    // the list, so taking it off would hide mail rather than reveal it.
+                                    onRead({
+                                        ...openingListing,
+                                        filters: { ...openingListing.filters, includeJunk: filters.includeJunk },
+                                    });
                                 }}
                             >
-                                {translate(rangeNames[offered])}
+                                {translate('list.clearFilters')}
                             </button>
-                        ))}
+                        )}
                     </div>
-
-                    {/* The browser's own date control rather than a picker of ours: it is localized, keyboard operable,
-                        and understood by every assistive technology already. */}
-                    <div className="flex flex-wrap items-end gap-2">
-                        <label className="flex flex-col gap-0.5 text-sm text-muted">
-                            {translate('list.receivedFromField')}
-                            <input
-                                type="datetime-local"
-                                className={dateField}
-                                value={typed.receivedFrom ?? ''}
-                                onChange={(event) => {
-                                    received({ receivedFrom: event.target.value || null });
-                                }}
-                            />
-                        </label>
-
-                        <label className="flex flex-col gap-0.5 text-sm text-muted">
-                            {translate('list.receivedToField')}
-                            <input
-                                type="datetime-local"
-                                className={dateField}
-                                value={typed.receivedTo ?? ''}
-                                onChange={(event) => {
-                                    received({ receivedTo: event.target.value || null });
-                                }}
-                            />
-                        </label>
-                    </div>
-
-                    {refusedRange === null ? null : (
-                        <p className="text-sm text-warning" role="alert">
-                            {translate('list.rangeSelectsNothing')}
-                        </p>
-                    )}
                 </div>
-
-                <div className="flex items-center gap-2.5 border-t border-line-soft pt-2">
-                    <p className="text-sm text-muted">
-                        {inForce === 0
-                            ? translate('list.noFiltersInForce')
-                            : translate('list.filtersInForce', { count: String(inForce) })}
-                    </p>
-
-                    {inForce === 0 ? null : (
-                        <button
-                            type="button"
-                            className="ms-auto cursor-pointer text-sm text-accent-deep underline-offset-2 hover:underline"
-                            onClick={() => {
-                                setRefusedRange(null);
-
-                                // What the reader chose about junk is not one of the narrowings this clears: it widens
-                                // the list, so taking it off would hide mail rather than reveal it.
-                                onRead({
-                                    ...openingListing,
-                                    filters: { ...openingListing.filters, includeJunk: filters.includeJunk },
-                                });
-                            }}
-                        >
-                            {translate('list.clearFilters')}
-                        </button>
-                    )}
-                </div>
-            </div>
-        </details>
+            ) : null}
+        </>
     );
 }
 

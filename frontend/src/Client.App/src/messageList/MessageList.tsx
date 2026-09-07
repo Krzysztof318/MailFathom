@@ -645,31 +645,29 @@ export function MessageList({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex flex-col gap-1 border-b border-line px-3 py-1.5">
-                <ListSettings
-                    listing={listing}
-                    junkAskable={scope.kind !== 'folder' && scope.kind !== 'role'}
-                    onRead={readWith}
-                />
+            <ListSettings
+                listing={listing}
+                junkAskable={scope.kind !== 'folder' && scope.kind !== 'role'}
+                onRead={readWith}
+            />
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {/* How many messages are picked out is said once, on the selection bar above this column, which is
-                        where the acts over them are too. A second count here would be the same sentence in two places
-                        and the two would be read as being about different things. */}
+            {/* How many messages are picked out is said once, on the selection bar above this column, which is where
+                the acts over them are too. A second count here would be the same sentence in two places and the two
+                would be read as being about different things. */}
 
-                    {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and
-                        what is missing is said above it rather than replacing it. */}
-                    {failure === null ? null : (
-                        <p className="text-sm text-warning" role="alert">
-                            {translate('list.partiallyFailed', { reason: translate(failureLabels[failure.reason]) })}
-                        </p>
-                    )}
+            {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and what
+                is missing is said above it rather than replacing it. */}
+            {failure === null ? null : (
+                <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-1.5">
+                    <p className="text-sm text-warning" role="alert">
+                        {translate('list.partiallyFailed', { reason: translate(failureLabels[failure.reason]) })}
+                    </p>
 
-                    {failure?.reason === 'unavailable' ? (
+                    {failure.reason === 'unavailable' ? (
                         <SecondaryButton label={translate('connection.retry')} onActivate={tryAgain} />
                     ) : null}
                 </div>
-            </div>
+            )}
 
             {rowCount === 0 ? (
                 <Note>{translate(emptyReason(accounts, scope, listing))}</Note>

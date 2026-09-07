@@ -35,6 +35,15 @@ const settingRow = 'flex items-center gap-2.5 px-3.25 py-2.5 text-base';
 // stands inside it is `controls/ChoiceSegment.tsx`, which the settings screen's groups draw from as well.
 const compactGroup = 'flex gap-0.75 rounded-lg border border-line bg-sunken p-0.5';
 
+// What the compact segments say on their face: the design draws each theme as one glyph and each language as its
+// two-letter code, so the strip above the form stays one line at the narrowest width. The full name is still the
+// segment's accessible name, out of sight beside the glyph, because a glyph is not a name a screen reader can say.
+const themeGlyphs: Readonly<Record<(typeof themeChoices)[number], string>> = {
+    system: 'A',
+    light: '\u2600',
+    dark: '\u263E',
+};
+
 /**
  * The theme as three segments, one of them carrying the accent.
  *
@@ -130,7 +139,8 @@ export function ThemeChoice() {
                             }
                         }}
                     >
-                        {translate(segmentNames[offered])}
+                        <span aria-hidden="true">{themeGlyphs[offered]}</span>
+                        <span className="sr-only">{translate(segmentNames[offered])}</span>
                     </ChoiceSegment>
                 ))}
             </div>
@@ -198,7 +208,10 @@ export function LanguageChoice() {
                             }
                         }}
                     >
-                        {localeNames[offered]}
+                        <span aria-hidden="true" className="tracking-wider uppercase">
+                            {offered}
+                        </span>
+                        <span className="sr-only">{localeNames[offered]}</span>
                     </ChoiceSegment>
                 ))}
             </div>

@@ -15,6 +15,8 @@ import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { HeadActs } from '../mailSpace/HeadActs';
+import { useTwoPanes } from '../shell/useWideWorkspace';
 import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { arrivalMark, arrivesAt, holdsMessage, messagesOf, type Arrival } from './threadOpening';
@@ -70,6 +72,7 @@ export function Thread({
 }) {
     const { locale, translate } = useLocalization();
     const { revise } = useWorkspace();
+    const twoPanes = useTwoPanes();
 
     const [pages, setPages] = useState<readonly MailThreadPage[]>([]);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -292,16 +295,23 @@ export function Thread({
         <Conversation
             onClose={close}
             header={
-                <header className="flex flex-col gap-1.5 border-b border-line px-5.5 py-4">
-                    <h2 className="text-3xl font-semibold text-balance">
-                        {held[0]?.email.subject ?? translate('message.noSubject')}
-                    </h2>
+                <header className="flex flex-col gap-1.75 border-b border-line px-5.5 py-4">
+                    {/* The acts the design draws beside a conversation's subject, the same four the head of a
+                        message carries: a conversation is what they are about in the design, whichever message
+                        of it is on the screen. */}
+                    <div className="flex min-w-0 items-center gap-2.25">
+                        <h2 className="min-w-0 flex-1 text-3xl font-semibold text-balance">
+                            {held[0]?.email.subject ?? translate('message.noSubject')}
+                        </h2>
+
+                        <HeadActs compact={!twoPanes} />
+                    </div>
 
                     {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are
                         the conversation's authors, so a screen deriving them would be paging a conversation to draw
                         its header. The list is worded by `Intl` under the active locale rather than joined here. */}
                     {latest.participants.length === 0 ? null : (
-                        <p className="text-base text-text-soft">
+                        <p className="text-base text-muted">
                             {translate('thread.wroteHere', {
                                 names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
                                     latest.participants.map((one) => one.displayName ?? one.address),
@@ -368,7 +378,7 @@ export function Thread({
                             <button
                                 type="button"
                                 aria-expanded={historyShown}
-                                className="rounded-full border border-line bg-sunken px-3.5 py-1.75 text-base text-text-soft transition hover:bg-hover"
+                                className="rounded-full border border-line bg-sunken px-3 py-1.25 text-sm text-muted transition hover:bg-hover"
                                 onClick={() => {
                                     setHistoryShown(!historyShown);
                                 }}

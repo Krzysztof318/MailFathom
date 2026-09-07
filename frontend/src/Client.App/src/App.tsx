@@ -19,7 +19,7 @@ import { forgetComposition } from './composer/keptComposition';
 import { ComposingContext } from './composer/useComposing';
 import { Containment } from './containment/Containment';
 import { BrandMark } from './controls/BrandMark';
-import { SecondaryButton } from './controls/SecondaryButton';
+import { PlannedControl } from './controls/PlannedControl';
 import { VersionLine } from './controls/VersionLine';
 import {
     forgetDeployment,
@@ -962,26 +962,26 @@ function SignInScreen({
             {/* The brand half. Above the split it is a column standing beside the form and carrying the claim; below
                 it the claim goes and what is left is a strip naming the product, because a narrow window's room
                 belongs to the form somebody came here to fill rather than to a sentence about it. */}
-            <aside className="flex shrink-0 items-center gap-3 border-b border-line bg-rail px-4 py-4 split:basis-2/5 split:flex-col split:items-start split:justify-start split:gap-10 split:py-12 split:border-e split:border-b-0 split:px-12">
+            <aside className="flex shrink-0 items-center border-b border-line bg-rail px-4.5 pt-4.5 pb-3 workspace:px-8.5 workspace:pt-5.5 workspace:pb-3.5 split:basis-sign-in-brand split:flex-col split:items-start split:justify-start split:gap-10 split:border-e split:border-b-0 split:px-11.5 split:py-11">
                 {/* The product's name is the screen's heading at every width, rather than the claim beneath it: the
                     claim is the half a narrow window drops, and a heading that disappears with the composition would
                     leave the form's own `h2` as the first heading on the page below the split. What is decided by
                     width here is what is drawn, never what the document is made of. */}
-                <div className="flex items-center gap-3 split:self-start">
-                    <BrandMark className="size-9 split:size-10" />
-                    <h1 className="text-2xl font-semibold tracking-tight">{translate('shell.title')}</h1>
+                <div className="flex items-center gap-2.75 split:gap-3 split:self-start">
+                    <BrandMark className="size-8.5 split:size-10" />
+                    <h1 className="text-xl font-semibold tracking-tight split:text-2xl">{translate('shell.title')}</h1>
                 </div>
 
                 {/* Centred in what the brand above it leaves, rather than centred with it: the design stands the
                     product's name at the top of the column and the claim in the middle of the rest. */}
-                <div className="hidden max-w-sm flex-col gap-4 split:my-auto split:flex">
+                <div className="hidden max-w-100 flex-col gap-4.5 pb-10 split:my-auto split:flex">
                     <p className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</p>
                     <p className="text-lg text-muted text-pretty">{translate('signIn.claimExplanation')}</p>
                 </div>
             </aside>
 
-            <main className="flex flex-1 justify-center overflow-y-auto px-4 py-8 split:items-center split:px-12">
-                <div className="flex w-full max-w-sm flex-col gap-6">
+            <main className="flex flex-1 justify-center overflow-y-auto px-4.5 pt-5.5 pb-7 workspace:px-8.5 workspace:py-7.5 split:items-center split:px-11.5 split:py-11">
+                <div className="flex w-full max-w-98 flex-col gap-4.5 workspace:gap-5.5">
                     {/* The version is not on this row and is at the foot of the form, which is where the design
                         project draws it. Off this row the two pickers fit one line at the narrowest width, which is
                         the composition the design draws. */}
@@ -995,38 +995,31 @@ function SignInScreen({
                         run has already been refused, and offering the form would invite a password against an address
                         the client will not use. */}
                     {refusal === null ? (
-                        <>
-                            {/* The way out of an address somebody named themselves, offered here rather than only
-                                inside the frame: a deployment that stopped accepting the credential, or one whose
-                                password is gone, leaves a person on this screen with no address field to correct —
-                                and a chosen address is read back out of storage on every later start, so reloading
-                                returns to the same one. */}
-                            {adopted?.origin === 'chosen' ? (
-                                <ChosenDeployment
-                                    address={adopted.deployment.baseAddress}
-                                    onChange={onPointSomewhereElse}
-                                />
-                            ) : null}
-
-                            <SignIn
-                                adopted={adopted}
-                                clearTextPermitted={clearTextPermitted}
-                                lifetime={lifetime}
-                                notices={notices}
-                                send={send}
-                                onSignedIn={onSignedIn}
-                            />
-                        </>
+                        <SignIn
+                            adopted={adopted}
+                            clearTextPermitted={clearTextPermitted}
+                            lifetime={lifetime}
+                            notices={notices}
+                            send={send}
+                            onSignedIn={onSignedIn}
+                            onPointSomewhereElse={onPointSomewhereElse}
+                        />
                     ) : (
                         <ConfigurationRefused refusal={refusal} />
                     )}
 
-                    {/* The foot of the form, under the refusal as well as under the form: what is running is one of
-                        the first things asked of somebody reporting that a deployment will not take them, and it is
-                        the client's own version alone here because no deployment has answered anything yet.
-                        The design project's foot row carries a help line on the left of it, which this client draws
-                        nowhere: no deployment publishes an address to send somebody to. */}
-                    <VersionLine deploymentVersion={null} className="text-end text-2xs text-faint" />
+                    {/* The foot of the form, under the refusal as well as under the form. The design draws a help line
+                        on its left, and no deployment publishes an address to send somebody to yet, so the link stands
+                        as the control it is — not built — rather than being dropped; the version on its right is one of
+                        the first things asked of somebody reporting that a deployment will not take them, and is the
+                        client's own alone here because no deployment has answered anything yet. */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="flex min-h-12 items-center text-base text-muted workspace:min-h-6 workspace:text-sm">
+                            {translate('signIn.forgotPassword')}&nbsp;
+                            <PlannedControl label={translate('signIn.itHelp')} shape="link" />
+                        </p>
+                        <VersionLine deploymentVersion={null} className="text-2xs whitespace-nowrap text-faint" />
+                    </div>
                 </div>
             </main>
         </div>
@@ -1066,18 +1059,5 @@ function ConfigurationRefused({ refusal }: { readonly refusal: ConfigurationRefu
             <p className="text-base text-text-soft">{translate(configurationRefusals[refusal])}</p>
             <p className="text-sm text-muted">{translate('configuration.whereItIsStated')}</p>
         </section>
-    );
-}
-
-// Offered only where somebody named the deployment themselves. An origin that served the client is not something
-// changing an address could move, so a client served by its own deployment is not asked to be pointed anywhere.
-function ChosenDeployment({ address, onChange }: { readonly address: string; readonly onChange: () => void }) {
-    const { translate } = useLocalization();
-
-    return (
-        <p className="flex items-center gap-2 text-sm text-muted">
-            {translate('deployment.reachedAt', { address })}
-            <SecondaryButton label={translate('deployment.change')} onActivate={onChange} />
-        </p>
     );
 }
