@@ -2,12 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -409,8 +412,88 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], ConfiguredMailFolders.InboxAliasesOf(options.Accounts));
     }
 
+    /// <summary>
+    /// A deployment declaring its mailboxes under an owner is refused a deployment section, so a reader that read only
+    /// that section reported every folder as unmapped and hid mail the deployment had already stored.
+    /// </summary>
+    [Fact]
+    public void GetParticipation_AFolderDeclaredUnderAnOwner_AnswersForThatFolderRatherThanUnmapped()
+    {
+        // Arrange
+        var options = OwnerDeclaring(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "archive",
+            RemotePath = "Archive",
+        }));
+        var archive = new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"));
+
+        // Act
+        var participation = options.Readers.FolderParticipation.GetParticipation(Primary, MailFolderAlias.Create("ARCHIVE"));
+
+        // Assert
+        Assert.Equal(MailFolderParticipation.Full, participation);
+        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersMapped);
+        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersSynchronized);
+        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersVisibleToTools);
+        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersGeneratingEmbeddings);
+    }
+
+    /// <summary>The junk catalog reads the same entries, so an owner-declared junk folder is withheld as a mapped one is.</summary>
+    [Fact]
+    public void JunkFolders_AFolderDeclaredUnderAnOwner_NamesThatFolder()
+    {
+        // Arrange
+        var options = OwnerDeclaring(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "junk",
+            SpecialUse = "Junk",
+        }));
+
+        // Act, Assert
+        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("JUNK"))], options.Readers.JunkFolderCatalog.JunkFolders);
+        Assert.True(options.Readers.JunkFolderCatalog.IsJunkFolder(Primary, MailFolderAlias.Create("JUNK")));
+    }
+
+    /// <summary>A folder is identified by its account beside its alias, so one owner's folder never enters another owner's scope.</summary>
+    [Fact]
+    public void FoldersVisibleToTools_TwoOwnersDeclaringTheSameAlias_KeepsEachFolderToItsOwnAccount()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions().WithServedOwners(
+        [
+            Owner(SyntheticMailOwner.Deployment, CreateAccount(new MailFolderMappingOptions { Alias = "private", RemotePath = "Private" })),
+            Owner(
+                SyntheticMailOwner.Another,
+                CreateAccount("secondary", new MailFolderMappingOptions
+                {
+                    Alias = "private",
+                    RemotePath = "Private",
+                    VisibleToTools = false,
+                })),
+        ]);
+
+        // Act
+        var visible = options.Readers.FolderParticipation.FoldersVisibleToTools;
+
+        // Assert
+        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("PRIVATE"))], visible);
+        Assert.False(options
+            .Readers.FolderParticipation.GetParticipation(MailAccountId.Create("secondary"), MailFolderAlias.Create("PRIVATE"))
+            .IsVisibleToTools);
+    }
+
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
         new() { Accounts = [account] };
+
+    private static MailSynchronizationOptions OwnerDeclaring(MailSynchronizationAccountOptions account) =>
+        new MailSynchronizationOptions().WithServedOwners([Owner(SyntheticMailOwner.Deployment, account)]);
+
+    private static ServedMailOwner Owner(MailOwnerId owner, MailSynchronizationAccountOptions account) =>
+        new(
+            owner,
+            "the owner this deployment serves",
+            MailOwnerAccountSource.OwnerDocument,
+            [account]);
 
     private static MailSynchronizationAccountOptions CreateAccount(params MailFolderMappingOptions[] folders) =>
         CreateAccount("primary", folders);

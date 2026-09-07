@@ -19,13 +19,23 @@ internal static class ConfiguredMailFolders
     /// <param name="settings">The snapshot the folders are read from.</param>
     /// <returns>One entry per usable configured folder.</returns>
     /// <remarks>
+    /// <para>
     /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> rather than the configured list, so an
     /// account that configures no folder answers for the inbox mapping it is actually run with. An entry whose alias or
     /// account identifier is unusable is skipped: startup validation refuses that configuration, and inventing an
     /// identity for it here would attach one folder's decision to a name no operator wrote.
+    /// </para>
+    /// <para>
+    /// Both places a mailbox is declared are read, exactly as <see cref="Rules.DeclaredMailAccounts.ReadFrom(MailSynchronizationOptions)" />
+    /// reads them: the deployment's own section, and each served owner's accounts. A deployment declaring owners is
+    /// refused a non-empty <c>MailSynchronization:Accounts</c>, so reading only the first leaves such a deployment with
+    /// no mapped folder at all — every folder unmapped, no folder visible to a tool, and mail it has already stored
+    /// reported as an empty mailbox.
+    /// </para>
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(MailSynchronizationOptions settings) =>
-        Of(settings.Accounts ?? []);
+        Of((settings.Accounts ?? [])
+            .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? []));
 
     /// <summary>Reads one set of account declarations as the pair of identity and participation the ports answer with.</summary>
     /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
