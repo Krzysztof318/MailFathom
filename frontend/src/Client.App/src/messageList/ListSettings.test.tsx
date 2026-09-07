@@ -54,26 +54,28 @@ describe('ListSettings', () => {
         const row = document.createElement('div');
         document.body.append(row);
 
-        render(
-            <LocalizationProvider>
-                <ListHeadRowContext value={row}>
-                    <ListSettings listing={openingListing} junkAskable={false} onRead={() => undefined} />
-                </ListHeadRowContext>
-            </LocalizationProvider>,
-        );
+        try {
+            render(
+                <LocalizationProvider>
+                    <ListHeadRowContext value={row}>
+                        <ListSettings listing={openingListing} junkAskable={false} onRead={() => undefined} />
+                    </ListHeadRowContext>
+                </LocalizationProvider>,
+            );
 
-        const opener = screen.getByRole('button', { name: 'Filters' });
+            const opener = screen.getByRole('button', { name: 'Filters' });
 
-        expect(row.contains(opener)).toBe(true);
-        expect(opener.getAttribute('aria-expanded')).toBe('false');
-        expect(screen.queryByText('No active filters')).toBeNull();
+            expect(row.contains(opener)).toBe(true);
+            expect(opener.getAttribute('aria-expanded')).toBe('false');
+            expect(screen.queryByText('No active filters')).toBeNull();
 
-        fireEvent.click(opener);
+            fireEvent.click(opener);
 
-        expect(opener.getAttribute('aria-expanded')).toBe('true');
-        expect(row.contains(screen.getByText('No active filters'))).toBe(false);
-
-        row.remove();
+            expect(opener.getAttribute('aria-expanded')).toBe('true');
+            expect(row.contains(screen.getByText('No active filters'))).toBe(false);
+        } finally {
+            row.remove();
+        }
     });
 
     it('says nothing narrows the folder rather than drawing a count nobody has to act on', () => {

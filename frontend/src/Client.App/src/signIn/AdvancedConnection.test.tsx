@@ -85,16 +85,18 @@ describe('AdvancedConnection', () => {
         expect(screen.getByText(/^TLS is off\./u)).toBeDefined();
     });
 
-    // A closed disclosure still says the permission is on, because a screen that folded away the one setting
-    // weakening the connection would be folding away exactly what a reader came to check.
-    it('marks the disclosure itself once an unsecured connection is permitted', () => {
-        drawing(secure, true);
+    // A closed disclosure still says the connection is unencrypted, because a screen that folded away the one fact
+    // weakening it would be folding away exactly what a reader came to check. It reads the connection rather than the
+    // permission: an address that arrived with the deployment carries no permission, and one that resolved to TLS is
+    // encrypted whatever was permitted.
+    it('marks the disclosure itself while the connection is unencrypted', () => {
+        drawing({ secure: false, authority: 'mail.example.test', port: null }, true);
 
         expect(screen.getByText('no TLS')).toBeDefined();
     });
 
-    it('carries no such mark while the connection is secured', () => {
-        drawing(secure);
+    it('carries no such mark while the connection is secured, even with clear text permitted', () => {
+        drawing(secure, true);
 
         expect(screen.queryByText('no TLS')).toBeNull();
     });

@@ -962,7 +962,7 @@ function SignInScreen({
             {/* The brand half. Above the split it is a column standing beside the form and carrying the claim; below
                 it the claim goes and what is left is a strip naming the product, because a narrow window's room
                 belongs to the form somebody came here to fill rather than to a sentence about it. */}
-            <aside className="flex shrink-0 items-center border-b border-line bg-rail px-4.5 pt-4.5 pb-3 workspace:px-8.5 workspace:pt-5.5 workspace:pb-3.5 split:basis-[44%] split:flex-col split:items-start split:justify-start split:gap-10 split:border-e split:border-b-0 split:px-11.5 split:py-11">
+            <aside className="flex shrink-0 items-center border-b border-line bg-rail px-4.5 pt-4.5 pb-3 workspace:px-8.5 workspace:pt-5.5 workspace:pb-3.5 split:basis-sign-in-brand split:flex-col split:items-start split:justify-start split:gap-10 split:border-e split:border-b-0 split:px-11.5 split:py-11">
                 {/* The product's name is the screen's heading at every width, rather than the claim beneath it: the
                     claim is the half a narrow window drops, and a heading that disappears with the composition would
                     leave the form's own `h2` as the first heading on the page below the split. What is decided by

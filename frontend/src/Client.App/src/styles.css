@@ -268,6 +268,11 @@
     --spacing-settings: 28.75rem;
     --spacing-settings-card: min(78vh, 37.5rem);
 
+    /* The share of the sign-in screen its brand column takes above the split breakpoint, which the design draws as a
+       proportion of the window rather than as a width — so the column and the form beside it keep their ratio at
+       every size the composition holds. Read by `basis-sign-in-brand`, which is why it is a `--container-*` name. */
+    --container-sign-in-brand: 44%;
+
     /* The widest a message's own content is ever drawn, which is a ceiling rather than a width: the reading pane takes
        whatever the three columns leave it, and this is where the words inside it stop taking more. It is the width the
        design draws the pane at, so a window the size the project was drawn against is unchanged by it and a wider one

@@ -690,6 +690,21 @@ describe('SignIn', () => {
         expect(pointedAway).toEqual([true]);
     });
 
+    // The badge a closed disclosure carries reads what the address resolved to rather than a permission somebody gave
+    // on this screen: an address kept from an earlier run arrived with no permission to read, and is unencrypted
+    // exactly when it resolves so.
+    it('marks a kept address that resolves to plain HTTP as unencrypted before the disclosure is opened', () => {
+        renderScreen(signedIn, { deployment: { baseAddress: 'http://mail.example.invalid' }, origin: 'chosen' });
+
+        expect(screen.getByText('Advanced').closest('summary')?.textContent).toContain('no TLS');
+    });
+
+    it('carries no unencrypted mark for a kept address that resolves to TLS', () => {
+        renderScreen(signedIn, { deployment: knownDeployment, origin: 'chosen' });
+
+        expect(screen.getByText('Advanced').closest('summary')?.textContent).not.toContain('no TLS');
+    });
+
     // The design offers sign-in through a provider above the password form, and this client speaks HTTP Basic alone:
     // the three stand as controls that are not built rather than being left out, and none of them acts.
     it('draws the provider sign-in the design offers as controls that say they are not built yet', () => {

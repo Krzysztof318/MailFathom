@@ -63,8 +63,9 @@ export function AdvancedConnection({
 
                 {/* The mark a closed disclosure still carries. It is words rather than a colour, for the reason the
                     certificate row below is: what a password crosses is not a statement anybody may be left to infer
-                    from a hue. */}
-                {clearTextPermitted ? (
+                    from a hue. It reads the connection rather than the permission, because an address that arrived
+                    with the deployment carries no permission to read and is unencrypted exactly when it resolves so. */}
+                {connection !== null && !connection.secure ? (
                     <span className="ms-0.5 rounded-sm bg-warning-soft px-1.75 py-0.5 text-xs text-warning-text">
                         {translate('connect.withoutTls')}
                     </span>
