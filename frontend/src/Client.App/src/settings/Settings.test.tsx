@@ -602,8 +602,8 @@ describe('Settings', () => {
     it('says what the client alone is running while the deployment has answered nothing', () => {
         renderSettings({ deploymentVersion: null });
 
-        expect(screen.queryByText(/, deployment /u)).toBeNull();
-        expect(screen.getByText(/^MailFathom Client /u)).toBeDefined();
+        expect(screen.queryByText(/ · deployment /u)).toBeNull();
+        expect(screen.getByText(/^MailFathom v/u)).toBeDefined();
     });
 
     it('says it under either tab, that being about the client rather than about what is open', () => {

@@ -11,8 +11,11 @@ import { pl } from './pl';
 // module's rather than this one's. The choice survives a restart of either head because both store it in the same
 // place: the web bundle in the browser's origin storage, the desktop shell in its WebView's.
 
-/** The languages the client is offered in. Neutral rather than regional: nothing differs between regions yet. */
-export const locales = ['en', 'pl'] as const;
+/**
+ * The languages the client is offered in, in the order the design lists them wherever a person picks one. Neutral rather
+ * than regional: nothing differs between regions yet.
+ */
+export const locales = ['pl', 'en'] as const;
 
 export type Locale = (typeof locales)[number];
 

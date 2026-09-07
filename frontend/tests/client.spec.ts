@@ -372,7 +372,7 @@ test('opens in Discover, under the version it was built from and the one the dep
     // deployment's arrives over the wire beside it. Both are read at the foot of the settings screen, which is where
     // the design project draws them.
     await openSettings(page);
-    await expect(page.getByText(`MailFathom Client ${declaredVersion}, deployment ${declaredVersion}`)).toBeVisible();
+    await expect(page.getByText(`MailFathom v${declaredVersion} · deployment ${declaredVersion}`)).toBeVisible();
     await page.getByRole('button', { name: 'Close settings' }).click();
 
     // A first load at the root is written back to the address the space is actually reached at, which is what makes
@@ -759,7 +759,7 @@ test('lets a choice outrank the machine preference, and keeps it across a reload
     // the label carrying the name, which is what this clicks too.
     const language = page.getByRole('group').filter({ has: page.getByRole('radio', { name: 'Polski' }) });
 
-    await language.getByText('English', { exact: true }).click();
+    await language.locator('label', { has: page.getByRole('radio', { name: 'English' }) }).click();
     await page.reload();
 
     // The machine still prefers Polish and the client still opens in English, which is the whole of what "explicit
@@ -1003,8 +1003,9 @@ test('runs nothing the markup carries, and reaches no host but its own until the
 
     // The script inside the frame fetches from a host of its own, so a request to it would be that script having run.
     // The picture's host is the other half: the representation carries no address for it until the reader asks, so a
-    // frame that fetched one would be drawing markup this client composed rather than the one it was served.
-    await expect(page.getByText(/permits no script at all/)).toBeVisible();
+    // frame that fetched one would be drawing markup this client composed rather than the one it was served. The
+    // sentence under the frame is the design project's own wording of that promise, which #1693 brought the surface to.
+    await expect(page.getByText(/scripts and remote content are blocked/)).toBeVisible();
     expect([...hosts]).not.toContain(messages.senderScriptHost);
     expect([...hosts]).not.toContain(messages.senderPictureHost);
 
@@ -1092,13 +1093,17 @@ test('draws the region again when it is retried, and hands the keyboard into it'
     await expect(message).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     // Somebody rather than nobody holds the keyboard, and the next tab stop says where they are: the first control
-    // the region draws. Both are asked in a browser rather than in jsdom, which draws no boxes and so does not model
-    // the element a browser refuses focus to — the wrapper this lands on was one until this change.
+    // the region draws, which is handing the conversation to the agent from the head of the message. Both are asked in
+    // a browser rather than in jsdom, which draws no boxes and so does not model the element a browser refuses focus
+    // to — the wrapper this lands on was one until this change. Named in full because the head's other acts share
+    // their names with the toolbar's, as the design draws them, and the toolbar has no control for this one.
     expect(await page.evaluate('document.activeElement !== document.body')).toBe(true);
 
     await page.keyboard.press('Tab');
 
-    await expect(page.getByRole('button', { name: 'Reply — not built yet' })).toBeFocused();
+    await expect(
+        page.getByRole('button', { name: 'Go to the agent with this thread as context — not built yet' }),
+    ).toBeFocused();
 });
 
 // The failure no boundary is left to contain, induced by refusing the element every surface in this client is built
@@ -1173,13 +1178,15 @@ test('draws the mail screens at the phone composition, with its own row height a
 
     const phoneRow = await boxOf(list.getByRole('option').first());
 
-    // The control that writes a message stands over the list rather than over the window, so it clears the question
-    // field at the foot of the column whatever that field comes to measure. Placed against the viewport it sat on the
-    // scope beneath the question instead, which put a press meant for the mailbox onto the control that composes.
+    // The control that writes a message stands over the list rather than over the window, so it clears whatever
+    // stands under the column — at this composition the navigation between spaces, which the design draws along the
+    // foot of the phone. Placed against the viewport it sat on that instead, which put a press meant for another space
+    // onto the control that composes. The question field is not here to clear: the design draws it at the foot of the
+    // reading column alone, and at this width that column stands in front of the list only once a message is open.
     const compose = await boxOf(page.getByRole('button', { name: /^New message/u }));
-    const question = await boxOf(page.getByRole('searchbox', { name: 'Ask your mail' }));
+    const spaces = await boxOf(page.getByRole('navigation', { name: 'Spaces' }));
 
-    expect(compose.y + compose.height).toBeLessThanOrEqual(question.y);
+    expect(compose.y + compose.height).toBeLessThanOrEqual(spaces.y);
 
     // Nothing has laid out past the window, which is the bar `frontend/src/AGENTS.md` sets at every width. Asked as an
     // expression for the reason the same question is asked that way at the three-column width above: this suite is
@@ -1313,10 +1320,8 @@ test('starts the list at its leading end when the order changes under a reader w
         await readOnward(page, list);
     }
 
-    // The order is behind the list's filter disclosure, and the element that opens one is reached by name rather than
-    // by role: Playwright's role engine reports a `summary` as `generic`, so `getByRole` matches nothing however the
-    // browser announces it. Its own name is visually hidden, which leaves the element and the text it holds.
-    await page.locator('summary').filter({ hasText: 'Filters' }).click();
+    // The order is behind the list's filters, opened from the control at the end of the column's head row.
+    await page.getByRole('button', { name: 'Filters' }).click();
     await page.getByRole('group', { name: 'Order' }).getByText('Oldest first', { exact: true }).click();
 
     // Changing the order empties the list, which takes the scroller out of the document, so the one that comes back is

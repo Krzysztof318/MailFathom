@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { ListHeadRowContext } from '../mailSpace/listHeadRow';
 import { ListSettings } from './ListSettings';
 import { openingListing, type MailListing } from './listing';
 
@@ -47,6 +48,32 @@ describe('ListSettings', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it('renders the control that opens it into the head row the column offers, and the panel under the row', () => {
+        const row = document.createElement('div');
+        document.body.append(row);
+
+        render(
+            <LocalizationProvider>
+                <ListHeadRowContext value={row}>
+                    <ListSettings listing={openingListing} junkAskable={false} onRead={() => undefined} />
+                </ListHeadRowContext>
+            </LocalizationProvider>,
+        );
+
+        const opener = screen.getByRole('button', { name: 'Filters' });
+
+        expect(row.contains(opener)).toBe(true);
+        expect(opener.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.queryByText('No active filters')).toBeNull();
+
+        fireEvent.click(opener);
+
+        expect(opener.getAttribute('aria-expanded')).toBe('true');
+        expect(row.contains(screen.getByText('No active filters'))).toBe(false);
+
+        row.remove();
     });
 
     it('says nothing narrows the folder rather than drawing a count nobody has to act on', () => {

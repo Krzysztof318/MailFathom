@@ -16,8 +16,8 @@ export const en = {
     'shell.theme': 'Theme',
     'shell.spaces': 'Spaces',
     'shell.signOut': 'Sign out',
-    'shell.clientVersion': 'Client {client}',
-    'shell.versions': 'Client {client}, deployment {deployment}',
+    'shell.clientVersion': 'v{client}',
+    'shell.versions': 'v{client} · deployment {deployment}',
     'shell.account': 'Account and preferences',
     'shell.accountMenu': 'Account',
     'shell.more': 'More',
@@ -61,14 +61,17 @@ export const en = {
 
     'signIn.claim': 'Your mail stays on your own server.',
     'signIn.claimExplanation':
-        'Name your organization\u2019s own MailFathom server. Indexing and analysis happen on it — nothing reaches the cloud without your say-so.',
+        'You connect to your organization\u2019s own MailFathom server. Indexing and analysis happen on it — nothing reaches the cloud without your say-so.',
     'signIn.revealPassword': 'Show',
     'signIn.hidePassword': 'Hide',
     'signIn.revealPasswordControl': 'Show the password',
     'signIn.hidePasswordControl': 'Hide the password',
 
+    'signIn.viaProvider': 'Sign in through a provider',
+    'signIn.orWithPassword': 'or with a password',
+    'signIn.forgotPassword': 'Forgot your password?',
+    'signIn.itHelp': 'IT help',
     'signIn.title': 'Connect your mailbox',
-    'signIn.explanation': 'What you sign in with goes to the server you name, and nowhere else.',
     'signIn.userName': 'Login',
     'signIn.userNameExample': 'k.kowalska@example.com',
     'signIn.password': 'Password',
@@ -101,8 +104,6 @@ export const en = {
         'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
 
     'connect.address': 'Server',
-    'connect.addressConfigured':
-        'The server address was supplied when this client was installed, so it cannot be changed here.',
     'connect.addressExample': 'mailfathom.example.com:8443',
     'connect.addressHint': 'The port is optional — without one this client reaches {port}.',
     'connect.clearText': 'Reach this deployment over plain HTTP',
@@ -113,6 +114,7 @@ export const en = {
     'connect.clearTextInForce':
         'TLS is off. The login, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
     'connect.portHint': 'port {port}',
+    'connect.changeServer': 'Change the server',
     'connect.advanced': 'Advanced',
     'connect.withoutTls': 'no TLS',
     'connect.protocol': 'Protocol',
@@ -196,9 +198,6 @@ export const en = {
     'settings.telemetryUnanswered':
         'Waiting for this deployment to say whether it forwards telemetry. Until it answers, your own decision is what holds.',
 
-    'deployment.reachedAt': 'Reading from {address}',
-    'deployment.change': 'Point somewhere else',
-
     'accounts.reading': 'Reading accounts…',
     'accounts.notRefreshing':
         'This deployment is not refreshing the local copy of these accounts, so what you see is as current as its last run left it. That is a setting on the deployment rather than a permission you are missing.',
@@ -246,6 +245,7 @@ export const en = {
     'menu.markUnread': 'Mark as unread',
     'menu.move': 'Move…',
     'mail.backToList': 'Back to the list',
+    'mail.hidePanels': 'Hide the panels — the correspondence alone',
     'mail.listColumn': 'Message list',
     'mail.readingColumn': 'What is open',
     'mail.listWidth': 'Message list width',
@@ -648,7 +648,13 @@ export const en = {
     'message.authorThenWhen': ' · ',
     'message.sentAtUnknown': 'The sender wrote no date this client can read.',
     'message.receivedAt': 'Received {when}',
-    'message.otherParticipants': 'Everybody else this message names ({count})',
+    'message.otherParticipants': 'everybody else ({count})',
+    'message.addressDetails': 'Everybody else this message names',
+    'message.collapseAddressDetails': 'Collapse the address details',
+    'message.ask': 'Ask',
+    'message.askTitle': 'Go to the agent with this thread as context',
+    'message.forward': 'Forward',
+    'message.flag': 'Flag',
 
     'participant.sender': 'Submitted by',
     'participant.replyTo': 'Reply to',
@@ -769,7 +775,7 @@ export const en = {
     'notifications.all': 'All',
     'notifications.unreadTab': 'Unread',
     'notifications.unreadWithCount': 'Unread · {count}',
-    'notifications.markAll': 'Mark all as read',
+    'notifications.markAll': 'Mark all',
     'notifications.markRead': 'Mark as read',
     'notifications.markUnread': 'Mark as unread',
     'notifications.unreadMark': 'Unread',

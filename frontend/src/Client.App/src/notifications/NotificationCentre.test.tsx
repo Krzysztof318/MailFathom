@@ -200,7 +200,7 @@ describe('NotificationCentre', () => {
     it('marks the whole centre read in one act', () => {
         panel();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Mark all' }));
 
         expect(acts.markAllRead).toHaveBeenCalledOnce();
     });
@@ -208,7 +208,7 @@ describe('NotificationCentre', () => {
     it('offers nothing to mark where nothing stands unread', () => {
         panel({ unreadCount: 0 });
 
-        expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Mark all' })).toBeNull();
     });
 
     it('goes where a notification leads when its row is pressed, and takes the panel off the screen with it', () => {

@@ -14,8 +14,9 @@ import { Icon } from '../controls/Icon';
 import { SurfaceControl } from '../controls/SurfaceControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
-import { useMailboxesDrawer } from '../mailSpace/mailboxesDrawer';
 import { useLocalization } from '../localization/useLocalization';
+import { ListHeadRowContext } from '../mailSpace/listHeadRow';
+import { useMailboxesDrawer } from '../mailSpace/mailboxesDrawer';
 import type { MailScope } from '../workspace/mailScope';
 import { mostRecentSearches } from '../workspace/rememberedWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -69,6 +70,14 @@ export function MailSearch({
 
     const [typed, setTyped] = useState('');
 
+    // The end of the head row, where the list below renders the control that opens its filters — `listHeadRow.ts`
+    // says why the place crosses rather than the state. Held as state rather than a ref because the list reads it
+    // during render, and a ref written after this row mounted would be read as `null` on the render that mattered.
+    // The element leaving is not written back: that happens while this tree is being taken down, and a state change
+    // scheduled then commits once more after the root has been cleared — over the document `main.tsx` puts in front
+    // of somebody when a failure escaped every boundary, which would wipe it.
+    const [filtersPlace, setFiltersPlace] = useState<HTMLElement | null>(null);
+
     // Why the last submission was not run, or `null` where it was. Two sentences rather than one, because a person who
     // pressed the button with nothing typed and one who pasted a document into the field have to do different things.
     const [refused, setRefused] = useState<MessageKey | null>(null);
@@ -99,9 +108,9 @@ export function MailSearch({
     }
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col">
             <form
-                className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5"
+                className="flex flex-wrap items-center gap-2.25 border-b border-line px-3 py-2.5"
                 onSubmit={(event) => {
                     event.preventDefault();
                     search(typed);
@@ -120,7 +129,7 @@ export function MailSearch({
                     <span className="sr-only">{translate('search.label')}</span>
                     <input
                         type="search"
-                        className="w-full rounded-full border border-line bg-rail px-3.25 py-2 text-md text-text placeholder:text-faint transition hover:bg-hover"
+                        className="min-h-12 w-full rounded-full border border-line bg-rail px-4 text-md text-text transition placeholder:text-faint hover:border-line-strong workspace:min-h-0 workspace:px-3.25 workspace:py-2.25 workspace:text-base"
                         placeholder={translate('search.placeholder')}
                         value={typed}
                         onChange={(event) => {
@@ -135,16 +144,26 @@ export function MailSearch({
                     type="submit"
                     aria-label={translate('search.submit')}
                     title={translate('search.submit')}
-                    className={`flex shrink-0 items-center whitespace-nowrap transition ${controlShapes.symbol}`}
+                    className={`flex shrink-0 items-center whitespace-nowrap text-muted transition ${controlShapes.symbol}`}
                 >
-                    <Icon name="search" className="size-4.5" />
+                    <Icon name="search" className="size-4.75" />
                 </button>
 
                 {ask === null ? null : <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />}
+
+                {/* Where the list puts the control that opens its filters, as the last thing on the row. */}
+                <span
+                    ref={(place) => {
+                        if (place !== null) {
+                            setFiltersPlace(place);
+                        }
+                    }}
+                    className="contents"
+                />
             </form>
 
             {refused === null ? null : (
-                <p className="px-3 text-sm text-warning" role="alert">
+                <p className="px-3 pt-2 text-sm text-warning" role="alert">
                     {translate(refused, { longest: String(longestSearchText) })}
                 </p>
             )}
@@ -163,10 +182,10 @@ export function MailSearch({
             ) : null}
 
             {ask === null ? (
-                children
+                <ListHeadRowContext value={filtersPlace}>{children}</ListHeadRowContext>
             ) : (
                 <>
-                    <div className="px-3">
+                    <div className="px-3 pt-2">
                         <SearchFilters ask={ask} accounts={accounts} onNarrow={setAsk} />
                     </div>
 

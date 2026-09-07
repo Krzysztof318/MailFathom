@@ -142,8 +142,8 @@ describe('LanguageSegments', () => {
 
         expect(screen.getByRole('group', { name: 'Language' })).toBeDefined();
         expect(screen.getAllByRole('radio').map((segment) => segment.getAttribute('value'))).toStrictEqual([
-            'en',
             'pl',
+            'en',
         ]);
         expect(screen.getByRole('radio', { name: 'Polski' })).toBeDefined();
     });

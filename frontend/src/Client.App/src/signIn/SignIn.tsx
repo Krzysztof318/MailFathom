@@ -14,6 +14,7 @@ import {
     type SignInRefusal,
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
+import { PlannedControl } from '../controls/PlannedControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
@@ -34,12 +35,11 @@ import type { CredentialLifetime } from './credentialStore';
 //
 // - **Nobody has said.** The field is asked for and is editable, and the `Advanced` disclosure beside it holds the
 //   permission an unsecured connection needs and what the entry resolved to.
-// - **A deployment configured it.** The field is drawn and is not editable — somebody has to be able to see what they
-//   are about to send a password over, and a hidden field says less than a locked one. The disclosure is not drawn at
-//   all: every row in it is about an address this person cannot change, and the permission it holds arrived from the
-//   same configuration, so it would offer a decision that has already been taken.
-// - **The origin served the client, or the person named it on an earlier run.** The address is not on this form. A web
-//   bundle is served by its deployment, and a chosen address is stated above this screen beside the way out of it.
+// - **A deployment configured it, the origin served the client, or the person named it on an earlier run.** The
+//   address is named under the title beside the lock that says what the password will cross, which is where the design
+//   draws it, and the disclosure below the form reads it back row by row. Only a chosen address can be changed, and
+//   the disclosure is where that is offered; a configured one arrived with its permission, so nothing here offers a
+//   decision that has already been taken.
 //
 // What is decided here is only what a person sees; the address rule, the precedence between configuration sources, and
 // the credential's own encoding each belong to the module that owns them.
@@ -112,12 +112,17 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
 // is the direction a mobile-first breakpoint reads in. It is the same width the workspace stops taking a phone's shape
 // at, which is why this screen names that breakpoint rather than one of its own.
 const fieldBox =
-    'flex items-center gap-2 rounded-xl border border-line-strong bg-panel px-3 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
+    'flex items-center gap-2.5 rounded-xl border border-line-strong bg-panel px-3.25 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
 
 const fieldInput =
     'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none workspace:min-h-11 workspace:text-md';
 
 const fieldLabel = 'text-sm font-medium text-text-soft';
+
+// The providers the design's sign-in screen draws when a server declares them. A deployment declares none today and
+// this client could act on none, so these are the design's own three, drawn inert; the day the service declares a list,
+// it is that list that stands here.
+const designedProviders = ['GitHub', 'Gmail', 'Keycloak'] as const;
 
 export function SignIn({
     adopted,
@@ -126,6 +131,7 @@ export function SignIn({
     notices,
     send,
     onSignedIn,
+    onPointSomewhereElse,
 }: {
     readonly adopted: AdoptedDeployment | null;
 
@@ -136,6 +142,9 @@ export function SignIn({
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
+
+    /** Pointing away from an address somebody named themselves, which this screen offers inside its disclosure. */
+    readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
     const deployment = adopted === null ? null : adopted.deployment;
@@ -325,31 +334,69 @@ export function SignIn({
         attempt.current?.abort();
     }
 
-    // Which of the three address shapes this screen is in, and what the field then holds. A configured address is the
-    // one somebody is shown rather than asked for, so it is read out of what was adopted rather than out of the entry.
-    const configured = adopted?.origin === 'configured';
-    const shownAddress = configured ? deployment?.baseAddress : deployment === null ? entry : undefined;
+    // The address field stands on this form only while an address is being typed. One that arrived with the
+    // deployment — the origin that served the client, a configuration, or a choice made on an earlier run — is named
+    // under the title instead, beside the lock that says what the password will cross, which is where the design
+    // draws it; the way to change a chosen one is inside the disclosure below the form.
+    const shownAddress = deployment === null ? entry : undefined;
 
     // What the address on the screen resolves to, computed during render rather than held beside the entry: it is a
     // pure function of values this component already has, and a second piece of state kept in step with them is the
-    // pair that eventually disagrees. It is `null` wherever there is no address on this form at all.
+    // pair that eventually disagrees.
     //
-    // A configured address is read back permitting clear text, for the reason a stored one is: it only became the
+    // A handed address is read back permitting clear text, for the reason a stored one is: it only became the
     // address this run uses by being resolved, and what is being asked here is what it resolved *to*.
     const connection =
-        shownAddress === undefined ? null : resolveConnection(shownAddress, configured || clearTextPermitted);
+        deployment === null
+            ? resolveConnection(entry, clearTextPermitted)
+            : resolveConnection(deployment.baseAddress, true);
 
     return (
-        <section className="flex flex-col gap-6">
-            <div className="flex flex-col gap-1">
+        <section className="flex flex-col gap-4.5 workspace:gap-5">
+            <div className="flex flex-col gap-1.25">
                 <h2 className="text-4xl font-semibold tracking-tight text-text">{translate('signIn.title')}</h2>
-                <p className="text-base text-muted">{translate('signIn.explanation')}</p>
+
+                {/* Where the password is about to go, under the title: the lock says whether it goes over TLS and the
+                    address says where. Only where the address arrived with the deployment — while one is being typed,
+                    the field below is what names it. */}
+                {deployment === null || connection === null ? null : (
+                    <p className="flex flex-wrap items-center gap-1.75 text-sm text-muted">
+                        <Icon
+                            name={connection.secure ? 'lock' : 'lock_open'}
+                            className={`size-3.75 ${connection.secure ? 'text-healthy-text' : 'text-warning-text'}`}
+                        />
+                        <span className="text-text-soft">{connection.authority}</span>
+                        {connection.secure ? null : (
+                            <span className="rounded-sm bg-warning-soft px-1.75 py-0.5 text-2xs font-medium text-warning-text">
+                                {translate('connect.withoutTls')}
+                            </span>
+                        )}
+                    </p>
+                )}
             </div>
 
             <CredentialNotices notices={notices} ref={notified} />
 
+            {/* The design offers sign-in through a provider above the password, in the providers the deployment
+                declares. This client speaks HTTP Basic and nothing else, so the three the design draws stand here as
+                what they are — controls the client has not built — rather than being left out. */}
+            <div className="flex flex-col gap-2.25">
+                <p className="text-xs font-medium tracking-wide text-faint">{translate('signIn.viaProvider')}</p>
+                <div className="grid grid-cols-3 gap-2">
+                    {designedProviders.map((provider) => (
+                        <PlannedControl key={provider} label={provider} icon="key" shape="provider" />
+                    ))}
+                </div>
+            </div>
+
+            <p className="flex items-center gap-2.75 text-xs text-faint">
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+                {translate('signIn.orWithPassword')}
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+            </p>
+
             <form
-                className="flex flex-col gap-5"
+                className="flex flex-col gap-4.5 workspace:gap-5"
                 onSubmit={(event) => {
                     event.preventDefault();
                     void present();
@@ -370,8 +417,7 @@ export function SignIn({
                                 className={fieldInput}
                                 id="sign-in-address"
                                 inputMode="url"
-                                placeholder={configured ? undefined : translate('connect.addressExample')}
-                                readOnly={configured}
+                                placeholder={translate('connect.addressExample')}
                                 ref={address}
                                 spellCheck={false}
                                 type="text"
@@ -381,10 +427,6 @@ export function SignIn({
                                     setRefusal(null);
                                 }}
                             />
-
-                            {/* The lock says the same thing the field's own read-only state already announces, for
-                                somebody reading rather than listening. Decorative for exactly that reason. */}
-                            {configured ? <Icon name="lock" className="size-4 shrink-0 text-faint" /> : null}
 
                             {/* The port this will actually reach, said beside the field while it is being typed. Out
                                 of the accessibility tree because the sentence under the field says the same thing in
@@ -396,14 +438,12 @@ export function SignIn({
                             )}
                         </div>
                         <p className="text-xs text-muted" id="sign-in-address-hint">
-                            {configured
-                                ? translate('connect.addressConfigured')
-                                : translate('connect.addressHint', {
-                                      port:
-                                          connection === null
-                                              ? portForPermission(clearTextPermitted)
-                                              : defaultPortOf(connection),
-                                  })}
+                            {translate('connect.addressHint', {
+                                port:
+                                    connection === null
+                                        ? portForPermission(clearTextPermitted)
+                                        : defaultPortOf(connection),
+                            })}
                         </p>
                     </div>
                 )}
@@ -461,7 +501,7 @@ export function SignIn({
                             aria-label={translate(
                                 revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
                             )}
-                            className="-me-2 flex min-h-12 shrink-0 items-center rounded-lg px-3 text-md text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-2 workspace:text-sm"
+                            className="-me-1.75 flex min-h-12 shrink-0 items-center rounded-xl px-3 text-base text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-1.5 workspace:text-sm"
                             type="button"
                             onClick={() => {
                                 setRevealed(!revealed);
@@ -474,25 +514,9 @@ export function SignIn({
                     </div>
                 </div>
 
-                {/* Only where an address is being typed. A client served by its own deployment is not being pointed
-                    anywhere, so there is no connection for a reader to check before handing over a password; and an
-                    address a deployment configured is one every row in here would be about and none of them could
-                    change, permission included. */}
-                {deployment === null ? (
-                    <AdvancedConnection
-                        connection={connection}
-                        clearTextPermitted={clearTextPermitted}
-                        clearTextConfigured={configuredClearText !== null}
-                        onPermitClearText={(permitted) => {
-                            setClearTextPermitted(permitted);
-                            setRefusal(null);
-                        }}
-                    />
-                ) : null}
-
                 {shown === null || presenting ? null : (
                     <p
-                        className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-text"
+                        className="rounded-lg bg-warning-soft px-3 py-2.25 text-sm text-warning-text"
                         id="sign-in-refusal"
                         role="alert"
                     >
@@ -502,7 +526,7 @@ export function SignIn({
 
                 <div className="flex items-center gap-3">
                     <button
-                        className="flex min-h-13 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-4 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:text-md"
+                        className="flex min-h-13 flex-1 items-center justify-center gap-2.25 rounded-full bg-accent px-4.5 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:rounded-xl workspace:text-md"
                         disabled={presenting}
                         ref={submit}
                         type="submit"
@@ -517,9 +541,31 @@ export function SignIn({
                         <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
                     ) : null}
                 </div>
+
+                {/* Under the submit, as the design draws it, and on every shape of this screen: what a password is
+                    about to cross is worth checking whether or not the address can be changed here. What the
+                    disclosure offers follows the address: the permission an unsecured connection needs while one is
+                    being typed, and the way out of an address somebody named themselves on an earlier run. */}
+                <AdvancedConnection
+                    connection={connection}
+                    clearTextPermitted={clearTextPermitted}
+                    clearTextConfigured={configuredClearText !== null}
+                    onPermitClearText={
+                        deployment === null
+                            ? (permitted) => {
+                                  setClearTextPermitted(permitted);
+                                  setRefusal(null);
+                              }
+                            : null
+                    }
+                    onChangeServer={adopted?.origin === 'chosen' ? onPointSomewhereElse : undefined}
+                />
             </form>
 
-            <p className="text-xs text-muted" id="sign-in-kept">
+            {/* Where the password is kept and for how long. The design draws no such sentence, so it is out of sight
+                rather than out of the document: both credential fields are described by it, and a reader who is told
+                nothing about where a password goes has been told less than the screen knows. */}
+            <p className="sr-only" id="sign-in-kept">
                 {translate(lifetimeMessages[lifetime])}
             </p>
 

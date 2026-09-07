@@ -1,9 +1,29 @@
 {
   "compositions": [
-    { "name": "telefon", "width": 390, "height": 844, "touch": true },
-    { "name": "fold", "width": 884, "height": 832, "touch": true },
-    { "name": "tablet", "width": 1024, "height": 768, "touch": true },
-    { "name": "desktop", "width": 1440, "height": 900, "touch": false }
+    {
+      "name": "telefon",
+      "width": 390,
+      "height": 844,
+      "touch": true
+    },
+    {
+      "name": "fold",
+      "width": 884,
+      "height": 832,
+      "touch": true
+    },
+    {
+      "name": "tablet",
+      "width": 1024,
+      "height": 768,
+      "touch": true
+    },
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "touch": false
+    }
   ],
   "screens": [
     {
@@ -11,7 +31,12 @@
       "route": "/",
       "signIn": false,
       "steps": [
-        { "expect": { "role": "heading", "name": "Connect your mailbox" } }
+        {
+          "expect": {
+            "role": "heading",
+            "name": "Połącz skrzynkę"
+          }
+        }
       ],
       "compositions": ["telefon", "fold", "tablet", "desktop"]
     },
@@ -19,7 +44,14 @@
       "id": "mail-list",
       "route": "/#/mail",
       "signIn": true,
-      "steps": [{ "expect": { "role": "listbox", "name": "Messages" } }],
+      "steps": [
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Wiadomości"
+          }
+        }
+      ],
       "compositions": ["telefon", "fold", "tablet", "desktop"]
     },
     {
@@ -27,11 +59,198 @@
       "route": "/#/mail",
       "signIn": true,
       "steps": [
-        { "expect": { "role": "listbox", "name": "Messages" } },
-        { "click": { "role": "option", "nth": 0 } },
-        { "expect": { "role": "article" } }
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Wiadomości"
+          }
+        },
+        {
+          "click": {
+            "role": "option",
+            "nth": 0
+          }
+        },
+        {
+          "expect": {
+            "role": "article"
+          }
+        }
       ],
       "compositions": ["telefon", "fold", "tablet", "desktop"]
+    },
+    {
+      "id": "settings-profile",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "Konto i ustawienia"
+          }
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Ustawienia",
+            "exact": true
+          }
+        },
+        {
+          "expect": {
+            "role": "tab",
+            "name": "Profil"
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "settings-application",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "Konto i ustawienia"
+          }
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Ustawienia",
+            "exact": true
+          }
+        },
+        {
+          "click": {
+            "role": "tab",
+            "name": "Aplikacja"
+          }
+        },
+        {
+          "expect": {
+            "role": "tabpanel"
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "notifications",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "2 nieprzeczytane powiadomienia",
+            "exact": true
+          }
+        },
+        {
+          "expect": {
+            "role": "heading",
+            "name": "Powiadomienia"
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "account-menu",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "Konto i ustawienia"
+          }
+        },
+        {
+          "expect": {
+            "role": "button",
+            "name": "Ustawienia",
+            "exact": true
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "full-html",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Wiadomości"
+          }
+        },
+        {
+          "click": {
+            "role": "option",
+            "nth": 0
+          }
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Pokaż pełną wersję HTML"
+          }
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Pokaż HTML",
+            "exact": true
+          }
+        },
+        {
+          "expect": {
+            "role": "region",
+            "name": "Własna wersja tej wiadomości od nadawcy"
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "full-html-ask",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "expect": {
+            "role": "listbox",
+            "name": "Wiadomości"
+          }
+        },
+        {
+          "click": {
+            "role": "option",
+            "nth": 0
+          }
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Pokaż pełną wersję HTML"
+          }
+        },
+        {
+          "expect": {
+            "role": "button",
+            "name": "Pokaż HTML",
+            "exact": true
+          }
+        }
+      ],
+      "compositions": ["tablet", "desktop"]
     }
   ]
 }

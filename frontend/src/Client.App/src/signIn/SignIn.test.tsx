@@ -69,6 +69,7 @@ const configuredDeployment: AdoptedDeployment = { deployment: knownDeployment, o
 interface Rendered {
     readonly presented: { deployment: DeploymentAddress; authorization: string }[];
     readonly attempts: AbortSignal[];
+    readonly pointedAway: boolean[];
 }
 
 // The screen is handed a transport per attempt rather than one transport, because giving up on an attempt is what
@@ -83,6 +84,7 @@ function renderScreen(
 ): Rendered {
     const presented: { deployment: DeploymentAddress; authorization: string }[] = [];
     const attempts: AbortSignal[] = [];
+    const pointedAway: boolean[] = [];
 
     render(
         <LocalizationProvider>
@@ -99,11 +101,14 @@ function renderScreen(
                 onSignedIn={(reached, authorization) => {
                     presented.push({ deployment: reached, authorization });
                 }}
+                onPointSomewhereElse={() => {
+                    pointedAway.push(true);
+                }}
             />
         </LocalizationProvider>,
     );
 
-    return { presented, attempts };
+    return { presented, attempts, pointedAway };
 }
 
 function typeAddress(entry: string): void {
@@ -654,28 +659,45 @@ describe('SignIn', () => {
         expect(screen.queryByRole('textbox', { name: 'Password' })).toBeNull();
     });
     // Somebody handed a packaged client has to be able to read what their password is about to cross, so the address
-    // is shown rather than hidden — and it is locked rather than absent, because a hidden field says less.
-    it('draws a configured address in a field nobody can edit, rather than dropping the field', () => {
+    // is named under the title beside the lock, as the design draws it, rather than hidden — and there is no field for
+    // it, because a field would say it can be changed here.
+    it('names a configured address under the title, and offers no field to change it in', () => {
         renderScreen(signedIn, configuredDeployment);
 
-        const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Server' });
-
-        expect(field.value).toBe('https://mail.example.invalid');
-        expect(field.readOnly).toBe(true);
-        expect(
-            screen.getByText(
-                'The server address was supplied when this client was installed, so it cannot be changed here.',
-            ),
-        ).toBeDefined();
+        expect(screen.getByText('mail.example.invalid', { selector: 'span' })).toBeDefined();
+        expect(screen.queryByRole('textbox', { name: 'Server' })).toBeNull();
     });
 
-    // Every row in it would be about an address this person cannot change, and the permission it holds arrived from
-    // the same configuration — so it would offer a decision that has already been taken.
-    it('draws no advanced disclosure at all where the address arrived from configuration', () => {
+    // The disclosure is drawn for every shape of the address, because what a password crosses is worth checking
+    // whether or not the address can be changed — but the permission it holds arrived with the configuration, so no
+    // control for it is offered, and nothing here offers to point elsewhere.
+    it('reads a configured address back row by row, and offers neither the permission nor a way to change it', () => {
         renderScreen(signedIn, configuredDeployment);
 
-        expect(screen.queryByText('Advanced')).toBeNull();
+        fireEvent.click(screen.getByText('Advanced'));
+
+        expect(screen.getByText('mail.example.invalid', { selector: 'dd' })).toBeDefined();
         expect(screen.queryByRole('checkbox', { name: 'Reach this deployment over plain HTTP' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Change the server' })).toBeNull();
+    });
+
+    it('offers the way out of a chosen address inside the disclosure, and says so when it is taken', () => {
+        const { pointedAway } = renderScreen(signedIn, { deployment: knownDeployment, origin: 'chosen' });
+
+        fireEvent.click(screen.getByText('Advanced'));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server' }));
+
+        expect(pointedAway).toEqual([true]);
+    });
+
+    // The design offers sign-in through a provider above the password form, and this client speaks HTTP Basic alone:
+    // the three stand as controls that are not built rather than being left out, and none of them acts.
+    it('draws the provider sign-in the design offers as controls that say they are not built yet', () => {
+        renderScreen(signedIn, servingDeployment);
+
+        for (const provider of ['GitHub', 'Gmail', 'Keycloak']) {
+            expect(screen.getByRole('button', { name: `${provider} — not built yet` })).toBeDefined();
+        }
     });
 
     it('signs in over a configured clear-text permission without anybody having to declare it again', async () => {

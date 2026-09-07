@@ -150,6 +150,17 @@ describe('MailToolbar', () => {
         }
     });
 
+    it('keeps hiding the panels apart at the far edge as a symbol alone, whatever fits the strip', () => {
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
+
+        const hiding = screen.getByRole('button', {
+            name: 'Hide the panels — the correspondence alone — not built yet',
+        });
+
+        expect(hiding.textContent).toBe('');
+        expect(hiding.className).toContain('ms-auto');
+    });
+
     it('gives composing up to the floating control first, keeping the other names in words', () => {
         drawToolbar(true, messageId, actsOffering(vi.fn()), 'floating');
 

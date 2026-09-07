@@ -86,15 +86,15 @@ describe('App deployment', () => {
         ).toBeDefined();
     });
 
-    // An address a deployment configured is not one changing an address could move, so the client is not offered as
-    // something to point elsewhere — which is the same reason an origin that served the client is not.
+    // An address a deployment configured is not one changing an address could move, so the client asks for none and
+    // is not offered as something to point elsewhere — which is the same reason an origin that served the client is
+    // not. Where the address arrived from is stated under the disclosure instead, as the design draws it.
     it('offers no way out of a configured address, that being nobody on this machine’s to change', () => {
         renderApp(wasConfiguredWith('https://configured.example.invalid'), null);
 
-        expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Server' }).value).toBe(
-            'https://configured.example.invalid',
-        );
-        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Server' })).toBeNull();
+        expect(screen.getAllByText('configured.example.invalid').length).toBeGreaterThan(0);
+        expect(screen.queryByRole('button', { name: 'Change the server', hidden: true })).toBeNull();
     });
 
     it('asks for an address when nothing has said where the deployment is', () => {
@@ -135,11 +135,11 @@ describe('App deployment', () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
-        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Change the server', hidden: true })).toBeNull();
 
         await signOut();
 
-        expect(screen.getByRole('button', { name: 'Point somewhere else', hidden: true })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Change the server', hidden: true })).toBeDefined();
     });
 
     it('offers a way out of the sign-in screen a chosen deployment left behind', () => {
@@ -147,7 +147,7 @@ describe('App deployment', () => {
 
         // A chosen address renders no address field, and it is read back out of storage on every later start — so
         // without this, somebody whose password no longer works has no way to point the client anywhere else.
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
     });
@@ -155,14 +155,14 @@ describe('App deployment', () => {
     it('offers nothing to change on the sign-in screen the origin that served the client left', () => {
         renderApp(servedFrom, null);
 
-        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Change the server', hidden: true })).toBeNull();
     });
 
     it('offers nothing to change where the origin that served the client is the deployment', async () => {
         renderApp();
         await framed();
 
-        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Change the server', hidden: true })).toBeNull();
     });
 
     it('asks for an address again, and shows no space, once it is pointed somewhere else', async () => {
@@ -170,7 +170,7 @@ describe('App deployment', () => {
         await framed();
 
         await signOut();
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
@@ -205,7 +205,7 @@ describe('App deployment', () => {
         // The way out of a chosen address sits above the form and stays live while an attempt runs. An answer for the
         // address somebody has just pointed away from would sign them back in to it and write the credential into the
         // store that was asked to clear it.
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
         answering = true;
         for (const answer of held) {
             answer();
@@ -236,7 +236,7 @@ describe('App deployment', () => {
         // assertion is about pointing elsewhere alone, signing out having its own reason to clear the same store.
         renderApp(chosen, null, deploymentAnswering(), credentials);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
 
         // Waited for rather than read once the screen above has settled: what the store was asked to do is a
         // promise the frame started, and the commit that put that screen up is not the one it resolves in.
@@ -259,7 +259,7 @@ describe('App deployment', () => {
         await framed();
 
         await signOut();
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
 
         expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Server' }));
     });
@@ -292,7 +292,7 @@ describe('App deployment', () => {
         await framed();
 
         await signOut();
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Change the server', hidden: true }));
         typeAddress('second.example.invalid');
         signIn();
         await framed();

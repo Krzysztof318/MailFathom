@@ -101,6 +101,12 @@ export function MailToolbar({ strip, fit }: StripFitting) {
             {/* The five that change the mailbox, over the one message that is open. With nothing open each of them
                 says so rather than being left out, for the reason the three answers above are drawn either way. */}
             <MailboxActControls messages={open === null ? [] : actedMessages(listed, [open])} shape={actShape} />
+
+            {/* The one control in the strip that changes the view rather than the message, which is why the design
+                keeps it apart at the far edge and draws it as its symbol alone at every width. What it hides is the
+                thread's state panels — MailFathom's own reading of a conversation — which the client does not draw
+                yet, so there is nothing for it to hide. */}
+            <PlannedControl label={translate('mail.hidePanels')} icon="fullscreen" shape="symbol" className="ms-auto" />
         </div>
     );
 }
