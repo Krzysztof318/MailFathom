@@ -254,6 +254,25 @@ stack's directory, and
 `the_stacks_change_filters_name_no_path_in_each_other` asserts that too, which is
 what makes a change to one stack cost nothing in the other.
 
+That isolation has a cost, and the contract suite is where it is paid. A rule
+spanning both stacks belongs to neither filter, so a check written on either side
+is silent for exactly the change that breaks it. The client's example mail is the
+worked case: it is written by hand against `/api/client`, and a field renamed
+under `backend/src/Host/Api/` reaches this repository only as a moved line in
+`backend/tests/PublicSurfaces.UnitTests/http-api-contract.json`, touching no
+client path — so the client job would report green on a corpus that no longer
+describes the deployment, and the service job would report green on a corpus it
+never read. `the_client_corpus_states_what_the_contract_records` holds the two
+against each other from outside both, in a suite that reads the whole tree on
+every pull request, and names the route, the field, and both spellings where they
+disagree. The casing difference is the failure it exists for: an enumeration
+arrives camel-cased over the MCP surface and Pascal-cased over `/api/client`, and
+a fixture copying the wrong one passes the linter, the type check, both unit
+projects and the browser suite, because the client's own hand-written types agree
+with it. A route the contract records and no fixture covers is reported rather
+than failed, because a route nothing has reached yet is work that has not
+happened rather than a defect.
+
 Three things follow that are worth knowing before they are discovered.
 
 - **A branch that changed nothing under `frontend/` reaches nothing of that

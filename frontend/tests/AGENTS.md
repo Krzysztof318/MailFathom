@@ -181,6 +181,15 @@ owns. Reaching a populated screen is most of the work in a client task, and it i
   `frontend/AGENTS.md` states about a capture of a signed-in client, read from the other end.
 - **The browser suite is the proof that it is sufficient.** `client.spec.ts` declares no fixture of its own, so a shape
   the corpus states wrongly fails a committed suite rather than one session's scratch file.
+- **What proves it is _right_ is outside this stack.** A suite here can only prove that the corpus and the client agree
+  with each other, which is what they do while both disagree with the deployment. So
+  `scripts/test-agent-workflow.sh` holds every value in this directory against
+  `backend/tests/PublicSurfaces.UnitTests/http-api-contract.json`, the byte-for-byte recording of the HTTP surface, and
+  fails naming the route, the field, and both spellings where they disagree. It lives there rather than under
+  `frontend/` because neither stack's change filter would run it when the other side moved, which
+  [Agent workflow](../../docs/operations/agent-workflow.md#which-stack-a-gate-runs) argues. Which answer each value
+  states is written in that script rather than here, for the reason the first rule above gives: a fixture naming a route
+  would be the routing this corpus refuses to know about.
 
 ## A localized screen
 
