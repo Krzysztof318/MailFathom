@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.SyntheticMail.Configuration;
+using MailFathom.SyntheticMail.Corpus;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
 using MailFathom.SyntheticMail.Generation.AiContent;
@@ -12,10 +13,12 @@ using MimeKit;
 
 namespace MailFathom.SyntheticMail.Commands;
 
-/// <summary>The whole command: generate a batch of invented mail and deliver it to one mailbox.</summary>
+/// <summary>The root command: generate a batch of invented mail and deliver it to one mailbox, or write it out.</summary>
 /// <remarks>
-/// A root command with no subcommands, because the tool does one thing. What varies between invocations is the
-/// recipient and the shape of the batch, and both are arguments; the credential is not, and never will be.
+/// Generating is what the tool is invoked for, so it is the root rather than a subcommand of one, and what varies
+/// between invocations is the recipient and the shape of the batch; the credential is not, and never will be.
+/// <c>replay</c> hangs beneath it because it is the other half of <c>--export</c> — a corpus this command wrote is
+/// delivered by that one — and because a run that generates nothing shares none of the options above.
 /// </remarks>
 internal static class DeliverBatchCommand
 {
@@ -132,6 +135,11 @@ internal static class DeliverBatchCommand
             Description = $"Seconds to wait for a submitted message to appear in the recipient's mailbox, 1..{BatchArguments.MaximumDeliveryTimeoutSeconds}. Defaults to {BatchArguments.DefaultDeliveryTimeoutSeconds}. Requires --conversation.",
         };
 
+        Option<string?> exportOption = new("--export")
+        {
+            Description = $"Write the generated corpus to this archive instead of delivering it, so that 'replay' can deliver it into any mailbox afterwards. Requires --conversation, '--sensitive-percentage 0', and a recipient under {SyntheticVocabulary.ReservedTopLevelDomain}.",
+        };
+
         RootCommand command = new("Generate invented mail and deliver a batch of it over SMTP to a development mailbox.")
         {
             recipientArgument,
@@ -151,6 +159,8 @@ internal static class DeliverBatchCommand
             conversationOption,
             deliveryTimeoutOption,
             concurrencyOption,
+            exportOption,
+            ReplayCorpusCommand.Create(context),
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
@@ -173,6 +183,7 @@ internal static class DeliverBatchCommand
                 result.GetValue(conversationOption),
                 result.GetValue(deliveryTimeoutOption),
                 result.GetValue(concurrencyOption),
+                result.GetValue(exportOption),
                 context.Clock),
             cancellationToken));
 
@@ -182,23 +193,20 @@ internal static class DeliverBatchCommand
     private static async Task<int> RunAsync(
         SyntheticMailContext context,
         BatchArguments arguments,
-        CancellationToken cancellationToken)
-    {
-        // The account is read before anything is generated, so a run that cannot possibly deliver says so immediately
-        // rather than after producing a corpus. A dry run is the one case that needs no credential at all.
-        var account = arguments.DryRun ? null : context.ReadAccount(arguments.ConfigurationPath);
-
-        return arguments.Conversation
-            ? await RunConversationsAsync(context, arguments, account, cancellationToken)
-            : await RunFlatBatchAsync(context, arguments, account, cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        arguments.Conversation
+            ? await RunConversationsAsync(context, arguments, cancellationToken)
+            : await RunFlatBatchAsync(context, arguments, cancellationToken);
 
     private static async Task<int> RunFlatBatchAsync(
         SyntheticMailContext context,
         BatchArguments arguments,
-        SendingAccount? account,
         CancellationToken cancellationToken)
     {
+        // The account is read before anything is generated, so a run that cannot possibly deliver says so immediately
+        // rather than after producing a corpus. A dry run is the one case here that needs no credential at all.
+        var account = arguments.Submits ? context.ReadAccount(arguments.ConfigurationPath) : null;
+
         var corpus = arguments.AiContent
             ? await GenerateAiCorpusAsync(context, arguments, cancellationToken)
             : SyntheticEmailGenerator.Generate(arguments.ToPlan());
@@ -215,23 +223,59 @@ internal static class DeliverBatchCommand
         return await DeliverAsync(context, arguments, account, corpus, cancellationToken);
     }
 
-    /// <summary>Generates and delivers the batch as exchanges, one turn at a time.</summary>
+    /// <summary>Generates the batch as exchanges, and either delivers it, writes it, or lists it.</summary>
     /// <remarks>
-    /// The watched mailbox is read before anything is generated, for the reason the sending account is: an exchange
-    /// that could not read the mailbox back could not build a single reply, and finding that out after a provider has
-    /// written two hundred messages costs a batch. A dry run needs no credential for it either — the mailbox's own
-    /// address is the recipient the invocation already named, which is all the generator needs to author half the
-    /// turns.
+    /// Both accounts are read before anything is generated: an exchange that could not read the mailbox back could not
+    /// build a single reply, and finding that out after a provider has written two hundred messages costs a batch. A
+    /// dry run and an export need no credential for either — the mailbox's own address is the recipient the invocation
+    /// already named, which is all the generator needs to author half the turns.
     /// </remarks>
     private static async Task<int> RunConversationsAsync(
         SyntheticMailContext context,
         BatchArguments arguments,
-        SendingAccount? account,
         CancellationToken cancellationToken)
     {
-        var watchedMailbox = arguments.DryRun ? null : ReadWatchedMailbox(context, arguments);
+        (SendingAccount Account, WatchedMailboxAccount Mailbox)? accounts = arguments.Submits
+            ? ExchangeDelivery.ReadAccounts(context, arguments.ConfigurationPath, arguments.Recipient)
+            : null;
+
+        if (arguments.ExportPath is { } path)
+        {
+            return await ExportAsync(context, arguments, path, cancellationToken);
+        }
+
+        var conversations = await GenerateConversationsAsync(context, arguments, cancellationToken);
+
+        ReportPlan(context, arguments);
+
+        if (accounts is not { } delivering)
+        {
+            ListConversations(context, conversations);
+
+            return SyntheticMailExitCode.Success;
+        }
+
+        var report = await ExchangeDelivery.DeliverAsync(
+            context,
+            delivering.Account,
+            delivering.Mailbox,
+            arguments.Recipient,
+            [.. conversations.Select(DeliverableTurn.From)],
+            arguments.Interval,
+            arguments.DeliveryTimeout,
+            cancellationToken);
+
+        return ExchangeDelivery.Report(context.Console, arguments.Recipient, report);
+    }
+
+    private static async Task<IReadOnlyList<SyntheticConversation>> GenerateConversationsAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        CancellationToken cancellationToken)
+    {
         var mailboxParticipant = ParticipantOf(arguments.Recipient);
-        var conversations = arguments.AiContent
+
+        return arguments.AiContent
             ? await SyntheticEmailGenerator.GenerateConversationsAsync(
                 arguments.ToPlan(),
                 mailboxParticipant,
@@ -239,33 +283,70 @@ internal static class DeliverBatchCommand
                 arguments.Concurrency,
                 cancellationToken)
             : SyntheticEmailGenerator.GenerateConversations(arguments.ToPlan(), mailboxParticipant);
-
-        ReportPlan(context, arguments);
-
-        if (account is null || watchedMailbox is null)
-        {
-            ListConversations(context, conversations);
-
-            return SyntheticMailExitCode.Success;
-        }
-
-        return await DeliverConversationsAsync(context, arguments, account, watchedMailbox, conversations, cancellationToken);
     }
 
-    /// <summary>Reads the watched mailbox, and refuses one that is not the address the exchange is being delivered to.</summary>
+    /// <summary>Reserves the corpus file, generates the batch into it, and leaves nothing behind if it never finishes.</summary>
     /// <remarks>
-    /// An exchange delivers to a mailbox, reads that mailbox back, and appends to it, so the three have to be one
-    /// address. Two would fill one mailbox with half a thread and leave the other holding replies to messages it never
-    /// received, which is worse than not running at all and is invisible until somebody opens the client.
+    /// The file is opened before anything is generated, on the same terms as the accounts are read: a path already
+    /// taken, misspelled, or not writable would otherwise be found after a provider has written a hundred messages,
+    /// which is a paid batch lost to a typo. What that reservation must not do is outlive a run that failed — a
+    /// half-second's generation failure would leave an empty file, and the identical command retried would then be
+    /// refused for a corpus that does not exist. So the reservation is discarded unless the archive was written.
     /// </remarks>
-    private static WatchedMailboxAccount ReadWatchedMailbox(SyntheticMailContext context, BatchArguments arguments)
+    private static async Task<int> ExportAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        string path,
+        CancellationToken cancellationToken)
     {
-        var watchedMailbox = context.ReadWatchedMailbox(arguments.ConfigurationPath);
+        // Reserved outside the block that discards, because the refusal this most often raises is that the path
+        // already holds a corpus — and discarding then would delete the very file `CorpusFile.Create` refused to
+        // write over, which is the loss the refusal exists to prevent. What may be discarded is this run's own
+        // reservation and nothing else.
+        var destination = context.CreateCorpus(path);
+        var written = false;
 
-        return string.Equals(watchedMailbox.Address.Address, arguments.Recipient.Address, StringComparison.OrdinalIgnoreCase)
-            ? watchedMailbox
-            : throw new SyntheticMailFailure(
-                $"'{arguments.Recipient.Address}' is not the mailbox configured as 'mailbox.address', which is '{watchedMailbox.Address.Address}'. An exchange delivers to a mailbox, reads it back, and files in it, so those are one address.");
+        try
+        {
+            using (destination)
+            {
+                var conversations = await GenerateConversationsAsync(context, arguments, cancellationToken);
+
+                ReportPlan(context, arguments);
+                ExportConversations(context, arguments, destination, path, conversations);
+
+                written = true;
+            }
+        }
+        finally
+        {
+            if (!written)
+            {
+                context.DiscardCorpus(path);
+            }
+        }
+
+        return SyntheticMailExitCode.Success;
+    }
+
+    /// <summary>Writes the generated exchanges as a corpus, which is what makes generation something paid for once.</summary>
+    /// <remarks>
+    /// The invocation recorded beside the messages is the repeat line the run already prints, so a second corpus is
+    /// generated by copying that line and adding an export of its own — the seed reproduces the envelope, and in AI
+    /// content mode a provider writes the words afresh.
+    /// </remarks>
+    private static void ExportConversations(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        Stream destination,
+        string path,
+        IReadOnlyList<SyntheticConversation> conversations)
+    {
+        CorpusArchive.Write(destination, arguments.RepeatCommandLine, conversations, arguments.Recipient);
+
+        context.Console.WriteError(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Exported {conversations.Sum(conversation => conversation.Messages.Count)} messages in {conversations.Count} exchanges to '{path}'. Replay it with: replay {path} <recipient>"));
     }
 
     /// <summary>Reads the invented participant the watched mailbox writes as.</summary>
@@ -273,35 +354,6 @@ internal static class DeliverBatchCommand
     private static SyntheticParticipant ParticipantOf(MailboxAddress address) => new(
         string.IsNullOrWhiteSpace(address.Name) ? address.Address : address.Name,
         address.Address);
-
-    private static async Task<int> DeliverConversationsAsync(
-        SyntheticMailContext context,
-        BatchArguments arguments,
-        SendingAccount account,
-        WatchedMailboxAccount watchedMailbox,
-        IReadOnlyList<SyntheticConversation> conversations,
-        CancellationToken cancellationToken)
-    {
-        context.Console.WriteError(string.Create(
-            CultureInfo.InvariantCulture,
-            $"Submitting as {account.Address.Address} to {account.Host}:{account.Port} over {account.Security}, and reading {watchedMailbox.Address.Address} at {watchedMailbox.Host}:{watchedMailbox.Port} over {watchedMailbox.Security}."));
-
-        await using var transport = context.OpenTransport(account);
-        await using var mailbox = context.OpenWatchedMailbox(watchedMailbox);
-
-        await transport.OpenAsync(cancellationToken);
-        await mailbox.OpenAsync(cancellationToken);
-
-        var report = await new SyntheticConversationDelivery(transport, mailbox, context.Console, context.Clock).DeliverAsync(
-            conversations,
-            account,
-            arguments.Recipient,
-            arguments.Interval,
-            arguments.DeliveryTimeout,
-            cancellationToken);
-
-        return ReportDelivery(context, arguments, report);
-    }
 
     private static async Task<IReadOnlyList<SyntheticEmail>> GenerateAiCorpusAsync(
         SyntheticMailContext context,
@@ -351,7 +403,7 @@ internal static class DeliverBatchCommand
             arguments.Interval,
             cancellationToken);
 
-        return ReportDelivery(context, arguments, report);
+        return ExchangeDelivery.Report(context.Console, arguments.Recipient, report);
     }
 
     private static void ReportPlan(SyntheticMailContext context, BatchArguments arguments)
@@ -406,27 +458,5 @@ internal static class DeliverBatchCommand
                     SyntheticConversation.SideOf(turn)));
             }
         }
-    }
-
-    private static int ReportDelivery(
-        SyntheticMailContext context,
-        BatchArguments arguments,
-        DeliveryReport report)
-    {
-        context.Console.WriteError(string.Create(
-            CultureInfo.InvariantCulture,
-            $"Delivered {report.Delivered} of {report.Attempted} to {arguments.Recipient.Address}."));
-
-        if (report.Failures.Count == 0)
-        {
-            return SyntheticMailExitCode.Success;
-        }
-
-        foreach (var failure in report.Failures)
-        {
-            context.Console.WriteError($"  refused <{failure.MessageId}> \"{failure.Subject}\": {failure.Reason}");
-        }
-
-        return SyntheticMailExitCode.Failure;
     }
 }

@@ -76,11 +76,21 @@ internal static class SendingAccountFile
     /// <returns>The account, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the file is missing, unreadable, or incomplete, with a message naming what to write.</exception>
-    internal static SendingAccount Read(string path)
+    internal static SendingAccount Read(string path) => Read(path, ConfigurationSource.UserSecretsPath());
+
+    /// <summary>Reads the sending account, from the named file or from the named store.</summary>
+    /// <param name="path">The file to read.</param>
+    /// <param name="storePath">Where the user-secrets store the run falls back to is.</param>
+    /// <returns>What the file or the store says, with every value checked.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="SyntheticMailFailure">Thrown when neither exists, or what does is unreadable or incomplete, with a message naming what to write.</exception>
+    /// <remarks>The store's path is an argument for the reason <see cref="ConfigurationSource.Open" /> gives.</remarks>
+    internal static SendingAccount Read(string path, string storePath)
     {
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(storePath);
 
-        var configured = ConfigurationSource.Open(path)
+        var configured = ConfigurationSource.Open(path, storePath)
             ?? throw new SyntheticMailFailure(
                 $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\" }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and use a throwaway account: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
 
@@ -95,7 +105,7 @@ internal static class SendingAccountFile
     /// <returns>The account, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the contents are not a complete sending account.</exception>
-    /// <remarks>Separate from <see cref="Read" /> so every rule about what a credential file must say is exercised without a test writing one.</remarks>
+    /// <remarks>Separate from <see cref="Read(string, string)" /> so every rule about what a credential file must say is exercised without a test writing one.</remarks>
     internal static SendingAccount ReadFrom(Stream contents, string origin)
     {
         ArgumentNullException.ThrowIfNull(contents);
@@ -126,11 +136,21 @@ internal static class SendingAccountFile
     /// <returns>The mailbox, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the file is missing, unreadable, or carries no complete <c>mailbox</c> block, with a message naming what to write.</exception>
-    internal static WatchedMailboxAccount ReadWatchedMailbox(string path)
+    internal static WatchedMailboxAccount ReadWatchedMailbox(string path) => ReadWatchedMailbox(path, ConfigurationSource.UserSecretsPath());
+
+    /// <summary>Reads the watched mailbox, from the named file or from the named store.</summary>
+    /// <param name="path">The file to read.</param>
+    /// <param name="storePath">Where the user-secrets store the run falls back to is.</param>
+    /// <returns>What the file or the store says, with every value checked.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="SyntheticMailFailure">Thrown when neither exists, or what does is unreadable or incomplete, with a message naming what to write.</exception>
+    /// <remarks>The store's path is an argument for the reason <see cref="ConfigurationSource.Open" /> gives.</remarks>
+    internal static WatchedMailboxAccount ReadWatchedMailbox(string path, string storePath)
     {
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(storePath);
 
-        var configured = ConfigurationSource.Open(path)
+        var configured = ConfigurationSource.Open(path, storePath)
             ?? throw new SyntheticMailFailure(
                 $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\", \"mailbox\": {{ \"host\": \"…\", \"address\": \"…\", \"password\": \"…\" }} }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and use throwaway accounts for both: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
 
@@ -145,7 +165,7 @@ internal static class SendingAccountFile
     /// <returns>The mailbox, with every value checked.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the contents carry no complete <c>mailbox</c> block.</exception>
-    /// <remarks>Separate from <see cref="ReadWatchedMailbox" /> for the reason <see cref="ReadFrom" /> is separate from <see cref="Read" />.</remarks>
+    /// <remarks>Separate from <see cref="ReadWatchedMailbox(string, string)" /> for the reason <see cref="ReadFrom" /> is separate from <see cref="Read(string, string)" />.</remarks>
     internal static WatchedMailboxAccount ReadWatchedMailboxFrom(Stream contents, string origin)
     {
         ArgumentNullException.ThrowIfNull(contents);

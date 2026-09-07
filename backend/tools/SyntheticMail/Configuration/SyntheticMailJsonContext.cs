@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MailFathom.SyntheticMail.Corpus;
 using MailFathom.SyntheticMail.Generation.AiContent;
 
 namespace MailFathom.SyntheticMail.Configuration;
@@ -26,4 +27,5 @@ namespace MailFathom.SyntheticMail.Configuration;
 [JsonSerializable(typeof(WatchedMailboxDocument))]
 [JsonSerializable(typeof(AiProviderConfigurationDocument))]
 [JsonSerializable(typeof(AiEmailContent))]
+[JsonSerializable(typeof(CorpusManifest))]
 internal sealed partial class SyntheticMailJsonContext : JsonSerializerContext;

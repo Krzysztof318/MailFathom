@@ -28,6 +28,7 @@ namespace MailFathom.SyntheticMail.Commands;
 /// <param name="Conversation">Whether the batch is generated and delivered as exchanges between two mailboxes rather than as a flat corpus.</param>
 /// <param name="DeliveryTimeout">How long an exchange waits for a submitted message to appear in the watched mailbox.</param>
 /// <param name="Concurrency">How many provider answers the generation waits for at once, and one when the run generates without a provider.</param>
+/// <param name="ExportPath">Where the generated corpus is written instead of being delivered, or <see langword="null" /> when the run delivers it.</param>
 /// <remarks>
 /// Defaults are resolved here rather than left to the point of use, which is what makes
 /// <see cref="RepeatCommandLine" /> possible: a run that chose its own seed and its own end date can print the exact
@@ -50,7 +51,8 @@ internal sealed record BatchArguments(
     string? AiConfigurationPath,
     bool Conversation,
     TimeSpan DeliveryTimeout,
-    int Concurrency)
+    int Concurrency,
+    string? ExportPath)
 {
     /// <summary>The fewest messages an exchange can be generated from.</summary>
     /// <remarks>Two, because a thread of one message has nothing in it that a flat corpus does not already produce.</remarks>
@@ -111,6 +113,10 @@ internal sealed record BatchArguments(
     /// <summary>The format a date is written and read in, which is the only one accepted.</summary>
     internal const string DateFormat = "yyyy-MM-dd";
 
+    /// <summary>Whether this run reaches a mail server at all.</summary>
+    /// <remarks>A dry run lists the corpus and an export writes it; neither needs a credential, and reading one they would not use is how a run refuses over a file it was never going to open.</remarks>
+    internal bool Submits => !this.DryRun && this.ExportPath is null;
+
     /// <summary>The newest instant a generated message is dated.</summary>
     /// <remarks>The end of the named day rather than its start, so the last day of the range holds mail like every other one.</remarks>
     internal DateTimeOffset LatestSentAt =>
@@ -164,6 +170,7 @@ internal sealed record BatchArguments(
     /// <param name="conversation">Whether to generate and deliver exchanges rather than a flat corpus.</param>
     /// <param name="deliveryTimeoutSeconds">How long to wait for a submitted message to appear in the watched mailbox.</param>
     /// <param name="concurrency">How many provider answers the generation waits for at once, or <see langword="null" /> for the default.</param>
+    /// <param name="exportPath">Where to write the generated corpus instead of delivering it, or <see langword="null" /> to deliver it.</param>
     /// <param name="timeProvider">What today is read from.</param>
     /// <returns>The checked invocation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipient" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
@@ -190,6 +197,7 @@ internal sealed record BatchArguments(
         bool conversation,
         int? deliveryTimeoutSeconds,
         int? concurrency,
+        string? exportPath,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(recipient);
@@ -199,6 +207,13 @@ internal sealed record BatchArguments(
         var spanDays = Bounded(days, 1, MaximumSpanDays, "--days");
         var messageCount = Bounded(count, 1, MaximumCount, "--count");
         var deliveryTimeout = ParseDeliveryTimeout(conversation, deliveryTimeoutSeconds);
+        var recipientAddress = ParseRecipient(recipient);
+        var export = string.IsNullOrWhiteSpace(exportPath) ? null : exportPath;
+
+        if (export is not null)
+        {
+            RefuseAnExportThatCannotBeCommitted(recipientAddress, conversation, dryRun, sensitivePercentage);
+        }
 
         if (conversation && messageCount < FewestConversationMessages)
         {
@@ -217,7 +232,7 @@ internal sealed record BatchArguments(
         var (aiContent, languages, topics, resolvedAiConfigurationPath) = ParseAiMode(ai, language, topic, aiConfigurationPath);
 
         return new BatchArguments(
-            ParseRecipient(recipient),
+            recipientAddress,
             // Random.Shared rather than a seed of its own, because this draw decides nothing a run has to reproduce —
             // it is the value the run then reports so that the *next* run can.
             seed ?? Random.Shared.Next(),
@@ -235,7 +250,60 @@ internal sealed record BatchArguments(
             resolvedAiConfigurationPath,
             conversation,
             deliveryTimeout,
-            ParseConcurrency(aiContent, concurrency));
+            ParseConcurrency(aiContent, concurrency),
+            export);
+    }
+
+    /// <summary>Refuses an export a corpus could not honestly be committed from.</summary>
+    /// <remarks>
+    /// An exported corpus is a file, and a file is a thing that gets committed, copied, and handed to a pipeline. The
+    /// three refusals here are what a corpus has to be able to say about itself.
+    /// <para>
+    /// It has to be exchanges, because a flat batch's threading is written into headers around identifiers the run
+    /// invented, and a submission server that replaces one leaves every reply in the corpus answering a message no
+    /// mailbox holds — a corpus that reads as an import rather than as correspondence, which is what
+    /// <c>--conversation</c> exists to stop producing.
+    /// </para>
+    /// <para>
+    /// Every address in it has to be fabricated, and the invented participants already are: the one address an
+    /// invocation supplies is the mailbox, so refusing one outside the reserved domain is what keeps somebody's own
+    /// mailbox out of a file that outlives the run.
+    /// </para>
+    /// <para>
+    /// And it carries no fabricated sensitive material, because this repository commits nothing shaped like a
+    /// credential — those values exist in a running process and in the mailbox they were delivered to, and a file is
+    /// neither. A corpus that needs them is generated and delivered rather than exported.
+    /// </para>
+    /// </remarks>
+    private static void RefuseAnExportThatCannotBeCommitted(
+        MailboxAddress recipient,
+        bool conversation,
+        bool dryRun,
+        int sensitivePercentage)
+    {
+        if (!conversation)
+        {
+            throw new SyntheticMailFailure(
+                "'--export' writes a corpus that is replayed into a mailbox later, and only '--conversation' produces threading that survives being delivered by somebody else's server: add '--conversation'.");
+        }
+
+        if (dryRun)
+        {
+            throw new SyntheticMailFailure(
+                "'--export' writes the corpus instead of submitting it, so '--dry-run' decides nothing beside it.");
+        }
+
+        if (sensitivePercentage > 0)
+        {
+            throw new SyntheticMailFailure(
+                "'--export' writes a file, and a file carrying a fabricated credential is one that gets committed: generate an exported corpus with '--sensitive-percentage 0', and deliver the corpus that plants decoys instead of exporting it.");
+        }
+
+        if (!recipient.Address.EndsWith(SyntheticVocabulary.ReservedTopLevelDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SyntheticMailFailure(
+                $"'{recipient.Address}' is not under '{SyntheticVocabulary.ReservedTopLevelDomain}', and an exported corpus outlives the run that wrote it: export against a fabricated mailbox, and replay it into a real one.");
+        }
     }
 
     /// <summary>Builds the plan this invocation describes.</summary>

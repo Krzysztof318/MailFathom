@@ -222,7 +222,7 @@ public sealed class SyntheticConversationDeliveryTests
 
         // Act
         await new SyntheticConversationDelivery(transport, mailbox, console, new FakeTimeProvider(Now)).DeliverAsync(
-            [Conversation(2)],
+            [DeliverableTurn.From(Conversation(2))],
             Account(),
             WatchedMailbox,
             TimeSpan.Zero,
@@ -243,6 +243,38 @@ public sealed class SyntheticConversationDeliveryTests
             ],
             console.Diagnostics);
         Assert.Empty(console.Output);
+    }
+
+    [Fact]
+    public async Task DeliverAsync_AnExchangeTheMailboxItselfOpens_IsRefusedRatherThanAddressedBackToItself()
+    {
+        // Arrange
+        // A corpus is a file this tool did not necessarily write, and a hand-written one can open an exchange with
+        // either side. Everything downstream reads the opening turn as the correspondent's.
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+
+        var opened = new DeliverableTurn(
+            WatchedMailbox,
+            "one@invented.test",
+            "Ferry timetable",
+            () => new MimeMessage { Subject = "Ferry timetable", Body = new TextPart("plain") { Text = "Whatever it says." } });
+
+        // Act
+        var failure = await Assert.ThrowsAsync<SyntheticMailFailure>(
+            () => new SyntheticConversationDelivery(transport, mailbox, new RecordingSyntheticMailConsole(), new FakeTimeProvider(Now)).DeliverAsync(
+                [[opened]],
+                Account(),
+                WatchedMailbox,
+                TimeSpan.Zero,
+                TimeSpan.Zero,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        // Delivered, it would address the mailbox's own reply back to itself: a thread that assembles nowhere and
+        // reports nothing wrong.
+        Assert.Contains(WatchedMailbox.Address, failure.Message, StringComparison.Ordinal);
+        Assert.Empty(transport.Submissions);
     }
 
     [Fact]
@@ -285,7 +317,7 @@ public sealed class SyntheticConversationDeliveryTests
         IReadOnlyList<SyntheticConversation> conversations,
         SendingAccount? account = null) =>
         new SyntheticConversationDelivery(transport, mailbox, new RecordingSyntheticMailConsole(), new FakeTimeProvider(Now)).DeliverAsync(
-            conversations,
+            [.. conversations.Select(DeliverableTurn.From)],
             account ?? Account(),
             WatchedMailbox,
             TimeSpan.Zero,

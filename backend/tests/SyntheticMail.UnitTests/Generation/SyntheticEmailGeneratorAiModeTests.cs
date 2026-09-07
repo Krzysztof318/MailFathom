@@ -331,6 +331,95 @@ public sealed class SyntheticEmailGeneratorAiModeTests
             request => Assert.Equal(request.ParentSubject is null, request.ParentOpening is null));
     }
 
+    [Fact]
+    public async Task GenerateAsync_AMessageCarryingATextFile_AsksTheSourceToWriteThatFileWithinTheSizeTheSeedDrew()
+    {
+        // Arrange, Act
+        var source = await Generate(["en"], [SyntheticMailTopic.Business], count: 40);
+
+        // Assert
+        // The name and the bound are the seed's, so which messages enclose a file and how large each one is stay
+        // reproducible even though the words in it are not.
+        var asked = source.Requests.Where(request => request.AttachmentFileName is not null).ToArray();
+
+        Assert.NotEmpty(asked);
+        Assert.All(asked, request => Assert.True(
+            request.AttachmentFileName!.EndsWith(".csv", StringComparison.Ordinal)
+            || request.AttachmentFileName.EndsWith(".txt", StringComparison.Ordinal),
+            request.AttachmentFileName));
+        Assert.All(asked, request => Assert.InRange(request.AttachmentCharacterBound, 1, 64 * 1024));
+        Assert.All(
+            source.Requests.Where(request => request.AttachmentFileName is null),
+            request => Assert.Equal(0, request.AttachmentCharacterBound));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AnOpaqueAttachment_IsNeverAskedFor()
+    {
+        // Arrange, Act
+        var source = await Generate(["en"], [SyntheticMailTopic.Business], count: 40);
+
+        // Assert
+        // An opaque part is opaque on purpose, and a model asked to write one would answer with text a reader then
+        // finds inside something claiming not to be readable.
+        Assert.DoesNotContain(".bin", string.Join(",", source.Requests.Select(request => request.AttachmentFileName)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AnOpaqueAttachment_KeepsItsDrawnBytesWhateverTheSourceAnswered()
+    {
+        // Arrange
+        // This source answers every request with a file, which the real one never does for an opaque part. That is
+        // the point: the guarantee is enforced where the two are merged rather than only by the caller that asks.
+        var source = new ScriptedAiEmailContentSource(Answer with { Attachment = "marker,depth\n7,4.2" });
+
+        // Act
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(
+            Plan(["en"], [SyntheticMailTopic.Business], count: 40),
+            source,
+            1,
+            CancellationToken.None);
+
+        // Assert
+        // A binary part exercises the extractor's refusal, so text written into one would be delivered as UTF-8 and
+        // stop testing the thing it exists for.
+        var opaque = corpus
+            .Select(message => message.Attachment)
+            .OfType<SyntheticEmailAttachment>()
+            .Where(attachment => !attachment.IsText)
+            .ToArray();
+
+        Assert.NotEmpty(opaque);
+        Assert.All(opaque, attachment => Assert.Null(attachment.Text));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AnAnsweredFile_BecomesWhatTheMessageEncloses()
+    {
+        // Arrange
+        var source = new ScriptedAiEmailContentSource(Answer with { Attachment = "marker,depth\n7,4.2" });
+
+        // Act
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(
+            Plan(["en"], [SyntheticMailTopic.Business], count: 40),
+            source,
+            1,
+            CancellationToken.None);
+
+        // Assert
+        // The length moves with the file, because a listing reporting the size the seed drew while the part holds
+        // what the model wrote is a corpus nobody can compare.
+        var carried = corpus
+            .Select(message => message.Attachment)
+            .OfType<SyntheticEmailAttachment>()
+            .Where(attachment => attachment.IsText)
+            .ToArray();
+
+        Assert.NotEmpty(carried);
+        Assert.All(carried, attachment => Assert.Equal("marker,depth\n7,4.2", attachment.Text));
+        Assert.All(carried, attachment => Assert.Equal(18, attachment.Length));
+    }
+
     private static SyntheticCorpusPlan Plan(
         IReadOnlyList<string> languages,
         IReadOnlyList<SyntheticMailTopic> topics,

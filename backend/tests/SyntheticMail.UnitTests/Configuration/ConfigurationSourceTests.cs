@@ -79,6 +79,23 @@ public sealed class ConfigurationSourceTests
     }
 
     [Fact]
+    public void Nest_AStoreSomebodyCleared_ReadsAsNoStoreAtAll()
+    {
+        // Arrange
+        // `dotnet user-secrets clear` empties the store rather than removing it, so this is the state a developer who
+        // has cleared theirs is actually in.
+        using var emptied = new MemoryStream(Encoding.UTF8.GetBytes("{}"));
+
+        // Act
+        var nested = ConfigurationSource.Nest(emptied);
+
+        // Assert
+        // Nothing rather than an empty document, so the refusal a run reports is the one naming the file to write and
+        // its shape, rather than a key missing from something the developer just emptied.
+        Assert.Null(nested);
+    }
+
+    [Fact]
     public void Nest_ContentsThatAreNotAnObject_AreRefused()
     {
         // Arrange
@@ -94,7 +111,8 @@ public sealed class ConfigurationSourceTests
     private static TConfigured Nested<TConfigured>(string secrets, Func<Stream, string, TConfigured> read)
     {
         using var flattened = new MemoryStream(Encoding.UTF8.GetBytes(secrets));
-        using var nested = ConfigurationSource.Nest(flattened);
+        using var nested = ConfigurationSource.Nest(flattened)
+            ?? throw new InvalidOperationException("The test's store holds no keys, which reads as no store at all.");
 
         return read(nested, Origin);
     }

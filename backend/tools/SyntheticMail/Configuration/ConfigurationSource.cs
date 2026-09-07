@@ -51,34 +51,52 @@ internal static class ConfigurationSource
 
     /// <summary>Opens what the run reads, preferring the named file and falling back to the store.</summary>
     /// <param name="path">The local file the command was pointed at.</param>
-    /// <returns>The contents and what a failure about them names, or <see langword="null" /> when neither exists.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
+    /// <param name="storePath">Where the user-secrets store is, which a run resolves with <see cref="UserSecretsPath" />.</param>
+    /// <returns>The contents and what a failure about them names, or <see langword="null" /> when neither exists — a store that exists and holds no keys being one of the two, for the reason <see cref="Nest" /> gives.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when what exists could not be opened or is not a JSON object.</exception>
     /// <remarks>
     /// The file wins, because it is the one a developer pointed the command at; the store is what a checkout that has
     /// never written one falls back to. Nothing is merged across the two: a half-configured run refuses with a message
     /// naming one origin rather than reporting keys from two.
+    /// <para>
+    /// The store's path is passed in rather than resolved here, because it is the one thing about a run that comes
+    /// from the machine rather than from the invocation: a developer who has configured this project's store — which
+    /// is what the failure message tells them to do — would otherwise make every test of the unconfigured case pass
+    /// on a build server and fail on their own machine.
+    /// </para>
     /// </remarks>
-    internal static (Stream Contents, string Origin)? Open(string path)
+    internal static (Stream Contents, string Origin)? Open(string path, string storePath)
     {
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(storePath);
 
         if (File.Exists(path))
         {
             return (OpenFile(path), path);
         }
 
-        var store = UserSecretsPath();
-
-        return File.Exists(store) ? (NestFile(store), UserSecretsOrigin) : null;
+        return File.Exists(storePath) && NestFile(storePath) is { } store ? (store, UserSecretsOrigin) : null;
     }
 
-    /// <summary>Turns the flat keys the user-secrets tooling writes into the nested document the readers deserialize.</summary>
+    /// <summary>Turns the flat keys the user-secrets tooling writes into the nested document the readers deserialize, and reports nothing where the store holds nothing.</summary>
     /// <param name="flattened">The store's contents.</param>
-    /// <returns>The same values with every colon-separated key expanded into a block.</returns>
+    /// <returns>The same values with every colon-separated key expanded into a block, or <see langword="null" /> when it holds no keys.</returns>
+    /// <remarks>
+    /// An empty store reads as no store, because <c>dotnet user-secrets clear</c> empties the file rather than
+    /// removing it: a developer who has cleared theirs would otherwise be answered with a key missing from something
+    /// they just emptied, when what they need is the message naming the file to write and its shape.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="flattened" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the contents are not a JSON object.</exception>
-    internal static Stream Nest(Stream flattened)
+    internal static MemoryStream? Nest(Stream flattened)
+    {
+        var nested = NestDocument(flattened);
+
+        return nested.Count == 0 ? null : AsStream(nested);
+    }
+
+    private static JsonObject NestDocument(Stream flattened)
     {
         ArgumentNullException.ThrowIfNull(flattened);
 
@@ -125,10 +143,13 @@ internal static class ConfigurationSource
             block[segments[^1]] = value?.DeepClone();
         }
 
-        return new MemoryStream(Encoding.UTF8.GetBytes(nested.ToJsonString()));
+        return nested;
     }
 
-    private static Stream NestFile(string path)
+    private static MemoryStream AsStream(JsonObject document) =>
+        new(Encoding.UTF8.GetBytes(document.ToJsonString()));
+
+    private static MemoryStream? NestFile(string path)
     {
         using var contents = OpenFile(path);
 
