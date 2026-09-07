@@ -95,6 +95,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<EmbeddingSpendPeriodEntity> EmbeddingSpendPeriods => this.Set<EmbeddingSpendPeriodEntity>();
 
+    internal DbSet<AttachmentDerivationSpendPeriodEntity> AttachmentDerivationSpendPeriods =>
+        this.Set<AttachmentDerivationSpendPeriodEntity>();
+
     internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
 
     internal DbSet<EmailSpamClassificationEntity> EmailSpamClassifications => this.Set<EmailSpamClassificationEntity>();
@@ -209,6 +212,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EmbeddingProfileConfiguration());
         modelBuilder.ApplyConfiguration(new EmailEmbeddingConfiguration());
         modelBuilder.ApplyConfiguration(new EmbeddingSpendPeriodConfiguration());
+        modelBuilder.ApplyConfiguration(new AttachmentDerivationSpendPeriodConfiguration());
         modelBuilder.ApplyConfiguration(new EmailContentRepairRequestConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSpamClassificationConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSpamClassificationSignalConfiguration());

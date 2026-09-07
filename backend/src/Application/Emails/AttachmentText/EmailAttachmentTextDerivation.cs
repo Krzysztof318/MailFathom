@@ -19,10 +19,14 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// <param name="Attachments">What each attachment yielded, in walk order, which is empty for a message that yielded nothing.</param>
 /// <param name="RedactedUnder">What the owner's mail was redacted under, or <see langword="null" /> where nothing scans it.</param>
 /// <param name="AwaitsRepair">Whether the stored copy was missing or unparseable, so a repair request was recorded for it.</param>
+/// <param name="ReadOctetCount">The octets this reading was handed, which is what the deployment's extraction ceiling is charged.</param>
+/// <param name="ProviderDescriptionCount">The chat calls this reading made, which is what the deployment's description ceiling is charged.</param>
 public sealed record EmailAttachmentTextDerivation(
     IReadOnlyList<DerivedAttachmentText> Attachments,
     SensitiveContentDerivationStamp? RedactedUnder,
-    bool AwaitsRepair = false)
+    bool AwaitsRepair = false,
+    long ReadOctetCount = 0,
+    long ProviderDescriptionCount = 0)
 {
     /// <summary>The outcomes that say a later reading may succeed, which is what keeps a message outstanding.</summary>
     private static readonly string[] AnswerableLater =

@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
@@ -385,7 +386,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // rate. The per-message bound is reachable rather than shipped, for the reason its constant states.
         builder.Services.AddSingleton(EmbeddingInputBound.Create(EmbeddingInputCharacterCeiling));
         builder.Services.AddSingleton(EmbeddingSpendBudget.Unbounded);
-        builder.Services.AddSingleton(EmbeddingRequestPacer.Create(
+        builder.Services.AddSingleton(ProviderRequestPacer.Create(
             maxRequestsPerMinute: 0,
             TimeProvider.System));
         // The bounds a composition root reads from the EmbeddingBackfill section. Small here on purpose: a test that

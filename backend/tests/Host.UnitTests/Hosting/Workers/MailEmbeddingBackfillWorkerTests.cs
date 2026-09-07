@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using MailFathom.Application.Access;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -524,7 +525,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddSingleton(spendBudget ?? EmbeddingSpendBudget.Unbounded);
         services.AddSingleton(
             CreateLedgerReporting(consumedInputCharacterCount, deploymentConsumedInputCharacterCount));
-        services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, world.TimeProvider));
+        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, world.TimeProvider));
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

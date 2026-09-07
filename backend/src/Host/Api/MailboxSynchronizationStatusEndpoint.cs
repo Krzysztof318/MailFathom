@@ -96,13 +96,15 @@ internal sealed record MailSynchronizationStatusResponse(
 /// <param name="ConsecutiveFailureCount">How many of its runs failed in a row; zero once one succeeds.</param>
 /// <param name="LastRun">How its most recent finished run ended, or <see langword="null" /> when none has finished in this process.</param>
 /// <param name="Folders">One entry per folder the account maps, ordered ordinally by alias.</param>
+/// <param name="AttachmentText">How far reading this account's attachments and images has come, and why the ones that yielded nothing did not.</param>
 internal sealed record MailAccountSynchronizationResponse(
     string Account,
     string Phase,
     DateTimeOffset? NextRunDueAt,
     int ConsecutiveFailureCount,
     MailAccountRunResponse? LastRun,
-    IReadOnlyList<MailFolderSynchronizationResponse> Folders)
+    IReadOnlyList<MailFolderSynchronizationResponse> Folders,
+    AttachmentDerivationCoverageResponse AttachmentText)
 {
     /// <summary>Describes one account on the wire.</summary>
     /// <param name="account">The account's status.</param>
@@ -114,7 +116,8 @@ internal sealed record MailAccountSynchronizationResponse(
             account.Run.NextRunDueAt,
             account.Run.ConsecutiveFailureCount,
             account.Run.LastRun is { } lastRun ? MailAccountRunResponse.For(lastRun) : null,
-            [.. account.Folders.Select(MailFolderSynchronizationResponse.For)]);
+            [.. account.Folders.Select(MailFolderSynchronizationResponse.For)],
+            AttachmentDerivationCoverageResponse.For(account.AttachmentText));
 }
 
 /// <summary>What one finished run of an account produced.</summary>

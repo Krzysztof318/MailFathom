@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -32,10 +33,17 @@ public sealed record MailSynchronizationStatus(
 /// <param name="AccountId">The account, as configuration names it.</param>
 /// <param name="Run">What the account's supervisor is doing and how its last run ended.</param>
 /// <param name="Folders">One entry per folder the account maps, ordered ordinally by alias.</param>
+/// <param name="AttachmentText">
+/// How much of this account's attachment and image content has been read, how much waits, and what was skipped. It sits
+/// beside the folder progress because it is the same question asked of the stage behind the cut: a folder can be fully
+/// fetched while every contract in it is still unread, and an operator watching results that do not appear needs to see
+/// which of the two is behind.
+/// </param>
 public sealed record MailAccountSynchronizationStatus(
     MailAccountId AccountId,
     MailAccountRunState Run,
-    IReadOnlyList<MailFolderSynchronizationStatus> Folders);
+    IReadOnlyList<MailFolderSynchronizationStatus> Folders,
+    AttachmentDerivationCoverage AttachmentText);
 
 /// <summary>Where one folder stands: what its last turn did, and how far its durable progress has come.</summary>
 /// <remarks>

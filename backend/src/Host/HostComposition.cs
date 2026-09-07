@@ -768,11 +768,23 @@ internal static class HostComposition
         // walks a mailbox rather than one extraction, but they are as much a statement about this installation.
         builder.Services.AddSingleton(provider =>
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.AttachmentText.ToAttachmentTextBounds());
+        // The aggregate ceilings on reading attachments, beside the embedding budget rather than inside it, because
+        // what a parse and a chat call cost are two quantities the characters an embedding sends do not predict. A
+        // singleton for the same reason the budget above is: it is a statement about this installation.
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.ToAttachmentDerivationBudget());
         // A singleton because the reservation it hands out is what makes one process's requests add up to the declared
         // rate; one per scope would let every worker send at the full rate on its own.
-        builder.Services.AddSingleton(provider => EmbeddingRequestPacer.Create(
+        builder.Services.AddSingleton(provider => ProviderRequestPacer.Create(
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.MaxRequestsPerMinute,
             provider.GetRequiredService<TimeProvider>()));
+        // The second pacer, keyed because it is the second: describing pictures is its own workload against its own
+        // chat quota, and one pacer shared with embedding would let either workload's burst spend the other's slots.
+        builder.Services.AddKeyedSingleton(
+            ServiceCollectionExtensions.ImageDescriptionPacerKey,
+            (provider, _) => ProviderRequestPacer.Create(
+                provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.ImageDescription.MaxRequestsPerMinute,
+                provider.GetRequiredService<TimeProvider>()));
 
         // Read the same way and for the same reason as the embedding declaration: whether this deployment generates text
         // decides which services exist, and that decision is taken before the container that would resolve an options

@@ -234,8 +234,75 @@ gap rather than described as a guard.
 An attachment an antivirus pass has judged infected is not excluded, because no such pass exists yet. When one lands,
 this port is where it gates: an infected attachment is skipped before a parser is offered its bytes.
 
+## What reading a mailbox costs, and what bounds it
+
+Reading attachments is the second thing MailFathom does that costs money per unit of mail, and it costs it in two units
+that do not convert. **Extraction** opens octets out of stored attachments, which costs the deployment's own processor
+and memory. **Description** sends a picture to a chat provider, which costs one call per picture at whatever that
+provider charges. Chunking and the lexical index cost neither: they reach no provider, and what they cost is disk.
+
+Each of the two is bounded independently, over the same fixed window `Embeddings:SpendPeriod` names and in its own
+unit, and each carries a per-owner share beside the deployment's own — the shape
+[`Embeddings:MaxInputCharactersPerPeriod`](../operations/configuration-ai.md#embeddings) already has. All four default
+to `0`, which declares no ceiling and still counts, so an operator sees the figures before choosing a number.
+
+| Step | Unit | Deployment | Per owner |
+| --- | --- | --- | --- |
+| Extraction | octets opened out of attachments | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` |
+| Description | calls a chat provider answered | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerOwner` |
+
+**A picture refused before the call is charged nothing.** A format outside the allow-list, a grid past `MaxPixels`, a
+file past `Chat:MaxRequestImageOctets`, and a header that does not hold the format it claims are all decided here, so
+no request leaves and no unit is spent. A provider that timed out, was unavailable, or refused *is* charged one call,
+because the request was made and a provider bills for having been asked.
+
+**Embedding attachment text has no ceiling of its own**, and that is a decision rather than an omission:
+`Embeddings:MaxInputCharactersPerPeriod` counts an attachment's characters exactly as it counts a message's own, so a
+second ceiling on the same send would be two keys answering for one behaviour. [ADR
+0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+records it. **Concurrency has no ceiling of its own here either**: how many account runs read at once is
+`Mail:MaxConcurrentAccounts`, and how many provider calls are in flight is
+`Resilience:AiProviderInvocation:ConcurrencyLimit`. What this section adds is a *rate* for the description workload —
+`Embeddings:ImageDescription:MaxRequestsPerMinute`, paced separately from the embedding provider's, because the two are
+different endpoints with different published quotas.
+
+**Reaching a ceiling waits rather than fails.** Both are read before a message is opened, so the account run ends where
+it is with that message untouched and unstamped. The surrounding synchronization run succeeds, nothing is dropped — a
+message with no attachment reading is exactly what the next pass selects on — and the first run after the period rolls
+over reaches it. A per-owner ceiling stops that owner's mail alone. It is the same degradation an exhausted embedding
+budget produces, which is what makes the two readable together.
+
+The run says which one it met, at information level and naming both halves: the step, which is the key to raise, and
+whether it was the deployment's ceiling or that owner's share of it. The two have different remedies — raising an
+owner's share achieves nothing while the deployment itself has stopped spending — so reporting only that *a* ceiling
+was met would send an operator to the wrong key.
+
+## What a mailbox reports about how far reading has come
+
+`mfctl embedding status` and `mfctl mailbox status` report attachment and image coverage separately from message
+coverage, because the two say different things: a mailbox may be entirely embedded on its message text with every
+document in it still unread.
+
+What each reports is the messages carrying an attachment, how many of those have been read, what reading the remainder
+would open and how many descriptions it could make, what reading has yielded — document extracts, described images, and
+the characters the lexical index grew by — and an aggregate of why the rest yielded nothing, one line per reason.
+The reasons are the deployment's own outcome names, so the reading is exact rather than bucketed: encrypted, malformed
+or unreadable, a format it does not read, past a size bound, timed out, and a description the provider refused, was
+unavailable for, or did not answer. One more is composed rather than stored — an attachment that parsed and carried no
+text, which is what a scan looks like, and which is reported as a skip rather than as an extract so a page of scanned
+paper is never counted as searchable. It is an aggregate over reasons and never a list of attachments, which is what
+makes it safe to serve: it says how much of a mailbox cannot be read without naming one message, one filename, or one
+sender. `mfctl mailbox status` scopes it to one account; `mfctl embedding
+status` reports the deployment, with both periods beside it.
+
+**Activating an embedding profile weighs the same figures.** On an instance already holding mail,
+`mfctl embedding activate` reports what reading the stored attachments would open and how many descriptions it could
+make, beside the passages it would send, and refuses the activation outright when either estimate is past what one
+period admits — so an operator agreeing to one bill is not handed the other afterwards. The refusal names the key to
+raise.
+
 ## Configuration
 
 Every ceiling and the format list live under `Embeddings:AttachmentText`, beside the embedding ceilings rather than
-inside them. [AI configuration](../operations/configuration-ai.md) holds each key, its default, and what happens when it
+inside them, with the description ceilings and the description rate under `Embeddings:ImageDescription`. [AI configuration](../operations/configuration-ai.md) holds each key, its default, and what happens when it
 binds.

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Cryptography;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -548,7 +549,8 @@ public sealed class EmailAttachmentTextDeriverTests
             ScanningSensitiveContentDerivation.Inactive(),
             this.repairRequestStore,
             new AttachmentTextExtractionOptions(),
-            Bounds()));
+            Bounds(),
+            Unpaced()));
         Assert.Throws<ArgumentNullException>(() => new EmailAttachmentTextDeriver(
             this.contentStore,
             this.attachmentReader,
@@ -557,7 +559,8 @@ public sealed class EmailAttachmentTextDeriverTests
             ScanningSensitiveContentDerivation.Inactive(),
             this.repairRequestStore,
             new AttachmentTextExtractionOptions(),
-            null!));
+            null!,
+            Unpaced()));
     }
 
     /// <summary>Stored octets that match the length and the digest recorded beside them, which is the ordinary case.</summary>
@@ -569,6 +572,10 @@ public sealed class EmailAttachmentTextDeriverTests
     }
 
     private static EmailAttachmentTextBounds Bounds() => EmailAttachmentTextBounds.Disabled with { IsEnabled = true };
+
+    /// <summary>A pacer that never waits, so what these tests measure is the walk rather than a rate.</summary>
+    private static ProviderRequestPacer Unpaced() =>
+        ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System);
 
     private static EmailAttachmentTextRunBudget Budget() => new(1024L * 1024);
 
@@ -591,7 +598,8 @@ public sealed class EmailAttachmentTextDeriverTests
         guard ?? ScanningSensitiveContentDerivation.Inactive(),
         this.repairRequestStore,
         extractionOptions ?? new AttachmentTextExtractionOptions(),
-        bounds ?? Bounds());
+        bounds ?? Bounds(),
+        Unpaced());
 
     private void StoreHolds()
     {

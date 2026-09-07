@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -289,7 +290,7 @@ public sealed class EmbeddingGenerationUpkeepTests
                         new InMemoryEmbeddingSpendLedger(),
                         EmbeddingSpendBudget.Unbounded,
                         new FakeTimeProvider()),
-                    EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+                    ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
                     new StubMailOwnership(),
                     SensitiveContentEgressGuards.Inactive()),
                 concurrencyRetryPolicy,

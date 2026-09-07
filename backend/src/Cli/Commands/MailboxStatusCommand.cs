@@ -101,6 +101,9 @@ internal static class MailboxStatusCommand
         details.Add("Phase", account.DescribePhase());
         details.Add("Backoff", account.DescribeBackoff());
         details.Add("Last run", account.LastRun?.Describe() ?? "none finished since this deployment started");
+        details.Add("Attachments", account.AttachmentText?.DescribeProgress() ?? "not reported");
+        details.Add("Attachment yield", account.AttachmentText?.DescribeYield() ?? "not reported");
+        details.Add("Attachment skips", string.Join("; ", account.AttachmentText?.DescribeSkips() ?? ["not reported"]));
 
         var folders = account.Folders ?? [];
 

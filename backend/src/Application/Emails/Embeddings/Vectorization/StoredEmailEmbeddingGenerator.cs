@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -55,7 +56,7 @@ public sealed class StoredEmailEmbeddingGenerator
     private readonly ITextEmbeddingGenerator textEmbeddingGenerator;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly EmbeddingSpendGate spendGate;
-    private readonly EmbeddingRequestPacer requestPacer;
+    private readonly ProviderRequestPacer requestPacer;
     private readonly IMailOwnership ownership;
     private readonly SensitiveContentEgressGuard egressGuard;
 
@@ -73,7 +74,7 @@ public sealed class StoredEmailEmbeddingGenerator
         ITextEmbeddingGenerator textEmbeddingGenerator,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         EmbeddingSpendGate spendGate,
-        EmbeddingRequestPacer requestPacer,
+        ProviderRequestPacer requestPacer,
         IMailOwnership ownership,
         SensitiveContentEgressGuard egressGuard)
     {

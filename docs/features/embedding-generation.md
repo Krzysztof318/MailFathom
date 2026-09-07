@@ -398,6 +398,15 @@ at all, and the three octet and count ceilings beside it bound one attachment, o
 [Attachment text extraction](attachment-text-extraction.md) holds them. What the reading yields is cut into passages of
 the same kind a body is cut into and embedded through the same profile, so those passages are spent against the four
 ceilings above exactly as a body's are — the block below counts the parsing, and the block above counts the sending.
+
+That block carries a period ceiling of its own beside the three, and describing an image carries a second one, because
+neither of the two workloads is counted in characters. `MaxInputOctetsPerPeriod` counts the octets every account run
+together opened out of attachments inside `SpendPeriod`, and `Embeddings:ImageDescription:MaxDescriptionsPerPeriod`
+counts the calls a chat provider answered about a picture inside the same window; each has a per-owner share beside it,
+and each is `0` by default, which declares no ceiling and still counts. Reaching one waits exactly as reaching the
+sending ceiling does — the run ends with the message untouched and the first run after the roll-over reaches it. What
+is deliberately absent is a *third* ceiling on sending an attachment's characters: `MaxInputCharactersPerPeriod` counts
+them already, so a second one would be two keys answering for one behaviour.
 [Message chunks](message-chunks.md#passages-cut-from-an-attachment) describes what is cut.
 
 Reaching the aggregate ceiling pauses embedding until the period rolls over, and nothing is lost by the pause: a

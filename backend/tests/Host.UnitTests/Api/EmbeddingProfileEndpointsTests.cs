@@ -12,6 +12,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Time.Testing;
@@ -282,6 +283,7 @@ public sealed class EmbeddingProfileEndpointsTests
             new PersistenceConcurrencyOptions(),
             timeProvider);
         var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
+        var attachmentDerivation = InMemoryAttachmentDerivationCoverageReader.Unbounded(timeProvider.GetUtcNow()).Reader;
 
         return new EndpointWorld(
             generationStore,
@@ -291,6 +293,7 @@ public sealed class EmbeddingProfileEndpointsTests
                 generationStore,
                 workloadReader,
                 spendGate,
+                attachmentDerivation,
                 new EmbeddingProfileActivation(generationStore, retryPolicy, backfillSchedule),
                 AdministrativeGrant.WholeSurface),
             new EmbeddingStatusReader(
@@ -299,6 +302,7 @@ public sealed class EmbeddingProfileEndpointsTests
                 spendGate,
                 providerHealth,
                 backfillSchedule,
+                attachmentDerivation,
                 AdministrativeGrant.WholeSurface),
             new EmbeddingReindexCancellation(
                 generationStore,

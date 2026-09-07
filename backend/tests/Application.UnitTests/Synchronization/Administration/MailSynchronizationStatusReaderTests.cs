@@ -205,6 +205,7 @@ public sealed class MailSynchronizationStatusReaderTests
             participation ?? StubMailFolderParticipation.Mapping(Inbox, Archive),
             ledger,
             progressReader,
+            new InMemoryAttachmentDerivationCoverageReader(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
     }
 }

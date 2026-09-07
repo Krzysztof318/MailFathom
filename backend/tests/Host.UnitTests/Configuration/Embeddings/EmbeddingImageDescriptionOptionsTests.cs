@@ -73,4 +73,69 @@ public sealed class EmbeddingImageDescriptionOptionsTests
         // Assert
         Assert.Empty(errors);
     }
+
+    /// <summary>A negative period ceiling is refused, because a period admitting less than nothing is not a budget.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ANegativePeriodCeiling_IsRefused()
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new() { MaxDescriptionsPerPeriod = -1 };
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxDescriptionsPerPeriod), StringComparison.Ordinal));
+    }
+
+    /// <summary>A per-owner ceiling above the deployment's own bounds nothing, so it is refused rather than ignored.</summary>
+    [Fact]
+    public void FindDeclarationErrors_APerOwnerCeilingAboveTheDeploymentCeiling_IsRefused()
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new()
+        {
+            MaxDescriptionsPerPeriod = 100,
+            MaxDescriptionsPerPeriodPerOwner = 200,
+        };
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxDescriptionsPerPeriodPerOwner), StringComparison.Ordinal));
+    }
+
+    /// <summary>Zero declares no ceiling and no pacing at all, which is the default a deployment starts on.</summary>
+    [Fact]
+    public void FindDeclarationErrors_TheCeilingsAndTheRateLeftAtZero_ReportNothing()
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new();
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Equal(0, settings.MaxDescriptionsPerPeriod);
+        Assert.Equal(0, settings.MaxDescriptionsPerPeriodPerOwner);
+        Assert.Equal(0, settings.MaxRequestsPerMinute);
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A rate outside the range is refused, at either end, for the reason the grid ceiling is.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(EmbeddingImageDescriptionOptions.GreatestRequestsPerMinute + 1)]
+    public void FindDeclarationErrors_ARateOutsideTheRange_IsRefused(int maxRequestsPerMinute)
+    {
+        // Arrange
+        EmbeddingImageDescriptionOptions settings = new() { MaxRequestsPerMinute = maxRequestsPerMinute };
+
+        // Act
+        var errors = settings.FindDeclarationErrors();
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(EmbeddingImageDescriptionOptions.MaxRequestsPerMinute), StringComparison.Ordinal));
+    }
 }

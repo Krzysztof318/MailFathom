@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Embeddings;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 
@@ -161,6 +162,21 @@ internal sealed class EmbeddingOptions : IValidatableObject
 
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;
+
+    /// <summary>Reads the aggregate ceilings reading attachments is bounded by, over this section's own period.</summary>
+    /// <returns>The budget the attachment pass consults before each message.</returns>
+    /// <remarks>
+    /// Composed from both blocks rather than from either, because the two steps it bounds are declared where their
+    /// other keys are: what a parse may read sits with the extraction ceilings and what a description may cost sits
+    /// with the switch that turns describing on. What they share is <see cref="SpendPeriod" />, so every ceiling this
+    /// section declares rolls over at one instant and an operator reads one of them rather than three.
+    /// </remarks>
+    internal AttachmentDerivationBudget ToAttachmentDerivationBudget() => AttachmentDerivationBudget.Create(
+        this.AttachmentText.MaxInputOctetsPerPeriod,
+        this.AttachmentText.MaxInputOctetsPerPeriodPerOwner,
+        this.ImageDescription.MaxDescriptionsPerPeriod,
+        this.ImageDescription.MaxDescriptionsPerPeriodPerOwner,
+        this.SpendPeriod);
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

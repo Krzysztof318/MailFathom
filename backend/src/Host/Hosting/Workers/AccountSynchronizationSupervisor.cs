@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Mail.Delivery.Outbox;
@@ -858,6 +859,17 @@ internal sealed partial class AccountSynchronizationSupervisor
                     report.RunBudgetExhausted,
                     report.EmailsRemain);
             }
+
+            // Reported apart from the line above, and whether or not the pass read anything, because it is the one
+            // outcome an operator has to act on: the step names which key to raise, and the bound says whether raising
+            // an owner's share would achieve anything while the deployment's own ceiling is what stopped spending.
+            if (report.PeriodCeilingReachedFor is { } reachedFor)
+            {
+                this.LogAttachmentPeriodCeilingReached(
+                    this.account.Id.Value,
+                    reachedFor,
+                    report.PeriodCeilingBound);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1613,6 +1625,15 @@ internal sealed partial class AccountSynchronizationSupervisor
         int refusedOfferCount,
         bool runBudgetExhausted,
         bool emailsRemain);
+
+    /// <summary>Reports which aggregate ceiling stopped a reading, in the deployment's own configured names alone.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Reading the attachments of account {AccountId} stopped: the {DerivationStep} ceiling of {ReachedBound} is spent for this period. The mail it did not reach is untouched and the first run after the period rolls over reads it.")]
+    private partial void LogAttachmentPeriodCeilingReached(
+        string accountId,
+        AttachmentDerivationStep derivationStep,
+        AttachmentDerivationBound reachedBound);
 
     /// <summary>Reports one account's derivations in counts alone; no mark, reason, or passage may reach a log.</summary>
     [LoggerMessage(

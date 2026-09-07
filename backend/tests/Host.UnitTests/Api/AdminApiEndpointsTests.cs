@@ -534,6 +534,7 @@ public sealed class AdminApiEndpointsTests
             timeProvider);
 
         var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
+        var attachmentDerivation = InMemoryAttachmentDerivationCoverageReader.Unbounded(timeProvider.GetUtcNow()).Reader;
 
         services.AddSingleton(new DeclaredEmbeddingGeometry(Identity: null));
         services.AddScoped(_ => new EmbeddingStatusReader(
@@ -542,11 +543,13 @@ public sealed class AdminApiEndpointsTests
             spendGate,
             Substitute.For<IAiProviderHealthReader>(),
             backfillSchedule,
+            attachmentDerivation,
             Authorization));
         services.AddScoped(_ => new CountedEmbeddingActivation(
             generationStore,
             workloadReader,
             spendGate,
+            attachmentDerivation,
             new EmbeddingProfileActivation(generationStore, retryPolicy, backfillSchedule),
             Authorization));
         services.AddScoped(_ => new EmbeddingReindexCancellation(

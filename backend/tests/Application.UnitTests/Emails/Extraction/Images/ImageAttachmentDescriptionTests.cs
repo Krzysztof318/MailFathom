@@ -50,4 +50,38 @@ public sealed class ImageAttachmentDescriptionTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => ImageAttachmentDescription.Refused((ImageDescriptionRefusal)99));
     }
+
+    /// <summary>
+    /// A description a provider answered is what the description ceiling counts, so the refusals that never left this
+    /// process must not be charged as calls: charging one would spend a period on work no provider ever saw.
+    /// </summary>
+    [Theory]
+    [InlineData(ImageDescriptionRefusal.NotActivated)]
+    [InlineData(ImageDescriptionRefusal.FormatNotSupported)]
+    [InlineData(ImageDescriptionRefusal.FormatExcluded)]
+    [InlineData(ImageDescriptionRefusal.ImageTooLarge)]
+    [InlineData(ImageDescriptionRefusal.PixelGridTooLarge)]
+    [InlineData(ImageDescriptionRefusal.ImageUnreadable)]
+    public void ReachedProvider_ARefusalTakenBeforeTheCall_IsNotCountedAsOne(ImageDescriptionRefusal refusal)
+    {
+        // Act
+        var description = ImageAttachmentDescription.Refused(refusal);
+
+        // Assert
+        Assert.False(description.ReachedProvider);
+    }
+
+    /// <summary>A refusal the provider itself produced cost a call, whatever it answered with.</summary>
+    [Theory]
+    [InlineData(ImageDescriptionRefusal.ProviderTimedOut)]
+    [InlineData(ImageDescriptionRefusal.ProviderUnavailable)]
+    [InlineData(ImageDescriptionRefusal.ProviderRefused)]
+    public void ReachedProvider_ARefusalTheProviderAnswered_IsCountedAsACall(ImageDescriptionRefusal refusal)
+    {
+        // Act
+        var description = ImageAttachmentDescription.Refused(refusal);
+
+        // Assert
+        Assert.True(description.ReachedProvider);
+    }
 }

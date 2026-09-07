@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using MailFathom.Application.Access;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -348,7 +349,7 @@ public sealed class MailEmbeddingWorkerTests
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(spendBudget);
         services.AddSingleton(spendLedger);
-        services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider));
+        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider));
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());

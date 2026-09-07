@@ -164,6 +164,11 @@ internal sealed record EmbeddingSpendResponse(
 /// deployment that is waiting apart from one that is failing, which every other member here reads alike: an instance
 /// between passes reports no vectors, no provider call, and no reason.
 /// </param>
+/// <param name="AttachmentDerivation">
+/// How far reading this deployment's attachments and images has come, and where their own two ceilings stand. Reported
+/// beside the vectors rather than folded into them, because a mailbox whose message text is entirely embedded may still
+/// have every document in it unread, and the two are counted in units that do not convert.
+/// </param>
 internal sealed record EmbeddingStatusResponse(
     EmbeddingGeometryResponse? Declared,
     bool ActivationOutstanding,
@@ -171,7 +176,8 @@ internal sealed record EmbeddingStatusResponse(
     EmbeddingGenerationResponse? Building,
     EmbeddingProviderHealthResponse Provider,
     EmbeddingSpendResponse Spend,
-    DateTimeOffset? NextBackfillPassDueAt)
+    DateTimeOffset? NextBackfillPassDueAt,
+    AttachmentDerivationStatusResponse AttachmentDerivation)
 {
     /// <summary>Describes one instance's embedding state for the wire.</summary>
     /// <param name="status">The state.</param>
@@ -188,7 +194,8 @@ internal sealed record EmbeddingStatusResponse(
             EmbeddingGenerationResponse.For(status.Building),
             EmbeddingProviderHealthResponse.For(status.ProviderHealth),
             EmbeddingSpendResponse.For(status.Period),
-            status.NextBackfillPassDueAt);
+            status.NextBackfillPassDueAt,
+            AttachmentDerivationStatusResponse.For(status.AttachmentDerivation));
     }
 }
 
@@ -197,13 +204,19 @@ internal sealed record EmbeddingStatusResponse(
 /// <param name="Forecast">What activating it would do.</param>
 /// <param name="Estimate">What that would cost.</param>
 /// <param name="Spend">Where the budget period stands.</param>
-/// <param name="ExceedsSpendCeiling">Whether the declared ceiling refuses this activation outright.</param>
+/// <param name="ExceedsSpendCeiling">Whether the declared embedding ceiling refuses this activation outright.</param>
+/// <param name="AttachmentDerivation">What reading the stored mail's attachments would cost, and where their own two periods stand.</param>
+/// <param name="ExceedsAttachmentCeiling">Whether either declared attachment ceiling refuses this activation outright.</param>
+/// <param name="Refused">Whether any declared ceiling refuses it, which is what the activation itself acts on.</param>
 internal sealed record EmbeddingActivationAssessmentResponse(
     EmbeddingGeometryResponse Declared,
     string Forecast,
     EmbeddingWorkloadResponse Estimate,
     EmbeddingSpendResponse Spend,
-    bool ExceedsSpendCeiling)
+    bool ExceedsSpendCeiling,
+    AttachmentDerivationStatusResponse AttachmentDerivation,
+    bool ExceedsAttachmentCeiling,
+    bool Refused)
 {
     /// <summary>Describes one assessment for the wire.</summary>
     /// <param name="assessment">The assessment.</param>
@@ -218,7 +231,10 @@ internal sealed record EmbeddingActivationAssessmentResponse(
             assessment.Forecast.ToString(),
             EmbeddingWorkloadResponse.For(assessment.Estimate),
             EmbeddingSpendResponse.For(assessment.Period),
-            assessment.ExceedsSpendCeiling);
+            assessment.ExceedsSpendCeiling,
+            AttachmentDerivationStatusResponse.For(assessment.AttachmentDerivation),
+            assessment.ExceedsAttachmentCeiling,
+            assessment.IsRefused);
     }
 }
 

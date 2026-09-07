@@ -56,6 +56,36 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     public long MaxInputOctetsPerAccountRun { get; set; } =
         EmailAttachmentTextBounds.DefaultMaxInputOctetsPerAccountRun;
 
+    /// <summary>Gets or sets the octets one budget period may read out of attachments in total, or zero to bound nothing.</summary>
+    /// <remarks>
+    /// <para>
+    /// The aggregate ceiling the three above are not. Each of them bounds one unit of work — an attachment, a message,
+    /// a run — and a run starts with a full budget on every interval, so nothing among them says how much a deployment
+    /// reads in a day. This does, over the same window <c>SpendPeriod</c> gives the embedding ceilings, so an operator
+    /// reads one roll-over instant rather than several.
+    /// </para>
+    /// <para>
+    /// Counted in octets rather than in characters because that is what a parse costs: the work is CPU and memory over a
+    /// byte stream a stranger composed, and what a provider prices has nothing to do with it. Reaching it leaves the
+    /// mail unread and outstanding, which the next period reaches; nothing is dropped and no account run fails.
+    /// </para>
+    /// <para>
+    /// Zero is the default and declares no aggregate ceiling at all, which leaves the three per-unit ceilings and the
+    /// synchronization interval as the whole of the bound — the state a deployment upgrading into this key was already
+    /// in. The configuration reference says what that exposes.
+    /// </para>
+    /// </remarks>
+    public long MaxInputOctetsPerPeriod { get; set; }
+
+    /// <summary>Gets or sets the octets one budget period may read for any one owner, or zero to bound no owner.</summary>
+    /// <remarks>
+    /// The same ceiling asked of one person rather than of the instance, and it exists for the reason the embedding
+    /// one's per-owner companion does: a deployment serving several owners bounds the whole cost with the key above and
+    /// nothing else, so one mailbox full of large attachments can exhaust the window everybody else was working in.
+    /// Reaching this one leaves that owner's mail unread and every other owner's read normally.
+    /// </remarks>
+    public long MaxInputOctetsPerPeriodPerOwner { get; set; }
+
     /// <summary>Gets the formats an attachment is offered to a parser for.</summary>
     /// <remarks>
     /// Writing nothing reads every format MailFathom parses, and naming any narrows to exactly those. The list starts
@@ -128,6 +158,14 @@ internal sealed class AttachmentTextOptions : IValidatableObject
                 [nameof(this.Timeout)]);
         }
 
+        foreach (var (name, value) in this.AggregateCeilings().Where(ceiling => ceiling.Value < 0))
+        {
+            yield return new ValidationResult(
+                $"Embeddings AttachmentText {name} is zero or positive. Zero declares no aggregate ceiling at all, "
+                + "which is a supported deployment; a negative one describes no budget.",
+                [name]);
+        }
+
         foreach (var (name, value, least, greatest) in this.Ceilings())
         {
             if (value < least || value > greatest)
@@ -167,7 +205,40 @@ internal sealed class AttachmentTextOptions : IValidatableObject
                 + "with a full budget that message would be passed over for ever.",
                 [nameof(this.MaxInputOctetsPerAccountRun)]);
         }
+
+        // The aggregate ceilings extend the same ordering rather than joining it: each is either absent, which is what
+        // zero declares, or at least what one message may cost. Below that, a message this deployment says it may read
+        // is one no period may afford, and since the ceiling is read before the message is opened it would be refused
+        // at every roll-over for ever.
+        foreach (var (name, value) in this.AggregateCeilings().Where(ceiling => ceiling.Value != 0))
+        {
+            if (value < this.MaxInputOctetsPerEmail)
+            {
+                yield return new ValidationResult(
+                    $"Embeddings AttachmentText {name} is either zero, which declares no aggregate ceiling, or at "
+                    + "least MaxInputOctetsPerEmail. Between the two, a message this deployment says it may read is "
+                    + "one no period may afford, and it would be passed over at every roll-over for ever.",
+                    [name]);
+            }
+        }
+
+        if (this.MaxInputOctetsPerPeriod != 0
+            && this.MaxInputOctetsPerPeriodPerOwner > this.MaxInputOctetsPerPeriod)
+        {
+            yield return new ValidationResult(
+                "Embeddings AttachmentText MaxInputOctetsPerPeriodPerOwner is at most MaxInputOctetsPerPeriod. Above "
+                + "it, the per-owner ceiling bounds nothing the deployment's own ceiling has not already bound, which "
+                + "reads as a limit somebody chose and refuses nothing.",
+                [nameof(this.MaxInputOctetsPerPeriodPerOwner)]);
+        }
     }
+
+    /// <summary>Names the two aggregate ceilings, which are read together wherever the ordering rule applies to both.</summary>
+    private IEnumerable<(string Name, long Value)> AggregateCeilings() =>
+    [
+        (nameof(this.MaxInputOctetsPerPeriod), this.MaxInputOctetsPerPeriod),
+        (nameof(this.MaxInputOctetsPerPeriodPerOwner), this.MaxInputOctetsPerPeriodPerOwner),
+    ];
 
     /// <summary>Reads the ceilings one message and one account run are read under.</summary>
     /// <returns>The bounds the pass applies.</returns>

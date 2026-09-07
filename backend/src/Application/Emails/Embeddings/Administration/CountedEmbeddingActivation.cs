@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Domain.Access;
@@ -29,6 +30,7 @@ public sealed class CountedEmbeddingActivation
     private readonly IEmbeddingGenerationStore generationStore;
     private readonly IEmbeddingWorkloadReader workloadReader;
     private readonly EmbeddingSpendGate spendGate;
+    private readonly AttachmentDerivationStatusReader attachmentDerivation;
     private readonly EmbeddingProfileActivation activation;
     private readonly AccessAuthorization authorization;
 
@@ -36,6 +38,7 @@ public sealed class CountedEmbeddingActivation
     /// <param name="generationStore">Reads which generations exist, which decides what an activation would do.</param>
     /// <param name="workloadReader">Counts the passages the run would send.</param>
     /// <param name="spendGate">Reads where the budget period stands.</param>
+    /// <param name="attachmentDerivation">Counts what reading the stored mail's attachments would cost, and where their own periods stand.</param>
     /// <param name="activation">Performs the activation once it has been weighed.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -43,18 +46,21 @@ public sealed class CountedEmbeddingActivation
         IEmbeddingGenerationStore generationStore,
         IEmbeddingWorkloadReader workloadReader,
         EmbeddingSpendGate spendGate,
+        AttachmentDerivationStatusReader attachmentDerivation,
         EmbeddingProfileActivation activation,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
         ArgumentNullException.ThrowIfNull(workloadReader);
         ArgumentNullException.ThrowIfNull(spendGate);
+        ArgumentNullException.ThrowIfNull(attachmentDerivation);
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.generationStore = generationStore;
         this.workloadReader = workloadReader;
         this.spendGate = spendGate;
+        this.attachmentDerivation = attachmentDerivation;
         this.activation = activation;
         this.authorization = authorization;
     }
@@ -97,7 +103,8 @@ public sealed class CountedEmbeddingActivation
             declared,
             Forecast(generations, declaredFingerprint),
             estimate,
-            period);
+            period,
+            await this.attachmentDerivation.ReadAsync(account: null, cancellationToken));
     }
 
     /// <summary>Weighs the declared geometry and activates it unless the spend ceiling refuses.</summary>
@@ -128,7 +135,7 @@ public sealed class CountedEmbeddingActivation
 
         var assessment = await this.ReadAssessmentAsync(declared, cancellationToken);
 
-        if (assessment.ExceedsSpendCeiling)
+        if (assessment.IsRefused)
         {
             return new CountedEmbeddingActivationResult(assessment, Activation: null);
         }

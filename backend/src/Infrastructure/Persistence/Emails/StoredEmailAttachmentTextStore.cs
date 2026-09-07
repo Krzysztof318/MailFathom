@@ -162,14 +162,46 @@ internal sealed class StoredEmailAttachmentTextStore(
         Guid ownerId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) => SelectingEverywhere(
+        emails.Where(email => email.OwnerId == ownerId && email.MailboxAccountId == mailboxAccountId),
+        embeddedFolders,
+        terms);
+
+    /// <summary>Narrows to the mail awaiting a reading of its attachments, in whatever scope the caller has already narrowed to.</summary>
+    /// <param name="emails">The messages to select from, narrowed to one account or to none.</param>
+    /// <param name="embeddedFolders">The folders an operator asked to have embedded.</param>
+    /// <param name="terms">The classification gate's terms, read once so the predicate and the answer agree.</param>
+    /// <returns>The mail this pass still owes a reading.</returns>
+    /// <remarks>
+    /// The account narrowing is the caller's rather than this method's, so a reading that reports across the whole
+    /// deployment and the walk that reads one account at a time answer the same question. Two predicates would let the
+    /// figure an operator watches disagree with the work that moves it: mail withheld by the gate, or held in a folder
+    /// nobody asked to embed, is not outstanding and would otherwise be counted as outstanding for ever.
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> SelectingEverywhere(
+        IQueryable<StoredEmailEntity> emails,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) =>
+        ReachableEverywhere(emails, embeddedFolders, terms).Where(email => email.AttachmentTextDerivedAt == null);
+
+    /// <summary>Narrows to the mail a reading could reach at all, whether or not one has already been taken.</summary>
+    /// <param name="emails">The messages to select from, narrowed to one account or to none.</param>
+    /// <param name="embeddedFolders">The folders an operator asked to have embedded.</param>
+    /// <param name="terms">The classification gate's terms, read once so the predicate and the answer agree.</param>
+    /// <returns>The mail carrying an attachment this pass is allowed to open.</returns>
+    /// <remarks>
+    /// The denominator of every coverage figure, and the selection above with the reading stamp left out. Keeping the
+    /// two here rather than writing a second predicate elsewhere is what makes "read" and "outstanding" add up to the
+    /// same population: a reading that counted a wider set would report a mailbox as permanently incomplete.
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> ReachableEverywhere(
+        IQueryable<StoredEmailEntity> emails,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
         AccountScopedMailFolders.Admitting(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
-                .Where(email => email.OwnerId == ownerId
-                    && email.MailboxAccountId == mailboxAccountId
-                    && email.AttachmentCount > 0
-                    && email.AttachmentTextDerivedAt == null)
+                .Where(email => email.AttachmentCount > 0)
                 .Where(MailAwaitingRuleEvaluation.IsFinishedWith)
                 .Where(MailAwaitingRelocation.IsSettledWhereItIs),
             embeddedFolders),

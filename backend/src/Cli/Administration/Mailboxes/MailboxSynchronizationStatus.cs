@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text.Json.Serialization;
+using MailFathom.Cli.Administration.AttachmentText;
 
 namespace MailFathom.Cli.Administration.Mailboxes;
 
@@ -27,13 +28,15 @@ internal sealed record MailboxSynchronizationStatus(
 /// <param name="ConsecutiveFailureCount">How many of its runs failed in a row.</param>
 /// <param name="LastRun">How its most recent finished run ended, or <see langword="null" /> when the deployment has finished none.</param>
 /// <param name="Folders">One entry per folder the account maps.</param>
+/// <param name="AttachmentText">How far reading this account's attachments and images has come, and why the ones that yielded nothing did not.</param>
 internal sealed record MailboxAccountSynchronization(
     [property: JsonPropertyName("account")] string? Account,
     [property: JsonPropertyName("phase")] string? Phase,
     [property: JsonPropertyName("nextRunDueAt")] DateTimeOffset? NextRunDueAt,
     [property: JsonPropertyName("consecutiveFailureCount")] int ConsecutiveFailureCount,
     [property: JsonPropertyName("lastRun")] MailboxAccountRun? LastRun,
-    [property: JsonPropertyName("folders")] IReadOnlyList<MailboxFolderSynchronization>? Folders)
+    [property: JsonPropertyName("folders")] IReadOnlyList<MailboxFolderSynchronization>? Folders,
+    [property: JsonPropertyName("attachmentText")] AttachmentDerivationCoverage? AttachmentText)
 {
     /// <summary>Describes what the account's supervisor is doing, and when it next acts.</summary>
     /// <returns>The phase in the words an operator reads it by, with the instant that ends a wait.</returns>

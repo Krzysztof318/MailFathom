@@ -126,6 +126,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             StubMailFolderParticipation.Mapping(Inbox),
             ledger,
             progressReader,
+            new InMemoryAttachmentDerivationCoverageReader(),
             AdministrativeGrant.WholeSurface);
     }
 }
