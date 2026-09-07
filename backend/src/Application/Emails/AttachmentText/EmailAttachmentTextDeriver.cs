@@ -101,16 +101,18 @@ public sealed class EmailAttachmentTextDeriver
     /// <param name="email">The message whose attachments are read, and the owner whose posture redacts them.</param>
     /// <param name="runBudget">What the account run has left to read, which this decrements as it reads.</param>
     /// <param name="cancellationToken">Cancels the read between attachments and inside one.</param>
-    /// <returns>What each attachment yielded, in walk order, or nothing at all where the run budget stopped the message.</returns>
+    /// <returns>What each attachment yielded, in walk order, beside what the reading spent and whether the run budget stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derivation.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// <para>
-    /// An absent answer and an empty one are different facts and the caller acts on them differently. Nothing means the
-    /// run had no budget left to reach this message, so it is left exactly as it was and the next run — which starts
-    /// with a full budget — reads it. An empty list means the message <em>was</em> decided and yielded nothing, so it is
-    /// recorded as read and never offered to a parser again.
+    /// A reading always answers, and two different facts arrive as an empty attachment list. <see
+    /// cref="EmailAttachmentTextDerivation.RunBudgetExhausted" /> says the run had no octets left to finish this
+    /// message, so nothing about it may be written down: it is left exactly as it was and the next run — which starts
+    /// with a full budget — reads it. Without that flag an empty list means the message <em>was</em> decided and
+    /// yielded nothing, so it is recorded as read and never offered to a parser again. Either way the two spend counts
+    /// on the answer are what the reading actually cost and are charged, which is why nothing is returned as absent.
     /// </para>
     /// <para>
     /// The walk reaches at most the message's count ceiling. A message declaring more parts than that has the rest
