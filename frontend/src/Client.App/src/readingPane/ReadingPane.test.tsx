@@ -591,6 +591,20 @@ describe('ReadingPane following a cited file', () => {
         expect(opened).toStrictEqual([]);
     });
 
+    // The everyday case, and the one nothing re-reads for: opening a message that is already the message open is a
+    // no-op, so a citation followed inside the read would never be followed at all.
+    it('opens the cited file of a message that was already read and on the screen', async () => {
+        const { opened, cite } = citing({ storedEmailId: messageId, position: 1 });
+
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(opened).toStrictEqual([{ storedEmailId: messageId, attachment: photograph }]);
+        });
+    });
+
     it('spends a citation the reader abandoned by reading another message', async () => {
         const { cite } = citing({ storedEmailId: 'another-message', position: 0 });
 

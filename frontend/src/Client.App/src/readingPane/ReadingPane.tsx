@@ -159,10 +159,9 @@ function OpenMessage({
     const [answer, setAnswer] = useState<Answered | null>(null);
     const [connected, setConnected] = useState(online);
 
-    // Everything following a citation takes, held in a ref rather than named as dependencies of the read below. Both
-    // would restart the read: the citation changes on the act that clears it, which is the read answering, and the
-    // opener is a new function on every render, which would restart it on every render for as long as the pane is open.
-    const following = useRef({ cited: workspace.citedAttachment, open: openAttachment });
+    // The opener is a new function on every render, so it is held rather than named as a dependency below: the effect
+    // that follows a citation reacts to the citation and to the answer, and naming this would run it once per render.
+    const openCitedFile = useRef(openAttachment);
 
     const opened = useRef<HTMLElement>(null);
     const body = useRef<HTMLDivElement>(null);
@@ -172,7 +171,7 @@ function OpenMessage({
     const focusedOn = useRef(arriving ? null : storedEmailId);
 
     useEffect(() => {
-        following.current = { cited: workspace.citedAttachment, open: openAttachment };
+        openCitedFile.current = openAttachment;
     });
 
     // A message changing under this component invalidates what is being read, which React answers by adjusting state
@@ -209,38 +208,44 @@ function OpenMessage({
             }
 
             setAnswer({ read, result: answered });
-
-            // A search result cited a file rather than the message, and this read is what turns that coordinate into
-            // something openable: the citation carries a position, and only the message says how large the file at that
-            // position declares itself to be, which is the bound the download is read under. It happens here rather
-            // than in an effect watching the answer because it is the act that caused this read finishing.
-            const { cited, open } = following.current;
-
-            // A read that failed keeps it, so the retry the reader is offered follows the citation rather than dropping
-            // it. A read that answered spends it either way: a citation is one act half finished, and somebody who has
-            // read another message since has abandoned it — leaving it set is how a message opened later opens a file
-            // nobody asked for.
-            if (cited === null || answered.outcome !== 'read') {
-                return;
-            }
-
-            revise({ citedAttachment: null });
-
-            if (cited.storedEmailId !== read.storedEmailId) {
-                return;
-            }
-
-            const file = answered.value.attachments.find((held) => held.position === cited.position);
-
-            if (file !== undefined) {
-                open({ storedEmailId: cited.storedEmailId, attachment: file });
-            }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, read, online, revise]);
+    }, [session, transport, read, online]);
+
+    // A search result cited a file rather than the message, and a description of the message is what turns that
+    // coordinate into something openable: the citation carries a position, and only the description says how large the
+    // file at that position declares itself to be, which is the bound the download is read under.
+    //
+    // It waits for the description to be here rather than for a read to answer, because the cited message may be the
+    // one already open: opening a message that is already the message opens nothing, so nothing re-reads and a citation
+    // followed inside the read would never be followed at all. That is the everyday case — reading a message, searching,
+    // and finding that the match is inside a file it carries.
+    useEffect(() => {
+        const cited = workspace.citedAttachment;
+
+        // A description that failed keeps the citation, so the retry the reader is offered follows it rather than
+        // dropping it. One that arrived spends it either way: a citation is one act half finished, and somebody who has
+        // read another message since has abandoned it — leaving it set is how a message opened later opens a file
+        // nobody asked for.
+        if (cited === null || answer?.result.outcome !== 'read' || answer.read.storedEmailId !== storedEmailId) {
+            return;
+        }
+
+        revise({ citedAttachment: null });
+
+        if (cited.storedEmailId !== storedEmailId) {
+            return;
+        }
+
+        const file = answer.result.value.attachments.find((held) => held.position === cited.position);
+
+        if (file !== undefined) {
+            openCitedFile.current({ storedEmailId: cited.storedEmailId, attachment: file });
+        }
+    }, [workspace.citedAttachment, answer, storedEmailId, revise]);
 
     // A message the deployment says has changed is read again where it is the one on the screen, quietly, so what a
     // reader is part-way through stays in front of them until the new answer replaces it. A signal naming other mail is

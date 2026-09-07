@@ -105,6 +105,24 @@ describe('rememberWorkspace', () => {
 
         expect(rememberedWorkspace().attachment).toBeNull();
     });
+
+    // A citation names a message the rest of the kept workspace does not, so what is asserted here is that identifier
+    // rather than the one `kept` already carries in its selection.
+    it('keeps no coordinate of the file a search result cited', () => {
+        rememberWorkspace({ ...kept, citedAttachment: { storedEmailId: 'AAMkAD-cited', position: 3 } });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('AAMkAD-cited');
+        expect(rememberedWorkspace().citedAttachment).toBeNull();
+    });
+
+    it('follows no citation for anybody where a store was edited to carry one', () => {
+        window.sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({ ...kept, citedAttachment: { storedEmailId: 'AAMkAD-cited', position: 3 } }),
+        );
+
+        expect(rememberedWorkspace().citedAttachment).toBeNull();
+    });
 });
 
 describe('rememberedWorkspace', () => {
