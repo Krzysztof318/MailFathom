@@ -490,8 +490,8 @@ public sealed class StoredEmailExtractionBackfillTests
         /// The predicate behind it is PostgreSQL's, so what it counts is proven against a real database rather than
         /// against this fake; nothing the backfill itself does reads the answer.
         /// </remarks>
-        public Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(0);
+        public Task<StaleDerivedDataCount> CountStaleDerivedDataAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new StaleDerivedDataCount(EmailCount: 0, AttachmentReadingCount: 0));
 
         private void RecordSession(IPersistenceSession session)
         {

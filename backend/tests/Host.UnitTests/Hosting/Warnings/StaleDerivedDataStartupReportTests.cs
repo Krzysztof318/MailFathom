@@ -31,7 +31,7 @@ public sealed class StaleDerivedDataStartupReportTests
     public async Task StartAsync_DerivedTextWrittenUnderAnOlderConfiguration_NamesTheCountAndTheKeyThatFixesIt()
     {
         // Arrange
-        this.StoreCounts(1_284);
+        this.StoreCounts(staleEmailCount: 1_284);
         using var report = this.Report(rebuildStaleDerivedData: false);
 
         // Act
@@ -44,12 +44,50 @@ public sealed class StaleDerivedDataStartupReportTests
         Assert.Contains("SensitiveContent:RebuildStaleDerivedData", message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// What an attachment yielded is a second copy of derived mail content with a stamp of its own, so an operator who
+    /// is told only about messages is told the mailbox is clean while a contract's words sit under-redacted in it.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AttachmentsReadUnderAnOlderConfiguration_ReportsThemBesideTheMessages()
+    {
+        // Arrange
+        this.StoreCounts(staleEmailCount: 12, staleAttachmentReadingCount: 407);
+        using var report = this.Report(rebuildStaleDerivedData: false);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var message = Assert.Single(this.logger.Messages);
+
+        Assert.Contains("12", message, StringComparison.Ordinal);
+        Assert.Contains("407", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A mailbox whose bodies are current and whose attachments are not is still a mailbox to act on.</summary>
+    [Fact]
+    public async Task StartAsync_OnlyAttachmentsWrittenUnderAnOlderConfiguration_StillWarns()
+    {
+        // Arrange
+        this.StoreCounts(staleEmailCount: 0, staleAttachmentReadingCount: 3);
+        using var report = this.Report(rebuildStaleDerivedData: false);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var message = Assert.Single(this.logger.Messages);
+
+        Assert.Contains("SensitiveContent:RebuildStaleDerivedData", message, StringComparison.Ordinal);
+    }
+
     /// <summary>An operator who has already asked for the rebuild is told it is under way rather than warned again.</summary>
     [Fact]
     public async Task StartAsync_ARebuildAlreadyRequested_SaysTheWalkWillReDeriveThem()
     {
         // Arrange
-        this.StoreCounts(7);
+        this.StoreCounts(staleEmailCount: 7);
         using var report = this.Report(rebuildStaleDerivedData: true);
 
         // Act
@@ -66,7 +104,7 @@ public sealed class StaleDerivedDataStartupReportTests
     public async Task StartAsync_NothingWrittenUnderAnOlderConfiguration_SaysTheMailboxIsCurrent()
     {
         // Arrange
-        this.StoreCounts(0);
+        this.StoreCounts(staleEmailCount: 0);
         using var report = this.Report(rebuildStaleDerivedData: false);
 
         // Act
@@ -84,8 +122,8 @@ public sealed class StaleDerivedDataStartupReportTests
     {
         // Arrange
         this.store
-            .CountEmailsWithStaleDerivedDataAsync(Arg.Any<CancellationToken>())
-            .Returns<Task<int>>(_ => throw new InvalidOperationException("The database is not answering."));
+            .CountStaleDerivedDataAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<StaleDerivedDataCount>>(_ => throw new InvalidOperationException("The database is not answering."));
         using var report = this.Report(rebuildStaleDerivedData: false);
 
         // Act
@@ -97,10 +135,10 @@ public sealed class StaleDerivedDataStartupReportTests
         Assert.Contains("unavailable", message, StringComparison.Ordinal);
     }
 
-    private void StoreCounts(int staleEmailCount) =>
+    private void StoreCounts(int staleEmailCount, int staleAttachmentReadingCount = 0) =>
         this.store
-            .CountEmailsWithStaleDerivedDataAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(staleEmailCount));
+            .CountStaleDerivedDataAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new StaleDerivedDataCount(staleEmailCount, staleAttachmentReadingCount)));
 
     /// <summary>Builds a deployment that scans somebody's mail, which is the only state this report says anything in.</summary>
     /// <remarks>

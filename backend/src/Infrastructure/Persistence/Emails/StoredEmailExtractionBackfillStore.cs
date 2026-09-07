@@ -166,6 +166,81 @@ internal sealed class StoredEmailExtractionBackfillStore(
         {
             await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
         }
+
+        await this.DiscardStaleAttachmentReadingsAsync(sessionContext, storedEmail, cancellationToken);
+    }
+
+    /// <summary>Throws away what this message's attachments yielded under an older posture, and offers it up to be read again.</summary>
+    /// <remarks>
+    /// <para>
+    /// The rebuild's other half. A reading of an attachment carries its own stamp, written by the stage that took it, so
+    /// a posture republished between the body's derivation and that stage leaves the two disagreeing — and re-deriving
+    /// the body alone would leave a contract's extracted text and a model's description of a picture redacted to
+    /// something the owner no longer runs, indefinitely, while the message's own document reported the new stamp.
+    /// </para>
+    /// <para>
+    /// The words are not taken again here. Clearing the marker is the whole of what puts the message back into the
+    /// account run's attachment stage, and that is deliberate: reading an attachment parses octets a stranger composed
+    /// and may ask a vision provider about a picture, so it belongs where the octet budget, the format list, and the
+    /// provider configuration that govern it are already applied. A walk that read them itself would bypass all three.
+    /// </para>
+    /// <para>
+    /// The stale rows go even where nothing will read them again — a deployment that has since switched attachment
+    /// reading off, or removed the vision provider. Under-redacted text is what the rebuild exists to remove, and
+    /// keeping it because its replacement is not coming would keep exactly the copy the posture change ruled out.
+    /// </para>
+    /// <para>
+    /// The passages cut from a discarded reading go with it, and the vectors built from them cascade away. They are the
+    /// copy a search actually returns, so leaving them until the attachment stage reaches the message would remove the
+    /// text an owner cannot query and keep the one they can — and where attachment reading has since been switched off
+    /// that stage never comes. Only the passages of the readings that went are removed, so an attachment already read
+    /// under the current posture keeps its own and no vector of it is billed again.
+    /// </para>
+    /// </remarks>
+    private async Task DiscardStaleAttachmentReadingsAsync(
+        MailFathomDbContext sessionContext,
+        StoredEmailEntity storedEmail,
+        CancellationToken cancellationToken)
+    {
+        // Nothing to discard for a message with no attachments, which is most of a mailbox, and the count is on the row
+        // this write is already holding — so the ordinary message costs no statement at all.
+        if (storedEmail.AttachmentCount == 0 || this.RebuiltTowards.Count == 0)
+        {
+            return;
+        }
+
+        var posture = this.RebuiltTowards.FirstOrDefault(candidate => candidate.Owner.Value == storedEmail.OwnerId);
+
+        // An owner off the roster is judged by the deployment's own posture, exactly as the selection judges them. An
+        // owner on it whose mail nothing scans has no stamp to be stale against, and falling through to the deployment's
+        // would re-read their attachments against a posture that was never applied to them.
+        if ((posture is null ? this.UnrosteredRebuiltTowards : posture.Posture.Stamp) is not { } current)
+        {
+            return;
+        }
+
+        var stamp = current.Value;
+        var discarded = await sessionContext.EmailAttachmentTexts
+            .Where(reading => reading.StoredEmailId == storedEmail.Id && reading.SensitiveContentStamp != stamp)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (discarded == 0)
+        {
+            return;
+        }
+
+        // An orphaned passage is exactly one whose reading has just gone, which is why this is expressed as the absence
+        // of the row rather than as the set of positions the delete above matched: no attachment passage is staged in
+        // this session, and both statements run inside the one transaction, so the subquery already sees the removal.
+        await sessionContext.EmailChunks
+            .Where(chunk => chunk.StoredEmailId == storedEmail.Id
+                && chunk.AttachmentPosition != null
+                && !sessionContext.EmailAttachmentTexts.Any(reading =>
+                    reading.StoredEmailId == storedEmail.Id
+                    && reading.AttachmentPosition == chunk.AttachmentPosition))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        storedEmail.AttachmentTextDerivedAt = null;
     }
 
     /// <inheritdoc />
@@ -206,32 +281,36 @@ internal sealed class StoredEmailExtractionBackfillStore(
     }
 
     /// <inheritdoc />
-    public Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken)
+    public async Task<StaleDerivedDataCount> CountStaleDerivedDataAsync(CancellationToken cancellationToken)
     {
         // The same conditions the walk selects on — a message that is not tombstoned and whose raw MIME is stored —
         // beside a document that holds derived body text whose stamp is not its own owner's. A message with no document
         // at all is left out here and is not: it has never been derived, so it holds no under-redacted text, and it is
         // already outstanding for the reason the backfill has always existed.
-        var derived = dbContext.StoredEmails
-            .AsNoTracking()
-            .Where(StoredEmailTombstone.IsNotTombstoned)
-            .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available
-                && email.SearchDocument != null
-                && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
+        var derived = Derived(this.Stored());
+        var postures = derivationGuard.Current;
+        var unrostered = derivationGuard.StampForUnrostered;
 
-        return StaleFor(derived, derivationGuard.Current, derivationGuard.StampForUnrostered)
-            .CountAsync(cancellationToken);
+        // Two queries rather than one, because the two figures count different rows: a message is counted once whatever
+        // it carries, and a reading is counted per attachment. Joining them would report one of the two as the other.
+        return new StaleDerivedDataCount(
+            await StaleFor(derived, postures, unrostered).CountAsync(cancellationToken),
+            await StaleReadingsFor(derived, postures, unrostered).CountAsync(cancellationToken));
     }
 
-    /// <summary>Narrows a set of derived rows to the ones written under something other than their own owner's posture.</summary>
+    /// <summary>Unions one branch per posture in force, so every row is judged against the stamp of whoever holds it.</summary>
+    /// <param name="postures">What each owner this deployment serves has their mail derived under.</param>
+    /// <param name="unrostered">What mail whose owner the roster no longer names is judged against, or nothing.</param>
+    /// <param name="nothing">The empty set to answer with where no posture carries a stamp at all.</param>
+    /// <param name="ofOwner">Builds one rostered owner's branch from their identity and their stamp.</param>
+    /// <param name="ofEverybodyElse">Builds the branch for the owners the roster does not name, from the roster and the deployment's stamp.</param>
+    /// <returns>The branches concatenated, which stay disjoint because each names a different set of owners.</returns>
     /// <remarks>
     /// <para>
     /// One branch per owner, unioned, rather than one predicate over a set of pairs: a row is stale against its own
     /// owner's stamp alone, and comparing it against every stamp in force would call a message fresh because somebody
     /// else's posture happens to match the configuration it was actually written under. Each branch is an equality on
     /// the owner column beside an inequality on the stamp, so PostgreSQL walks the same index a per-owner read walks.
-    /// A deployment serving one owner produces that owner's branch beside the unrostered one, which is two rather than
-    /// the one predicate the base commit issued — and <c>Outstanding</c> concatenates the never-derived rows on top.
     /// </para>
     /// <para>
     /// One further branch covers the rows whose owner the roster does not name — mail still stored for somebody a
@@ -240,62 +319,124 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// candidates. Without it those rows would match nothing, and a walk that silently steps over stored mail is
     /// exactly what the deployment-wide predicate this replaced did not do.
     /// </para>
+    /// <para>
+    /// An owner whose mail nothing scans has no stamp to be stale against, so they contribute no branch at all: their
+    /// derived rows carry none and are exactly what a deployment that scans nobody writes.
+    /// </para>
     /// </remarks>
-    private static IQueryable<StoredEmailEntity> StaleFor(
-        IQueryable<StoredEmailEntity> derived,
+    private static IQueryable<TRow> AcrossPostures<TRow>(
         IReadOnlyList<OwnerSensitiveContentPosture> postures,
-        SensitiveContentDerivationStamp? unrostered)
+        SensitiveContentDerivationStamp? unrostered,
+        IQueryable<TRow> nothing,
+        Func<Guid, string, IQueryable<TRow>> ofOwner,
+        Func<Guid[], string, IQueryable<TRow>> ofEverybodyElse)
     {
-        // An owner whose mail nothing scans has no stamp to be stale against: their derived rows carry none and are
-        // exactly what a deployment that scans nobody writes, so nothing about them is outstanding.
         var branches = postures
             .Where(posture => posture.Posture.Stamp is not null)
-            .Select(posture => (Owner: posture.Owner.Value, Stamp: posture.Posture.Stamp!.Value.Value))
-            .Select(posture => derived.Where(email =>
-                email.OwnerId == posture.Owner
-                && email.SearchDocument!.SensitiveContentStamp != posture.Stamp))
+            .Select(posture => ofOwner(posture.Owner.Value, posture.Posture.Stamp!.Value.Value))
             .ToList();
 
         if (unrostered is { } deployment)
         {
-            var rostered = postures.Select(posture => posture.Owner.Value).ToArray();
-            var deploymentStamp = deployment.Value;
-
-            branches.Add(derived.Where(email =>
-                !rostered.Contains(email.OwnerId)
-                && email.SearchDocument!.SensitiveContentStamp != deploymentStamp));
+            branches.Add(ofEverybodyElse([.. postures.Select(posture => posture.Owner.Value)], deployment.Value));
         }
 
         return branches.Count == 0
-            ? derived.Take(0)
+            ? nothing
             : branches.Skip(1).Aggregate(branches[0], (stale, branch) => stale.Concat(branch));
     }
 
+    /// <summary>Narrows a set of derived rows to the ones whose body text was written under something other than their own owner's posture.</summary>
+    internal static IQueryable<StoredEmailEntity> StaleFor(
+        IQueryable<StoredEmailEntity> derived,
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered) => AcrossPostures(
+        postures,
+        unrostered,
+        derived.Take(0),
+        (owner, stamp) => derived.Where(email =>
+            email.OwnerId == owner && email.SearchDocument!.SensitiveContentStamp != stamp),
+        (rostered, stamp) => derived.Where(email =>
+            !rostered.Contains(email.OwnerId) && email.SearchDocument!.SensitiveContentStamp != stamp));
+
+    /// <summary>Narrows a set of derived rows to the ones where either the body or an attachment was read under an older posture.</summary>
+    /// <remarks>
+    /// What the rebuilding walk selects, and one predicate rather than two sets unioned: a message stale on both counts
+    /// would otherwise arrive in a batch twice, be read twice, and have the position committed past itself.
+    /// <para>
+    /// The two halves are independent because they are written by different stages a posture change can fall between —
+    /// the body where extraction reads it, an attachment on the account run's later pass — so a message whose document
+    /// carries the current stamp may still hold a contract's words redacted to a configuration nobody runs.
+    /// </para>
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> StaleOrReadUnderAnOlderPostureFor(
+        IQueryable<StoredEmailEntity> derived,
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered) => AcrossPostures(
+        postures,
+        unrostered,
+        derived.Take(0),
+        (owner, stamp) => derived.Where(email =>
+            email.OwnerId == owner
+            && (email.SearchDocument!.SensitiveContentStamp != stamp
+                || email.AttachmentTexts.Any(reading => reading.SensitiveContentStamp != stamp))),
+        (rostered, stamp) => derived.Where(email =>
+            !rostered.Contains(email.OwnerId)
+            && (email.SearchDocument!.SensitiveContentStamp != stamp
+                || email.AttachmentTexts.Any(reading => reading.SensitiveContentStamp != stamp))));
+
+    /// <summary>Selects the readings of an attachment that were taken under something other than their own owner's posture.</summary>
+    /// <remarks>
+    /// A row per attachment rather than per message, because that is the unit of the work a rebuild causes here: one
+    /// document parsed again, or one picture described by a provider again. Reported beside the message count rather
+    /// than added to it, since the two neither contain nor exclude one another.
+    /// </remarks>
+    internal static IQueryable<EmailAttachmentTextEntity> StaleReadingsFor(
+        IQueryable<StoredEmailEntity> derived,
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered) => AcrossPostures(
+        postures,
+        unrostered,
+        derived.SelectMany(email => email.AttachmentTexts).Take(0),
+        (owner, stamp) => derived
+            .Where(email => email.OwnerId == owner)
+            .SelectMany(email => email.AttachmentTexts)
+            .Where(reading => reading.SensitiveContentStamp != stamp),
+        (rostered, stamp) => derived
+            .Where(email => !rostered.Contains(email.OwnerId))
+            .SelectMany(email => email.AttachmentTexts)
+            .Where(reading => reading.SensitiveContentStamp != stamp));
+
+    /// <summary>Selects the stored mail any of these queries may reach: not a tombstone, and with its raw MIME still there.</summary>
+    private IQueryable<StoredEmailEntity> Stored() => dbContext.StoredEmails
+        .AsNoTracking()
+        .Where(StoredEmailTombstone.IsNotTombstoned)
+        .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available);
+
+    /// <summary>Narrows stored mail to what has actually been derived from, which is what a stamp can be judged on.</summary>
+    /// <remarks>
+    /// A document recording that extraction never ran is left out, because re-reading it produces nothing to write: its
+    /// message is the one whose stored MIME no reader can parse, so a walk would fetch it, fail to read it, and leave
+    /// the stamp exactly where it was on every pass forever. Such a row holds no derived body text and therefore nothing
+    /// written under an older configuration to correct.
+    /// </remarks>
+    private static IQueryable<StoredEmailEntity> Derived(IQueryable<StoredEmailEntity> stored) => stored
+        .Where(email => email.SearchDocument != null
+            && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
+
     /// <summary>Selects the messages this walk still owes work on, under the configuration it is walking for.</summary>
     /// <remarks>
-    /// <para>
     /// Two shapes rather than one predicate carrying a flag, because they are two different questions and the deployment
     /// asking each is different. Without a rebuild the walk owes work only where extraction never ran, which is the
     /// original question and the query a deployment that scans nobody goes on issuing unchanged. With one it also owes
-    /// work where the derived text was written under a configuration that message's own owner no longer runs —
-    /// including the absent stamp, which is a document derived before any scanner was switched on and is exactly the
-    /// case an operator or an owner enabling one late is asking about.
-    /// </para>
-    /// <para>
-    /// A document recording that extraction never ran is left out of the rebuilding branch, because re-reading it
-    /// produces nothing to write: its message is the one whose stored MIME no reader can parse, so a walk would fetch
-    /// it, fail to read it, and leave the stamp exactly where it was on every pass forever. Such a row holds no derived
-    /// body text and therefore nothing written under an older configuration to correct.
-    /// </para>
+    /// work where derived text was written under a configuration that message's own owner no longer runs — its body,
+    /// what its attachments yielded, or both — including the absent stamp, which is text derived before any scanner was
+    /// switched on and is exactly the case an operator or an owner enabling one late is asking about.
     /// </remarks>
     private IQueryable<StoredEmailEntity> Outstanding()
     {
-        var outstanding = dbContext.StoredEmails
-            .AsNoTracking()
-            .Where(StoredEmailTombstone.IsNotTombstoned)
-            .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available);
-
-        var neverDerived = outstanding.Where(email => email.SearchDocument == null);
+        var stored = this.Stored();
+        var neverDerived = stored.Where(email => email.SearchDocument == null);
         var rebuiltTowards = this.RebuiltTowards;
 
         if (rebuiltTowards.Count == 0)
@@ -303,10 +444,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
             return neverDerived;
         }
 
-        var derived = outstanding.Where(email => email.SearchDocument != null
-            && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
-
-        return neverDerived.Concat(StaleFor(derived, rebuiltTowards, this.UnrosteredRebuiltTowards));
+        return neverDerived.Concat(
+            StaleOrReadUnderAnOlderPostureFor(Derived(stored), rebuiltTowards, this.UnrosteredRebuiltTowards));
     }
 
     /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>

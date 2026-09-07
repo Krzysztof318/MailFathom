@@ -61,6 +61,12 @@ public interface IStoredEmailExtractionBackfillStore
     /// This persists the classification markers MIME extraction produces before it persists any text derived from
     /// them. A row stored before extraction existed carries no markers at all, so reading one instead of writing it
     /// would leave every pre-existing encrypted message indistinguishable from an empty one.
+    /// <para>
+    /// A rebuilding walk also discards whatever this message's attachments yielded under an older posture and takes the
+    /// message's reading marker off, which is the whole of what puts it back in front of the account run's attachment
+    /// stage. The words are taken again there rather than here, so the re-reading is charged to that run's own octet
+    /// budget and asks a vision provider only where the deployment still has one configured.
+    /// </para>
     /// </remarks>
     Task ApplyExtractionAsync(
         IPersistenceSession session,
@@ -82,9 +88,9 @@ public interface IStoredEmailExtractionBackfillStore
         StoredEmailId position,
         CancellationToken cancellationToken);
 
-    /// <summary>Counts the stored emails whose derived text was written under something other than their owner's posture.</summary>
+    /// <summary>Counts what was derived under something other than its own owner's posture, message text and attachment readings apart.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>How many stored emails a rebuild would re-derive.</returns>
+    /// <returns>How many stored emails a rebuild would re-derive, and how many readings of an attachment it would discard and have taken again.</returns>
     /// <remarks>
     /// <para>
     /// Answered by the walk's own store rather than by a reader of its own, so the number an operator is shown and the
@@ -101,6 +107,12 @@ public interface IStoredEmailExtractionBackfillStore
     /// no single value describes the answer. A count summed by a caller over one owner at a time would be the same
     /// number reached through several round trips.
     /// </para>
+    /// <para>
+    /// A message counted for its body and a message counted for its attachments are two different populations, and
+    /// neither contains the other: a posture republished between the body's derivation and the attachment stage leaves
+    /// one of the two current. So the answer is two figures rather than a total, and a message whose body and
+    /// attachments are both stale is one message beside however many readings it carries.
+    /// </para>
     /// </remarks>
-    Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken);
+    Task<StaleDerivedDataCount> CountStaleDerivedDataAsync(CancellationToken cancellationToken);
 }
