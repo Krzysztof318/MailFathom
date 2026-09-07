@@ -10,18 +10,21 @@ import {
     type ClientFailureReason,
     type ClientSession,
     type MailFathomTransport,
+    type MailSearchAttachmentMatch,
     type MailSearchPage,
     type MailSearchRanking,
     type MailSearchResult,
     type MailSearchRetrieval,
+    type MailSearchSegmentKind,
     type MailSemanticSearch,
 } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
-import { useLocalization } from '../localization/useLocalization';
+import { useLocalization, type Translate } from '../localization/useLocalization';
 import { MessageRow } from '../messageRows/MessageRow';
 import { estimatedRowHeight, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { explainingFileOf } from './citedFile';
 import { matchedRuns } from './matchedRuns';
 import { queryFor, type MailSearchAsk } from './searchAsk';
 
@@ -88,7 +91,7 @@ export function SearchResults({
     readonly onOpen: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { translate } = useLocalization();
-    const { workspace } = useWorkspace();
+    const { workspace, revise } = useWorkspace();
 
     const [found, setFound] = useState<FoundMail | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -225,13 +228,29 @@ export function SearchResults({
         wantsFocus.current = true;
     }
 
+    // Opening a row is what follows its citation as well, because the row is the control: a result explained by a file
+    // is one whose reason to be in the list lives inside that file, and a reader who opened it to see why is owed the
+    // file rather than the message it hides behind. The row is an option in a listbox, so there is nothing else here it
+    // could be — an option holds no control of its own — and the citation names what will open.
+    //
+    // What is recorded is a coordinate rather than the file, for the reason `workspace/openAttachment.ts` gives: a
+    // search result is served without the size the download is bounded by, so the pane that reads the message is what
+    // turns this into an opened file.
     function open(row: number): void {
         const result = results[row];
 
-        if (result !== undefined) {
-            setFocusedRow(row);
-            onOpen(result.id, result.subject);
+        if (result === undefined) {
+            return;
         }
+
+        const cited = explainingFileOf(result);
+
+        setFocusedRow(row);
+        revise({
+            citedAttachment:
+                cited === undefined ? null : { storedEmailId: result.id, position: cited.attachmentPosition },
+        });
+        onOpen(result.id, result.subject);
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLUListElement>): void {
@@ -407,34 +426,80 @@ const rankingSentences: Readonly<Record<MailSearchRanking, MessageKey>> = {
     BothRankings: 'search.matchedBothWays',
 };
 
+// What the counted place inside a file is called, which is the file's own unit rather than a page number for all three.
+const segmentNames: Readonly<Record<MailSearchSegmentKind, MessageKey>> = {
+    Page: 'search.inFilePage',
+    Slide: 'search.inFileSlide',
+    Sheet: 'search.inFileSheet',
+};
+
 /**
  * Why one result is in the list, in the line the row's height already reserves.
  *
- * An extract is what a person can check for themselves, so it is preferred wherever the deployment cut one. Where it
- * cut none the ranking is said in words instead: a message ranked by meaning carries no part of it showing the words
- * that were typed, and a row with nothing under it would read as unexplained rather than as honestly matched.
+ * An extract is what a person can check for themselves, so it is preferred wherever the deployment cut one. The
+ * message's own words come first, then a file it carries, then — where the deployment cut neither — the ranking said in
+ * words: a message ranked by meaning carries no part of it showing the words that were typed, and a row with nothing
+ * under it would read as unexplained rather than as honestly matched. A named file always has words under it: a
+ * citation quoting nothing is refused where the answer is parsed rather than drawn as a colon with nothing after it.
+ *
+ * A file is named whenever it is what the row is explaining, because nothing else in the row could tell a reader that
+ * the words were found inside `invoice.pdf` rather than in the message. Where those words are a model's account of a
+ * picture the line says so instead of quoting them as the file's own, which is the difference ADR 0030 turns on.
  */
 function WhyItMatched({ result }: { readonly result: MailSearchResult }) {
     const { translate } = useLocalization();
-    const extract = result.snippets[0];
+    const cited = explainingFileOf(result);
+    const extract = result.snippets[0] ?? cited?.extracts[0];
 
     return (
         <span className="block truncate text-faint">
             <span className="sr-only">{translate('search.whyItMatched')} </span>
 
-            {extract === undefined
-                ? translate(rankingSentences[result.matchedBy])
-                : matchedRuns(extract).map((run, at) => (
-                      <span
-                          // The runs of one extract have no identity of their own, so their position is what they are:
-                          // the extract is replaced whole whenever the result is, and nothing reorders them.
-                          key={`${String(at)}-${run.text}`}
-                          className={run.matched ? 'font-semibold text-accent-strong' : undefined}
-                      >
-                          {run.text}
-                      </span>
-                  ))}
+            {cited === undefined ? null : <span>{citationOf(cited, translate)} </span>}
+
+            {extract === undefined ? (
+                translate(rankingSentences[result.matchedBy])
+            ) : (
+                <MarkedExtract extract={extract} />
+            )}
         </span>
+    );
+}
+
+// How one cited file introduces the words under it: which file, where inside it, and whether anybody wrote them. A file
+// whose reading recorded no boundaries names the file alone rather than a place nothing counted, and a file the sender
+// left unnamed says so rather than being drawn as a gap where a name would be.
+function citationOf(cited: MailSearchAttachmentMatch, translate: Translate): string {
+    const file = cited.fileName ?? translate('search.unnamedFile');
+
+    if (cited.source === 'ImageDescription') {
+        return translate('search.matchedInPicture', { file });
+    }
+
+    if (cited.segmentKind === null || cited.segmentNumber === null) {
+        return translate('search.matchedInFile', { file });
+    }
+
+    const place = translate(segmentNames[cited.segmentKind], { number: cited.segmentNumber.toFixed(0) });
+
+    return translate('search.matchedInFileAt', { file, place });
+}
+
+/** One extract, drawn as the runs it is made of rather than as markup the deployment marked. */
+function MarkedExtract({ extract }: { readonly extract: string }) {
+    return (
+        <>
+            {matchedRuns(extract).map((run, at) => (
+                <span
+                    // The runs of one extract have no identity of their own, so their position is what they are: the
+                    // extract is replaced whole whenever the result is, and nothing reorders them.
+                    key={`${String(at)}-${run.text}`}
+                    className={run.matched ? 'font-semibold text-accent-strong' : undefined}
+                >
+                    {run.text}
+                </span>
+            ))}
+        </>
     );
 }
 

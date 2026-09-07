@@ -16,6 +16,7 @@ const kept: Workspace = {
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fullHtml: null,
     attachment: null,
+    citedAttachment: null,
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',

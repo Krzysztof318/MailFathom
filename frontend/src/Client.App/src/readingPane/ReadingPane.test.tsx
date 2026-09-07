@@ -12,7 +12,7 @@ import type {
     MailFathomTransport,
 } from '@mailfathom/client-backend';
 import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
-import { OpenAttachmentContext } from '../workspace/openAttachment';
+import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
 import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import {
@@ -23,6 +23,7 @@ import {
 } from '../readMarking/useReadMarking';
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
+import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import {
     SignalledChangesContext,
@@ -503,6 +504,124 @@ describe('ReadingPane against a deployment that says what changed', () => {
         // Assert
         expect(screen.getByText('Quarterly invoice')).toBeDefined();
         expect(screen.queryByText('Reading this message…')).toBeNull();
+    });
+});
+
+// Following a search result's citation, which is one act across two components: the row records which file of which
+// message it cited, and this pane is the only place that learns how large that file declares itself to be — the bound
+// the download is read under, and the reason the citation is a coordinate rather than an opened file.
+describe('ReadingPane following a cited file', () => {
+    // The citation is written the way a search row writes it — through the workspace, before the pane has read the
+    // message — rather than by seeding a store, which `rememberWorkspace` deliberately never keeps it in.
+    function citing(cited: Workspace['citedAttachment']): { opened: OpenedAttachment[]; cite: () => void } {
+        const opened: OpenedAttachment[] = [];
+        let cite = (): void => undefined;
+
+        function Citing() {
+            const { workspace, revise } = useWorkspace();
+
+            cite = () => {
+                revise({ citedAttachment: cited });
+            };
+
+            return <output>{JSON.stringify(workspace.citedAttachment)}</output>;
+        }
+
+        render(
+            <LocalizationProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext
+                                value={(opening) => {
+                                    opened.push(opening);
+                                }}
+                            >
+                                <Citing />
+                                <ReadingPane
+                                    session={session}
+                                    transport={deploymentDescribing(
+                                        description({ attachments: [invoice, photograph] }),
+                                    )}
+                                    storedEmailId={messageId}
+                                    online
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                </WorkspaceProvider>
+            </LocalizationProvider>,
+        );
+
+        return {
+            opened,
+            cite: () => {
+                cite();
+            },
+        };
+    }
+
+    it('opens the file a result cited, with the size the message declared for it', async () => {
+        const { opened, cite } = citing({ storedEmailId: messageId, position: 1 });
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(opened).toStrictEqual([{ storedEmailId: messageId, attachment: photograph }]);
+        });
+    });
+
+    it('clears the citation as it follows it, so reopening the message opens no file nobody asked for', async () => {
+        const { cite } = citing({ storedEmailId: messageId, position: 0 });
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(screen.getByText('null')).toBeDefined();
+        });
+    });
+
+    it('opens nothing where the citation names a message other than the one being read', async () => {
+        const { opened, cite } = citing({ storedEmailId: 'another-message', position: 0 });
+
+        act(cite);
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        expect(opened).toStrictEqual([]);
+    });
+
+    it('spends a citation the reader abandoned by reading another message', async () => {
+        const { cite } = citing({ storedEmailId: 'another-message', position: 0 });
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(screen.getByText('null')).toBeDefined();
+        });
+    });
+
+    it('reads the message once although following the citation revises the workspace', async () => {
+        asked.length = 0;
+
+        const { opened, cite } = citing({ storedEmailId: messageId, position: 1 });
+
+        act(cite);
+
+        await waitFor(() => {
+            expect(opened).toStrictEqual([{ storedEmailId: messageId, attachment: photograph }]);
+        });
+
+        expect(asked.filter((request) => !request.path.includes('/body'))).toHaveLength(1);
+    });
+
+    it('opens nothing where the message carries no file at the cited position', async () => {
+        const { opened, cite } = citing({ storedEmailId: messageId, position: 9 });
+
+        act(cite);
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        expect(opened).toStrictEqual([]);
     });
 });
 

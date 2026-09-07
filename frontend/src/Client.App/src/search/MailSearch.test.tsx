@@ -42,6 +42,8 @@ const result = {
     preview: 'The invoice for August is attached.',
     snippets: ['The **invoice** for August'],
     matchedBy: 'LexicalRanking',
+    attachmentMatches: [],
+    isDepictedMatch: false,
 };
 
 const onePage = JSON.stringify({

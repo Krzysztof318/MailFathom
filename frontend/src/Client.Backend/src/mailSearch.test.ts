@@ -48,6 +48,18 @@ const result = {
     preview: 'The figures you asked for are attached.',
     snippets: ['The **quarterly figures** you asked for'],
     matchedBy: 'BothRankings',
+    attachmentMatches: [],
+    isDepictedMatch: false,
+};
+
+const citedFile = {
+    attachmentPosition: 0,
+    fileName: 'figures-2026-08.pdf',
+    mediaType: 'application/pdf',
+    source: 'Document',
+    segmentKind: 'Page',
+    segmentNumber: 2,
+    extracts: ['The **quarterly figures** are on this page'],
 };
 
 function bodyOf(results: readonly unknown[], page: Readonly<Record<string, unknown>> = {}): string {
@@ -157,6 +169,54 @@ describe('readMailSearch', () => {
         );
     });
 
+    it('reads a result the search reached inside a file as the file, the place in it, and what it said', async () => {
+        const body = bodyOf([{ ...result, snippets: [], matchedBy: 'LexicalRanking', attachmentMatches: [citedFile] }]);
+        const answer = await readMailSearch(session, answering({ status: 200, body }), bestRanked);
+
+        expect(answer.outcome === 'read' && answer.value.results[0]?.attachmentMatches).toStrictEqual([
+            {
+                attachmentPosition: 0,
+                fileName: 'figures-2026-08.pdf',
+                mediaType: 'application/pdf',
+                source: 'Document',
+                segmentKind: 'Page',
+                segmentNumber: 2,
+                extracts: ['The **quarterly figures** are on this page'],
+            },
+        ]);
+    });
+
+    it('reads a file read before boundaries were recorded as a citation naming no place inside it', async () => {
+        const unplaced = { ...citedFile, segmentKind: null, segmentNumber: null };
+        const body = bodyOf([{ ...result, attachmentMatches: [unplaced] }]);
+        const answer = await readMailSearch(session, answering({ status: 200, body }), bestRanked);
+
+        expect(answer.outcome === 'read' && answer.value.results[0]?.attachmentMatches[0]).toStrictEqual(
+            expect.objectContaining({ segmentKind: null, segmentNumber: null }) as unknown,
+        );
+    });
+
+    it('reads a result a picture is the whole claim of as one that says so', async () => {
+        const depicted = { ...citedFile, source: 'ImageDescription', extracts: ['A signed delivery note'] };
+        const body = bodyOf([
+            {
+                ...result,
+                snippets: [],
+                matchedBy: 'SemanticRanking',
+                attachmentMatches: [depicted],
+                isDepictedMatch: true,
+            },
+        ]);
+        const answer = await readMailSearch(session, answering({ status: 200, body }), bestRanked);
+
+        expect(answer.outcome === 'read' && answer.value.results[0]).toStrictEqual(
+            expect.objectContaining({
+                isDepictedMatch: true,
+                attachmentMatches: [expect.objectContaining({ source: 'ImageDescription' }) as unknown],
+            }) as unknown,
+        );
+    });
+
     it('reads a page ranked by words alone on a deployment that has activated no embedding profile', async () => {
         const lexical = bodyOf([result], { retrievalMode: 'Lexical', semanticSearch: 'Inactive' });
         const answer = await readMailSearch(session, answering({ status: 200, body: lexical }), bestRanked);
@@ -213,6 +273,39 @@ describe('readMailSearch', () => {
         ['a result whose extracts are not a list', bodyOf([{ ...result, snippets: 'one' }])],
         ['a result whose extracts hold something that is not text', bodyOf([{ ...result, snippets: [7] }])],
         ['a result with no identity', bodyOf([{ ...result, id: null }])],
+        [
+            'a result that does not say whether a picture is its whole claim',
+            bodyOf([{ ...result, isDepictedMatch: null }]),
+        ],
+        ['a result whose cited files are not a list', bodyOf([{ ...result, attachmentMatches: {} }])],
+        [
+            'a cited file whose words came from somewhere this client cannot name',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, source: 'Handwriting' }] }]),
+        ],
+        [
+            'a cited file counted in a unit this client cannot name',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, segmentKind: 'Chapter' }] }]),
+        ],
+        [
+            'a cited file naming a place with no unit to count it in',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, segmentKind: null }] }]),
+        ],
+        [
+            'a cited file naming a unit with no place counted in it',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, segmentNumber: null }] }]),
+        ],
+        [
+            'a cited file numbered from zero rather than from one',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, segmentNumber: 0 }] }]),
+        ],
+        [
+            'a cited file at no position in the message',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, attachmentPosition: null }] }]),
+        ],
+        [
+            'a cited file quoting nothing, which is a coordinate rather than a citation',
+            bodyOf([{ ...result, attachmentMatches: [{ ...citedFile, extracts: [] }] }]),
+        ],
     ])('refuses %s rather than drawing it', async (_, body) => {
         const answer = await readMailSearch(session, answering({ status: 200, body }), bestRanked);
 
