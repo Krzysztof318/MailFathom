@@ -12,6 +12,26 @@ package boundary and the three mechanisms that hold it, the strict compiler sett
 produces. [ADR 0021](../docs/decisions/0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) is the decision
 all of it implements, and it is required reading before a change to the stack itself.
 
+## Where a screen comes from
+
+The client is built UX-first, and what a screen looks like is settled outside this repository: in a design project read
+through an MCP server, which a session reads and never writes to. **A change that alters what a screen looks like opens
+by reading that design rather than by designing a screen in the session**, and `$read-design` is the step —
+[Agent workflow](../docs/operations/agent-workflow.md#skills) describes what it does and what it refuses.
+
+What it produces is a local mirror of the design's screen sources and a state inventory extracted from them, both under
+`artifacts/design/`, which is gitignored and never staged: a design is not repository content, and no file here
+describes what a screen looks like. **The inventory is what a screen is built from; a rendered preview is not.** A
+preview shows the one state it was clicked into, while the source states every screen, every variant and every reaction
+at once — so the empty state, the failing state, the state that only exists under a coarse pointer, and the state no
+click reaches at all are each invisible in a picture, and a screen built from one is built from a partial reading of a
+complete document.
+
+Where the design and the code disagree, the design wins and the code changes. The three exceptions turn it around — an
+accessibility obligation, a real platform constraint, and something that cannot be built — and each of those is a
+correction to the design rather than a difference to live with, so it is named precisely and handed to the owner. The
+same holds for a state the source gates and nothing draws: that is a gap in the design, not a screen to invent.
+
 ## What the toolchain already decides
 
 Three files hold every rule a tool can check, and none of them is repeated in prose here or in any file below:
