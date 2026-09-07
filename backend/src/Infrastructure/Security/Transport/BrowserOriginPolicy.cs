@@ -23,6 +23,17 @@ namespace MailFathom.Infrastructure.Security.Transport;
 /// </remarks>
 public sealed class BrowserOriginPolicy
 {
+    /// <summary>The scheme a client rendering in a native shell's own webview serves its document from, and therefore the scheme of the origin it sends.</summary>
+    /// <remarks>
+    /// A downloaded head is not exempt from CORS — its webview enforces it exactly as a browser does, against the
+    /// origin the shell served the bundle from. Tauri serves that bundle over a custom protocol, so the Linux desktop
+    /// head sends <c>tauri://localhost</c>; Windows and Android tunnel the same protocol over
+    /// <c>http://tauri.localhost</c>, which is an ordinary <c>http</c> origin and needs nothing of its own here.
+    /// Admitting the custom-protocol scheme is what lets a deployment name the head it serves instead of opening the
+    /// surface to every origin, which was the only posture that reached the first of those at all.
+    /// </remarks>
+    private const string NativeShellScheme = "tauri";
+
     private readonly HashSet<string> allowedOrigins;
 
     private BrowserOriginPolicy(bool allowsAnyOrigin, IEnumerable<string> allowedOrigins)
@@ -38,7 +49,9 @@ public sealed class BrowserOriginPolicy
     /// <remarks>
     /// It refuses every request carrying an <c>Origin</c> and serves every request carrying none, so what it excludes is
     /// browsers rather than clients. That is the accurate posture for a deployment whose only consumers are agents and
-    /// command-line clients, and it is the one posture a list of origins cannot express.
+    /// command-line clients, and it is the one posture a list of origins cannot express. A page a deployment serves
+    /// itself is unaffected, being same-origin and therefore never subject to CORS at all; a head somebody downloaded
+    /// is not, and this posture refuses it, which is why <see cref="NativeShellScheme" /> exists to be listed.
     /// </remarks>
     public static BrowserOriginPolicy ServingNoBrowserOrigin { get; } = new(allowsAnyOrigin: false, []);
 
@@ -76,6 +89,12 @@ public sealed class BrowserOriginPolicy
     /// than a set of special cases, and so <c>https://Client.Example.Test:443/</c> and <c>https://client.example.test</c>
     /// cannot be two different entries in one list. A path, a query, a fragment, or user information means the operator
     /// wrote a URL where an origin belongs, and is refused rather than silently discarded.
+    /// <para>
+    /// Three schemes are admitted rather than the two a page on the web can be served from: <c>http</c>, <c>https</c>,
+    /// and the <see cref="NativeShellScheme" /> a downloaded head sends. The list is closed rather than open so a
+    /// scheme nobody here serves — a typo, or another framework's protocol — is a startup error naming the entry,
+    /// instead of a line that binds and then matches nothing a client ever sends.
+    /// </para>
     /// </remarks>
     public static bool TryNormalize(string? configuredValue, out string normalizedOrigin)
     {
@@ -93,7 +112,9 @@ public sealed class BrowserOriginPolicy
             && string.IsNullOrEmpty(origin.UserInfo);
 
         if (!carriesOnlyAnAuthority
-            || (origin.Scheme != Uri.UriSchemeHttp && origin.Scheme != Uri.UriSchemeHttps))
+            || (origin.Scheme != Uri.UriSchemeHttp
+                && origin.Scheme != Uri.UriSchemeHttps
+                && origin.Scheme != NativeShellScheme))
         {
             return false;
         }

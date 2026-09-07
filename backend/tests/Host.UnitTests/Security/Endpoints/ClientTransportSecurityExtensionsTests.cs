@@ -54,7 +54,28 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.True(ClientCorsPolicyOf(endpointSettings).AllowAnyOrigin);
     }
 
-    /// <summary>An emptied list advertises nothing to a browser, which is what a deployment whose client is a desktop or mobile head wants.</summary>
+    /// <summary>
+    /// Both native heads render in a webview and enforce CORS against the origin their shell served the bundle from, so
+    /// the custom-protocol origin three of the five platforms send has to reach the policy intact — otherwise the only
+    /// posture serving those heads is every origin.
+    /// </summary>
+    [Fact]
+    public void AddClientTransportSecurity_TheOriginOfADownloadedHead_ReachesThePolicyUnchanged()
+    {
+        // Arrange
+        var endpointSettings = EnabledEndpoint();
+        endpointSettings.Cors.AllowedOrigins.Add("tauri://localhost");
+        endpointSettings.Cors.AllowedOrigins.Add("http://tauri.localhost");
+
+        // Act
+        var policy = ClientCorsPolicyOf(endpointSettings);
+
+        // Assert
+        Assert.False(policy.AllowAnyOrigin);
+        Assert.Equal(["tauri://localhost", "http://tauri.localhost"], policy.Origins);
+    }
+
+    /// <summary>An emptied list advertises nothing to a browser, which is what a deployment whose only client is the page it serves itself wants.</summary>
     [Fact]
     public void AddClientTransportSecurity_AnEmptiedOriginList_AdvertisesNothingToABrowser()
     {

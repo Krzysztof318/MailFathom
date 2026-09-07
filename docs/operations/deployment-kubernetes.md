@@ -308,7 +308,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
 | Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` or `ClientEndpoint:RateLimiting` for the other surfaces | [Rate limiting](mcp-endpoint.md#rate-limiting) |
-| The surface the MailFathom client reaches | `ClientEndpoint`, whose `Cors:AllowedOrigins` names the origin a browser-hosted client is served from | [The client endpoint](client-endpoint.md) |
+| The surface the MailFathom client reaches | `ClientEndpoint`, whose `Cors:AllowedOrigins` names the origin every client but this deployment's own page calls from, a downloaded head included | [The client endpoint](client-endpoint.md) |
 | The client itself, served as a page | `client.enabled`, which is a chart value rather than a ConfigMap entry — see [serving the client](#serving-the-client) | [Serving the client from the deployment](client-endpoint.md#serving-the-client-from-the-deployment) |
 
 The ingress row is the one an OAuth deployment should not skip, and it narrows rather than enables. The controller

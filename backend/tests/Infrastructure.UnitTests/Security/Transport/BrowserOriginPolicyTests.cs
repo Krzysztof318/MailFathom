@@ -27,6 +27,22 @@ public sealed class BrowserOriginPolicyTests
         Assert.Equal(expectedOrigin, normalizedOrigin);
     }
 
+    /// <summary>A downloaded head is served over a custom protocol on Linux, macOS, and iOS, so its origin is the one an operator has to be able to list.</summary>
+    [Theory]
+    [InlineData("tauri://localhost", "tauri://localhost")]
+    [InlineData("TAURI://LocalHost", "tauri://localhost")]
+    [InlineData("tauri://localhost/", "tauri://localhost")]
+    [InlineData("http://tauri.localhost", "http://tauri.localhost")]
+    public void TryNormalize_TheOriginANativeHeadSends_IsAcceptedAndNormalized(string configuredValue, string expectedOrigin)
+    {
+        // Arrange, Act
+        var normalized = BrowserOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
+
+        // Assert
+        Assert.True(normalized);
+        Assert.Equal(expectedOrigin, normalizedOrigin);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -39,7 +55,10 @@ public sealed class BrowserOriginPolicyTests
     [InlineData("https://user@client.example.test")]
     [InlineData("ftp://client.example.test")]
     [InlineData("file:///etc/hosts")]
-    public void TryNormalize_AnythingThatIsNotAnHttpOrigin_IsRefused(string? configuredValue)
+    [InlineData("capacitor://localhost")]
+    [InlineData("tauri:localhost")]
+    [InlineData("tauri://localhost/index.html")]
+    public void TryNormalize_AnythingThatIsNotAnOriginThisSurfaceIsCalledFrom_IsRefused(string? configuredValue)
     {
         // Arrange, Act
         var normalized = BrowserOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
@@ -87,6 +106,19 @@ public sealed class BrowserOriginPolicyTests
         Assert.True(policy.Permits("https://client.example.test"));
         Assert.True(policy.Permits("https://other-client.example.test"));
         Assert.False(policy.Permits("https://attacker.example.test"));
+    }
+
+    /// <summary>Naming the head's own origin is what a deployment serving one does instead of opening the surface to every origin.</summary>
+    [Fact]
+    public void Permits_TheListedOriginOfANativeHead_IsServedAndNoOtherCustomProtocolOriginIs()
+    {
+        // Arrange
+        var policy = BrowserOriginPolicy.Restricting(["tauri://localhost"]);
+
+        // Act, Assert
+        Assert.True(policy.Permits("tauri://localhost"));
+        Assert.False(policy.Permits("tauri://attacker.example.test"));
+        Assert.False(policy.Permits("http://tauri.localhost"));
     }
 
     /// <summary>A page served over plain HTTP is a different origin from the same host over HTTPS, and so is a different port.</summary>

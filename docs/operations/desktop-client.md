@@ -97,6 +97,14 @@ head is, in full, is that record; how one is built is
 
 ## Pointing the client at a deployment
 
+**The deployment has to allow this client's origin first**, and a deployment serving only its own page does not. This
+head renders in a webview, which enforces CORS exactly as a browser does against the origin the shell served the bundle
+from — `tauri://localhost` on Linux, `http://tauri.localhost` on Windows — so the deployment's
+`ClientEndpoint:Cors:AllowedOrigins` names that origin, or answers nothing this client can read. It looks like a
+deployment that is down rather than one that refused: the sign-in screen reports that the deployment did not answer,
+before a password has been typed, and nothing reaches the deployment's logs. [The origin a downloaded head
+sends](client-endpoint.md#the-origin-a-downloaded-head-sends) is the operator's half of it.
+
 The web head is served by its deployment and needs to be told nothing. The desktop head is served by nobody, so it asks
 for an address on the sign-in screen — and where somebody hands this application to other people, they can state that
 address once instead, so nobody is asked for it at all. Two settings do that, and both are read at start.
