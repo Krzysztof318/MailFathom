@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -306,6 +307,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
                 await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
                 await this.ReadAttachmentsOfCutMailAsync(runSettings, workUnitToken);
+                await this.DeriveMarksOfCutMailAsync(runSettings, workUnitToken);
                 await this.ReportRunToItsOwnerAsync(
                     runSettings,
                     scheduledFolders.Length,
@@ -864,6 +866,55 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogAttachmentReadingFailed(exception, this.account.Id.Value);
+        }
+    }
+
+    /// <summary>Derives what the mail this run cut is about, why it may matter, and any commitment it contains.</summary>
+    /// <remarks>
+    /// <para>
+    /// Behind the cut, because a mark cites passages and a message derived from before it was cut would have nothing to
+    /// rest its evidence on. Everything the stages in front of this one may still change about a message — its verdict,
+    /// its folder, its passages — has been settled by the time it runs.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run, for the reason the passes above it do not: what a derivation reads is already
+    /// stored, and the one remote thing it reaches — a chat endpoint — is bounded by its own resilience budget and is
+    /// not the mail server this account's backoff is about. What a pass did not derive stays outstanding for the next
+    /// run, which is also how an existing mailbox is backfilled.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A derivation that failed is logged and resumed by the next run rather than putting the account into backoff; the remarks hold why the one remote step it takes is bounded elsewhere.")]
+    private async Task DeriveMarksOfCutMailAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<MailEnrichmentPass>()
+                .RunAsync(this.account, cancellationToken);
+
+            if (!report.IsEmpty)
+            {
+                this.LogMarksDerived(
+                    this.account.Id.Value,
+                    report.DerivedEmailCount,
+                    report.MarkedEmailCount,
+                    report.StoppedBy,
+                    report.EmailsRemain);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogMarkDerivationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -1563,10 +1614,26 @@ internal sealed partial class AccountSynchronizationSupervisor
         bool runBudgetExhausted,
         bool emailsRemain);
 
+    /// <summary>Reports one account's derivations in counts alone; no mark, reason, or passage may reach a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Derived marks for {DerivedEmailCount} messages of account {AccountId}, {MarkedEmailCount} of which carry at least one; what stopped the pass early was {StoppedBy}, empty where it ran to its own bound, and messages remain: {EmailsRemain}.")]
+    private partial void LogMarksDerived(
+        string accountId,
+        int derivedEmailCount,
+        int markedEmailCount,
+        EmailEnrichmentWithholding? stoppedBy,
+        bool emailsRemain);
+
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Reading the attachments of the mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not read stays outstanding for the next run.")]
     private partial void LogAttachmentReadingFailed(Exception exception, string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deriving the marks of the cut mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not derived stays outstanding for the next run.")]
+    private partial void LogMarkDerivationFailed(Exception exception, string accountId);
 
     /// <summary>Reports one account run's share of a whole-mailbox classification run, in counts and the profile alone.</summary>
     [LoggerMessage(

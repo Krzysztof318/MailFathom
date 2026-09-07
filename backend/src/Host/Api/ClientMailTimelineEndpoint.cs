@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseTimeline;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Access;
@@ -293,6 +294,7 @@ internal sealed record ClientMailTimelineResponse(
 /// <param name="AttachmentCount">How many of those there are.</param>
 /// <param name="SizeOctets">The size the mail server reported for the message.</param>
 /// <param name="Preview">The opening of the message's own text, bounded, or <see langword="null" /> where nothing has extracted the message yet.</param>
+/// <param name="Enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
 /// <remarks>
 /// <para>
 /// The three flags are published as the states a row draws rather than as the snapshot they came from, because a screen
@@ -303,6 +305,12 @@ internal sealed record ClientMailTimelineResponse(
 /// <para>
 /// <c>preview</c> is the message's own text and nothing else: no quoted history, no signature block, and never a body.
 /// It is absent rather than empty for a message this deployment has stored but not yet extracted.
+/// </para>
+/// <para>
+/// <c>enrichment</c> is absent for a message no derivation has reached — which is every message on a deployment that
+/// has not turned enrichment on — and present with an empty <c>marks</c> array for one a derivation answered nothing
+/// about. The two are different states and a screen draws them differently: the first may change on a later run and
+/// the second will not.
 /// </para>
 /// </remarks>
 internal sealed record ClientMailTimelineEntryResponse(
@@ -322,23 +330,31 @@ internal sealed record ClientMailTimelineEntryResponse(
     bool HasAttachments,
     int AttachmentCount,
     long SizeOctets,
-    string? Preview)
+    string? Preview,
+    ClientMailEnrichmentResponse? Enrichment)
 {
     /// <summary>Describes one row for the wire.</summary>
     /// <param name="row">The row the use case read.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) => For(row.Email, row.Preview);
+    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) =>
+        For(row.Email, row.Preview, row.Enrichment);
 
     /// <summary>Describes one message for the wire, wherever on this surface a message is drawn.</summary>
     /// <param name="email">The message the use case read.</param>
     /// <param name="preview">The opening of the message's own text, or <see langword="null" /> where nothing has extracted it.</param>
+    /// <param name="enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
     /// <returns>The response body.</returns>
     /// <remarks>
-    /// The pair rather than a reading's own row type, because a message is one shape on this surface: a list row and a
+    /// The three rather than a reading's own row type, because a message is one shape on this surface: a list row and a
     /// message inside a conversation are drawn from the same fields, and a second mapping is how the two would come to
-    /// publish one message two ways.
+    /// publish one message two ways. The derivation is a parameter rather than a default for the same reason — a caller
+    /// that had one and did not pass it would publish <see langword="null" />, which this surface reads as no derivation
+    /// having reached the message rather than as this reading not having asked.
     /// </remarks>
-    internal static ClientMailTimelineEntryResponse For(EmailSummary email, string? preview) => new(
+    internal static ClientMailTimelineEntryResponse For(
+        EmailSummary email,
+        string? preview,
+        EmailEnrichment? enrichment) => new(
         email.StoredEmailId.Value,
         email.AccountId.Value,
         email.FolderAlias.Value,
@@ -355,5 +371,6 @@ internal sealed record ClientMailTimelineEntryResponse(
         email.Attachments.HasAttachments,
         email.Attachments.AttachmentCount,
         email.SizeOctets,
-        preview);
+        preview,
+        ClientMailEnrichmentResponse.For(enrichment));
 }

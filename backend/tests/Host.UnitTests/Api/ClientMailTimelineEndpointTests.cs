@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseTimeline;
+using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
@@ -207,7 +209,8 @@ public sealed class ClientMailTimelineEndpointTests
         // Arrange
         var row = new BrowsedEmail(
             SyntheticListedEmail(subject: "the release is out", attachmentCount: 2),
-            "it went out this morning");
+            "it went out this morning",
+            Enrichment: null);
 
         // Act
         var response = ClientMailTimelineEntryResponse.For(row);
@@ -230,7 +233,7 @@ public sealed class ClientMailTimelineEndpointTests
     public void For_ARowTheServerReportedAsSeen_IsNotUnread()
     {
         // Arrange
-        var row = new BrowsedEmail(SyntheticListedEmail(isRemotelySeen: true), Preview: null);
+        var row = new BrowsedEmail(SyntheticListedEmail(isRemotelySeen: true), Preview: null, Enrichment: null);
 
         // Act
         var response = ClientMailTimelineEntryResponse.For(row);
@@ -240,13 +243,78 @@ public sealed class ClientMailTimelineEndpointTests
         Assert.Null(response.Preview);
     }
 
+    /// <summary>What a derivation concluded reaches a row whole: the reading, its reason, its standing, and its evidence.</summary>
+    [Fact]
+    public void For_ARowADerivationReached_CarriesEachMarkWithItsProvenanceAndEvidence()
+    {
+        // Arrange
+        var passage = EmailChunkId.Create(Guid.CreateVersion7());
+        var dueAt = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
+        var row = new BrowsedEmail(
+            SyntheticListedEmail(),
+            Preview: null,
+            new EmailEnrichment(
+                StoredEmailId.Create(Guid.CreateVersion7()),
+                [
+                    EmailEnrichmentMark.Create(
+                        EmailEnrichmentAspect.Commitment,
+                        "answer the supplier",
+                        "the passage asks for an answer",
+                        [passage],
+                        EmailEnrichmentProvenance.FromAgent("mailfathom-email-enrichment"),
+                        dueAt),
+                ],
+                FirstJuly));
+
+        // Act
+        var response = ClientMailTimelineEntryResponse.For(row);
+
+        // Assert
+        Assert.NotNull(response.Enrichment);
+        Assert.Equal(FirstJuly, response.Enrichment.DerivedAt);
+
+        var mark = Assert.Single(response.Enrichment.Marks);
+
+        Assert.Equal(EmailEnrichmentAspect.Commitment, mark.Aspect);
+        Assert.Equal("answer the supplier", mark.Text);
+        Assert.Equal("the passage asks for an answer", mark.Reason);
+        Assert.Equal(dueAt, mark.DueAt);
+        Assert.Equal(EmailEnrichmentSource.Model, mark.Source);
+        Assert.Equal("mailfathom-email-enrichment", mark.Origin);
+        Assert.Equal([passage.Value], mark.Evidence);
+    }
+
+    /// <summary>
+    /// A derivation that ran and found nothing to say is an object with no marks, and a message no derivation has
+    /// reached carries no object at all — which is how a client tells the two apart without a third field saying which.
+    /// </summary>
+    [Fact]
+    public void For_ADerivationThatFoundNothingAndOneThatNeverRan_ReachTheWireDifferently()
+    {
+        // Arrange
+        var nothingToSay = new BrowsedEmail(
+            SyntheticListedEmail(),
+            Preview: null,
+            new EmailEnrichment(StoredEmailId.Create(Guid.CreateVersion7()), [], FirstJuly));
+        var neverDerived = new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null);
+
+        // Act
+        var settled = ClientMailTimelineEntryResponse.For(nothingToSay);
+        var outstanding = ClientMailTimelineEntryResponse.For(neverDerived);
+
+        // Assert
+        Assert.NotNull(settled.Enrichment);
+        Assert.Empty(settled.Enrichment.Marks);
+        Assert.Null(outstanding.Enrichment);
+    }
+
     /// <summary>Both cursors reach the wire, because a list a screen can only scroll one way is half a list.</summary>
     [Fact]
     public void For_APageInTheMiddleOfTheList_CarriesTheCursorAtBothEnds()
     {
         // Arrange
         var page = new BrowsedTimelinePage(
-            [new BrowsedEmail(SyntheticListedEmail(), Preview: null)],
+            [new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null)],
             NextCursor: "after",
             PreviousCursor: "before",
             PageSize: 25);
@@ -347,9 +415,15 @@ public sealed class ClientMailTimelineEndpointTests
             .Returns(Task.FromResult<IReadOnlyDictionary<StoredEmailId, string>>(
                 new Dictionary<StoredEmailId, string>()));
 
+        var enrichments = Substitute.For<IStoredEmailEnrichmentReader>();
+        enrichments.ReadEnrichmentsAsync(Arg.Any<IReadOnlyList<StoredEmailId>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<StoredEmailId, EmailEnrichment>>(
+                new Dictionary<StoredEmailId, EmailEnrichment>()));
+
         return new MailTimelineBrowser(
             this.timeline,
             previews,
+            enrichments,
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,

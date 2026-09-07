@@ -178,6 +178,10 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>Present rather than nullable, because every member of it has a usable default and the block's own <c>Enabled</c> is what says whether the pass runs. Off is the default and is a supported deployment.</remarks>
     public PassageRelevanceFilterOptions RelevanceFilter { get; set; } = new();
 
+    /// <summary>Gets or sets whether arriving mail is read into the marks a list row draws.</summary>
+    /// <remarks>Present rather than nullable for the reason the block above is: its own <c>Enabled</c> is what says whether the derivation runs, and off is the default and a supported deployment.</remarks>
+    public EmailEnrichmentOptions Enrichment { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the alias because it is the one member with no usable default: a section an operator began writing but left without a name is not a declaration, and a section they never wrote has none either.</remarks>
     public bool IsConfigured => this.Alias.Trim().Length > 0;
@@ -201,7 +205,8 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
                 || this.ApiKey is not null
                 || this.EntraCredential is not null
                 || this.Unauthenticated
-                || this.RelevanceFilter.Enabled)
+                || this.RelevanceFilter.Enabled
+                || this.Enrichment.Enabled)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

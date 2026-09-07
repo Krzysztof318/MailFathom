@@ -182,7 +182,7 @@ internal sealed record ClientMailThreadEmailResponse(
     internal static ClientMailThreadEmailResponse For(BrowsedThreadEmail message) => new(
         message.Position,
         message.AnsweredStoredEmailId?.Value,
-        ClientMailTimelineEntryResponse.For(message.Email, message.Contribution));
+        ClientMailTimelineEntryResponse.For(message.Email, message.Contribution, message.Enrichment));
 }
 
 /// <summary>Somebody who has written in the conversation, and how much of it is theirs.</summary>

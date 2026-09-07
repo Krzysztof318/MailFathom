@@ -195,6 +195,13 @@ is the layer rather than something MailFathom re-implements:
   pass](../features/mail-answering.md#an-optional-second-pass-the-model-decides-what-answers) states what a refused
   judgement costs there, which is filtering and never the lookup.
 
+  Where a deployment turns [message enrichment](../features/message-enrichment.md) on, the account run puts each
+  arriving message to the same endpoint through the same client, and for the same reason walks its batch **one message
+  at a time**. Eight derivations dispatched together against a limiter that rejects rather than queues would report a
+  healthy provider as an outage on seven of them and would take the account run's whole batch down with the first
+  refusal. Serializing them also makes the pass's own withholding meaningful: a rejection is read as a provider that is
+  unavailable, which ends the pass and leaves every message it had not reached outstanding rather than settled.
+
   The fourth is the transport a request to the object-storage endpoint is sent over. Every call already runs under
   `ObjectStorageInvocation`, so keeping the handler would put three attempts inside three against an endpoint that is
   already refusing. There is a third layer to switch off here as well, and for the same reason as the provider clients:

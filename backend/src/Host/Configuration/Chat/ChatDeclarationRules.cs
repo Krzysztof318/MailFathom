@@ -141,6 +141,12 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.RelevanceFilter)}:{nameof(PassageRelevanceFilterOptions.Enabled)} — whether retrieval judges its candidates decides which retrieval is registered, so turning the pass on or off needs a restart rather than a configuration reload. The two numbers beside it reload.");
         }
 
+        if (candidate.Enrichment.Enabled != composed.Enrichment.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.Enrichment)}:{nameof(EmailEnrichmentOptions.Enabled)} — whether arriving mail is derived from decides which enricher the arrival pipeline resolves, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
         return errors;
     }
 

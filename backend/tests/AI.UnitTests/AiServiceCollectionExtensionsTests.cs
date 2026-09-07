@@ -5,6 +5,7 @@
 using MailFathom.AI.Chat;
 using MailFathom.AI.Descriptions;
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -15,6 +16,7 @@ using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Discovery.Runs;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
@@ -219,6 +221,66 @@ public sealed class AiServiceCollectionExtensionsTests
         using var second = provider.CreateScope();
 
         Assert.NotSame(describer, second.ServiceProvider.GetRequiredService<IEmailAttachmentImageDescriber>());
+    }
+
+    /// <summary>
+    /// The port is registered whichever decision a deployment took, for the reason description's is: the pass needs a
+    /// reason it can report and a message it can leave outstanding, rather than an absent service it would have to
+    /// interpret. An instance that has not turned enrichment on resolves the enricher that reads nothing.
+    /// </summary>
+    [Fact]
+    public void AddEmailEnrichmentAgent_NotActivated_ResolvesTheEnricherThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddEmailEnrichmentAgent(isActivated: false);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveEmailEnricher>(provider.GetRequiredService<IEmailEnricher>());
+    }
+
+    /// <summary>Scoped where it is active, because each derivation opens its own credential, transport, and client.</summary>
+    [Fact]
+    public void AddEmailEnrichmentAgent_Activated_ResolvesTheAgentOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ => ChatDeclarations.Plan());
+        services.AddScoped(_ => MailAnsweringRunBounds.Default);
+        services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddScoped(_ => Substitute.For<IHttpClientFactory>());
+        services.AddScoped(_ => Substitute.For<IOutboundOperationRunner>());
+        services.AddScoped(_ => Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped(_ => SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddEmailEnrichmentAgent(isActivated: true);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var enricher = scope.ServiceProvider.GetRequiredService<IEmailEnricher>();
+
+        Assert.IsType<EmailEnrichmentAgent>(enricher);
+        Assert.Same(enricher, scope.ServiceProvider.GetRequiredService<IEmailEnricher>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(enricher, second.ServiceProvider.GetRequiredService<IEmailEnricher>());
+    }
+
+    [Fact]
+    public void AddEmailEnrichmentAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddEmailEnrichmentAgent(null!, isActivated: false));
     }
 
     /// <summary>A ceiling that admits no image would refuse every one of them while reading as a bound somebody chose.</summary>
