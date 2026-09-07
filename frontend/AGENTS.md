@@ -32,6 +32,50 @@ accessibility obligation, a real platform constraint, and something that cannot 
 correction to the design rather than a difference to live with, so it is named precisely and handed to the owner. The
 same holds for a state the source gates and nothing draws: that is a gap in the design, not a screen to invent.
 
+## Holding a screen against the design
+
+Reading the design settles what a screen should look like. Whether it does is a separate question, and it is not one to
+answer by reading the source: **a change that alters what a screen looks like is held against the design as images, and
+the comparison is made by a tool rather than by eye.** Three scripts are the whole of it, and they are run in this
+order.
+
+1. `bash scripts/capture-design.sh --out <directory> --screen <id>` captures the design side. It serves the mirror out
+   of `artifacts/design/files/` — the screen sources and the runtime that boots them, which is why the mirror carries
+   that one generated file beside them.
+2. `bash scripts/capture-client.sh --out <directory> --screen <id>` captures the client side, served from the fixture
+   corpus under `frontend/tests/fixtures/` so a capture shows example mail and never somebody's.
+3. `bash scripts/compare-captures.sh <directory>` compares each pair and reports the result.
+
+What makes the pair a pair is that both scripts read one manifest,
+[`design-parity/screens.json`](design-parity/screens.json): each screen's address, the steps that reach the state being
+compared, and the compositions it is compared at — the design project's own four sizes, three of them under a coarse
+pointer. A comparison across two widths, two pointers or two device pixel ratios proves nothing while looking exactly
+like one that proves something, so neither side is given a viewport of its own to get wrong. The manifest describes the
+client and carries no design content, which is what lets it live in a public tree; the design half of the pairing —
+which artboard a screen is drawn on and what reaches it — is design content and sits beside the mirror in
+`artifacts/design/parity.json`, which `$read-design` writes and `.gitignore` covers.
+
+What the manifest names is the screens the client **implements**. A space the rail still draws as a placeholder is not
+a parity question: the difference would be the whole frame, every time, and acting on it means building the screen
+rather than correcting one. Such a space joins the manifest in the change that builds it.
+
+**Read the report before any image, and then read a region rather than a frame.** A screenshot is the most expensive
+thing a session loads and the cost follows its pixel dimensions rather than its bytes — compressing a capture to a
+quarter of its size changes what it costs to read by nothing. So the comparison answers in text first: how many pixels
+differ in each pair, and where, as regions with the crop that opens each one. A pass that captures four compositions and
+opens eight images has spent its context before it has found anything; the same pass reading the counts and then opening
+the two regions they flagged has spent almost none. That is also why both capture scripts refuse to produce more than
+four pairs per invocation and say so rather than truncating: a parity pass proceeds one screen at a time.
+
+Nothing is tolerated by default, and a tolerance is not a way of making a report quieter. `--fuzz` and `--smallest`
+exist for a difference whose class has been named and explained — an unmirrored asset the design references, say, which
+the design capture reports by path for exactly that reason — never for the report as a whole.
+
+Captures go to the session's scratch directory or under `artifacts/`, and the scripts refuse anywhere else. Both sides
+are material that does not belong in a public tree: the design side is the source of truth for screens that have not
+shipped, and the client side is a capture of a running client. What travels out of a session is the report and a
+description of what was seen.
+
 ## What the toolchain already decides
 
 Three files hold every rule a tool can check, and none of them is repeated in prose here or in any file below:

@@ -13,6 +13,7 @@
     "vitest.config.ts",
     "playwright.config.ts",
     "tests",
+    "design-parity/capture.ts",
     "src-tauri/run-tauri.ts"
   ]
 }

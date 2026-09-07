@@ -93,7 +93,10 @@ is well past the per-call cap. `$read-design` is the step that reads it, and thi
 script is the half of that step a session should not be doing by eye: it compares
 one full-depth listing — every path, size and opaque `etag`, no content read at
 all — against the manifest under `artifacts/design/`, and names which screen
-sources still have to be read. An unchanged project costs the listing and nothing
+sources and which generated runtime still have to be read. The runtime is the one
+file that is not a screen source and is still mirrored, because an artboard is a
+component it boots rather than a document a browser draws, and the parity loop
+below serves the mirror to a browser. An unchanged project costs the listing and nothing
 else. Its other four commands are `extract`, which takes the wrapper off a read
 result the harness saved to a file and copies bytes that never passed through a
 model at all, `decode`, which is for the opposite case — a result small enough to
@@ -110,6 +113,24 @@ repository content:
 `artifacts/` is gitignored, `.worktreeinclude` copies `artifacts/design/` into a
 linked worktree so a session does not re-fetch what the main checkout holds, and
 no file describing what a screen looks like is committed.
+
+Ask whether a client screen still looks like the design it was built from:
+
+```bash
+bash scripts/capture-design.sh --out "$WORK_DIR/pairs" --screen <id>
+bash scripts/capture-client.sh --out "$WORK_DIR/pairs" --screen <id>
+bash scripts/compare-captures.sh "$WORK_DIR/pairs"
+```
+
+The first serves the mirror above to a browser, the second serves the client from
+the fixture corpus, and both read one manifest —
+[`frontend/design-parity/screens.json`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/design-parity/screens.json) —
+so a pair cannot differ in size, state or device pixel ratio. The third compares
+each pair and answers in text: how many pixels differ, and where, as regions with
+the crop that opens one. `frontend/AGENTS.md` § _Holding a screen against the
+design_ is the rule, including why the report is read before any image and why an
+invocation produces at most four pairs. None of the three gates anything, and
+nothing they write enters the tree.
 
 Run the complete gate before committing:
 
