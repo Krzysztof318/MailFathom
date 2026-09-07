@@ -8860,6 +8860,364 @@ SAVED
   rm -rf "$repository_root/artifacts/design"
 }
 
+# The client's example mail, held against the HTTP surface the service actually publishes.
+#
+# **Why it is here rather than in either stack.** `scripts/resolve-changed-stacks.sh` and `ci.yml`'s
+# `detect-changes` name no `backend/` path in the client filter and no `frontend/` path in the
+# service's, so a check written on either side would not run when the other side moved — which is the
+# only moment it is worth anything. A field renamed under `backend/src/Host/Api/` reaches this
+# repository as a moved line in `http-api-contract.json` and touches no client path, so a corpus
+# still writing the old spelling would stay green in the client job; a fixture rewritten under
+# `frontend/tests/fixtures/` touches no service path, so it would stay green in the service job. This
+# suite reads the whole tree on every pull request through `Repository contracts`, which is what
+# makes it the one place a rule spanning both stacks can be asserted at all. Moving it into either
+# stack would not weaken the check — it would silence it for exactly the changes it exists to catch.
+#
+# **What it compares.** The field names an answer states, and the enumeration spellings inside it.
+# Those are what a hand-written fixture gets wrong and what nothing else notices: an enumeration is
+# camel-cased over the MCP surface and Pascal-cased over `/api/client`, and a fixture that copies the
+# wrong spelling passes the linter, the type check, both unit projects and the browser suite, because
+# the client's own hand-written types agree with it. What it deliberately does not read is whether a
+# fixture *omits* a field the contract requires: a fixture legitimately states the part of an answer
+# a check reads, and refusing that would be a rule about how fixtures are written rather than about
+# whether they agree with the deployment.
+#
+# **Why it reads the fixtures as text.** The job that runs this suite installs nothing, and the
+# corpus is TypeScript whose imports carry no extension, which no runtime on a runner resolves
+# without the workspace's own toolchain. Reading the source is the same trade the fake `dotnet` at
+# the top of this file makes, and it is what the three helpers below are: strings, comments and
+# parameter lists are removed, and what is left is read as object-literal keys and quoted values.
+#
+# The one JavaScript key that survives that and is not a field is `length`, out of the
+# `Array.from({ length })` a generated page is built with, so it is named here rather than left to
+# read as a field the contract has never heard of.
+#
+# Which answer each fixture states is written here rather than in the corpus, because
+# `frontend/tests/AGENTS.md` § *The corpus* refuses a fixture that names a route: the corpus is data,
+# and this table is the check's own reading of it. `-` names a value that states no answer of this
+# surface at all, and each one says why.
+client_answer_bindings() {
+  cat <<'BINDINGS'
+changes.ts flagsRecorded POST /api/client/mutations/flags
+changes.ts movesPartlyRecorded POST /api/client/mutations/moves
+changes.ts mutationRecords GET /api/client/mutations
+changes.ts signalTicket POST /api/client/signals/ticket
+changes.ts signals - -
+deployment.ts sessionAnswer GET /api/client/session
+deployment.ts ownDisplayName GET /api/client/display-name
+deployment.ts clientPreferences GET /api/client/preferences
+deployment.ts workAccount GET /api/client/accounts
+deployment.ts failingAccount GET /api/client/accounts
+deployment.ts accountBehind GET /api/client/accounts
+deployment.ts mailAccounts GET /api/client/accounts
+deployment.ts troubledAccounts GET /api/client/accounts
+deployment.ts inbox GET /api/client/folders
+deployment.ts archive2024 GET /api/client/folders
+deployment.ts emptyFolder GET /api/client/folders
+deployment.ts mailFolders GET /api/client/folders
+deployment.ts troubledFolders GET /api/client/folders
+drafts.ts draft GET /api/client/drafts/{draftId}
+drafts.ts answeringDraft GET /api/client/drafts/{draftId}
+drafts.ts drafts - -
+drafts.ts savedDraft POST /api/client/drafts
+drafts.ts queuedSend POST /api/client/drafts/{draftId}/send
+drafts.ts refusedSend - -
+mail.ts timelineRow GET /api/client/emails
+mail.ts timelinePage GET /api/client/emails
+mail.ts emptyFolderPage GET /api/client/emails
+mail.ts rackingQuote GET /api/client/emails
+mail.ts searchResults GET /api/client/emails/search
+mail.ts noSearchResults GET /api/client/emails/search
+mail.ts conversationRows - -
+mail.ts conversation GET /api/client/threads/{threadId}
+messages.ts run GET /api/client/messages/{storedEmailId}/body
+messages.ts newsletterBlocks GET /api/client/messages/{storedEmailId}/body
+messages.ts newsletterBody GET /api/client/messages/{storedEmailId}/body
+messages.ts markupOnlyBody GET /api/client/messages/{storedEmailId}/body
+messages.ts newsletterMessage GET /api/client/messages/{storedEmailId}
+messages.ts markupOnlyMessage GET /api/client/messages/{storedEmailId}
+notifications.ts notificationPage GET /api/client/notifications
+notifications.ts emptyNotificationPage GET /api/client/notifications
+notifications.ts unreadNotificationCount GET /api/client/notifications/unread-count
+notifications.ts notificationMarkedRead POST /api/client/notifications/{notificationId}/read-state
+notifications.ts everyNotificationMarkedRead POST /api/client/notifications/read
+BINDINGS
+}
+
+# The four values above that answer for no route, and the reason each one does:
+#
+# - `changes.ts signals` carries the payloads a deployment pushes down the signal channel. The
+#   channel is a stream rather than a route with a body, and `http-api-contract.json` records the
+#   ticket it is opened with and nothing about what travels over it, so there is nothing here to
+#   compare against.
+# - `drafts.ts drafts` is the two records a listing would carry rather than the listing itself. The
+#   corpus says so in its own words: nothing in `Client.Backend` reads that route yet, and inventing
+#   the envelope would be the drift this check exists to end.
+# - `drafts.ts refusedSend` is a problem-details body with the `errorCode` extension a client matches
+#   the refusal by. The contract records no failure body for the send route, and an extension is not
+#   something an OpenAPI document carries at all, so what would be compared is a shape nothing wrote
+#   down. That is a gap in what the service declares rather than a defect in the fixture.
+# - `mail.ts conversationRows` is the table the conversation is assembled from, and `answersRow` in
+#   it is a position in that list rather than anything the service answers with.
+
+# Every property name and every enumeration spelling reachable from what a route answers with, as one
+# JSON object, or nothing at all where the contract records no JSON body there.
+#
+# The closure is taken over `$ref` at any depth rather than over the top-level schema, because that
+# is how the surface is recorded: an answer is a handful of named schemas pointing at each other, and
+# a comparison against the outermost one alone would read every nested field as unknown.
+contract_route_vocabulary() {
+  local contract="$1" method="$2" path="$3"
+
+  jq -r --arg method "$(printf '%s' "$method" | tr 'A-Z' 'a-z')" --arg path "$path" '
+    def refs: [.. | objects | select(has("$ref")) | .["$ref"] | sub("^#/components/schemas/"; "")];
+    def expand($schemas):
+      (. + (map($schemas[.] // {} | refs) | add // []) | unique) as $next
+      | if ($next | length) == length then $next else ($next | expand($schemas)) end;
+
+    .components.schemas as $schemas
+    | (.paths[$path][$method].responses // {}
+       | to_entries
+       | map(select(.key | startswith("2")))
+       | map(.value.content // {} | to_entries | map(.value.schema."$ref" // empty))
+       | add // []
+       | map(sub("^#/components/schemas/"; ""))) as $roots
+    | if ($roots | length) == 0 then empty
+      else
+        ($roots | expand($schemas)) as $names
+        | {
+            properties: ([$names[] | $schemas[.] // {}
+                          | [.. | objects | select(has("properties")) | .properties | keys[]]]
+                         | add // [] | unique),
+            enumerations: ([$names[] | $schemas[.] // {}
+                            | [.. | objects | select(has("enum")) | .enum[] | select(type == "string")]]
+                           | add // [] | unique)
+          }
+      end
+  ' "$contract"
+}
+
+# Every route of the client surface that answers with a JSON body of its own, which is what the
+# corpus is measured against for coverage. A route answering a stream or nothing has no shape to
+# state, so it is not a gap when no fixture covers it.
+contract_client_routes() {
+  jq -r '
+    .paths
+    | to_entries[]
+    | .key as $path
+    | select($path | startswith("/api/client"))
+    | .value
+    | to_entries[]
+    | select(.key | IN("get", "post", "put", "delete", "patch"))
+    | .key as $method
+    | .value.responses // {}
+    | to_entries
+    | map(select(.key | startswith("2")))
+    | map(.value.content // {} | to_entries | map(.value.schema."$ref" // empty))
+    | add // []
+    | map(select(endswith("/Stream") | not))
+    | select(length > 0)
+    | "\($method | ascii_upcase) \($path)"
+  ' "$1" | LC_ALL=C sort -u
+}
+
+# One top-level declaration of a fixture module, from the line that opens it to the line that opens
+# the next one. A declaration this suite has no binding for is a fixture nobody stated an answer for,
+# which the contract below reports rather than skips.
+fixture_block() {
+  awk -v name="$2" '
+    /^(export )?(const|function|type|interface|class) / { inside = 0 }
+    $0 ~ "^(export )?(const|function) " name "[^A-Za-z0-9_$]" { inside = 1 }
+    inside
+  ' "$1"
+}
+
+# The field names a block states, read in object-literal key position alone: a colon after `?` is a
+# conditional rather than a field, and a parameter list on a function's own line is TypeScript rather
+# than an answer.
+fixture_block_fields() {
+  sed -E "s/'[^']*'/''/g; s/\`[^\`]*\`/\`\`/g; s|//.*||" |
+    sed -E 's/^((export )?function [A-Za-z0-9_$]+)\(.*\)/\1/' |
+    { grep -oE '(^|[{,])[[:space:]]*[A-Za-z_$][A-Za-z0-9_$]*[[:space:]]*:' || true; } |
+    sed -E 's/^[{,]?[[:space:]]*//; s/[[:space:]]*:$//' |
+    { grep -vxF 'length' || true; } |
+    sort -u
+}
+
+# The quoted values a block states. Comments are left in deliberately: stripping them would cut a URL
+# in half at its `//` and leave an unbalanced quote behind, and a word inside a comment matches an
+# enumeration spelling only by being that spelling written correctly.
+fixture_block_strings() {
+  { grep -oE "'[^']*'" || true; } | sed -E "s/^'//; s/'$//" | sort -u
+}
+
+# What one fixture block and one route's vocabulary disagree about, one line each, naming the route,
+# the field or value, and both spellings wherever the contract has one to offer.
+fixture_disagreements() {
+  local route="$1" origin="$2" properties="$3" enumerations="$4" body="$5"
+  local field value spelling
+
+  while IFS= read -r field; do
+    [[ -n "$field" ]] || continue
+    grep -qxF "$field" <<< "$properties" && continue
+
+    spelling="$(grep -ixF "$field" <<< "$properties" | head -n 1 || true)"
+
+    if [[ -n "$spelling" ]]; then
+      printf '%s: %s writes the field %s where the contract writes %s\n' "$route" "$origin" "$field" "$spelling"
+    else
+      printf '%s: %s writes the field %s, which the contract records nowhere on that route\n' \
+        "$route" "$origin" "$field"
+    fi
+  done < <(fixture_block_fields <<< "$body")
+
+  while IFS= read -r value; do
+    [[ -n "$value" ]] || continue
+    grep -qxF "$value" <<< "$enumerations" && continue
+
+    spelling="$(grep -ixF "$value" <<< "$enumerations" | head -n 1 || true)"
+    [[ -n "$spelling" ]] || continue
+
+    printf '%s: %s writes the value %s where the contract writes %s\n' "$route" "$origin" "$value" "$spelling"
+  done < <(fixture_block_strings <<< "$body")
+}
+
+the_client_corpus_states_what_the_contract_records() {
+  local contract corpus module block method path route vocabulary
+  local properties enumerations body disagreements uncovered
+  local covered='' bound='' failures=0
+
+  contract="$source_repository_root/backend/tests/PublicSurfaces.UnitTests/http-api-contract.json"
+  corpus="$source_repository_root/frontend/tests/fixtures"
+
+  while read -r module block method path; do
+    bound+="$module $block"$'\n'
+
+    if [[ "$method" == '-' ]]; then
+      continue
+    fi
+
+    route="$method $path"
+    covered+="$route"$'\n'
+    body="$(fixture_block "$corpus/$module" "$block")"
+
+    if [[ -z "$body" ]]; then
+      printf '%s states the answer for %s and no longer exists in %s\n' "$block" "$route" "$module" >&2
+      failures=$(( failures + 1 ))
+      continue
+    fi
+
+    vocabulary="$(contract_route_vocabulary "$contract" "$method" "$path")"
+
+    # A route the corpus states an answer for and the contract does not record is a route the client
+    # invented, which is the one direction of this comparison that cannot be a wrong spelling.
+    if [[ -z "$vocabulary" ]]; then
+      printf '%s states the answer for %s, which the contract records no JSON body for\n' \
+        "$block" "$route" >&2
+      failures=$(( failures + 1 ))
+      continue
+    fi
+
+    properties="$(jq -r '.properties[]' <<< "$vocabulary")"
+    enumerations="$(jq -r '.enumerations[]' <<< "$vocabulary")"
+    disagreements="$(fixture_disagreements \
+      "$route" "$module $block" "$properties" "$enumerations" "$body")"
+
+    if [[ -n "$disagreements" ]]; then
+      printf '%s\n' "$disagreements" >&2
+      failures=$(( failures + $(grep -c '' <<< "$disagreements") ))
+    fi
+  done < <(client_answer_bindings)
+
+  # A fixture nobody stated an answer for is unchecked, and silently so, which is the state this
+  # whole contract exists to leave. Only a declaration that states fields is asked for: an identifier
+  # or a sentence carries no shape to compare.
+  while IFS= read -r module; do
+    while IFS= read -r block; do
+      [[ -n "$(fixture_block_fields <<< "$(fixture_block "$corpus/$module" "$block")")" ]] || continue
+      grep -qxF "$module $block" <<< "$bound" && continue
+
+      printf '%s in %s states an answer that no binding names, so nothing checks it\n' \
+        "$block" "$module" >&2
+      failures=$(( failures + 1 ))
+    done < <({ grep -oE '^(export )?(const|function) [A-Za-z0-9_$]+' "$corpus/$module" || true; } |
+      awk '{ print $NF }' | sort -u)
+  done < <(cd "$corpus" && ls -1 ./*.ts | sed 's|^\./||')
+
+  # The other direction is a gap rather than a defect: a route nothing has reached yet is work that
+  # has not happened, and failing on it would make every new endpoint a broken build.
+  # Byte collation on both sides, because `comm` compares bytes: a locale that orders `{` away from
+  # where a byte comparison puts it makes every route past the first path parameter read as uncovered.
+  uncovered="$(comm -23 \
+    <(contract_client_routes "$contract") \
+    <(LC_ALL=C sort -u <<< "$covered"))"
+
+  if [[ -n "$uncovered" ]]; then
+    printf 'the corpus states no answer for %s of the %s client routes the contract records: %s\n' \
+      "$(grep -c '' <<< "$uncovered")" \
+      "$(contract_client_routes "$contract" | grep -c '')" \
+      "$(paste -sd, - <<< "$uncovered" | sed 's/,/, /g')"
+  fi
+
+  (( failures == 0 ))
+}
+
+# And the comparison itself, against a disagreement of each kind, because a sweep that found nothing
+# reads exactly like one whose extraction stopped matching anything.
+the_corpus_comparison_names_the_route_the_field_and_both_spellings() {
+  local properties enumerations findings failures=0
+
+  properties='storedEmailId
+outcome
+destinationFolder
+availability
+truncation
+subject'
+  enumerations='Readable
+None'
+
+  findings="$(fixture_disagreements 'GET /api/client/example' 'example.ts sample' \
+    "$properties" "$enumerations" "export const sample = {
+    storedEmailId: 'a',
+    StoredEmailID: 'b',
+    changes: [],
+    availability: 'readable',
+    truncation: 'None',
+    subject: 'The outcome of none of it',
+};")"
+
+  if ! grep -qxF \
+    'GET /api/client/example: example.ts sample writes the field StoredEmailID where the contract writes storedEmailId' \
+    <<< "$findings"; then
+    printf 'the comparison does not name both spellings of a field written with the wrong casing\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  if ! grep -qxF \
+    'GET /api/client/example: example.ts sample writes the field changes, which the contract records nowhere on that route' \
+    <<< "$findings"; then
+    printf 'the comparison does not name a field the contract records nowhere\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  if ! grep -qxF \
+    'GET /api/client/example: example.ts sample writes the value readable where the contract writes Readable' \
+    <<< "$findings"; then
+    printf 'the comparison does not name both spellings of an enumeration value\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  # A value spelled the way the contract spells it, a field the contract holds, and a sentence that
+  # merely contains an enumeration's word are each not findings.
+  if (( $(grep -c '' <<< "$findings") != 3 )); then
+    printf 'the comparison reported %s findings for a block holding three:\n%s\n' \
+      "$(grep -c '' <<< "$findings")" "$findings" >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  (( failures == 0 ))
+}
+
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_fast_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
@@ -9152,6 +9510,8 @@ run_test the_design_mirror_decodes_a_read_result_without_retyping_it
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
 run_test no_two_tracked_paths_differ_only_by_case
+run_test the_client_corpus_states_what_the_contract_records
+run_test the_corpus_comparison_names_the_route_the_field_and_both_spellings
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
 
