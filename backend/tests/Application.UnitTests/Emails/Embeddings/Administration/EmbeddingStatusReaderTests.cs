@@ -199,6 +199,7 @@ public sealed class EmbeddingStatusReaderTests
                 new FakeTimeProvider(Now)),
             providerHealth,
             backfillSchedule,
+            InMemoryAttachmentDerivationCoverageReader.Unbounded(Now).Reader,
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         return new StatusWorld(generationStore, workloadReader, ledger, providerHealth, backfillSchedule, reader);

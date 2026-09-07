@@ -540,6 +540,34 @@ The table exists rather than the count being derived from the stored vectors, wh
 
 The one write is an increment issued as an upsert, in the same transaction as the vectors it paid for. That makes the charge and the vectors one durable fact, and it means two workers spending inside one period add to each other rather than each overwriting a total that was already stale when it was read — which is why the row carries no concurrency token. Nothing hangs off it and nothing cascades into it — not even from the owner record, which is deliberate: a character count, an instant, and a generated owner identifier name no message, passage, or vector, so the record of a cost outlives every vector that cost paid for and outlives the erasure of the owner it was incurred for.
 
+## What reading a mailbox's attachments has spent
+
+`attachment_derivation_spend_periods` holds one row per budget period, **step**, and owner, keyed by `PeriodStartsAt`,
+`OwnerId`, and `Step` in that order. It is `embedding_spend_periods` beside it with one column added, and everything
+that page says about the shape holds here for the same reasons: the period start is derived from the configured period
+length and the Unix epoch rather than read from anywhere, the leading column lets one key answer both the deployment's
+question and one owner's, `ConsumedUnitCount` is a `bigint` because a period of an initial reading passes a billion
+octets without difficulty, and nothing allocates a period — the first spend inside one inserts its row and every later
+spend adds to it, as one composed `INSERT … ON CONFLICT DO UPDATE` issued inside the transaction that stores the
+readings it paid for.
+
+`Step` is what makes it a column rather than a second table. Two steps of attachment reading are bounded, and they are
+counted in units that do not convert: `Extraction` counts the octets opened out of attachments, and `Description`
+counts the calls a chat provider answered about a picture. Summing the two would add a megabyte to a phone call, so the
+step is part of the key and every read names one. It is stored as text rather than as a number, so a row read straight
+out of the database says which step it is.
+
+Embedding is deliberately not a step here, and neither is chunking. What may be *sent* to an embedding provider is
+already bounded by `embedding_spend_periods`, which counts attachment characters exactly as it counts a message's own —
+[ADR 0029](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md)
+decides that there is no second ceiling on it. Chunking and the lexical index reach no provider at all, so what they
+cost is storage, reported as the characters the index grew by rather than charged to a period.
+
+Nothing hangs off the table and nothing cascades into it, for the reason `embedding_spend_periods` has none: an octet
+count, a call count, an instant, a step name, and a generated owner identifier name no message, no attachment, and no
+filename, so the record of a cost outlives every reading that cost paid for and outlives the erasure of the owner it
+was incurred for.
+
 ## What one owner's stored content holds
 
 `owner_stored_content` holds one row per owner, keyed by `OwnerId`, with a `bigint` `StoredContentByteCount`. It is the only figure on this page that duplicates something derivable from the rows beneath it, and the duplication is the point: the derivation is a sum over one person's whole mailbox, and the per-owner storage ceiling it serves is consulted before every message. What it counts is the payload bytes, which is what a re-derivation produces — not what the table occupies on disk, an answer that exists only for the table as a whole and is what the deployment-wide ceiling reads instead.
@@ -1492,6 +1520,8 @@ authentication outcome, or a rule — never the value of a header — and nothin
 trace, or an error message.
 
 `jobs` is derived personal data by the same reading as a chunk or a classification: a row says that something is to be done about somebody's message, and it points at that message by its occurrence identity. What keeps it a pointer rather than a copy is the payload contract — a document of references with no property a subject, an address, or a body could go in, bounded in size at the enqueue boundary so a payload that grew into a copy is refused instead of stored. The account column and the cascade from `mailbox_accounts` are what erasure reaches queued work by. The message the payload names is deliberately not a foreign key: the identity in the document is the remote occurrence rather than the local row, so there is nothing for a constraint to point at, and reaching the message is a lookup by that identity like every other read of it.
+
+`attachment_derivation_spend_periods` holds no personal data for exactly the reason `embedding_spend_periods` does not, and it is a stronger claim there because what it counts is reading rather than sending: a unit count, an instant, a step name, and a generated owner identifier say how much a deployment opened, of which kind, for whom, and when, and none of them names a message, an attachment, or a filename. Nothing cascades into it either, so erasing the mail a period paid to read leaves the record that the period was paid for.
 
 `job_schedules` holds no personal data either, for the reason `embedding_spend_periods` does not: an identity composed of MailFathom's own configured names, two instants, and the identifier of a job say when a recurring dispatch last acted and on which occasion, and none of them names a message. That is also why nothing cascades into it — erasing an account's mail says nothing about when its rules are due to run again.
 

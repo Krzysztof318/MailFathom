@@ -283,6 +283,11 @@ $ mfctl embedding activate
 The command reads what the deployment would spend, prints it as passages, characters, and approximate tokens, and asks
 before it starts. `--yes` agrees up front, for a scripted run.
 
+If your deployment also reads attachments, the same output states what reading the documents it already holds would
+open and how many pictures it could send to be described — a second bill, in units the first one is not counted in —
+and the activation is refused outright where either is past what one period admits. The refusal names the setting to
+raise, so you are told a number rather than left to find one.
+
 | What you want | Command |
 | --- | --- |
 | Find out why semantic search is quiet | `mfctl embedding status` |
@@ -294,6 +299,14 @@ that model is still the one your configuration declares, whether your provider i
 is embedded, what the current budget period has spent, and when the walk that embeds your existing mail next runs. That
 last line is the one to read in the minutes after an activation: until the first passages have gone out, a deployment
 that is simply between passes looks exactly like one that is broken.
+
+It reports how far reading your attachments has come separately from all of that, because the two are separate: a
+mailbox can be entirely searchable on what people typed while every document attached to it is still unread. Beside the
+coverage it says what reading produced — extracted documents, described pictures, and how much the keyword index grew
+by — and how many attachments yielded nothing, grouped by why: encrypted, unreadable, a format your deployment does not
+read, too large, timed out, refused by the provider, or — the scan case — a document that parsed and carried no text at
+all. It is a count per reason and never a list of files, so nothing there names
+one of your messages. `mfctl mailbox status` reports the same three readings for one account.
 
 [Administering the embedding profile](../operations/admin-endpoint.md#administering-the-embedding-profile) is the
 operator's reference for all three, and [changing the embedding model](../operations/embedding-profiles.md) is what a

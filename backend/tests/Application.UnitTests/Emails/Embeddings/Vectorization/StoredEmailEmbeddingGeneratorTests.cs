@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -549,7 +550,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
-            EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+            ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
             ownership ?? new StubMailOwnership(),
             egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }

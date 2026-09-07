@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Folders;
@@ -32,6 +33,7 @@ public sealed class MailSynchronizationStatusReader
     private readonly IMailFolderParticipationReader folders;
     private readonly MailSynchronizationRunLedger runLedger;
     private readonly IMailFolderSynchronizationProgressReader progressReader;
+    private readonly IAttachmentDerivationCoverageReader attachmentCoverage;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes a reader over the four sources one status answer is composed from.</summary>
@@ -39,6 +41,7 @@ public sealed class MailSynchronizationStatusReader
     /// <param name="folders">Names the folders configuration maps, and which of them are mirrored.</param>
     /// <param name="runLedger">Reports what the running process's supervisors are doing.</param>
     /// <param name="progressReader">Reports how far each folder's durable progress has come.</param>
+    /// <param name="attachmentCoverage">Counts how far reading each account's attachments has come.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailSynchronizationStatusReader(
@@ -46,18 +49,21 @@ public sealed class MailSynchronizationStatusReader
         IMailFolderParticipationReader folders,
         MailSynchronizationRunLedger runLedger,
         IMailFolderSynchronizationProgressReader progressReader,
+        IAttachmentDerivationCoverageReader attachmentCoverage,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(runLedger);
         ArgumentNullException.ThrowIfNull(progressReader);
+        ArgumentNullException.ThrowIfNull(attachmentCoverage);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.accounts = accounts;
         this.folders = folders;
         this.runLedger = runLedger;
         this.progressReader = progressReader;
+        this.attachmentCoverage = attachmentCoverage;
         this.authorization = authorization;
     }
 
@@ -82,14 +88,22 @@ public sealed class MailSynchronizationStatusReader
         var mappedByAccount = this.folders.FoldersMapped
             .ToLookup(folder => folder.AccountId);
 
-        return new MailSynchronizationStatus(
-            this.accounts.SynchronizationEnabled,
-            [
-                .. this.accounts.ServedAccounts.Select(account => new MailAccountSynchronizationStatus(
-                    account.Id,
-                    this.runLedger.ReadAccount(account.Id),
-                    this.DescribeFolders(mappedByAccount[account.Id], mirrored, progressByFolder))),
-            ]);
+        // Counted per account rather than once for the deployment, because that is the scope this answer is read at:
+        // an operator looking at one account's folders needs the attachment figure for that account beside them. The
+        // accounts a deployment serves are the handful configuration names, so this is one aggregate each rather than
+        // an unbounded fan-out, and awaiting them in order is what keeps them on one scoped database context.
+        List<MailAccountSynchronizationStatus> accountStatuses = [];
+
+        foreach (var account in this.accounts.ServedAccounts)
+        {
+            accountStatuses.Add(new MailAccountSynchronizationStatus(
+                account.Id,
+                this.runLedger.ReadAccount(account.Id),
+                this.DescribeFolders(mappedByAccount[account.Id], mirrored, progressByFolder),
+                await this.attachmentCoverage.ReadCoverageAsync(account.Identity, cancellationToken)));
+        }
+
+        return new MailSynchronizationStatus(this.accounts.SynchronizationEnabled, accountStatuses);
     }
 
     /// <summary>Describes one account's mapped folders, in the ordinal alias order the contract states.</summary>

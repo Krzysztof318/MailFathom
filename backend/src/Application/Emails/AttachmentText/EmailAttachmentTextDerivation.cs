@@ -19,10 +19,16 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// <param name="Attachments">What each attachment yielded, in walk order, which is empty for a message that yielded nothing.</param>
 /// <param name="RedactedUnder">What the owner's mail was redacted under, or <see langword="null" /> where nothing scans it.</param>
 /// <param name="AwaitsRepair">Whether the stored copy was missing or unparseable, so a repair request was recorded for it.</param>
+/// <param name="ExtractedOctetCount">The octets a parser was handed, which is what the deployment's extraction ceiling is charged.</param>
+/// <param name="ProviderDescriptionCount">The chat calls this reading made, which is what the deployment's description ceiling is charged.</param>
+/// <param name="RunBudgetExhausted">Whether the account run ran out of octets mid-message, so nothing about the message may be written down.</param>
 public sealed record EmailAttachmentTextDerivation(
     IReadOnlyList<DerivedAttachmentText> Attachments,
     SensitiveContentDerivationStamp? RedactedUnder,
-    bool AwaitsRepair = false)
+    bool AwaitsRepair = false,
+    long ExtractedOctetCount = 0,
+    long ProviderDescriptionCount = 0,
+    bool RunBudgetExhausted = false)
 {
     /// <summary>The outcomes that say a later reading may succeed, which is what keeps a message outstanding.</summary>
     private static readonly string[] AnswerableLater =
@@ -41,8 +47,10 @@ public sealed record EmailAttachmentTextDerivation(
     /// again and replaces them wholesale. Two things unsettle one: a provider that may answer later, and a stored copy
     /// a repair request has been recorded for — in the second case there is nothing to read until synchronization has
     /// fetched the message again, and stamping would take it out of the walk before the repair could matter.
+    /// A run that ran out of octets mid-message is a third, and the strongest: it keeps no readings either, because
+    /// what it holds is a fraction of a message rather than a complete answer about one.
     /// </remarks>
-    public bool IsSettled => !this.AwaitsRepair && !this.MayBeAnsweredLater;
+    public bool IsSettled => !this.AwaitsRepair && !this.RunBudgetExhausted && !this.MayBeAnsweredLater;
 
     /// <summary>Gets whether a reading was refused only because a provider did not answer this time.</summary>
     /// <remarks>

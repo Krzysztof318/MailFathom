@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Emails.AttachmentText.Administration;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -258,9 +260,109 @@ public sealed class CountedEmbeddingActivationTests
         Assert.Equal(MailFathomPermission.AdminSpend, refusal.RequiredPermission);
     }
 
+    /// <summary>
+    /// Reading the attachments of the mail already stored is weighed beside the passages, so an operator agreeing to
+    /// one bill is not handed the other afterwards — and the ceiling that would be passed refuses the activation.
+    /// </summary>
+    [Fact]
+    public async Task AssessAsync_AnAttachmentEstimatePastItsCeiling_RefusesTheActivationOnItsOwn()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: Ceilings(maxInputOctetsPerPeriod: 4096, maxDescriptionsPerPeriod: 0),
+            attachmentCoverage: Outstanding(octets: 8192, attachments: 3));
+        var declared = CreateIdentity("a-model");
+        world.WorkloadReader.Set(declared, new EmbeddingWorkload(120, 120, 400, 40_000));
+
+        // Act
+        var assessment = await world.Activation.AssessAsync(declared, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(assessment.ExceedsSpendCeiling);
+        Assert.True(assessment.ExceedsAttachmentCeiling);
+        Assert.True(assessment.IsRefused);
+    }
+
+    /// <summary>
+    /// The description ceiling refuses on its own count, which is what makes the two independent: a deployment with
+    /// octets to spare and no calls left has still agreed to nothing more this period.
+    /// </summary>
+    [Fact]
+    public async Task AssessAsync_AnImageEstimatePastItsOwnCeiling_RefusesTheActivationWithOctetsToSpare()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: Ceilings(maxInputOctetsPerPeriod: 1_000_000, maxDescriptionsPerPeriod: 2),
+            attachmentCoverage: Outstanding(octets: 8192, attachments: 3));
+        var declared = CreateIdentity("a-model");
+        world.WorkloadReader.Set(declared, new EmbeddingWorkload(120, 120, 400, 40_000));
+
+        // Act
+        var assessment = await world.Activation.AssessAsync(declared, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(assessment.ExceedsAttachmentCeiling);
+    }
+
+    /// <summary>An activation the attachment ceiling refuses registers nothing, exactly as the embedding ceiling's does.</summary>
+    [Fact]
+    public async Task ActivateAsync_AnAttachmentEstimatePastItsCeiling_RegistersNothing()
+    {
+        // Arrange
+        var world = CreateWorld(
+            attachmentBudget: Ceilings(maxInputOctetsPerPeriod: 4096, maxDescriptionsPerPeriod: 0),
+            attachmentCoverage: Outstanding(octets: 8192, attachments: 3));
+        var declared = CreateIdentity("a-model");
+        world.WorkloadReader.Set(declared, new EmbeddingWorkload(120, 120, 400, 40_000));
+
+        // Act
+        var result = await world.Activation.ActivateAsync(declared, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(result.Activation);
+        Assert.True(result.Assessment.ExceedsAttachmentCeiling);
+        Assert.Null((await world.GenerationStore.ReadGenerationsAsync(TestContext.Current.CancellationToken)).Building);
+    }
+
+    /// <summary>A deployment that reads no attachment is never refused by a ceiling it has nothing to spend against.</summary>
+    [Fact]
+    public async Task AssessAsync_ADeploymentReadingNoAttachment_IsNotRefusedByTheAttachmentCeiling()
+    {
+        // Arrange
+        var world = CreateWorld(attachmentBudget: Ceilings(maxInputOctetsPerPeriod: 1, maxDescriptionsPerPeriod: 1));
+        var declared = CreateIdentity("a-model");
+        world.WorkloadReader.Set(declared, new EmbeddingWorkload(120, 120, 400, 40_000));
+
+        // Act
+        var assessment = await world.Activation.AssessAsync(declared, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(assessment.ExceedsAttachmentCeiling);
+        Assert.False(assessment.IsRefused);
+    }
+
+    /// <summary>The two deployment-wide attachment ceilings, the per-owner pair being no part of an activation's question.</summary>
+    private static AttachmentDerivationBudget Ceilings(long maxInputOctetsPerPeriod, long maxDescriptionsPerPeriod) =>
+        AttachmentDerivationBudget.Create(
+            maxInputOctetsPerPeriod,
+            maxInputOctetsPerPeriodPerOwner: 0,
+            maxDescriptionsPerPeriod,
+            maxDescriptionsPerPeriodPerOwner: 0,
+            TimeSpan.FromDays(1));
+
+    /// <summary>Coverage reporting mail still to be read, which is what an attachment ceiling is weighed against.</summary>
+    private static AttachmentDerivationCoverage Outstanding(long octets, long attachments) =>
+        AttachmentDerivationCoverage.Nothing with
+        {
+            EmailsWithAttachmentCount = 3,
+            Outstanding = new AttachmentDerivationEstimate(3, octets, attachments),
+        };
+
     private static ActivationWorld CreateWorld(
         long maxInputCharactersPerPeriod = 1_000_000,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        AttachmentDerivationBudget? attachmentBudget = null,
+        AttachmentDerivationCoverage? attachmentCoverage = null)
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var workloadReader = new InMemoryEmbeddingWorkloadReader();
@@ -271,6 +373,11 @@ public sealed class CountedEmbeddingActivationTests
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Substitute.For<IPersistenceSession>());
 
+        var attachments = InMemoryAttachmentDerivationCoverageReader.Bounded(
+            Now,
+            attachmentBudget ?? AttachmentDerivationBudget.Unbounded);
+        attachments.Coverage.Coverage = attachmentCoverage ?? AttachmentDerivationCoverage.Nothing;
+
         var activation = new CountedEmbeddingActivation(
             generationStore,
             workloadReader,
@@ -278,6 +385,7 @@ public sealed class CountedEmbeddingActivationTests
                 ledger,
                 EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, 0, TimeSpan.FromDays(1)),
                 timeProvider),
+            attachments.Reader,
             new EmbeddingProfileActivation(
                 generationStore,
                 new OptimisticConcurrencyRetryPolicy(

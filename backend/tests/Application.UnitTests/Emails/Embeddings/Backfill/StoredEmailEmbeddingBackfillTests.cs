@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -466,7 +467,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
                     spendLedger ?? new InMemoryEmbeddingSpendLedger(),
                     spendBudget ?? EmbeddingSpendBudget.Unbounded,
                     new FakeTimeProvider(PeriodStart)),
-                EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+                ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
                 ownership ?? new StubMailOwnership(),
                 SensitiveContentEgressGuards.Inactive()),
             concurrencyRetryPolicy,

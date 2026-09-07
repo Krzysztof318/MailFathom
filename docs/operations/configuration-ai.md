@@ -371,6 +371,9 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 | --- | --- | --- | --- | --- |
 | `Embeddings:ImageDescription:Enabled` | bool | `false` | with it off nothing is read and nothing is sent; with it on, and a chat endpoint declared, an image attachment's octets leave the deployment | restart |
 | `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent. A value outside the range stops the start, naming this key | restart |
+| `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | long | `0` | zero or positive; the description calls one period may make. `0` declares no ceiling at all, which is the default and means an enabled feature can produce a bill nobody agreed to. Counted in calls rather than in characters, because a chat provider prices a picture per request rather than per word | restart |
+| `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerOwner` | long | `0` | zero or positive, and at most `MaxDescriptionsPerPeriod` where that is set; the calls one period may make for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants | restart |
+| `Embeddings:ImageDescription:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a chat provider whose quota is stated per minute; a caller takes the next free slot and waits for it, and it paces this workload alone rather than sharing the embedding provider's rate | restart |
 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
 is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
@@ -422,6 +425,8 @@ much.
 | `Embeddings:AttachmentText:MaxAttachmentsPerEmail` | int | `20` | 1 – 1000; how many of one message's attachments are read at all, counted in walk order. It bounds the walk rather than what the walk decides: a part past it is never opened and no row is stored against it, because the number of parts a message declares is the sender's. What the ceiling left unread is the count stored against the message less the readings beside it | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerEmail` | long | `67108864` | 1 KiB – 8 GiB, and at least `MaxInputOctets`; the octets one message's attachments may be read from together. A ten-line covering note with a two-hundred-page report attached is an expensive message, and no length of its text predicts that | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerAccountRun` | long | `4294967296` | 1 KiB – 1 TiB, and at least `MaxInputOctetsPerEmail`; the octets one account run may read across every message it reaches. A run that spends it stops where it is and leaves the message it was on untouched, so the next run reaches that message first. The budget is per account rather than shared, so a mailbox full of large attachments delays nobody else's run | restart |
+| `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | long | `0` | zero or positive, and where set at least `MaxInputOctetsPerEmail`; the octets every account run together may hand a document parser inside one period, which excludes an attachment stepped over from its declaration. `0` declares no ceiling at all, which is the default. It is the aggregate the per-run budget above does not give: a run's budget is refilled on every run, so a mailbox is read at whatever rate the runs come | restart |
+| `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` | long | `0` | zero or positive, at most `MaxInputOctetsPerPeriod` where that is set, and where set at least `MaxInputOctetsPerEmail`; the octets one period may hand a document parser for any **one** owner. `0` declares no per-owner ceiling | restart |
 | `Embeddings:AttachmentText:Formats:<index>` | enum | every format read | `Pdf`, `WordOpenXml`, `SpreadsheetOpenXml`, `PresentationOpenXml`, `OpenDocumentText`, `OpenDocumentSpreadsheet`, `OpenDocumentPresentation`, `PlainText`, `Markdown`, `Csv`; writing nothing reads all ten and naming any narrows to exactly those. Naming `LegacyWord`, `LegacySpreadsheet`, or `LegacyPresentation` is refused at startup, because MailFathom recognizes those three and reads none of them | restart |
 | `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Every parser here seeks, so an attachment is held in memory for the length of one extraction | restart |
 | `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses. It also bounds how many entries a workbook's shared string table may hold, since an entry costs memory whether or not it carries a character — crossing it there is reported as `ContainerBoundExceeded` rather than as `ExtractedTextTooLarge`, because what was passed is a count of entries rather than characters an owner would get back | restart |
@@ -430,6 +435,35 @@ much.
 | `Embeddings:AttachmentText:MaxContainerParts` | int | `2000` | 1 – 100000; the parts a reader will go on to open. Very many tiny parts cost per part, which neither size ceiling measures. It is also what bounds the pages one OpenDocument content part may declare, that family keeping a whole document in a single part rather than one part per page | restart |
 | `Embeddings:AttachmentText:MaxElementDepth` | int | `100` | 2 – 10000; the depth an element tree inside an archive part may nest to. Deep nesting is what turns a small part into a walk that consumes stack | restart |
 | `Embeddings:AttachmentText:Timeout` | TimeSpan | `00:00:30` | positive and no longer than `01:00:00`; the time one extraction may take. The upper end is the platform timer's rather than a policy: a longer deadline is refused by `CancellationTokenSource`, which would leave the port raising out of a contract whose whole promise is that it answers instead. It is observed between units of work — a page, a part, an element — because no parser here accepts a cancellation token, which is why the size, ratio, and depth ceilings above are the ones that bound a parser stuck inside one unit | restart |
+
+**Two more ceilings bound the period rather than the run, and they are what an operator declares a budget with.**
+`MaxInputOctetsPerEmail` and `MaxInputOctetsPerAccountRun` bound one message and one run; neither bounds a month,
+because a run's budget is full again on the next run. `MaxInputOctetsPerPeriod` counts the octets every account run
+together opened inside `Embeddings:SpendPeriod`, and `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` counts the
+calls a description provider answered inside the same window, each with a per-owner share beside it. Both are `0` by
+default, which declares no ceiling and still counts — so the figures are on the status surface before an operator has
+to choose a number.
+
+**The two are counted in units that do not convert, which is why they are two.** Extraction is charged the octets a
+parser was actually handed, which is narrower than what a walk stepped over: a picture, a format this deployment does
+not parse, and an attachment the declared size already puts past `MaxInputOctets` are each decided from the
+declaration and are charged nothing, so a mailbox of pictures cannot spend the ceiling a mailbox of documents is
+bounded by. Description is charged one call per picture a provider answered, and a picture refused before the call —
+a format outside the list, a grid past `MaxPixels`, a file past `Chat:MaxRequestImageOctets` — is charged nothing,
+because nothing was sent. What a picture still costs is the per-message and per-run octet budgets above, which bound
+what a walk reads whichever port ends up with it. Chunking and the lexical index are charged neither: they reach no provider, and what they
+cost is disk, reported as the characters the index grew by rather than bounded by a ceiling.
+
+**Reaching one waits rather than fails.** The ceilings are read before a message is opened, so an account run that
+meets one ends where it is with that message untouched and unstamped; the surrounding synchronization run succeeds,
+the message stays outstanding, and the next run after the period rolls over reaches it first. It is the same
+degradation an exhausted embedding budget produces, and nothing is dropped: a message with no attachment reading is
+what the next pass selects on. A per-owner ceiling stops that owner's mail alone, exactly as the embedding one does.
+
+**Activating an embedding profile weighs them too.** On an instance already holding mail,
+`mfctl embedding activate` reports what reading the stored attachments would open and how many descriptions it could
+make, beside the passages it would send, and refuses the activation outright when either estimate is past the ceiling
+one period admits. Raise the key the refusal names, or set it to `0` to declare no ceiling at all, and activate again.
 
 **The three octet ceilings are nested, and a set written otherwise is refused at startup.** What one attachment may
 cost is at most what its message may, and what a message may is at most what its run may. Written the other way round,

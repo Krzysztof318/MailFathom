@@ -19,6 +19,8 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.AttachmentText.Administration;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.BrowseThread;
 using MailFathom.Application.Emails.BrowseTimeline;
@@ -33,6 +35,7 @@ using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Extraction.Attachments;
+using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
@@ -160,6 +163,15 @@ namespace MailFathom.Infrastructure;
 [RequiresIntegrationCoverage]
 public static class ServiceCollectionExtensions
 {
+    /// <summary>Names the pacer that spaces out the chat calls image description makes.</summary>
+    /// <remarks>
+    /// Two workloads pace requests to two AI providers under two quotas, so the container holds two pacers and one of
+    /// them has to be named. The embedding one is unkeyed because it is the instance the process has always had and
+    /// every consumer of it resolves it by type; this is the second, and the constant is what keeps the registration
+    /// and the one consumer from disagreeing about a string.
+    /// </remarks>
+    public const string ImageDescriptionPacerKey = "mailfathom.embeddings.image-description";
+
     /// <summary>The largest token endpoint response read, beyond which the request fails.</summary>
     /// <remarks>An RFC 6749 token response is a few hundred bytes; even a JWT access token stays well inside this. The limit exists so a replaced or compromised authorization server cannot make a synchronization run buffer an unbounded body.</remarks>
     private const int MailOAuthTokenResponseSizeLimitInBytes = 64 * 1024;
@@ -409,8 +421,30 @@ public static class ServiceCollectionExtensions
         // reach a provider — so a message reaches retrieval on its own words first and gains its attachments' words
         // when they arrive.
         services.AddScoped<IStoredEmailAttachmentTextStore, StoredEmailAttachmentTextStore>();
-        services.AddScoped<EmailAttachmentTextDeriver>();
+        // Built by hand for one argument's sake: two workloads pace calls to two AI providers, and the container has to
+        // be told which pacer this one takes. The embedding generator resolves the unkeyed instance, which is the one
+        // the process has always had, and the description rate is the second and is therefore the keyed one.
+        services.AddScoped(provider => new EmailAttachmentTextDeriver(
+            provider.GetRequiredService<IEmailContentStore>(),
+            provider.GetRequiredService<IEmailAttachmentContentReader>(),
+            provider.GetRequiredService<IAttachmentTextExtractor>(),
+            provider.GetRequiredService<IEmailAttachmentImageDescriber>(),
+            provider.GetRequiredService<SensitiveContentDerivationGuard>(),
+            provider.GetRequiredService<IEmailContentRepairRequestStore>(),
+            provider.GetRequiredService<AttachmentTextExtractionOptions>(),
+            provider.GetRequiredService<EmailAttachmentTextBounds>(),
+            provider.GetRequiredKeyedService<ProviderRequestPacer>(ImageDescriptionPacerKey)));
         services.AddScoped<MailAttachmentTextPass>();
+        // The aggregate ceilings the per-attachment, per-message, and per-run ones are not, registered whether or not
+        // this deployment reads attachments at all: what a period consumed is a fact about the instance, and an
+        // operator deciding whether to declare a ceiling reads it before there is anything to bound.
+        services.AddScoped<IAttachmentDerivationSpendLedger, AttachmentDerivationSpendLedger>();
+        services.AddScoped<AttachmentDerivationSpendGate>();
+        // How far reading has come, counted over exactly the population the pass walks. Registered on the same terms
+        // and for the same reason: an operator asks it of an instance that has read nothing.
+        services.AddScoped<IAttachmentDerivationCoverageReader, AttachmentDerivationCoverageReader>();
+        // The composition of the two, which is what every administrative surface asks rather than asking both.
+        services.AddScoped<AttachmentDerivationStatusReader>();
         // The read half, which is a port of its own for the reason the cited-fragment reader is: an attachment passage
         // is content a caller may legitimately receive, and a message passage is not.
         services.AddScoped<IEmailAttachmentPassageReader, EmailAttachmentPassageReader>();

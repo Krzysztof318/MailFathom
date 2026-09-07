@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Cli.Administration.AttachmentText;
 
 namespace MailFathom.Cli.Administration.Embeddings;
 
@@ -16,13 +17,19 @@ namespace MailFathom.Cli.Administration.Embeddings;
 /// <param name="Forecast">What activating it would do.</param>
 /// <param name="Estimate">What that would cost.</param>
 /// <param name="Spend">Where the deployment's budget period stands.</param>
-/// <param name="ExceedsSpendCeiling">Whether the deployment's ceiling refuses this activation outright.</param>
+/// <param name="ExceedsSpendCeiling">Whether the deployment's embedding ceiling refuses this activation outright.</param>
+/// <param name="AttachmentDerivation">What reading the stored mail's attachments would cost, and where their own two periods stand.</param>
+/// <param name="ExceedsAttachmentCeiling">Whether either of the deployment's attachment ceilings refuses this activation outright.</param>
+/// <param name="Refused">Whether any of the deployment's ceilings refuses it, which is what it acts on when the activation arrives.</param>
 internal sealed record EmbeddingActivationAssessment(
     [property: JsonPropertyName("declared")] EmbeddingGeometry? Declared,
     [property: JsonPropertyName("forecast")] string? Forecast,
     [property: JsonPropertyName("estimate")] EmbeddingWorkload? Estimate,
     [property: JsonPropertyName("spend")] EmbeddingSpend? Spend,
-    [property: JsonPropertyName("exceedsSpendCeiling")] bool ExceedsSpendCeiling)
+    [property: JsonPropertyName("exceedsSpendCeiling")] bool ExceedsSpendCeiling,
+    [property: JsonPropertyName("attachmentDerivation")] AttachmentDerivationStatus? AttachmentDerivation,
+    [property: JsonPropertyName("exceedsAttachmentCeiling")] bool ExceedsAttachmentCeiling,
+    [property: JsonPropertyName("refused")] bool Refused)
 {
     /// <summary>The forecast naming the one activation that spends.</summary>
     /// <remarks>

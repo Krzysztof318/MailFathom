@@ -6,10 +6,12 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
@@ -385,9 +387,18 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // rate. The per-message bound is reachable rather than shipped, for the reason its constant states.
         builder.Services.AddSingleton(EmbeddingInputBound.Create(EmbeddingInputCharacterCeiling));
         builder.Services.AddSingleton(EmbeddingSpendBudget.Unbounded);
-        builder.Services.AddSingleton(EmbeddingRequestPacer.Create(
+        builder.Services.AddSingleton(ProviderRequestPacer.Create(
             maxRequestsPerMinute: 0,
             TimeProvider.System));
+        // The attachment reading's own two ceilings and its own rate, on the same terms: nothing here reaches a chat
+        // provider, so the budget bounds nothing and the pacer delays nothing. Registered rather than left out because
+        // AddInfrastructure resolves both unconditionally — the spend gate takes the budget through its constructor and
+        // the deriver takes the pacer by key — so the first orchestrated test to resolve an attachment pass would fail
+        // to build the container rather than fail an assertion.
+        builder.Services.AddSingleton(AttachmentDerivationBudget.Unbounded);
+        builder.Services.AddKeyedSingleton(
+            ServiceCollectionExtensions.ImageDescriptionPacerKey,
+            (_, _) => ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
         // The bounds a composition root reads from the EmbeddingBackfill section. Small here on purpose: a test that
         // proves a walk is bounded needs the bound to be reachable within the mail it stored.
         builder.Services.AddSingleton(new StoredEmailEmbeddingBackfillOptions

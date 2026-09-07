@@ -65,6 +65,170 @@
           "Removed"
         ]
       },
+      "AttachmentDerivationCoverageResponse": {
+        "properties": {
+          "describedImageCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "documentTextAttachmentCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "emailsWithAttachmentCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "indexedCharacterCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingAttachmentCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingInputOctetCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "readEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "skippedAttachmentCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "skips": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentSkipResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "emailsWithAttachmentCount",
+          "readEmailCount",
+          "outstandingEmailCount",
+          "outstandingInputOctetCount",
+          "outstandingAttachmentCount",
+          "documentTextAttachmentCount",
+          "describedImageCount",
+          "indexedCharacterCount",
+          "skippedAttachmentCount",
+          "skips"
+        ],
+        "type": "object"
+      },
+      "AttachmentDerivationPeriodResponse": {
+        "properties": {
+          "ceilingUnitCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "consumedUnitCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "periodEndsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStartsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "remainingUnitCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "step": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "periodStartsAt",
+          "periodEndsAt",
+          "consumedUnitCount",
+          "ceilingUnitCount",
+          "remainingUnitCount"
+        ],
+        "type": "object"
+      },
+      "AttachmentDerivationStatusResponse": {
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/AttachmentDerivationCoverageResponse"
+          },
+          "description": {
+            "$ref": "#/components/schemas/AttachmentDerivationPeriodResponse"
+          },
+          "extraction": {
+            "$ref": "#/components/schemas/AttachmentDerivationPeriodResponse"
+          }
+        },
+        "required": [
+          "coverage",
+          "extraction",
+          "description"
+        ],
+        "type": "object"
+      },
       "AttachmentEntry": {
         "properties": {
           "availability": {
@@ -94,6 +258,26 @@
           "mediaType",
           "sizeOctets",
           "availability"
+        ],
+        "type": "object"
+      },
+      "AttachmentSkipResponse": {
+        "properties": {
+          "attachmentCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "attachmentCount"
         ],
         "type": "object"
       },
@@ -3501,17 +3685,26 @@
       },
       "EmbeddingActivationAssessmentResponse": {
         "properties": {
+          "attachmentDerivation": {
+            "$ref": "#/components/schemas/AttachmentDerivationStatusResponse"
+          },
           "declared": {
             "$ref": "#/components/schemas/EmbeddingGeometryResponse"
           },
           "estimate": {
             "$ref": "#/components/schemas/EmbeddingWorkloadResponse"
           },
+          "exceedsAttachmentCeiling": {
+            "type": "boolean"
+          },
           "exceedsSpendCeiling": {
             "type": "boolean"
           },
           "forecast": {
             "type": "string"
+          },
+          "refused": {
+            "type": "boolean"
           },
           "spend": {
             "$ref": "#/components/schemas/EmbeddingSpendResponse"
@@ -3522,7 +3715,10 @@
           "forecast",
           "estimate",
           "spend",
-          "exceedsSpendCeiling"
+          "exceedsSpendCeiling",
+          "attachmentDerivation",
+          "exceedsAttachmentCeiling",
+          "refused"
         ],
         "type": "object"
       },
@@ -3686,6 +3882,9 @@
           "activationOutstanding": {
             "type": "boolean"
           },
+          "attachmentDerivation": {
+            "$ref": "#/components/schemas/AttachmentDerivationStatusResponse"
+          },
           "building": {
             "oneOf": [
               {
@@ -3737,7 +3936,8 @@
           "building",
           "provider",
           "spend",
-          "nextBackfillPassDueAt"
+          "nextBackfillPassDueAt",
+          "attachmentDerivation"
         ],
         "type": "object"
       },
@@ -3933,6 +4133,9 @@
           "account": {
             "type": "string"
           },
+          "attachmentText": {
+            "$ref": "#/components/schemas/AttachmentDerivationCoverageResponse"
+          },
           "consecutiveFailureCount": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -3974,7 +4177,8 @@
           "nextRunDueAt",
           "consecutiveFailureCount",
           "lastRun",
-          "folders"
+          "folders",
+          "attachmentText"
         ],
         "type": "object"
       },

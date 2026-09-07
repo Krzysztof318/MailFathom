@@ -5,6 +5,7 @@
 using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.AttachmentText;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Output;
 
@@ -75,6 +76,11 @@ internal static class ActivateEmbeddingCommand
             throw new CliFailure(DescribeCeilingRefusal(assessment));
         }
 
+        if (assessment.ExceedsAttachmentCeiling)
+        {
+            throw new CliFailure(DescribeAttachmentCeilingRefusal(assessment));
+        }
+
         // Reported on standard error and with a failing code, which is what every other command does when it did not
         // do what it was asked. A caller that redirected the output reads an empty result and a reason rather than a
         // sentence about nothing happening mixed into what it captured.
@@ -114,6 +120,13 @@ internal static class ActivateEmbeddingCommand
             details.Add("Spend", spend.Describe());
         }
 
+        if (assessment.AttachmentDerivation is { } attachments)
+        {
+            details.Add("Attachments", attachments.Coverage?.DescribeProgress() ?? "not reported");
+            details.Add("Extraction spend", attachments.Extraction?.Describe() ?? "not reported");
+            details.Add("Description spend", attachments.Description?.Describe() ?? "not reported");
+        }
+
         context.Console.Write(details);
     }
 
@@ -143,4 +156,29 @@ internal static class ActivateEmbeddingCommand
             CultureInfo.InvariantCulture,
             $"The deployment's ceiling refuses this activation: it would send {estimate:N0} characters and at most {ceiling:N0} are admitted in one period. Raise 'Embeddings:MaxInputCharactersPerPeriod', or set it to zero to declare no ceiling at all, and activate again.");
     }
+
+    /// <summary>States which attachment ceiling refused the activation, and what it would have to admit.</summary>
+    /// <remarks>
+    /// Named apart from the embedding refusal above because the remedy is a different key and the figure is in a
+    /// different unit. Where both ceilings would be passed the extraction one is reported, since it is the step the
+    /// other one is reached through: nothing is described that was not first read.
+    /// </remarks>
+    private static string DescribeAttachmentCeilingRefusal(EmbeddingActivationAssessment assessment)
+    {
+        var coverage = assessment.AttachmentDerivation?.Coverage;
+
+        if (Exceeds(assessment.AttachmentDerivation?.Extraction, coverage?.OutstandingInputOctetCount))
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"The deployment's attachment ceiling refuses this activation: reading the mail it already holds would open {coverage?.OutstandingInputOctetCount:N0} octets and at most {assessment.AttachmentDerivation?.Extraction?.CeilingUnitCount:N0} are admitted in one period. Raise 'Embeddings:AttachmentText:MaxInputOctetsPerPeriod', or set it to zero to declare no ceiling at all, and activate again.");
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"The deployment's image ceiling refuses this activation: reading the mail it already holds could make {coverage?.OutstandingAttachmentCount:N0} description calls and at most {assessment.AttachmentDerivation?.Description?.CeilingUnitCount:N0} are admitted in one period. Raise 'Embeddings:ImageDescription:MaxDescriptionsPerPeriod', or set it to zero to declare no ceiling at all, and activate again.");
+    }
+
+    private static bool Exceeds(AttachmentDerivationPeriod? period, long? estimate) =>
+        period?.CeilingUnitCount is { } ceiling && estimate > ceiling;
 }

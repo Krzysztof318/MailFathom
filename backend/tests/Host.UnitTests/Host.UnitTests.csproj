@@ -26,6 +26,8 @@
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <!-- The synchronization harness composes the classification gate, which reports through this. -->
     <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
+    <Compile Include="..\shared\InMemoryAttachmentDerivationSpendLedger.cs" Link="InMemoryAttachmentDerivationSpendLedger.cs" />
+    <Compile Include="..\shared\InMemoryAttachmentDerivationCoverageReader.cs" Link="InMemoryAttachmentDerivationCoverageReader.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <!-- The draft routes take a file in and read a draft back, so the two client-facing acts a request decides

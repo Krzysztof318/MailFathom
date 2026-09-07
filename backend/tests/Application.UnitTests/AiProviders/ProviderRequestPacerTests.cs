@@ -2,21 +2,21 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Emails.Embeddings.Limits;
+using MailFathom.Application.AiProviders;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
-namespace MailFathom.Application.UnitTests.Emails.Embeddings.Limits;
+namespace MailFathom.Application.UnitTests.AiProviders;
 
 /// <summary>Covers the rate ceiling binding on a caller and releasing it once its slot arrives.</summary>
-public sealed class EmbeddingRequestPacerTests
+public sealed class ProviderRequestPacerTests
 {
     [Fact]
     public async Task WaitForSlotAsync_NoRateIsDeclared_LetsEveryCallerThroughAtOnce()
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var pacer = EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider);
+        var pacer = ProviderRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider);
 
         // Act
         var waits = Enumerable
@@ -35,7 +35,7 @@ public sealed class EmbeddingRequestPacerTests
     public async Task WaitForSlotAsync_TheFirstCaller_IsNotHeldBack()
     {
         // Arrange
-        var pacer = EmbeddingRequestPacer.Create(maxRequestsPerMinute: 60, new FakeTimeProvider());
+        var pacer = ProviderRequestPacer.Create(maxRequestsPerMinute: 60, new FakeTimeProvider());
 
         // Act
         var wait = pacer.WaitForSlotAsync(TestContext.Current.CancellationToken);
@@ -54,7 +54,7 @@ public sealed class EmbeddingRequestPacerTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var pacer = EmbeddingRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
+        var pacer = ProviderRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
         await pacer.WaitForSlotAsync(TestContext.Current.CancellationToken);
 
         // Act
@@ -76,7 +76,7 @@ public sealed class EmbeddingRequestPacerTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var pacer = EmbeddingRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
+        var pacer = ProviderRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
 
         // Act
         var waits = Enumerable
@@ -98,7 +98,7 @@ public sealed class EmbeddingRequestPacerTests
     {
         // Arrange
         var timeProvider = new FakeTimeProvider();
-        var pacer = EmbeddingRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
+        var pacer = ProviderRequestPacer.Create(maxRequestsPerMinute: 60, timeProvider);
         await pacer.WaitForSlotAsync(TestContext.Current.CancellationToken);
         using var cancellation = new CancellationTokenSource();
 
@@ -115,8 +115,8 @@ public sealed class EmbeddingRequestPacerTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => EmbeddingRequestPacer.Create(maxRequestsPerMinute: -1, new FakeTimeProvider()));
+            () => ProviderRequestPacer.Create(maxRequestsPerMinute: -1, new FakeTimeProvider()));
         Assert.Throws<ArgumentNullException>(
-            () => EmbeddingRequestPacer.Create(maxRequestsPerMinute: 60, null!));
+            () => ProviderRequestPacer.Create(maxRequestsPerMinute: 60, null!));
     }
 }

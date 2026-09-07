@@ -2,15 +2,20 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Application.Emails.Embeddings.Limits;
+namespace MailFathom.Application.AiProviders;
 
-/// <summary>Spaces embedding requests out so a deployment never sends faster than it declared it would.</summary>
+/// <summary>Spaces requests to one AI provider out so a deployment never sends faster than it declared it would.</summary>
 /// <remarks>
 /// <para>
 /// A rate ceiling and the spend ceiling beside it bound different things and neither substitutes for the other: the
 /// budget decides how much a period may cost, this decides how quickly that cost is allowed to accumulate. It exists
 /// because a provider quota is stated per minute rather than per month, and because being refused with a rate-limit
 /// response costs an attempt, a retry, and a place in a circuit-breaker window that other work is measured in.
+/// </para>
+/// <para>
+/// One instance paces one workload rather than one provider. Embedding a mailbox's passages and describing its pictures
+/// are two bulk workloads against two declared endpoints with two quotas, so each takes a pacer of its own built from
+/// its own rate; sharing one would make either workload's burst spend the other's slots.
 /// </para>
 /// <para>
 /// It is also not the concurrency limit. How many calls may be in flight at once is the resilience pipeline's
@@ -24,7 +29,7 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// lets a test prove that the ceiling binds and then releases, rather than proving it against a wall clock.
 /// </para>
 /// </remarks>
-public sealed class EmbeddingRequestPacer
+public sealed class ProviderRequestPacer
 {
     private readonly Lock reservation = new();
     private readonly TimeSpan interval;
@@ -32,7 +37,7 @@ public sealed class EmbeddingRequestPacer
 
     private DateTimeOffset nextSlotAt;
 
-    private EmbeddingRequestPacer(TimeSpan interval, TimeProvider timeProvider)
+    private ProviderRequestPacer(TimeSpan interval, TimeProvider timeProvider)
     {
         this.interval = interval;
         this.timeProvider = timeProvider;
@@ -48,17 +53,17 @@ public sealed class EmbeddingRequestPacer
     /// <returns>The pacer.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the rate is negative.</exception>
-    public static EmbeddingRequestPacer Create(int maxRequestsPerMinute, TimeProvider timeProvider)
+    public static ProviderRequestPacer Create(int maxRequestsPerMinute, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentOutOfRangeException.ThrowIfNegative(maxRequestsPerMinute);
 
-        return new EmbeddingRequestPacer(
+        return new ProviderRequestPacer(
             maxRequestsPerMinute == 0 ? TimeSpan.Zero : TimeSpan.FromMinutes(1) / maxRequestsPerMinute,
             timeProvider);
     }
 
-    /// <summary>Waits until this deployment is allowed to send its next embedding request.</summary>
+    /// <summary>Waits until this deployment is allowed to send the paced workload's next request.</summary>
     /// <param name="cancellationToken">Abandons the wait when the caller stops or the host shuts down.</param>
     /// <returns>A task that completes when the slot has arrived, immediately where nothing is paced.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the wait is cancelled, which leaves the reservation spent and the next caller no worse off than one slot.</exception>

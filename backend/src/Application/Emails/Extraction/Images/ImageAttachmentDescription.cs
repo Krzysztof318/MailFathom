@@ -35,6 +35,19 @@ public sealed record ImageAttachmentDescription
     /// <summary>Gets why nothing was described, or <see langword="null" /> where something was.</summary>
     public ImageDescriptionRefusal? Refusal { get; }
 
+    /// <summary>Gets whether a request actually left this deployment for the provider.</summary>
+    /// <remarks>
+    /// What a caller counting provider calls charges against, and the reason it is answered here rather than by that
+    /// caller: which refusals are reached before a request is composed is a property of the describing port, and a
+    /// counter that re-derived it would charge a deployment for the pictures it declined to send. Six of the nine
+    /// refusals are settled from the switch, the format, or the header, so the call happens exactly where words came
+    /// back or where the provider itself answered.
+    /// </remarks>
+    public bool ReachedProvider => this.Refusal is null
+        or ImageDescriptionRefusal.ProviderTimedOut
+        or ImageDescriptionRefusal.ProviderUnavailable
+        or ImageDescriptionRefusal.ProviderRefused;
+
     /// <summary>Carries what the model said the picture shows.</summary>
     /// <param name="text">The description, which is never blank.</param>
     /// <returns>The described result.</returns>

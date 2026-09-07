@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -25,6 +26,7 @@ public sealed class EmbeddingStatusReader
     private readonly EmbeddingSpendGate spendGate;
     private readonly IAiProviderHealthReader providerHealth;
     private readonly EmbeddingBackfillSchedule backfillSchedule;
+    private readonly AttachmentDerivationStatusReader attachmentDerivation;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes a new reader over the state one status answer is composed from.</summary>
@@ -33,6 +35,7 @@ public sealed class EmbeddingStatusReader
     /// <param name="spendGate">Reads where the budget period stands.</param>
     /// <param name="providerHealth">Reports what the last call to the embedding provider established.</param>
     /// <param name="backfillSchedule">Reports when the walk's next pass is due.</param>
+    /// <param name="attachmentDerivation">Reports how far reading attachments has come and what its own periods have consumed.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingStatusReader(
@@ -41,6 +44,7 @@ public sealed class EmbeddingStatusReader
         EmbeddingSpendGate spendGate,
         IAiProviderHealthReader providerHealth,
         EmbeddingBackfillSchedule backfillSchedule,
+        AttachmentDerivationStatusReader attachmentDerivation,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
@@ -48,6 +52,7 @@ public sealed class EmbeddingStatusReader
         ArgumentNullException.ThrowIfNull(spendGate);
         ArgumentNullException.ThrowIfNull(providerHealth);
         ArgumentNullException.ThrowIfNull(backfillSchedule);
+        ArgumentNullException.ThrowIfNull(attachmentDerivation);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.generationStore = generationStore;
@@ -55,6 +60,7 @@ public sealed class EmbeddingStatusReader
         this.spendGate = spendGate;
         this.providerHealth = providerHealth;
         this.backfillSchedule = backfillSchedule;
+        this.attachmentDerivation = attachmentDerivation;
         this.authorization = authorization;
     }
 
@@ -87,7 +93,8 @@ public sealed class EmbeddingStatusReader
             await this.DescribeAsync(generations.Building, cancellationToken),
             this.providerHealth.Read(AiProviderRole.Embedding),
             await this.spendGate.ReadCurrentPeriodAsync(cancellationToken),
-            this.backfillSchedule.NextPassDueAt);
+            this.backfillSchedule.NextPassDueAt,
+            await this.attachmentDerivation.ReadAsync(account: null, cancellationToken));
     }
 
     /// <summary>Counts what one generation still owes, where there is a generation to count for.</summary>

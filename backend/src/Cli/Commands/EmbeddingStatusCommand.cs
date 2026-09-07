@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.AttachmentText;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Output;
 
@@ -59,10 +60,27 @@ internal static class EmbeddingStatusCommand
         details.Add("Next pass", DescribeNextPass(status.NextBackfillPassDueAt));
         details.Add("Provider", DescribeProvider(status.Provider));
         details.Add("Spend", status.Spend?.Describe() ?? "not reported");
+        AddAttachmentDetails(details, status.AttachmentDerivation);
 
         context.Console.Write(details);
 
         return CliExitCode.Success;
+    }
+
+    /// <summary>States how far reading attachments has come, and where each of its two ceilings stands.</summary>
+    /// <remarks>
+    /// Three lines rather than one, because the three figures are not the same quantity: coverage is a proportion of the
+    /// mailbox, extraction is counted in the octets it opens, and description is counted in the calls it makes. A
+    /// deployment that reads no attachment still reports all three, so an operator can tell a feature that is switched
+    /// off apart from one that is stuck.
+    /// </remarks>
+    private static void AddAttachmentDetails(CliDetails details, AttachmentDerivationStatus? attachments)
+    {
+        details.Add("Attachments", attachments?.Coverage?.DescribeProgress() ?? "not reported");
+        details.Add("Attachment yield", attachments?.Coverage?.DescribeYield() ?? "not reported");
+        details.Add("Attachment skips", string.Join("; ", attachments?.Coverage?.DescribeSkips() ?? ["not reported"]));
+        details.Add("Extraction spend", attachments?.Extraction?.Describe() ?? "not reported");
+        details.Add("Description spend", attachments?.Description?.Describe() ?? "not reported");
     }
 
     /// <summary>States what the deployment declares, and whether anything has taken that declaration up.</summary>

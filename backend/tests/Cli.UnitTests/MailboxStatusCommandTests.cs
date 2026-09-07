@@ -235,6 +235,67 @@ public sealed class MailboxStatusCommandTests : IDisposable
             line => line.Contains("DeferredForAReasonThisBuildHasNoWordFor", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Attachment coverage is its own reading rather than a share of the message one: a mailbox entirely synchronized
+    /// may still hold documents nobody has opened, and a skip reason is what says whether that is a bound or a scanner.
+    /// </summary>
+    [Fact]
+    public async Task Status_AnAccountWhoseAttachmentsAreOnlyPartlyRead_ReportsTheYieldAndWhyTheRestWereSkipped()
+    {
+        // Arrange
+        using var deployment = FakeMailboxDeployment.Answering("""
+            {
+              "synchronizationEnabled": true,
+              "accounts": [
+                {
+                  "account": "work",
+                  "phase": "Idle",
+                  "nextRunDueAt": null,
+                  "consecutiveFailureCount": 0,
+                  "lastRun": null,
+                  "folders": [],
+                  "attachmentText": {
+                    "emailsWithAttachmentCount": 300,
+                    "readEmailCount": 180,
+                    "outstandingEmailCount": 120,
+                    "outstandingInputOctetCount": 24000000,
+                    "outstandingAttachmentCount": 260,
+                    "documentTextAttachmentCount": 140,
+                    "describedImageCount": 30,
+                    "indexedCharacterCount": 96000,
+                    "skippedAttachmentCount": 11,
+                    "skips": [
+                      {"outcome":"Encrypted","attachmentCount":7},
+                      {"outcome":"AReasonThisBuildHasNeverHeardOf","attachmentCount":4}
+                    ]
+                  }
+                }
+              ]
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "mailbox", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("180 of 300 messages with attachments read", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("260 attachments left over 24,000,000 octets", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("140 document extracts and 30 described images", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("7 encrypted, so nothing could be opened", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("4 AReasonThisBuildHasNeverHeardOf", StringComparison.Ordinal));
+    }
+
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
         this.harness.RunAsync(deployment, args);
 

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -110,9 +111,54 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             lastRun);
     }
 
+    /// <summary>
+    /// How far a mailbox's attachments have been read travels on this route, so an operator asking why a document is
+    /// not searchable is answered without a second call. Every figure is asserted rather than the presence of the
+    /// object, because a mapping that dropped a member or crossed two of them answers plausibly.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatusAsync_AnAccountPartWayThroughItsAttachments_PutsEveryCoverageFigureOnTheWire()
+    {
+        // Arrange
+        var coverage = new InMemoryAttachmentDerivationCoverageReader
+        {
+            Coverage = new AttachmentDerivationCoverage(
+                EmailsWithAttachmentCount: 300,
+                ReadEmailCount: 180,
+                new AttachmentDerivationEstimate(120, 24_000_000, 260),
+                DocumentTextAttachmentCount: 140,
+                DescribedImageCount: 30,
+                IndexedCharacterCount: 96_000,
+                [new AttachmentSkipCount("Encrypted", 7)]),
+        };
+
+        var reader = Reader(
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Now)),
+            attachmentCoverage: coverage);
+
+        // Act
+        var result = await MailboxSynchronizationStatusEndpoint.ReadStatusAsync(
+            reader,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachments = Assert.Single(result.Value!.Accounts).AttachmentText;
+        Assert.Equal(300, attachments.EmailsWithAttachmentCount);
+        Assert.Equal(180, attachments.ReadEmailCount);
+        Assert.Equal(120, attachments.OutstandingEmailCount);
+        Assert.Equal(24_000_000, attachments.OutstandingInputOctetCount);
+        Assert.Equal(260, attachments.OutstandingAttachmentCount);
+        Assert.Equal(140, attachments.DocumentTextAttachmentCount);
+        Assert.Equal(30, attachments.DescribedImageCount);
+        Assert.Equal(96_000, attachments.IndexedCharacterCount);
+        Assert.Equal(7, attachments.SkippedAttachmentCount);
+        Assert.Equal(new AttachmentSkipResponse("Encrypted", 7), Assert.Single(attachments.Skips));
+    }
+
     private static MailSynchronizationStatusReader Reader(
         MailSynchronizationRunLedger ledger,
-        IReadOnlyList<MailFolderSynchronizationProgress>? progress = null)
+        IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
+        IAttachmentDerivationCoverageReader? attachmentCoverage = null)
     {
         var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(true);
@@ -126,6 +172,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             StubMailFolderParticipation.Mapping(Inbox),
             ledger,
             progressReader,
+            attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),
             AdministrativeGrant.WholeSurface);
     }
 }

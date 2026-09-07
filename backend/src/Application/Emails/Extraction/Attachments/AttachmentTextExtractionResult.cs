@@ -73,6 +73,18 @@ public sealed record AttachmentTextExtractionResult
     /// </remarks>
     public ExtractedAttachmentText? Text { get; }
 
+    /// <summary>Gets whether the attachment's octets were actually handed to a parser.</summary>
+    /// <remarks>
+    /// Three outcomes are decided from the declaration alone and read nothing: a format nothing recognizes, a
+    /// recognized format nothing here parses, and one the declared size already puts past the input ceiling. Every
+    /// other outcome, including each of the parser's own refusals, follows the whole attachment being buffered. What
+    /// asks is the extraction ceiling, which counts what a parser was handed rather than what a walk stepped over.
+    /// </remarks>
+    public bool ReadTheAttachment => this.Outcome
+        is not (AttachmentTextExtractionOutcome.FormatNotRecognized
+            or AttachmentTextExtractionOutcome.FormatNotExtracted
+            or AttachmentTextExtractionOutcome.InputTooLarge);
+
     /// <summary>Reports an attachment that was read.</summary>
     /// <param name="text">What it yielded.</param>
     /// <returns>An extracted result.</returns>

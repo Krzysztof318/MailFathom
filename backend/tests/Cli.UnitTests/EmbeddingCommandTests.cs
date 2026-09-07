@@ -45,7 +45,25 @@ public sealed class EmbeddingCommandTests : IDisposable
             "ceilingInputCharacterCount": 1000000,
             "remainingInputCharacterCount": 1000000
           },
-          "exceedsSpendCeiling": false
+          "exceedsSpendCeiling": false,
+          "attachmentDerivation": {
+            "coverage": {
+              "emailsWithAttachmentCount": 400,
+              "readEmailCount": 0,
+              "outstandingEmailCount": 400,
+              "outstandingInputOctetCount": 8000000,
+              "outstandingAttachmentCount": 900,
+              "documentTextAttachmentCount": 0,
+              "describedImageCount": 0,
+              "indexedCharacterCount": 0,
+              "skippedAttachmentCount": 0,
+              "skips": []
+            },
+            "extraction": {"step":"Extraction","periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedUnitCount":0,"ceilingUnitCount":4000000,"remainingUnitCount":4000000},
+            "description": {"step":"Description","periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedUnitCount":0,"ceilingUnitCount":5000,"remainingUnitCount":5000}
+          },
+          "exceedsAttachmentCeiling": false,
+          "refused": false
         }
         """;
 
@@ -80,6 +98,60 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("a-model", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("nothing outstanding", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("Serving", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The attachment workload is bounded in two units that are not the embedding one, so each is named beside its own
+    /// number: an operator reading "12,000" with no unit could only guess whether raising it costs a bill or a disk.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentBoundingItsAttachmentWork_NamesEachStepInItsOwnUnit()
+    {
+        // Arrange
+        using var deployment = FakeEmbeddingDeployment.Answering(status: """
+            {
+              "declared": {"fingerprint":"a1b2c3","provider":"a-provider","model":"a-model","modelVersion":null,"dimension":1536,"distanceMetric":"Cosine"},
+              "activationOutstanding": false,
+              "serving": null,
+              "building": null,
+              "provider": {"state":"Serving","observedAt":"2026-08-08T11:59:00+00:00"},
+              "spend": {"periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedInputCharacterCount":0,"ceilingInputCharacterCount":0,"remainingInputCharacterCount":null},
+              "attachmentDerivation": {
+                "coverage": {
+                  "emailsWithAttachmentCount": 120,
+                  "readEmailCount": 120,
+                  "outstandingEmailCount": 0,
+                  "outstandingInputOctetCount": 0,
+                  "outstandingAttachmentCount": 0,
+                  "documentTextAttachmentCount": 200,
+                  "describedImageCount": 45,
+                  "indexedCharacterCount": 310000,
+                  "skippedAttachmentCount": 3,
+                  "skips": [{"outcome":"NoTextExtracted","attachmentCount":3}]
+                },
+                "extraction": {"step":"Extraction","periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedUnitCount":12000,"ceilingUnitCount":4000000,"remainingUnitCount":3988000},
+                "description": {"step":"Description","periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedUnitCount":45,"ceilingUnitCount":null,"remainingUnitCount":null}
+              }
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("12,000 of 4,000,000 octets read", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("45 description calls, against no declared ceiling", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("310,000 characters of lexical index", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains("3 carrying no text to read", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -305,6 +377,34 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Empty(this.harness.Console.Questions);
         Assert.Contains(this.harness.Console.Errors, line => line.Contains("200,000 characters", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Errors, line => line.Contains("1,000,000", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A ceiling in a different unit, refusing for a different reason, so the remedy it names is a different key. The
+    /// embedding ceiling is not passed here, which is what proves the refusal was reached through the attachment one.
+    /// </summary>
+    [Fact]
+    public async Task Activate_AnAttachmentEstimatePastItsCeiling_NamesTheOctetsAndActivatesNothing()
+    {
+        // Arrange
+        this.harness.Console.AnswerToGive = true;
+        using var deployment = FakeEmbeddingDeployment.Answering(
+            assessment: SpendingAssessment
+                .Replace("\"exceedsAttachmentCeiling\": false", "\"exceedsAttachmentCeiling\": true", StringComparison.Ordinal)
+                .Replace("\"refused\": false", "\"refused\": true", StringComparison.Ordinal),
+            activation: (HttpStatusCode.OK, ActivationAnswer("ReindexStarted")));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "activate", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.False(deployment.WasAskedToActivate());
+        Assert.Empty(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("8,000,000 octets", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("Embeddings:AttachmentText:MaxInputOctetsPerPeriod", StringComparison.Ordinal));
     }
 
     /// <summary>Re-activating what already serves spends nothing, so it is performed without a question in the way.</summary>

@@ -4,12 +4,14 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.AttachmentText;
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
@@ -321,7 +323,17 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<ISensitiveContentPostures>());
         services.AddSingleton(Substitute.For<ISensitiveContentDerivationTelemetry>());
         services.AddScoped<SensitiveContentDerivationGuard>();
+        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
         services.AddScoped<EmailAttachmentTextDeriver>();
+
+        // The two aggregate ceilings the pass reads before it opens a message, composed against an empty ledger and a
+        // budget declaring none. These tests are about the order the run's local stages take rather than about a
+        // budget, so what the gate must do here is admit everything — and it has to be resolvable either way, for the
+        // reason stated above the block: a pass that could not resolve one would fail the account run inside the
+        // supervisor's own catch, which reaches the test as a timeout rather than as a missing registration.
+        services.AddSingleton<IAttachmentDerivationSpendLedger>(new InMemoryAttachmentDerivationSpendLedger());
+        services.AddSingleton(AttachmentDerivationBudget.Unbounded);
+        services.AddScoped<AttachmentDerivationSpendGate>();
         services.AddScoped<MailAttachmentTextPass>();
 
         // The history's retention pass rides the same run, and a supervisor resolves it from the same scope. These

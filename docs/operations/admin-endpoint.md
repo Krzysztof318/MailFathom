@@ -257,10 +257,13 @@ $ mfctl mailbox status
 Deployment:       production (https://mail.example.test:8443)
 Synchronization:  on
 
-Account:   work
-Phase:     waiting; next run due at 2026-08-15 12:20:00Z
-Backoff:   4 runs failed in a row, which is what the wait above was grown from
-Last run:  failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
+Account:            work
+Phase:              waiting; next run due at 2026-08-15 12:20:00Z
+Backoff:            4 runs failed in a row, which is what the wait above was grown from
+Last run:           failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
+Attachments:        980 of 1,240 messages with attachments read; 412 attachments left over 88,104,336 octets
+Attachment yield:   1,504 document extracts and 96 described images; 3,918,220 characters of lexical index
+Attachment skips:   61 in a format this deployment does not read; 12 encrypted, so nothing could be opened; 4 carrying no text to read, which is what a scan looks like
 
 Folder   Progress                                                         Last run
 INBOX    UID 12,410 in UIDVALIDITY 3, last moved at 2026-08-15 11:55:00Z  synchronized at 2026-08-15 11:55:00Z; stored 0, 0 oversized, 0 unreadable, more to fetch: False
@@ -286,6 +289,13 @@ comes back resumes from there.
 deployment's clock rather than yours. `Backoff` is the consecutive failure count that delay was grown from, so a wait
 far longer than `MailSynchronization:Interval` is explained rather than merely observed.
 
+**The three attachment lines are this account's alone**, and they say how far reading its mail's attachments and
+images has come — coverage, what reading produced, and an aggregate of why the rest yielded nothing. They are here as
+well as on `mfctl embedding status` because the scope differs: this answers for one account beside its folders, and
+that one answers for the deployment beside both spend periods, which are what a ceiling bounds. An account is not a
+budget, so no period appears here — reporting one account's share of a deployment ceiling would invent a figure nothing
+enforces. `not reported` on any of the three is an older deployment that does not answer with them.
+
 **A folder the account maps and no longer mirrors is listed and marked**, rather than left out, so a folder whose
 mirroring was switched off never reads as a folder that vanished. `Synchronization: off` on the first line says the
 whole deployment fetches nothing, which is what makes every figure below it still.
@@ -295,8 +305,9 @@ last run as none until the account runs again, which happens within one interval
 and survives, which is deliberate — the half that tells a stalled folder from an idle one is the half that outlives the
 process, and the half a restart clears is the backoff a restart genuinely clears.
 
-Nothing in the answer is mail. Configured account identifiers, folder aliases, a phase, counts, UIDs, and timestamps are
-the whole of it: no subject, no address, no remote folder path, and no exception detail.
+Nothing in the answer is mail. Configured account identifiers, folder aliases, a phase, counts, UIDs, timestamps, and
+the attachment aggregate's reason names are the whole of it: no subject, no address, no remote folder path, no
+attachment filename, and no exception detail.
 
 ### Reading what MailFathom changed
 
@@ -415,13 +426,28 @@ Serving:     openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of
 Reindex:     none running.
 Next pass:   due at 2026-08-08 12:14:30Z
 Provider:    Serving, as of 2026-08-08 11:59:00Z
-Spend:       1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Spend:              1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Attachments:        980 of 1,240 messages with attachments read; 412 attachments left over 88,104,336 octets
+Attachment yield:   1,504 document extracts and 96 described images; 3,918,220 characters of lexical index
+Attachment skips:   61 in a format this deployment does not read; 12 encrypted, so nothing could be opened; 4 carrying no text to read, which is what a scan looks like
+Extraction spend:   214,880,112 octets read, against no declared ceiling; the period rolls over at 2026-08-09 00:00:00Z
+Description spend:  96 of 500 description calls; the period rolls over at 2026-08-09 00:00:00Z
 ```
 
 **`mfctl embedding status` is the command to run when semantic search is not returning what you expected.** It answers
 that question six ways at once, because it has six answers that look nothing alike: no provider declared, a
 declaration nobody activated, a provider refusing the credential, a reindex still running, a budget period spent, and a
-walk whose next pass is simply not due yet. The line to read first is `Declared`, which says so outright when an
+walk whose next pass is simply not due yet.
+
+**The five attachment lines answer a question the six above cannot**, which is why they are reported apart rather than
+folded in: a mailbox may be entirely embedded on its message text with every document in it still unread, and the two
+workloads are counted in units that do not convert. `Attachments` is coverage, `Attachment yield` is what reading
+produced — the last figure being lexical-index growth, which is storage rather than provider spend — and `Attachment
+skips` is an aggregate over reasons, never a list of attachments: it says how much of a mailbox cannot be read without
+naming one message, one filename, or one sender. The two spend lines name their own unit in every reading, because
+octets read and calls made are not the same quantity and a bare number would invite adding them.
+[Attachment text extraction](../features/attachment-text-extraction.md#what-reading-a-mailbox-costs-and-what-bounds-it)
+holds what each bounds. The line to read first is `Declared`, which says so outright when an
 activation is outstanding — an edited configuration file changes nothing until one happens, and this is where you find
 that out rather than from search results that stayed the same.
 
@@ -441,8 +467,11 @@ and the command puts both numbers on the screen before the question:
 $ mfctl embedding activate
 Declared:  openai text-embedding-3-small, 1536 dimensions, Cosine
 Forecast:  This deployment is not embedding under that model, so activating starts a reindex.
-Estimate:  41,208 passages to send (18,700,412 characters, roughly 4,675,103 tokens).
-Spend:     0 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Estimate:           41,208 passages to send (18,700,412 characters, roughly 4,675,103 tokens).
+Spend:              0 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Attachments:        0 of 1,240 messages with attachments read; 3,910 attachments left over 812,004,336 octets
+Extraction spend:   0 octets read, against no declared ceiling; the period rolls over at 2026-08-09 00:00:00Z
+Description spend:  0 of 500 description calls; the period rolls over at 2026-08-09 00:00:00Z
 Embed the mailbox under that model? [y/N]
 ```
 
@@ -460,6 +489,14 @@ spends nothing and is performed without a question; activating while a *differen
 **An estimate above the ceiling is refused outright, with `409` naming both numbers.** It is not started and paced:
 ADR 0006 takes a budget that only slows a run down to be a schedule rather than a budget. Raising
 `Embeddings:MaxInputCharactersPerPeriod`, or setting it to zero to declare no ceiling at all, is what gets past it.
+
+**The two attachment ceilings refuse it on the same terms, and on their own count.** Activating a profile is the moment
+a deployment that has also switched attachment reading on begins deriving at scale, so what reading the stored mail
+would open and how many descriptions it could make are weighed here beside the passages — and either estimate past what
+one period admits refuses the activation, so an operator agreeing to one bill is not handed the other afterwards. The
+refusal names the key: `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` for the octets and
+`Embeddings:ImageDescription:MaxDescriptionsPerPeriod` for the calls, each with zero declaring no ceiling at all. A
+deployment that reads no attachment reports nothing outstanding and is never refused by this.
 
 The ceiling weighed here is the deployment's alone, and `Embeddings:MaxInputCharactersPerPeriodPerOwner` is deliberately
 absent from this reading. An activation reindexes every owner's mail under one profile — the profile is what a stored

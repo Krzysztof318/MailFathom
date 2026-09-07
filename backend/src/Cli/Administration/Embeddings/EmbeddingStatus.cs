@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using System.Text.Json.Serialization;
+using MailFathom.Cli.Administration.AttachmentText;
 
 namespace MailFathom.Cli.Administration.Embeddings;
 
@@ -21,6 +22,7 @@ namespace MailFathom.Cli.Administration.Embeddings;
 /// <param name="Provider">What the deployment's last call to its embedding provider established.</param>
 /// <param name="Spend">Where the deployment's budget period stands.</param>
 /// <param name="NextBackfillPassDueAt">When the deployment's backfill runs its next pass, or <see langword="null" /> while it has scheduled none.</param>
+/// <param name="AttachmentDerivation">How far reading the deployment's attachments and images has come, and where their own two ceilings stand.</param>
 internal sealed record EmbeddingStatus(
     [property: JsonPropertyName("declared")] EmbeddingGeometry? Declared,
     [property: JsonPropertyName("activationOutstanding")] bool ActivationOutstanding,
@@ -28,7 +30,8 @@ internal sealed record EmbeddingStatus(
     [property: JsonPropertyName("building")] EmbeddingGeneration? Building,
     [property: JsonPropertyName("provider")] EmbeddingProviderHealth? Provider,
     [property: JsonPropertyName("spend")] EmbeddingSpend? Spend,
-    [property: JsonPropertyName("nextBackfillPassDueAt")] DateTimeOffset? NextBackfillPassDueAt);
+    [property: JsonPropertyName("nextBackfillPassDueAt")] DateTimeOffset? NextBackfillPassDueAt,
+    [property: JsonPropertyName("attachmentDerivation")] AttachmentDerivationStatus? AttachmentDerivation);
 
 /// <summary>One vector space, as a deployment names it.</summary>
 /// <param name="Fingerprint">The digest the deployment's profile row is unique on.</param>

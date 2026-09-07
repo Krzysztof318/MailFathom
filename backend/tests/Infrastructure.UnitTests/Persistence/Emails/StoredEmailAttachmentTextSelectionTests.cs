@@ -43,6 +43,10 @@ public sealed class StoredEmailAttachmentTextSelectionTests
         MailAccountId.Create("work"),
         MailFolderAlias.Create("ARCHIVE"));
 
+    private static readonly MailFolderIdentity HomeInbox = new(
+        MailAccountId.Create("home"),
+        MailFolderAlias.Create("INBOX"));
+
     /// <summary>The ordinary arrival: cut, evaluated, admitted, carrying an attachment, and never read.</summary>
     [Fact]
     public void Selecting_MailCarryingAnUnreadAttachment_SelectsIt()
@@ -146,6 +150,43 @@ public sealed class StoredEmailAttachmentTextSelectionTests
 
         // Assert
         Assert.Empty(selected);
+    }
+
+    /// <summary>
+    /// The deployment-wide reading narrows to no account, so what an operator watches spans the mailboxes the pass
+    /// walks one at a time. An account narrowing leaking back into this predicate would report less outstanding than
+    /// the deployment holds, and would report it as a figure that simply stops moving rather than as a failure.
+    /// </summary>
+    [Fact]
+    public void SelectingEverywhere_UnreadMailInSeveralAccounts_SelectsEveryAccountsShareOfIt()
+    {
+        // Arrange
+        StoredEmailEntity[] emails = [Email("work", "INBOX"), Email("home", "INBOX")];
+
+        // Act
+        var selected = SelectingEverywhere(emails, [WorkInbox, HomeInbox], ClassificationOff);
+
+        // Assert
+        Assert.Equal(["work", "home"], selected.Select(email => email.MailboxAccountId));
+    }
+
+    /// <summary>
+    /// The denominator spans the accounts the numerator does, and it carries the mail a reading has already been taken
+    /// of. Either half narrowing where the other does not is what makes a mailbox permanently incomplete.
+    /// </summary>
+    [Fact]
+    public void ReachableEverywhere_MailInSeveralAccountsOneOfItAlreadyRead_ReachesEveryAccountsMail()
+    {
+        // Arrange
+        var work = Email("work", "INBOX");
+        work.AttachmentTextDerivedAt = Now;
+        StoredEmailEntity[] emails = [work, Email("home", "INBOX")];
+
+        // Act
+        var reachable = ReachableEverywhere(emails, [WorkInbox, HomeInbox], ClassificationOff);
+
+        // Assert
+        Assert.Equal(["work", "home"], reachable.Select(email => email.MailboxAccountId));
     }
 
     /// <summary>
@@ -266,6 +307,18 @@ public sealed class StoredEmailAttachmentTextSelectionTests
             "work",
             embeddedFolders,
             terms)];
+
+    private static IReadOnlyList<StoredEmailEntity> SelectingEverywhere(
+        IReadOnlyList<StoredEmailEntity> emails,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) =>
+        [.. StoredEmailAttachmentTextStore.SelectingEverywhere(emails.AsQueryable(), embeddedFolders, terms)];
+
+    private static IReadOnlyList<StoredEmailEntity> ReachableEverywhere(
+        IReadOnlyList<StoredEmailEntity> emails,
+        IReadOnlyList<MailFolderIdentity> embeddedFolders,
+        DerivedWorkAdmissionTerms terms) =>
+        [.. StoredEmailAttachmentTextStore.ReachableEverywhere(emails.AsQueryable(), embeddedFolders, terms)];
 
     /// <summary>Builds the message the pass is meant to read, which every test then takes one fact away from.</summary>
     private static StoredEmailEntity Email(string accountId, string alias)

@@ -25,6 +25,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.AttachmentDerivationSpendPeriodEntity", b =>
+                {
+                    b.Property<DateTimeOffset>("PeriodStartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("PeriodStartsAt");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("OwnerId");
+
+                    b.Property<string>("Step")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("Step");
+
+                    b.Property<long>("ConsumedUnitCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ConsumedUnitCount");
+
+                    b.HasKey("PeriodStartsAt", "OwnerId", "Step");
+
+                    b.ToTable("attachment_derivation_spend_periods", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.BackfillPositionEntity", b =>
                 {
                     b.Property<string>("Name")
@@ -250,7 +274,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("Text")
                         .HasColumnType("text");
 
-                    b.HasKey("StoredEmailId", "AttachmentPosition");
+                    b.HasKey("StoredEmailId", "AttachmentPosition")
+                        .HasName("PK_email_attachment_texts");
 
                     b.HasIndex("SearchVector")
                         .HasDatabaseName("ix_email_attachment_texts_search_vector");

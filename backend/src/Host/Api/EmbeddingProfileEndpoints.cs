@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Domain.Access;
@@ -186,10 +187,42 @@ internal static class EmbeddingProfileEndpoints
     /// way past this is to raise the figure the deployment agreed to.
     /// </remarks>
     private static string DescribeCeilingRefusal(EmbeddingActivationAssessment assessment) =>
+        assessment.ExceedsSpendCeiling
+            ? DescribeSpendRefusal(assessment)
+            : DescribeAttachmentRefusal(assessment);
+
+    private static string DescribeSpendRefusal(EmbeddingActivationAssessment assessment) =>
         $"Activating the declared model would send {assessment.Estimate.OutstandingCharacterCount} characters to the "
         + $"provider, and this deployment admits at most {assessment.Period.CeilingInputCharacterCount} in each "
         + $"{assessment.Period.EndsAt - assessment.Period.StartsAt} period. Raise "
         + "'Embeddings:MaxInputCharactersPerPeriod', or set it to zero to declare no ceiling at all, and activate again.";
+
+    /// <summary>States which attachment ceiling refused the activation, in that ceiling's own unit and under its own key.</summary>
+    /// <remarks>
+    /// Separate from the spend refusal above because the remedy is a different key and the figure is a different
+    /// quantity: an operator told to raise the embedding ceiling when the extraction one refused would raise it and be
+    /// refused again. Where both attachment ceilings would be passed the extraction one is named, since it is the step
+    /// the other is reached through — nothing is described that was not first read.
+    /// </remarks>
+    private static string DescribeAttachmentRefusal(EmbeddingActivationAssessment assessment)
+    {
+        var outstanding = assessment.AttachmentDerivation.Coverage.Outstanding;
+
+        return Exceeds(assessment.AttachmentDerivation.Extraction, outstanding.OutstandingInputOctetCount)
+            ? $"Activating the declared model would read {outstanding.OutstandingInputOctetCount} octets out of the "
+                + "attachments this deployment already holds, and it admits at most "
+                + $"{assessment.AttachmentDerivation.Extraction.CeilingUnitCount} in each period. Raise "
+                + "'Embeddings:AttachmentText:MaxInputOctetsPerPeriod', or set it to zero to declare no ceiling at "
+                + "all, and activate again."
+            : $"Activating the declared model would ask a provider to describe {outstanding.OutstandingAttachmentCount} "
+                + "attachments of the mail this deployment already holds, and it admits at most "
+                + $"{assessment.AttachmentDerivation.Description.CeilingUnitCount} description calls in each period. "
+                + "Raise 'Embeddings:ImageDescription:MaxDescriptionsPerPeriod', or set it to zero to declare no "
+                + "ceiling at all, and activate again.";
+    }
+
+    private static bool Exceeds(AttachmentDerivationPeriod period, long estimate) =>
+        period.CeilingUnitCount is { } ceiling && estimate > ceiling;
 
     private static ProblemHttpResult NothingDeclared() => TypedResults.Problem(
         "This deployment declares no embedding provider, so there is nothing to activate. Declare one under "

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -186,16 +187,64 @@ public sealed class MailSynchronizationStatusReaderTests
         Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
     }
 
+    /// <summary>
+    /// Attachment coverage is counted per account rather than once for the deployment, because that is the scope this
+    /// answer is read at: an operator asking why one mailbox is not searchable is told about that mailbox. So what is
+    /// asserted is both that the figure reaches the account it was read for and that a read happened under each
+    /// account's own identity — a reader passed the wrong identity would answer plausibly and report somebody else.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_SeveralServedAccounts_ReadsAttachmentCoverageUnderEachAccountsOwnIdentity()
+    {
+        // Arrange
+        var personal = MailAccountId.Create("personal");
+        var coverage = new InMemoryAttachmentDerivationCoverageReader
+        {
+            Coverage = AttachmentDerivationCoverage.Nothing with
+            {
+                EmailsWithAttachmentCount = 40,
+                ReadEmailCount = 25,
+                DescribedImageCount = 7,
+            },
+        };
+
+        var reader = Reader(
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Start)),
+            attachmentCoverage: coverage,
+            served: [Work, personal]);
+
+        // Act
+        var status = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [Work, personal],
+            status.Accounts.Select(account => account.AccountId));
+        Assert.All(
+            status.Accounts,
+            account =>
+            {
+                Assert.Equal(40, account.AttachmentText.EmailsWithAttachmentCount);
+                Assert.Equal(25, account.AttachmentText.ReadEmailCount);
+                Assert.Equal(7, account.AttachmentText.DescribedImageCount);
+            });
+        MailAccountId[] scopedTo = [.. coverage.Reads.Select(read => read!.Value.Id)];
+        Assert.Equal([Work, personal], scopedTo);
+    }
+
     private static MailSynchronizationStatusReader Reader(
         MailSynchronizationRunLedger ledger,
         bool enabled = true,
         StubMailFolderParticipation? participation = null,
         IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        InMemoryAttachmentDerivationCoverageReader? attachmentCoverage = null,
+        IReadOnlyList<MailAccountId>? served = null)
     {
         var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(enabled);
-        accounts.ServedAccounts.Returns([SyntheticServedAccount.Of(Work)]);
+        accounts.ServedAccounts.Returns(
+            [.. (served ?? [Work]).Select(account => SyntheticServedAccount.Of(account))]);
 
         var progressReader = Substitute.For<IMailFolderSynchronizationProgressReader>();
         progressReader.ReadAsync(Arg.Any<CancellationToken>()).Returns(progress ?? []);
@@ -205,6 +254,7 @@ public sealed class MailSynchronizationStatusReaderTests
             participation ?? StubMailFolderParticipation.Mapping(Inbox, Archive),
             ledger,
             progressReader,
+            attachmentCoverage ?? new InMemoryAttachmentDerivationCoverageReader(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
     }
 }

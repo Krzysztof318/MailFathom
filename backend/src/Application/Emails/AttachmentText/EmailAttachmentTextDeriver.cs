@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -51,6 +52,7 @@ public sealed class EmailAttachmentTextDeriver
     private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly AttachmentTextExtractionOptions extractionOptions;
     private readonly EmailAttachmentTextBounds bounds;
+    private readonly ProviderRequestPacer descriptionPacer;
 
     /// <summary>Initializes the derivation from the stores and ports one message's attachments are read through.</summary>
     /// <param name="contentStore">Reads the stored raw MIME the attachments are opened from.</param>
@@ -61,6 +63,7 @@ public sealed class EmailAttachmentTextDeriver
     /// <param name="repairRequestStore">Records durably that a message's stored copy is missing or will not parse.</param>
     /// <param name="extractionOptions">The per-attachment ceilings, whose input bound also bounds what is buffered for a description.</param>
     /// <param name="bounds">The per-message and per-run ceilings.</param>
+    /// <param name="descriptionPacer">Holds a description back until this deployment is allowed to send its next chat call.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailAttachmentTextDeriver(
         IEmailContentStore contentStore,
@@ -70,7 +73,8 @@ public sealed class EmailAttachmentTextDeriver
         SensitiveContentDerivationGuard guard,
         IEmailContentRepairRequestStore repairRequestStore,
         AttachmentTextExtractionOptions extractionOptions,
-        EmailAttachmentTextBounds bounds)
+        EmailAttachmentTextBounds bounds,
+        ProviderRequestPacer descriptionPacer)
     {
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(attachmentReader);
@@ -80,6 +84,7 @@ public sealed class EmailAttachmentTextDeriver
         ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(extractionOptions);
         ArgumentNullException.ThrowIfNull(bounds);
+        ArgumentNullException.ThrowIfNull(descriptionPacer);
 
         this.contentStore = contentStore;
         this.attachmentReader = attachmentReader;
@@ -89,22 +94,25 @@ public sealed class EmailAttachmentTextDeriver
         this.repairRequestStore = repairRequestStore;
         this.extractionOptions = extractionOptions;
         this.bounds = bounds;
+        this.descriptionPacer = descriptionPacer;
     }
 
     /// <summary>Reads the attachments of one message.</summary>
     /// <param name="email">The message whose attachments are read, and the owner whose posture redacts them.</param>
     /// <param name="runBudget">What the account run has left to read, which this decrements as it reads.</param>
     /// <param name="cancellationToken">Cancels the read between attachments and inside one.</param>
-    /// <returns>What each attachment yielded, in walk order, or nothing at all where the run budget stopped the message.</returns>
+    /// <returns>What each attachment yielded, in walk order, beside what the reading spent and whether the run budget stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derivation.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// <para>
-    /// An absent answer and an empty one are different facts and the caller acts on them differently. Nothing means the
-    /// run had no budget left to reach this message, so it is left exactly as it was and the next run — which starts
-    /// with a full budget — reads it. An empty list means the message <em>was</em> decided and yielded nothing, so it is
-    /// recorded as read and never offered to a parser again.
+    /// A reading always answers, and two different facts arrive as an empty attachment list. <see
+    /// cref="EmailAttachmentTextDerivation.RunBudgetExhausted" /> says the run had no octets left to finish this
+    /// message, so nothing about it may be written down: it is left exactly as it was and the next run — which starts
+    /// with a full budget — reads it. Without that flag an empty list means the message <em>was</em> decided and
+    /// yielded nothing, so it is recorded as read and never offered to a parser again. Either way the two spend counts
+    /// on the answer are what the reading actually cost and are charged, which is why nothing is returned as absent.
     /// </para>
     /// <para>
     /// The walk reaches at most the message's count ceiling. A message declaring more parts than that has the rest
@@ -124,7 +132,7 @@ public sealed class EmailAttachmentTextDeriver
     /// disagrees with the structure, which no repair changes and no repetition resolves.
     /// </para>
     /// </remarks>
-    public async Task<EmailAttachmentTextDerivation?> DeriveAsync(
+    public async Task<EmailAttachmentTextDerivation> DeriveAsync(
         EmailAwaitingAttachmentText email,
         EmailAttachmentTextRunBudget runBudget,
         CancellationToken cancellationToken)
@@ -134,7 +142,7 @@ public sealed class EmailAttachmentTextDeriver
 
         if (runBudget.IsExhausted)
         {
-            return null;
+            return RunBudgetExhausted(redactedUnder: null);
         }
 
         // Read before the scan rather than at the write, exactly as the body's own redaction takes it: a posture
@@ -175,7 +183,14 @@ public sealed class EmailAttachmentTextDeriver
         await using var attachments = walk;
 
         var derived = new List<DerivedAttachmentText>();
-        var readOctets = 0L;
+
+        // Two counts rather than one, because the two ceilings are charged in different units and neither is a share of
+        // the other. The run budget below is charged every attachment's decoded size, since that is what the walk reads
+        // out of the message whichever port ends up with it; the extraction ceiling is charged only what a parser was
+        // actually handed, so a mailbox of pictures cannot spend the octets a mailbox of documents is bounded by.
+        var reservedOctets = 0L;
+        var extractedOctets = 0L;
+        var providerDescriptions = 0L;
 
         // The walk's own count rather than the one the stored row carries: the two disagree whenever the row was
         // written by an older reading, and reading the row's number would leave the trailing attachments of an
@@ -201,7 +216,9 @@ public sealed class EmailAttachmentTextDeriver
                     EmailContentDefect.Unreadable,
                     redactedUnder,
                     cancellationToken,
-                    derived);
+                    derived,
+                    extractedOctets,
+                    providerDescriptions);
             }
 
             // A position the message turns out not to have is the walk disagreeing with the count the row recorded.
@@ -216,7 +233,7 @@ public sealed class EmailAttachmentTextDeriver
                 var description = attachment.Description;
                 var fileName = description.FileName?.Value;
 
-                if (readOctets + description.DecodedSizeOctets > this.bounds.MaxInputOctetsPerEmail)
+                if (reservedOctets + description.DecodedSizeOctets > this.bounds.MaxInputOctetsPerEmail)
                 {
                     derived.Add(DerivedAttachmentText.PastMessageBudget(position, description.MediaType, fileName));
 
@@ -227,18 +244,51 @@ public sealed class EmailAttachmentTextDeriver
                 {
                     // The run rather than the message, so nothing about this message is written down: it is untouched
                     // and the next run reaches it with a full budget. A partial commit here would stamp the message as
-                    // derived while most of it never was.
-                    return null;
+                    // derived while most of it never was. What the earlier attachments already spent is still reported,
+                    // for the reason the repair path reports it: those octets were genuinely parsed and those calls
+                    // were genuinely made, and a ledger omitting them shows less consumed than the provider will bill.
+                    return RunBudgetExhausted(redactedUnder, extractedOctets, providerDescriptions);
                 }
 
-                readOctets += description.DecodedSizeOctets;
+                reservedOctets += description.DecodedSizeOctets;
 
-                derived.Add(await this.ReadAsync(position, attachment, email.Owner, cancellationToken));
+                var read = await this.ReadAsync(position, attachment, email.Owner, cancellationToken);
+
+                derived.Add(read.Text);
+                extractedOctets += read.ExtractedOctetCount;
+
+                if (read.ReachedProvider)
+                {
+                    providerDescriptions++;
+                }
             }
         }
 
-        return new EmailAttachmentTextDerivation(derived, redactedUnder);
+        return new EmailAttachmentTextDerivation(
+            derived,
+            redactedUnder,
+            AwaitsRepair: false,
+            extractedOctets,
+            providerDescriptions);
     }
+
+    /// <summary>Reports a message the run's octet budget ran out under, carrying what reaching that point cost.</summary>
+    /// <remarks>
+    /// The readings taken before the budget ran out are deliberately dropped rather than returned: nothing about the
+    /// message is written down, so a partial list would only be a list nobody stores. The two counts are not dropped
+    /// with them, because they are what was spent rather than what was decided.
+    /// </remarks>
+    private static EmailAttachmentTextDerivation RunBudgetExhausted(
+        SensitiveContentDerivationStamp? redactedUnder,
+        long extractedOctets = 0,
+        long providerDescriptions = 0) =>
+        new(
+            [],
+            redactedUnder,
+            AwaitsRepair: false,
+            extractedOctets,
+            providerDescriptions,
+            RunBudgetExhausted: true);
 
     /// <summary>Leaves a durable note that the stored copy needs fetching again, and hands back what was read so far.</summary>
     /// <remarks>
@@ -250,17 +300,33 @@ public sealed class EmailAttachmentTextDeriver
         EmailContentDefect defect,
         SensitiveContentDerivationStamp? redactedUnder,
         CancellationToken cancellationToken,
-        IReadOnlyList<DerivedAttachmentText>? read = null)
+        IReadOnlyList<DerivedAttachmentText>? read = null,
+        long extractedOctets = 0,
+        long providerDescriptions = 0)
     {
         await this.repairRequestStore.RecordAsync(
             new EmailContentRepairRequest(emailId, defect),
             cancellationToken);
 
-        return new EmailAttachmentTextDerivation(read ?? [], redactedUnder, AwaitsRepair: true);
+        // What was already read is charged even though the message stays unsettled, because the octets were genuinely
+        // parsed and the calls were genuinely made. Reporting nothing here would let a mailbox whose stored copies are
+        // all damaged consume without ever appearing in the figures an operator reads.
+        return new EmailAttachmentTextDerivation(
+            read ?? [],
+            redactedUnder,
+            AwaitsRepair: true,
+            extractedOctets,
+            providerDescriptions);
     }
 
     /// <summary>Reads one opened attachment as a document, falling through to a description where it is not one.</summary>
-    private async Task<DerivedAttachmentText> ReadAsync(
+    /// <returns>What to store, what a parser was handed for it, and whether a request left this deployment for the chat provider.</returns>
+    /// <remarks>
+    /// The octet count is what the extraction ceiling is charged, so it is the extractor's own answer rather than the
+    /// attachment's declared size: a picture and a format nothing here parses are stepped over from the declaration
+    /// alone, and charging their size to a ceiling counted in parser input would let one workload spend the other's.
+    /// </remarks>
+    private async Task<(DerivedAttachmentText Text, long ExtractedOctetCount, bool ReachedProvider)> ReadAsync(
         int position,
         IOpenedEmailAttachment attachment,
         MailOwnerId owner,
@@ -271,23 +337,27 @@ public sealed class EmailAttachmentTextDeriver
         var fileName = description.FileName?.Value;
 
         var extracted = await this.extractor.ExtractTextAsync(attachment, cancellationToken);
+        var extractedOctets = extracted.ReadTheAttachment ? description.DecodedSizeOctets : 0L;
 
         if (extracted.Outcome is not AttachmentTextExtractionOutcome.FormatNotRecognized)
         {
-            return await this.RedactAsync(
+            var text = await this.RedactAsync(
                 DerivedAttachmentText.FromExtraction(position, mediaType, fileName, extracted),
                 owner,
                 cancellationToken);
+
+            return (text, extractedOctets, ReachedProvider: false);
         }
 
-        return await this.RedactAsync(
-            DerivedAttachmentText.FromDescription(
-                position,
-                mediaType,
-                fileName,
-                await this.DescribeAsync(attachment, mediaType, cancellationToken)),
-            owner,
-            cancellationToken);
+        var described = await this.DescribeAsync(attachment, mediaType, cancellationToken);
+
+        return (
+            await this.RedactAsync(
+                DerivedAttachmentText.FromDescription(position, mediaType, fileName, described),
+                owner,
+                cancellationToken),
+            extractedOctets,
+            described.ReachedProvider);
     }
 
     /// <summary>Buffers one attachment's octets and asks what the picture shows.</summary>
@@ -318,6 +388,10 @@ public sealed class EmailAttachmentTextDeriver
         {
             return ImageAttachmentDescription.Refused(ImageDescriptionRefusal.ImageTooLarge);
         }
+
+        // Waited for here rather than before the buffering, so the rate ceiling paces the calls that are actually made
+        // and never delays a picture the two ceilings above are about to refuse without asking anybody.
+        await this.descriptionPacer.WaitForSlotAsync(cancellationToken);
 
         return await this.describer.DescribeAsync(mediaType, buffer.ToReadableStream(), cancellationToken);
     }

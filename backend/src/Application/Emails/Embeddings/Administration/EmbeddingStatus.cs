@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText.Administration;
 using MailFathom.Application.Emails.Embeddings.Limits;
 
 namespace MailFathom.Application.Emails.Embeddings.Administration;
@@ -31,13 +32,20 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// a pass that is running or about to be taken; the absence is an instance that has only just started, or one whose
 /// walk is turned off and will schedule nothing at all.
 /// </param>
+/// <param name="AttachmentDerivation">
+/// How far reading this deployment's attachments and images has come, and what its own two ceilings have consumed. A
+/// member of its own rather than figures folded into the ones above, because attachment work is counted in octets and
+/// in calls while embedding is counted in characters, and one mailbox may be entirely embedded on its message text
+/// with every document in it still unread.
+/// </param>
 public sealed record EmbeddingStatus(
     EmbeddingProfileIdentity? Declared,
     EmbeddingGenerationProgress? Serving,
     EmbeddingGenerationProgress? Building,
     AiProviderHealth ProviderHealth,
     EmbeddingSpendPeriod Period,
-    DateTimeOffset? NextBackfillPassDueAt)
+    DateTimeOffset? NextBackfillPassDueAt,
+    AttachmentDerivationStatus AttachmentDerivation)
 {
     /// <summary>Gets whether a declaration is waiting for an activation nobody has performed.</summary>
     /// <remarks>
