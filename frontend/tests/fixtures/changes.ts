@@ -33,16 +33,20 @@ export const flagsRecorded = {
  * A refusal about one message is that message's own result rather than the request's, so a batch composed from a list
  * that has moved on since the screen drew it reports exactly which entries did not apply and writes the rest down —
  * which is the state a screen has to be looked at in and the one a fixture of nothing but successes never reaches.
+ *
+ * A move result is not a flag result with the word changed. A message goes to one folder, so the record is a single
+ * `change` rather than a list of them, and what a refusal states beside it is the `destinationFolder` the move was
+ * recorded against rather than a sentence about the change itself.
  */
 export const movesPartlyRecorded = {
     results: [
         {
             storedEmailId: newsletterId,
             outcome: 'recorded',
-            detail: null,
-            changes: [{ mutation: 'relocate', recordId: '00000000-0000-4000-8000-0000000000a3', state: 'pending' }],
+            destinationFolder: 'ARCHIVE-2024',
+            change: { mutation: 'relocate', recordId: '00000000-0000-4000-8000-0000000000a3', state: 'pending' },
         },
-        { storedEmailId: markupOnlyId, outcome: 'message-not-found', detail: null, changes: [] },
+        { storedEmailId: markupOnlyId, outcome: 'message-not-found', destinationFolder: null, change: null },
     ],
 };
 
