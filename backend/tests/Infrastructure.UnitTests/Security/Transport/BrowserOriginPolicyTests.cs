@@ -27,7 +27,7 @@ public sealed class BrowserOriginPolicyTests
         Assert.Equal(expectedOrigin, normalizedOrigin);
     }
 
-    /// <summary>A downloaded head is served over a custom protocol on Linux, macOS, and iOS, so its origin is the one an operator has to be able to list.</summary>
+    /// <summary>The desktop head on Linux is served over a custom protocol, so its origin is the one an operator has to be able to list.</summary>
     [Theory]
     [InlineData("tauri://localhost", "tauri://localhost")]
     [InlineData("TAURI://LocalHost", "tauri://localhost")]
