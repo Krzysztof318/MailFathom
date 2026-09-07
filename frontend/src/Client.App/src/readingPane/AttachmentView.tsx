@@ -21,9 +21,10 @@ import { sizeOf } from '../localization/octets';
 import { kindOf } from './fileKind';
 import { shownAttachment, type NotShown } from './shownAttachment';
 
-// One file a message carries, opened inside the client instead of saved. It stands where the message was — in the
-// reading column, as the fourth kind of tab the design project draws — and closing it is a return to that message
-// rather than a way out of the client.
+// One file a message carries, opened inside the client instead of saved. It stands with the message — in the reading
+// column as the fourth kind of tab the design project draws where somebody works in tabs, and over the message in
+// `mailSpace/SurfaceWindow.tsx` where they do not — and closing it is a return to that message rather than a way out of
+// the client. Which of the two it is put in is the composition root's, so nothing here asks.
 //
 // **What it shows is decided before anything is fetched**, by `shownAttachment.ts` beside it, which is where the two
 // shapes this client draws and the reasoning behind each of them live. A file of any other kind, and a file of either

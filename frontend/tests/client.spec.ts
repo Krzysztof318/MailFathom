@@ -903,13 +903,17 @@ test('describes an attached file before it is fetched, and fetches it only when 
 test('opens an attached file inside the client rather than handing it to the machine', async ({ page }) => {
     await openTheFirstMessage(page);
 
-    await page.getByRole('button', { name: 'Open orders.csv' }).click();
+    const openTheFile = page.getByRole('button', { name: 'Open orders.csv' });
 
-    // The file is drawn in the reading column under its own name, which is the whole of what opening one means: the
-    // person reads it where they were reading the message, and nothing was written to their machine to get there.
+    await openTheFile.click();
+
+    // The file is drawn under its own name in a window over the message, which is the whole of what opening one means
+    // where somebody does not work in tabs: the person reads it where they were reading the message, the message is
+    // still there underneath, and nothing was written to their machine to get there.
     const viewer = page.getByRole('region', { name: 'orders.csv' });
     await expect(viewer.getByRole('heading', { name: 'orders.csv' })).toBeVisible();
     await expect(viewer.getByText(/kettle,1/u)).toBeVisible();
+    await expect(page.getByRole('article', messageRegion)).toBeVisible();
 
     // Only a browser can say the octets the built bundle read were decoded rather than drawn as a download: jsdom has
     // no download of its own to distinguish it from.
@@ -918,6 +922,7 @@ test('opens an attached file inside the client rather than handing it to the mac
     await viewer.getByRole('button', { name: 'Close orders.csv' }).click();
 
     await expect(page.getByRole('article', messageRegion)).toBeVisible();
+    await expect(openTheFile).toBeFocused();
 });
 
 test('presents the credential the bundle composed when it fetches an attached file', async ({ page }) => {
@@ -1001,32 +1006,49 @@ test('runs nothing the markup carries, and reaches no host but its own until the
     await showTheSenderMarkup(page);
     await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
 
+    // Scoped to the surface, because the message it stands over is still drawn underneath and offers the same ask: the
+    // window is what the reader is looking at, and it is that one's promise being asserted.
+    const surface = page.getByRole('region', { name: "The sender's own version of this message" });
+
     // The script inside the frame fetches from a host of its own, so a request to it would be that script having run.
     // The picture's host is the other half: the representation carries no address for it until the reader asks, so a
     // frame that fetched one would be drawing markup this client composed rather than the one it was served. The
     // sentence under the frame is the design project's own wording of that promise, which #1693 brought the surface to.
-    await expect(page.getByText(/scripts and remote content are blocked/)).toBeVisible();
+    await expect(surface.getByText(/scripts and remote content are blocked/)).toBeVisible();
     expect([...hosts]).not.toContain(messages.senderScriptHost);
     expect([...hosts]).not.toContain(messages.senderPictureHost);
 
-    await page.getByRole('button', { name: 'Load pictures from the sender' }).click();
+    await surface.getByRole('button', { name: 'Load pictures from the sender' }).click();
 
     // Asking is what makes the request, on this surface exactly as in the pane. The script is unaffected by it: the
     // consent restores addresses and never restores anything that runs.
-    await expect(page.getByText(/their servers can tell it was opened/)).toBeVisible();
+    await expect(surface.getByText(/their servers can tell it was opened/)).toBeVisible();
     await expect.poll(() => [...hosts]).toContain(messages.senderPictureHost);
     expect([...hosts]).not.toContain(messages.senderScriptHost);
 });
 
+// What only a browser can say about the shape the two surfaces take where somebody does not work in tabs: the design
+// project draws each as a window over the message, and a window is the platform's own modal — which jsdom carries the
+// element of and none of the behaviour of. So the focus handed back as it closes is asserted here and nowhere else.
 test('leaves the markup surface for the message it was opened from, and asks again next time', async ({ page }) => {
     await openTheFirstMessage(page);
+
+    const showTheMarkup = page.getByRole('button', { name: 'Show the full HTML version' });
+
     await showTheSenderMarkup(page);
     await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
+
+    // The message is still where it was rather than replaced, which is what a window over it means.
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
     await page.getByRole('button', { name: 'Close this view' }).click();
 
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
     await expect(page.locator(`iframe[title="${markupFrame}"]`)).toHaveCount(0);
+
+    // Closing a modal hands focus back to what opened it, and that is the whole reason every way out of the window
+    // leaves through the element rather than by taking the surface off the screen from underneath it.
+    await expect(showTheMarkup).toBeFocused();
 
     // Nothing on either side wrote the answer down, so the control asks again rather than reopening what was shown.
     await page.getByRole('button', { name: 'Show the full HTML version' }).click();

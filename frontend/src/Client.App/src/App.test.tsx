@@ -191,10 +191,10 @@ describe('App', () => {
         });
     });
 
-    // The message this one opens belongs to no conversation, which is deliberate: what is being proven is leaving the
-    // sender's own view, and a threaded message would draw the way into the conversation beside it — a second surface
-    // for every query here to walk past, in the heaviest test this suite has.
-    it('returns to the message from the sender own markup, and places the reader in it', async () => {
+    // The message this one opens belongs to no conversation, which is deliberate: what is being proven is the shape the
+    // sender's own view is drawn in, and a threaded message would draw the way into the conversation beside it — a
+    // second surface for every query here to walk past, in the heaviest test this suite has.
+    it('draws the sender own markup in a window over the message where the person does not work in tabs', async () => {
         renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
         await framed();
 
@@ -206,18 +206,42 @@ describe('App', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
         fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
 
-        const surface = await screen.findByRole('region', { name: "The sender's own version of this message" });
+        const standing = await screen.findByRole('dialog', { name: "The sender's own version of this message" });
+        const surface = within(standing).getByRole('region', { name: "The sender's own version of this message" });
+
+        // The message is where it was rather than replaced by the surface, which is the whole of what a window over it
+        // means: the reading column goes on drawing what the reader was reading.
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+
+        // Opening it is a view change, so the reader is placed in what was opened. Where that focus goes when the
+        // window closes is the platform's own — the browser suite is where a real modal can be asked.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(surface);
+        });
 
         fireEvent.click(within(surface).getByRole('button', { name: 'Close this view' }));
 
-        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+    });
 
-        // The same rule the conversation above is held to, and the one the two surfaces would otherwise disagree on:
-        // what decides it is that *something* was in front of the message rather than which of the two it was, so a
-        // reader leaving this one is placed exactly as a reader leaving that one is.
-        await waitFor(() => {
-            expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
-        });
+    it('draws the sender own markup in the reading column where the person works in tabs', async () => {
+        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+
+        // A tab of its own, so it takes the column the message had rather than standing in a window over it — which is
+        // the mode deciding the shape, and the one difference between this test and the one above.
+        expect(await screen.findByRole('region', { name: "The sender's own version of this message" })).toBeDefined();
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByText('A drawn message.')).toBeNull();
     });
 
     // Three things decide whether opening a message marks it read, and all three are the frame's: the reader's own

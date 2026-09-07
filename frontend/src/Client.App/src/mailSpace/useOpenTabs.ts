@@ -57,12 +57,12 @@ export interface OpenTabsInForce {
     readonly closeFullHtml: () => void;
 
     /**
-     * Opens one file a message carries, in the reading column.
+     * Opens one file a message carries.
      *
-     * In a tab of its own where the person works in tabs, so the message it was opened from stays open beside it. Where
-     * they do not, it stands in front of that message exactly as a conversation does — which is the one place this
-     * differs from opening a message, and it differs because a file is opened *from* what is on the screen rather than
-     * instead of it: replacing the one tab there is would close the message the reader is going back to.
+     * In a tab of its own in the reading column where the person works in tabs, so the message it was opened from stays
+     * open beside it. Where they do not, it stands in front of that message in a window over it — which is the one
+     * place this differs from opening a message, and it differs because a file is opened *from* what is on the screen
+     * rather than instead of it: replacing the one tab there is would close the message the reader is going back to.
      */
     readonly openAttachment: (opened: OpenedAttachment) => void;
 
@@ -166,8 +166,8 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
         },
 
         // The surface is a tab of its own only where a person works in tabs. Where they do not there is one reading
-        // column and nothing to put a second tab beside, so the surface stands in front of the message the way a
-        // conversation does — which is what makes closing it a return to that message rather than to nothing.
+        // column and nothing to put a second tab beside, so the surface stands in front of the message in a window over
+        // it — which is what makes closing it a return to that message rather than to nothing.
         openFullHtml: (storedEmailId, subject) => {
             if (!inTabs) {
                 revise({ fullHtml: storedEmailId });

@@ -36,6 +36,7 @@ import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
 import type { MessageKey } from './localization/en';
 import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
+import { SurfaceWindow } from './mailSpace/SurfaceWindow';
 import { TabStrip } from './mailSpace/TabStrip';
 import { useOpenTabs } from './mailSpace/useOpenTabs';
 import { MailboxActsProvider } from './mailboxActs/MailboxActs';
@@ -402,17 +403,19 @@ export function App({
     const twoPanes = useTwoPanes();
 
     // What is standing in front of what a reader was last looking at, which is what the back gesture unwinds before it
-    // moves anywhere. The surfaces in the reading column count at every width, because each of them genuinely covers
-    // what it was opened from; the message covering the list counts only where the composition shows one pane, since
-    // that is the only composition where opening one took the other off the screen.
+    // moves anywhere. The two surfaces count here only where they are tabs in the reading column: where somebody does
+    // not work in tabs each is drawn in a window over the message, and a window registers itself as a screen layer the
+    // way every other modal surface does — so counting it here as well would spend two presses on one window. The
+    // message covering the list counts only where the composition shows one pane, since that is the only composition
+    // where opening one took the other off the screen.
     //
     // One list rather than a count beside a chain of branches, because how many steps stand there and what each of
     // them does to go away are one fact read twice. A press that unwinds two of them at once is what makes the
     // difference: asking the workspace again for the second step would answer with the surface the first has already
     // taken away, this event holding the revision that closed one no more than it holds the one that opened it.
     const inFrontOfTheList = [
-        workspace.attachment === null ? null : openTabs.closeAttachment,
-        workspace.fullHtml === null ? null : openTabs.closeFullHtml,
+        inTabs && workspace.attachment !== null ? openTabs.closeAttachment : null,
+        inTabs && workspace.fullHtml !== null ? openTabs.closeFullHtml : null,
         twoPanes || (workspace.selection === null && workspace.conversation === null)
             ? null
             : () => {
@@ -538,6 +541,7 @@ export function App({
                     attachment={workspace.attachment}
                     storedEmailId={workspace.selection}
                     online={connection.online}
+                    inTabs={inTabs}
                     expandWholeThread={preferences.expandWholeThread}
                     onShowFullHtml={openTabs.openFullHtml}
                     onCloseFullHtml={openTabs.closeFullHtml}
@@ -847,6 +851,7 @@ function OpenMail({
     attachment,
     storedEmailId,
     online,
+    inTabs,
     expandWholeThread,
     onShowFullHtml,
     onCloseFullHtml,
@@ -863,9 +868,18 @@ function OpenMail({
     readonly onCloseFullHtml: () => void;
     readonly onCloseAttachment: () => void;
 
+    /**
+     * Whether the person is working in tabs, which is what decides the shape either surface is drawn in rather than
+     * which of them was opened: a tab in the reading column where they are, and a window over the message where they
+     * are not.
+     */
+    readonly inTabs: boolean;
+
     /** Whether the reader asked for conversations to open with every message drawn, which only the conversation reads. */
     readonly expandWholeThread: boolean;
 }) {
+    const { translate } = useLocalization();
+
     // Whether the pane below is being arrived at rather than landed on. Closing whatever stood in front of the message
     // swaps this position from one component to the other, so the pane mounts afresh exactly as it does on a cold start
     // and cannot tell the two apart from anything it holds itself — this is the only place that saw the surface go.
@@ -876,7 +890,11 @@ function OpenMail({
     // The question is *whether something was in front* rather than which of the three it was, so the conversation, the
     // markup surface, and the file are one value here. Asking it per surface is how closing the second one would leave
     // focus on a control that has just been unmounted, while closing the first placed it correctly.
-    const covered = conversation !== null || fullHtml !== null || attachment !== null;
+    //
+    // Neither surface is in front of the pane where they are drawn as windows: the pane goes on standing underneath one
+    // and is never unmounted by it, and what places focus as the window goes is the platform handing it back to the
+    // control that opened it. Counting it here as well would have the pane take focus off that control.
+    const covered = conversation !== null || (inTabs && (fullHtml !== null || attachment !== null));
     const [wasCovered, setWasCovered] = useState(covered);
     const [arriving, setArriving] = useState(false);
 
@@ -885,51 +903,78 @@ function OpenMail({
         setArriving(!covered);
     }
 
-    // Keyed by the file, so opening a second one from the same message is a surface of its own rather than the first
-    // one adjusted — which is what keeps a read of one file from drawing into the screen that asked for another.
-    if (attachment !== null) {
-        return (
-            <AttachmentView
-                key={attachmentKey(attachment)}
-                session={session}
-                opened={attachment}
-                online={online}
-                onClose={onCloseAttachment}
-            />
-        );
+    // Which surface is open, what it is drawn as, and what it comes to — written once, because the two shapes below
+    // differ in where the surface stands rather than in what it is. Keyed by what was opened, so opening a second file
+    // from the same message is a surface of its own rather than the first one adjusted — which is what keeps a read of
+    // one file from drawing into the screen that asked for another.
+    const opened =
+        attachment !== null
+            ? {
+                  drawn: 'file' as const,
+                  label: attachment.attachment.fileName ?? translate('attachment.unnamed'),
+                  onClosed: onCloseAttachment,
+                  draw: (close: () => void) => (
+                      <AttachmentView
+                          key={attachmentKey(attachment)}
+                          session={session}
+                          opened={attachment}
+                          online={online}
+                          onClose={close}
+                      />
+                  ),
+              }
+            : fullHtml !== null
+              ? {
+                    drawn: 'markup' as const,
+                    label: translate('fullHtml.surface'),
+                    onClosed: onCloseFullHtml,
+                    draw: (close: () => void) => (
+                        <FullHtmlSurface
+                            key={fullHtml}
+                            session={session}
+                            transport={transport}
+                            storedEmailId={fullHtml}
+                            online={online}
+                            onClose={close}
+                        />
+                    ),
+                }
+              : null;
+
+    // In tabs the surface *is* the reading column, because a tab of its own is what it was opened as and the message it
+    // came from is a tab beside it. Closing it is the workspace letting go of it, there being no window to leave.
+    if (inTabs && opened !== null) {
+        return opened.draw(opened.onClosed);
     }
 
-    if (fullHtml !== null) {
-        return (
-            <FullHtmlSurface
-                key={fullHtml}
-                session={session}
-                transport={transport}
-                storedEmailId={fullHtml}
-                online={online}
-                onClose={onCloseFullHtml}
-            />
-        );
-    }
+    return (
+        <>
+            {conversation === null ? (
+                <ReadingPane
+                    session={session}
+                    transport={transport}
+                    storedEmailId={storedEmailId}
+                    online={online}
+                    onShowFullHtml={onShowFullHtml}
+                    arriving={arriving}
+                />
+            ) : (
+                <Thread
+                    key={conversationKey(conversation)}
+                    session={session}
+                    transport={transport}
+                    conversation={conversation}
+                    online={online}
+                    expandWholeThread={expandWholeThread}
+                />
+            )}
 
-    return conversation === null ? (
-        <ReadingPane
-            session={session}
-            transport={transport}
-            storedEmailId={storedEmailId}
-            online={online}
-            onShowFullHtml={onShowFullHtml}
-            arriving={arriving}
-        />
-    ) : (
-        <Thread
-            key={conversationKey(conversation)}
-            session={session}
-            transport={transport}
-            conversation={conversation}
-            online={online}
-            expandWholeThread={expandWholeThread}
-        />
+            {opened === null ? null : (
+                <SurfaceWindow label={opened.label} drawn={opened.drawn} onClosed={opened.onClosed}>
+                    {opened.draw}
+                </SurfaceWindow>
+            )}
+        </>
     );
 }
 
