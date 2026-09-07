@@ -7874,6 +7874,42 @@ the_development_tooling_never_reaches_a_published_artifact() {
   fi
 }
 
+# A corpus under `backend/tools/SyntheticMail/corpora/` is model-written mail generated once and committed, so
+# every clone of this repository carries it forever and a second one is added by whoever needs different mail. That
+# is what the bound is about: a corpus is paid for once in money and then in every checkout, and the number below is
+# the ceiling somebody raising it has to come to. One megabyte holds a few hundred compressed messages with small
+# text attachments, which is more mail than a seeding run needs; a corpus that does not fit is a corpus generated with
+# `--count` or `--attachment-bytes` too high rather than a bound too low.
+a_committed_corpus_stays_within_its_size_bound() {
+  local corpora="$source_repository_root/backend/tools/SyntheticMail/corpora"
+  local most_bytes=1048576
+  local failures='' corpus size offenders
+
+  if [[ ! -d "$corpora" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r corpus; do
+    size="$(wc -c < "$corpus")"
+
+    if ((size > most_bytes)); then
+      failures+="$(basename "$corpus") is $size bytes, past the $most_bytes byte bound. "
+    fi
+  done < <(find "$corpora" -type f -name '*.zip')
+
+  # Anything else in there is a corpus committed in a form nothing replays, or a stray file nobody meant to keep.
+  offenders="$(find "$corpora" -type f ! -name '*.zip' || true)"
+
+  if [[ -n "$offenders" ]]; then
+    failures+="these files under backend/tools/SyntheticMail/corpora/ are not corpus archives: $(tr '\n' ' ' <<< "$offenders"). "
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # The condition the web head was adopted under: it changes no deployment shape. The client is built by a stage of the
 # image's own build, so the one thing that may cross into the runtime stage is the directory of static files that stage
 # produced — a Node runtime, a package manager, or a `node_modules` reaching it would put a second process into Compose,
@@ -9756,6 +9792,7 @@ run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
+run_test a_committed_corpus_stays_within_its_size_bound
 run_test the_runtime_image_carries_the_client_bundle_and_no_node
 run_test the_required_check_aggregates_every_job_in_ci
 run_test the_stacks_change_filters_name_no_path_in_each_other

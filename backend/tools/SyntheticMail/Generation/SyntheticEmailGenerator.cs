@@ -575,6 +575,10 @@ internal sealed class SyntheticEmailGenerator
 
             AiEmailContent content;
 
+            // Only a text attachment is asked for. An opaque part is opaque on purpose, and a model asked to write
+            // one would answer with text that a reader then finds inside something claiming not to be readable.
+            var written = envelope.Attachment is { IsText: true } file ? file : null;
+
             try
             {
                 content = await contentSource.GenerateAsync(
@@ -583,7 +587,9 @@ internal sealed class SyntheticEmailGenerator
                         envelope.Origin.Topic,
                         envelope.Author.DisplayName,
                         parent?.Subject,
-                        OpeningOf(parent)),
+                        OpeningOf(parent),
+                        written?.FileName,
+                        written?.Length ?? 0),
                     cancellationToken);
             }
             finally
@@ -610,7 +616,9 @@ internal sealed class SyntheticEmailGenerator
             parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}",
             envelope.SentAt,
             ComposeAiBody(envelope, content),
-            envelope.Attachment,
+            envelope.Attachment is { IsText: true } attachment && content.Attachment is { } written
+                ? attachment.Carrying(written)
+                : envelope.Attachment,
             envelope.Origin);
 
     private string DrawLanguage() => this.plan.Languages[this.source.Next(this.plan.Languages.Count)];

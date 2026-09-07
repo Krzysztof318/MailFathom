@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -30,8 +31,15 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// A result carries what a list row draws and, beside it, why it is in the list: the highlighted extracts around what
-/// matched, and which ranking found it. A message ranked by meaning carries no extract, because there is no part of it
-/// that shows the query's words, and saying so is the honest answer where inventing one would not be.
+/// matched, which ranking found it, and what any of its attachments contributed. A message ranked by meaning carries no
+/// extract, because there is no part of it that shows the query's words, and saying so is the honest answer where
+/// inventing one would not be.
+/// </para>
+/// <para>
+/// What a query matched inside an attached file is named rather than folded into the extracts: the file, the page,
+/// slide, or sheet inside it, and whether the words are the document's own or a model's account of a picture. A message
+/// whose only claim on the query is a word inside a document would otherwise be a row with nothing under it, which
+/// reads as an unexplained result rather than as a match a screen can show and a person can open.
 /// </para>
 /// <para>
 /// A query that matched nothing is answered with nothing. The page comes back empty rather than filled with the nearest
@@ -258,6 +266,8 @@ internal sealed record ClientMailSearchResponse(
 /// <param name="Preview">The opening of the message's own text, bounded, or <see langword="null" /> where nothing has extracted the message yet.</param>
 /// <param name="Snippets">The extracts around what matched, each marking the matched words with <c>**</c>, and empty where nothing in the body matched.</param>
 /// <param name="MatchedBy">Which ranking found this result: <c>LexicalRanking</c>, <c>SemanticRanking</c>, or <c>BothRankings</c>.</param>
+/// <param name="AttachmentMatches">The attachments of this message the query reached, each naming the file, the place inside it, and bounded extracts of its text.</param>
+/// <param name="IsDepictedMatch">Whether a description of an attached picture is the whole of this message's claim on the query.</param>
 /// <remarks>
 /// <para>
 /// The row is the message list's row, field for field, so one layout draws both and a search result can be opened,
@@ -266,7 +276,14 @@ internal sealed record ClientMailSearchResponse(
 /// <para>
 /// The extracts are text cut from untrusted mail and are marked rather than marked up: the emphasis is <c>**</c> around
 /// the matched words and nothing in them is markup a client should render as such. An empty list is a message that
-/// matched on its headers or by meaning, which <c>matchedBy</c> separates.
+/// matched on its headers, by meaning, or inside one of its files, which <c>matchedBy</c> and <c>attachmentMatches</c>
+/// separate.
+/// </para>
+/// <para>
+/// An attachment match is a citation rather than a second extract list: it carries the file, the place inside it, and
+/// bounded extracts of that file's text, so a screen can show why the row is there and open what it came from without
+/// a second request. An attachment MailFathom could not read is absent from it rather than present and empty, exactly
+/// as it is from the tool surface.
 /// </para>
 /// <para>
 /// No relevance score is published. A rank means something only inside the ordering that produced it, so a number here
@@ -293,7 +310,9 @@ internal sealed record ClientMailSearchResultResponse(
     long SizeOctets,
     string? Preview,
     IReadOnlyList<string> Snippets,
-    string MatchedBy)
+    string MatchedBy,
+    IReadOnlyList<ClientMailAttachmentMatchResponse> AttachmentMatches,
+    bool IsDepictedMatch)
 {
     /// <summary>Describes one result for the wire.</summary>
     /// <param name="result">The result the use case read.</param>
@@ -317,5 +336,60 @@ internal sealed record ClientMailSearchResultResponse(
         result.Email.SizeOctets,
         result.Preview,
         result.Snippets,
-        result.MatchedBy.ToString());
+        result.MatchedBy.ToString(),
+        [.. result.AttachmentMatches.Select(ClientMailAttachmentMatchResponse.For)],
+        result.IsDepictedMatch);
+}
+
+/// <summary>One attachment of a result the query reached, and where inside the file it was reached.</summary>
+/// <param name="AttachmentPosition">The zero-based walk position of the attachment, which is the coordinate the attachment route is addressed with.</param>
+/// <param name="FileName">The file name the sender gave the attachment, or <see langword="null" /> where the part carried none that could be used.</param>
+/// <param name="MediaType">What the part declared itself to be, which is the sender's claim rather than a reading of the octets.</param>
+/// <param name="Source">Where the words came from: <c>Document</c> for the file's own text, <c>ImageDescription</c> for a model's account of a picture.</param>
+/// <param name="SegmentKind">What the counted place inside the file is — <c>Page</c>, <c>Slide</c>, or <c>Sheet</c> — or <see langword="null" /> where the reading recorded no boundaries.</param>
+/// <param name="SegmentNumber">That place's one-based number in reading order, or <see langword="null" /> where <c>segmentKind</c> is.</param>
+/// <param name="Extracts">The bounded extracts of the attachment's text, in the order the attachment carries them.</param>
+/// <remarks>
+/// <para>
+/// A coordinate rather than a payload. Nothing here carries the file's bytes or its whole text: the walk position is
+/// what the attachment route is asked for, and this says which one to ask for and which page of it a person is being
+/// sent to. A citation a reader cannot go and check is an extract with nothing behind it.
+/// </para>
+/// <para>
+/// <c>source</c> is what separates the two things an attachment can contribute, and a screen owes the reader the
+/// difference. A document's words were written by whoever sent the file; a description was composed by a model out of a
+/// picture, and a result carrying one is in the list only because nothing anybody wrote was near the query — which
+/// <c>isDepictedMatch</c> on the result says outright.
+/// </para>
+/// <para>
+/// The extracts and the file name are untrusted mail content, marked rather than marked up exactly as the message's own
+/// extracts are.
+/// </para>
+/// </remarks>
+internal sealed record ClientMailAttachmentMatchResponse(
+    int AttachmentPosition,
+    string? FileName,
+    string MediaType,
+    string Source,
+    string? SegmentKind,
+    int? SegmentNumber,
+    IReadOnlyList<string> Extracts)
+{
+    /// <summary>Describes one attachment match for the wire.</summary>
+    /// <param name="match">The match the use case read.</param>
+    /// <returns>The response body.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="match" /> is <see langword="null" />.</exception>
+    internal static ClientMailAttachmentMatchResponse For(EmailAttachmentMatch match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+
+        return new ClientMailAttachmentMatchResponse(
+            match.AttachmentPosition,
+            match.FileName,
+            match.DeclaredMediaType,
+            match.Kind.ToString(),
+            match.Segment?.Kind.ToString(),
+            match.Segment?.Number,
+            match.Extracts);
+    }
 }

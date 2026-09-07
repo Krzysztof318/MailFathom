@@ -4,6 +4,7 @@
 
 using System.Text;
 using MailFathom.SyntheticMail.Configuration;
+using MailFathom.SyntheticMail.UnitTests.TestDoubles;
 
 using Xunit;
 
@@ -93,7 +94,7 @@ public sealed class SyntheticAiProviderFileTests
         var missing = Path.Combine(AppContext.BaseDirectory, $"nothing-writes-this-{Guid.NewGuid():N}.local.json");
 
         // Act
-        var failure = Assert.Throws<SyntheticMailFailure>(() => SyntheticAiProviderFile.Read(missing));
+        var failure = Assert.Throws<SyntheticMailFailure>(() => SyntheticAiProviderFile.Read(missing, UnconfiguredUserSecrets.Store()));
 
         // Assert
         // The whole of the failure is what to write and where: a tool nobody has configured yet is the ordinary first

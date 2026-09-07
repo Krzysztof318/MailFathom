@@ -17,21 +17,19 @@ cannot reach the query without them; the `search_emails` MCP tool maps protocol 
 returns, and [MCP tools](mcp-tools.md#search_emails) documents that surface.
 
 **A screen searches the same mail through a second use case.** `MailSearchBrowser` composes the same scope, the same
-filters, both rankings, the same fusion and the same body extracts, and differs in the two things a screen needs and a
-tool does not: the results continue past the first window, and each one says which ranking found it.
-[Paging a ranking](#paging-a-ranking) is where the first of those is described and
+filters, both rankings, the same partition, the same body extracts, and the same attachment matches, and differs in the
+two things a screen needs and a tool does not: the results continue past the first window, and each one says which
+ranking found it. [Paging a ranking](#paging-a-ranking) is where the first of those is described and
 [What a result carries](#what-a-result-carries) the second; the route is
 [the client endpoint's](../operations/client-endpoint.md#the-mail-search-route). Everything else on this page holds for
 both.
 
-One part does not. **A client result carries no attachment match and is never marked depicted**: `MailSearchBrowser`
-never reads the attachment index for what it quotes, so its `attachmentMatches` is always empty and it publishes the
-written ranking alone. What both routes do share is which messages are eligible, so a message whose only claim on the
-query is a word inside a document is returned to a screen as well — with an empty snippet, because the extract cut from
-its body has no highlight to keep. A result nothing visible explains is exactly what the tool's attachment section
-exists to prevent, and closing that gap on the client is
-[#1559](https://github.com/Krzysztof318/MailFathom/issues/1559), which owns how a client row says a file or a
-description put it there. Until then the route reports the message and not the reason.
+**What an attachment contributed reaches both surfaces through one step.** `HybridSearchRanking.Compose` composes the
+ordering and `IEmailAttachmentMatchReader` reads what the window's files said, and both use cases call each of them
+rather than keeping a rule of their own — so a message whose only claim on the query is a word inside a document is
+returned to a screen naming the file and the page, instead of as a row with an empty snippet and nothing to explain it.
+A result a described picture alone placed sits below every written match on both surfaces and says so on the result
+itself.
 
 ## What is searchable, and what is not
 
@@ -184,11 +182,14 @@ that no ranking supports, and the order of the results is what the ranking has t
 kind of reason — a screen reads it once from
 [the folders route](../operations/client-endpoint.md#the-folders-route) rather than on every page.
 
-The subject, the snippets, and the sender's display name are what a result carries that a message's author wrote, so
-where a sensitive-content scanner is switched on all three are redacted before the window is served, each value scanned
+The subject, the snippets, the sender's display name, and what an attachment contributed — the file name its sender
+chose, and the extracts — are what a result carries that somebody other than MailFathom composed, so where a
+sensitive-content scanner is switched on every one of them is redacted before the window is served, each value scanned
 on its own rather than as one composed result. The display name is scanned rather than treated as part of the address it
 accompanies, because an address is a routing identity a server issued while the name in front of it is free text the
-sending side wrote. A client search scans the preview beside those three and reports under a point of its own, because
+sending side wrote; an attachment's walk position, its declared media type, and a page number are not scanned for the
+same reason, being coordinates a caller acts on rather than text to read. A client search scans the preview beside them
+and reports under a point of its own, because
 what crosses there is chosen by the query rather than by where a message sits in a folder. A scanner that cannot answer
 refuses the search. Both switches are off by default,
 and nothing on this path is scanned then. [Sensitive-content scanning § the guarded egress
@@ -464,7 +465,8 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   `SemanticSearchCapability` it reports and the `SemanticEmailSearchOutcome` the two travel in; and
   `IEmailSearchIndexReader` and `IEmailVectorSearchIndexReader`, the two ports the adapters implement.
 - `MailFathom.Application.Emails.Search.Attachments` — `IEmailAttachmentMatchReader`, the port that reads what a
-  window's own files contributed, with `EmailAttachmentMatch` and `StoredEmailAttachmentMatches`, what it answers with.
+  window's own files contributed, with `EmailAttachmentMatch` and `StoredEmailAttachmentMatches`, what it answers with;
+  and `EmailAttachmentMatchWindow`, the one step both use cases read that port through and scan what it returned with.
 - `MailFathom.Application.AiProviders` — `IAiProviderHealthReader` and `AiProviderHealthState`, the recorded outcome of
   the last provider call that the capability is read from. `MailFathom.Infrastructure.Observability` holds
   `AiProviderHealthTracker`, which is what records it, publishes the gauge, and logs a transition.

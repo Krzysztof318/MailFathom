@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.SyntheticMail.Configuration;
+using MailFathom.SyntheticMail.Corpus;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
 using MailFathom.SyntheticMail.Generation.AiContent;
@@ -149,7 +150,7 @@ public sealed class SyntheticMailRunnerTests
 
         // Act
         var exitCode = await SyntheticMailRunner.RunAsync(
-            Context(console, transport, SendingAccountFile.Read),
+            Context(console, transport, path => SendingAccountFile.Read(path, UnconfiguredUserSecrets.Store())),
             ["developer@example.com", "--config", missing],
             TestContext.Current.CancellationToken);
 
@@ -389,6 +390,229 @@ public sealed class SyntheticMailRunnerTests
             && line.Contains("somebody.else@example.com", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RunAsync_AnExportWhoseGenerationFails_LeavesNoFileBehindForTheRetryToTripOver()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        using var written = new MemoryStream();
+        var discarded = new List<string>();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(
+                console,
+                transport,
+                mailbox: mailbox,
+                aiContentSource: new ScriptedAiEmailContentSource(
+                    new SyntheticMailFailure("The model's answer carried no attachment.")),
+                createCorpus: _ => new UnclosedStream(written),
+                discardCorpus: discarded.Add),
+            [
+                "owner@example.test",
+                "--conversation",
+                "--sensitive-percentage",
+                "0",
+                "--count",
+                "6",
+                "--ai",
+                "--export",
+                "corpus.zip",
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // The file is reserved before generation so a typo cannot cost a paid batch, and that reservation must not
+        // outlive the run: the identical command retried would otherwise be refused for a corpus that never existed.
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Equal(["corpus.zip"], discarded);
+    }
+
+    [Fact]
+    public async Task RunAsync_AnExportToAPathThatCannotBeWritten_IsRefusedBeforeAnythingIsGenerated()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Subject", "Body", "<p>Body</p>"));
+        var discarded = new List<string>();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(
+                console,
+                transport,
+                mailbox: mailbox,
+                aiContentSource: source,
+                createCorpus: path => throw new SyntheticMailFailure($"'{path}' already exists."),
+                discardCorpus: discarded.Add),
+            [
+                "owner@example.test",
+                "--conversation",
+                "--sensitive-percentage",
+                "0",
+                "--count",
+                "6",
+                "--ai",
+                "--export",
+                "corpus.zip",
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // The file is reserved on the same terms as the accounts are read: a path already taken, misspelled, or not
+        // writable would otherwise be found after a provider has been paid to write the whole batch.
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Empty(source.Requests);
+        Assert.Contains("already exists", string.Join("\n", console.Diagnostics), StringComparison.Ordinal);
+
+        // And nothing is discarded, because the file that refused the reservation is somebody else's corpus rather
+        // than this run's: deleting it is the loss the refusal exists to prevent.
+        Assert.Empty(discarded);
+    }
+
+    [Fact]
+    public async Task RunAsync_AnExport_WritesTheCorpusAndOpensNothing()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        using var written = new MemoryStream();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, mailbox: mailbox, createCorpus: _ => new UnclosedStream(written)),
+            [
+                "owner@example.test",
+                "--conversation",
+                "--sensitive-percentage",
+                "0",
+                "--count",
+                "6",
+                "--seed",
+                "42",
+                "--export",
+                "corpus.zip",
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // Generating is what costs money, so an export pays for the corpus once and reaches no mail server at all:
+        // where it is delivered is the replay's decision and belongs to no run that generated anything.
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(0, transport.Opened);
+        Assert.Equal(0, mailbox.Opened);
+
+        using var source = new MemoryStream(written.ToArray(), writable: false);
+        var corpus = CorpusArchive.Read(source);
+
+        Assert.Equal(6, corpus.Exchanges.Sum(exchange => exchange.Count));
+        Assert.Contains("--seed 42", corpus.Invocation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_AReplayOfACorpusItDidNotGenerate_DeliversBothHalvesAndThreadsFromWhatTheMailboxAssigned()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        using var corpus = TwoTurnCorpus();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, mailbox: mailbox, openCorpus: _ => new UnclosedStream(corpus)),
+            ["replay", "corpus.zip", "developer@example.com", "--interval", "0", "--delivery-timeout", "1"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // Nothing about a replay depends on this repository's generator, and the identifiers it threads from are the
+        // mailbox's rather than the corpus's — which is the whole reason an exchange is delivered a turn at a time.
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+
+        var submitted = Assert.Single(transport.Submissions);
+        var appended = Assert.Single(mailbox.Appended);
+
+        Assert.Equal("one@invented.test", submitted.MessageId);
+        Assert.Equal(["ada@invented.test"], submitted.From);
+        Assert.Equal(["developer@example.com"], submitted.To);
+        Assert.Equal("one@invented.test", submitted.Marker);
+        Assert.Equal(["developer@example.com"], appended.From);
+        Assert.Equal(["ada@invented.test"], appended.To);
+        Assert.Equal(RecordingWatchedMailbox.AssignedPrefix + "one@invented.test", appended.InReplyTo);
+        Assert.Equal([RecordingWatchedMailbox.AssignedPrefix + "one@invented.test"], appended.References);
+    }
+
+    [Fact]
+    public async Task RunAsync_AReplaySaysWhatItIsDeliveringAndWhatProducedIt()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        using var corpus = TwoTurnCorpus();
+
+        // Act
+        await SyntheticMailRunner.RunAsync(
+            Context(console, openCorpus: _ => new UnclosedStream(corpus)),
+            ["replay", "corpus.zip", "developer@example.com", "--interval", "0", "--delivery-timeout", "1"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // A run filling a mailbox says where its mail came from, so nobody has to unpack the archive to find out.
+        Assert.Contains(
+            console.Diagnostics,
+            line => line.Contains("Replaying 2 messages in 1 exchanges", StringComparison.Ordinal));
+        Assert.Contains(console.Diagnostics, line => line == "The corpus was generated with: written by hand");
+    }
+
+    [Fact]
+    public async Task RunAsync_TwoReplaysOfOneCorpus_FillTwoFreshMailboxesIdentically()
+    {
+        // Arrange
+        string[] invocation = ["replay", "corpus.zip", "developer@example.com", "--interval", "0", "--delivery-timeout", "1"];
+        await using var first = new RecordingSyntheticMailTransport();
+        await using var second = new RecordingSyntheticMailTransport();
+        using var corpus = TwoTurnCorpus();
+
+        // Act
+        await SyntheticMailRunner.RunAsync(
+            Context(new RecordingSyntheticMailConsole(), first, openCorpus: _ => new UnclosedStream(corpus)),
+            invocation,
+            TestContext.Current.CancellationToken);
+        await SyntheticMailRunner.RunAsync(
+            Context(new RecordingSyntheticMailConsole(), second, openCorpus: _ => new UnclosedStream(corpus)),
+            invocation,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // A replay generates nothing, so two runs of one corpus into two fresh mailboxes leave the same mail in both —
+        // which is what makes a difference between two runs of a pipeline a difference in the code. The headers are
+        // compared as text because a snapshot's address lists are compared by reference otherwise.
+        Assert.Equal(
+            first.Submissions.Select(Describe),
+            second.Submissions.Select(Describe));
+    }
+
+    /// <summary>Reduces one submission to what two runs of a corpus have to agree on.</summary>
+    private static string Describe(SubmittedMessage message) => string.Join(
+        " | ",
+        message.MessageId,
+        message.Subject,
+        string.Join(",", message.From),
+        string.Join(",", message.To),
+        message.InReplyTo ?? "-",
+        string.Join(",", message.References),
+        message.Marker ?? "-");
+
+    /// <summary>Builds a two-turn exchange nothing in this repository generated.</summary>
+    private static MemoryStream TwoTurnCorpus() => HandWrittenCorpus.Build(
+        """{ "invocation": "written by hand", "exchanges": [["a.eml", "b.eml"]] }""",
+        ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "developer@example.com")),
+        ("b.eml", HandWrittenCorpus.Message("two@invented.test", "Re: Ferry timetable", "developer@example.com", "ada@invented.test", "one@invented.test")));
+
     private static SyntheticMailContext Context(
         RecordingSyntheticMailConsole console,
         ISyntheticMailTransport? transport = null,
@@ -396,13 +620,16 @@ public sealed class SyntheticMailRunnerTests
         string? aiConfigurationPath = null,
         IAiEmailContentSource? aiContentSource = null,
         Func<string, WatchedMailboxAccount>? readWatchedMailbox = null,
-        IWatchedMailbox? mailbox = null)
+        IWatchedMailbox? mailbox = null,
+        Func<string, Stream>? createCorpus = null,
+        Action<string>? discardCorpus = null,
+        Func<string, Stream>? openCorpus = null)
     {
         // A path named by a test is read by the real reader, which is what makes the missing-file message the one a
         // developer actually gets; a run that names none is handed a configuration that is never used, because a
         // test that reaches for content supplies the source rather than the file it would come from.
         Func<string, AiProviderConfiguration> readAiProvider = aiConfigurationPath is not null
-            ? SyntheticAiProviderFile.Read
+            ? path => SyntheticAiProviderFile.Read(path, UnconfiguredUserSecrets.Store())
             : _ => new AiProviderConfiguration("not-a-real-key", "gpt-test", null);
 
         Func<AiProviderConfiguration, IAiEmailContentSource> openAiContentSource = aiContentSource is { } source
@@ -417,6 +644,9 @@ public sealed class SyntheticMailRunnerTests
             _ => transport ?? new RecordingSyntheticMailTransport(),
             _ => mailbox ?? new RecordingWatchedMailbox(),
             openAiContentSource,
+            createCorpus ?? (_ => throw new SyntheticMailFailure("the test has not configured a corpus to write")),
+            discardCorpus ?? (_ => { }),
+            openCorpus ?? (_ => throw new SyntheticMailFailure("the test has not configured a corpus to read")),
             new FakeTimeProvider(Today));
     }
 

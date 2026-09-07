@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
@@ -24,14 +25,18 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// the results continue past the first window, and each one says why it is in the list.
 /// </para>
 /// <para>
-/// One thing the tool's reader publishes and this one does not: what a query matched inside an attached file. Every
-/// result here carries an empty <c>AttachmentMatches</c> and is never marked depicted, because a client row a
-/// description put there needs a way to say so and
-/// <see href="https://github.com/Krzysztof318/MailFathom/issues/1559">#1559</see> owns that shape. The eligibility the
-/// lexical ranking reads is shared, though, so a message this route returns may be one whose only claim on the query is
-/// a word inside a document — and such a result publishes no snippet, because the body extract it would quote has no
-/// highlight in it. An empty snippet on a result nothing visible explains is what that issue closes; until it does,
-/// this route reports the message and not the reason.
+/// What a query matched inside an attached file is published here as it is to a tool, through the same step: a result
+/// names the file, the place inside it, and whether the words are the document's own or a model's account of a picture.
+/// It is the answer to a result a screen could otherwise not explain — a message whose only claim on the query is a
+/// word inside a document carries no snippet, because the body extract it would quote has no highlight in it, and a row
+/// with nothing under it reads as unexplained rather than as a match inside a file.
+/// </para>
+/// <para>
+/// A message a description of a picture alone placed sits below every message a query word or a written passage
+/// reached, and says so on the result. That floor is <see cref="HybridSearchRanking" />'s rather than this use case's,
+/// because
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// requires one step every surface calls instead of a rule each of them remembers.
 /// </para>
 /// <para>
 /// The filters constrain and never rank. <see cref="RankedSearchList" /> carries them into both rankings as the
@@ -64,6 +69,7 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 public sealed class MailSearchBrowser
 {
     private readonly IEmailSearchIndexReader searchIndexReader;
+    private readonly IEmailAttachmentMatchReader attachmentMatchReader;
     private readonly SemanticEmailSearch semanticSearch;
     private readonly IStoredEmailPreviewReader previewReader;
     private readonly MailboxScopeResolver scopeResolver;
@@ -74,6 +80,7 @@ public sealed class MailSearchBrowser
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
+    /// <param name="attachmentMatchReader">Reads which attachment of a result the query reached, and where inside the file.</param>
     /// <param name="semanticSearch">Ranks mail by meaning, or reports that this instance cannot.</param>
     /// <param name="previewReader">Reads the bounded opening of the text of the emails a page returned.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the search runs against.</param>
@@ -84,6 +91,7 @@ public sealed class MailSearchBrowser
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailSearchBrowser(
         IEmailSearchIndexReader searchIndexReader,
+        IEmailAttachmentMatchReader attachmentMatchReader,
         SemanticEmailSearch semanticSearch,
         IStoredEmailPreviewReader previewReader,
         MailboxScopeResolver scopeResolver,
@@ -93,6 +101,7 @@ public sealed class MailSearchBrowser
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
+        ArgumentNullException.ThrowIfNull(attachmentMatchReader);
         ArgumentNullException.ThrowIfNull(semanticSearch);
         ArgumentNullException.ThrowIfNull(previewReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -102,6 +111,7 @@ public sealed class MailSearchBrowser
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.searchIndexReader = searchIndexReader;
+        this.attachmentMatchReader = attachmentMatchReader;
         this.semanticSearch = semanticSearch;
         this.previewReader = previewReader;
         this.scopeResolver = scopeResolver;
@@ -168,6 +178,14 @@ public sealed class MailSearchBrowser
             rankedList.QueryText,
             this.snippetBounds,
             page,
+            cancellationToken);
+
+        matches = await this.attachmentMatchReader.ReadWindowMatchesAsync(
+            rankedList.Selection,
+            rankedList.QueryText,
+            this.snippetBounds,
+            matches,
+            ranking.DepictedOnly,
             cancellationToken);
 
         var previews = await this.previewReader.ReadPreviewsAsync(
@@ -273,25 +291,20 @@ public sealed class MailSearchBrowser
             ranking.Completed(lexicalCandidates.Count);
 
             return new RankedSearchRanking(
-                lexicalCandidates,
+                RankedSearchSequence.Written(lexicalCandidates),
                 lexicalCandidates,
                 [],
                 EmailSearchRetrievalMode.Lexical,
                 semantic.Capability);
         }
 
-        // The written ranking alone, which is the whole of what this route published before descriptions existed. The
-        // depicted ranking is deliberately left out until the client's result shape can say a picture placed a row:
-        // appending a tail of messages no word and no written passage reached, with nothing on the row to explain them,
-        // would publish an unexplained result. Issue #1559 is where this route takes the shared partition step whole.
-        var semanticCandidates = semanticRankings.Written;
-
-        ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
+        ranking.Completed(
+            lexicalCandidates.Count + semanticRankings.Written.Count + semanticRankings.Depicted.Count);
 
         return new RankedSearchRanking(
-            ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, depth),
+            HybridSearchRanking.Compose(lexicalCandidates, semanticRankings, depth),
             lexicalCandidates,
-            semanticCandidates,
+            semanticRankings.Written,
             EmailSearchRetrievalMode.Hybrid,
             semantic.Capability);
     }
@@ -311,12 +324,15 @@ public sealed class MailSearchBrowser
         request.IsRemotelyFlagged,
         request.HasAttachments);
 
-    /// <summary>Scans the four things a result carries that a message's author wrote.</summary>
+    /// <summary>Scans everything a result carries that a message's author, a sender, or a model composed.</summary>
     /// <remarks>
     /// The subject and the sender's display name are what every listing scans, and for the same reasons. The extracts
     /// and the preview are the message's own text, and a result carrying either unscanned would be the leak the subject
-    /// beside it was redacted to prevent. Everything else is what a screen acts on: the identity a later request names,
-    /// the folder alias, the addresses, the sizes, the flags, and which ranking found the result.
+    /// beside it was redacted to prevent. What an attachment contributed is scanned on the same rule and by the same
+    /// step both searches share — the file name a sender chose, and the extracts, twice over where those are a model's
+    /// account of a picture. Everything else is what a screen acts on: the identity a later request names, the folder
+    /// alias, the addresses, the sizes, the flags, the attachment's walk position and declared type, and which ranking
+    /// found the result.
     /// </remarks>
     private async Task<IReadOnlyList<BrowsedSearchResult>> GuardedAsync(
         IReadOnlyList<EmailSearchMatch> matches,
@@ -332,7 +348,9 @@ public sealed class MailSearchBrowser
                     match.Summary,
                     PreviewOf(match.Summary, previews),
                     match.Snippets,
-                    ranking.OriginOf(match.Summary.StoredEmailId))),
+                    ranking.OriginOf(match.Summary.StoredEmailId),
+                    match.AttachmentMatches,
+                    match.IsDepictedMatch)),
             ];
         }
 
@@ -367,7 +385,12 @@ public sealed class MailSearchBrowser
                     SensitiveContentEgressPoint.ClientMailSearch,
                     match.Snippets,
                     cancellationToken),
-                ranking.OriginOf(match.Summary.StoredEmailId)));
+                ranking.OriginOf(match.Summary.StoredEmailId),
+                await this.egressGuard.GuardAttachmentMatchesAsync(
+                    SensitiveContentEgressPoint.ClientMailSearch,
+                    match.AttachmentMatches,
+                    cancellationToken),
+                match.IsDepictedMatch));
         }
 
         scan.Completed();
@@ -380,18 +403,18 @@ public sealed class MailSearchBrowser
         previews.TryGetValue(email.StoredEmailId, out var preview) ? EmailPreview.Bounded(preview) : null;
 
     /// <summary>One query's ranked list, together with which ranking placed each message in it.</summary>
-    /// <param name="Ordered">The list a page is cut from, best first.</param>
+    /// <param name="Sequence">The list a page is cut from, best first, and which of its members a description alone placed.</param>
     /// <param name="LexicalCandidates">What the full-text ranking returned, which is the list itself on a lexical page.</param>
-    /// <param name="SemanticCandidates">What the semantic ranking returned, empty where this query was not ranked that way.</param>
+    /// <param name="SemanticCandidates">What the written semantic ranking returned, empty where this query was not ranked that way.</param>
     /// <param name="RetrievalMode">How the list was produced.</param>
     /// <param name="SemanticSearch">What semantic retrieval can do on this instance, read after the query rather than before it.</param>
     /// <remarks>
-    /// The two rankings are kept beside the fused list rather than discarded into it, because which of them found a
+    /// The two rankings are kept beside the composed list rather than discarded into it, because which of them found a
     /// message is what a result publishes as why it matched — and the fusion deliberately forgets it, scoring by place
     /// alone so that no ranking's units can influence the other's.
     /// </remarks>
     private sealed record RankedSearchRanking(
-        IReadOnlyList<RankedEmailCandidate> Ordered,
+        RankedSearchSequence Sequence,
         IReadOnlyList<RankedEmailCandidate> LexicalCandidates,
         IReadOnlyList<RankedEmailCandidate> SemanticCandidates,
         EmailSearchRetrievalMode RetrievalMode,
@@ -403,16 +426,34 @@ public sealed class MailSearchBrowser
         private readonly HashSet<StoredEmailId> semanticIds =
             [.. SemanticCandidates.Select(static candidate => candidate.StoredEmailId)];
 
+        /// <summary>Gets the whole published ordering, best first.</summary>
+        public IReadOnlyList<RankedEmailCandidate> Ordered => this.Sequence.Candidates;
+
+        /// <summary>Gets the members of the ordering a description of a picture alone placed.</summary>
+        public IReadOnlySet<StoredEmailId> DepictedOnly => this.Sequence.DepictedOnly;
+
         /// <summary>Names which ranking found one message.</summary>
         /// <param name="storedEmailId">The message's stable local identity.</param>
         /// <returns>The origin a result publishes.</returns>
-        public SearchMatchOrigin OriginOf(StoredEmailId storedEmailId) =>
-            (this.lexicalIds.Contains(storedEmailId), this.semanticIds.Contains(storedEmailId)) switch
+        /// <remarks>
+        /// A message a description alone placed is reported as semantically ranked, which is what found it: no word of
+        /// the query reached it, and the written half of the semantic ranking did not carry it either. It is separated
+        /// from a message a written passage placed by the result's own depicted mark rather than by this value, because
+        /// the two answer different questions — which ranking found the message, and whether a picture is the whole of
+        /// its claim on the query.
+        /// </remarks>
+        public SearchMatchOrigin OriginOf(StoredEmailId storedEmailId)
+        {
+            var byMeaning = this.semanticIds.Contains(storedEmailId)
+                || this.DepictedOnly.Contains(storedEmailId);
+
+            return (this.lexicalIds.Contains(storedEmailId), byMeaning) switch
             {
                 (true, true) => SearchMatchOrigin.BothRankings,
                 (false, true) => SearchMatchOrigin.SemanticRanking,
                 _ => SearchMatchOrigin.LexicalRanking,
             };
+        }
 
         /// <summary>Cuts the candidates ordered strictly after a boundary, at most as many as asked for.</summary>
         /// <param name="boundary">The place the previous page ended on, or <see langword="null" /> for the best-ranked end of the list.</param>
