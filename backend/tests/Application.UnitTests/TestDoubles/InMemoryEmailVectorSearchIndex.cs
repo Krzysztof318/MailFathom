@@ -26,19 +26,34 @@ internal sealed class InMemoryEmailVectorSearchIndex : IEmailVectorSearchIndexRe
     /// <summary>Gets what each call to the port asked for, in order.</summary>
     public IReadOnlyList<ReadNearestCandidatesCall> Calls => this.calls;
 
-    /// <summary>Adds one embedded email to the index.</summary>
+    /// <summary>Adds one email whose nearest passage is something a person wrote.</summary>
     /// <param name="summary">The email a candidate stands for.</param>
     /// <param name="distance">How far its nearest passage sits from any query vector, smaller being nearer.</param>
     /// <returns>This index, so arrangement reads as one statement.</returns>
     public InMemoryEmailVectorSearchIndex With(EmailSummary summary, float distance)
     {
-        this.indexed.Add(new NearEmail(new InMemoryStoredEmail(summary, []), distance));
+        this.indexed.Add(new NearEmail(new InMemoryStoredEmail(summary, []), distance, Depicted: false));
+
+        return this;
+    }
+
+    /// <summary>Adds one email whose nearest passage is a model's description of an attached picture.</summary>
+    /// <param name="summary">The email a candidate stands for.</param>
+    /// <param name="distance">How far that description sits from any query vector, smaller being nearer.</param>
+    /// <returns>This index, so arrangement reads as one statement.</returns>
+    /// <remarks>
+    /// An email can be arranged into both rankings, which is a message carrying a written passage and a described
+    /// picture that are each near the query — the case the floor has to place once, at the written passage's place.
+    /// </remarks>
+    public InMemoryEmailVectorSearchIndex WithDepiction(EmailSummary summary, float distance)
+    {
+        this.indexed.Add(new NearEmail(new InMemoryStoredEmail(summary, []), distance, Depicted: true));
 
         return this;
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
+    public Task<SemanticEmailRankings> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
         RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
@@ -53,17 +68,23 @@ internal sealed class InMemoryEmailVectorSearchIndex : IEmailVectorSearchIndexRe
 
         this.calls.Add(new ReadNearestCandidatesCall(selection, profile, queryVector, limit));
 
-        IReadOnlyList<RankedEmailCandidate> ranking =
+        return Task.FromResult(new SemanticEmailRankings(
+            this.Ranked(selection, limit, depicted: false),
+            this.Ranked(selection, limit, depicted: true)));
+    }
+
+    /// <summary>Ranks one of the two kinds of passage the port separates.</summary>
+    private IReadOnlyList<RankedEmailCandidate> Ranked(
+        MailboxEmailSelection selection,
+        int limit,
+        bool depicted) =>
         [
             .. this.indexed
-                .Where(candidate => candidate.Email.Matches(selection))
+                .Where(candidate => candidate.Depicted == depicted && candidate.Email.Matches(selection))
                 .Select(candidate => new RankedEmailCandidate(candidate.Email.Summary.Position, candidate.Distance))
                 .Order(Comparer<RankedEmailCandidate>.Create(NearestThenTimeline))
                 .Take(limit),
         ];
-
-        return Task.FromResult(ranking);
-    }
 
     /// <summary>Orders as the port promises: nearest first, then the newest-first timeline order.</summary>
     private static int NearestThenTimeline(RankedEmailCandidate left, RankedEmailCandidate right)
@@ -86,5 +107,5 @@ internal sealed class InMemoryEmailVectorSearchIndex : IEmailVectorSearchIndexRe
         EmbeddingVector QueryVector,
         int Limit);
 
-    private sealed record NearEmail(InMemoryStoredEmail Email, float Distance);
+    private sealed record NearEmail(InMemoryStoredEmail Email, float Distance, bool Depicted);
 }

@@ -75,7 +75,12 @@ internal sealed class ScopedMailKnowledgeRetrieval
         + $"and every result says which in the {RetrievedMailContextFormatter.RetrievalModeAttributeName} attribute of "
         + $"the <{RetrievedMailContextFormatter.RetrievalElementName}> element: lexical finds the words a query "
         + "contains rather than what they mean, while hybrid also finds mail whose meaning is close and combines the "
-        + "two rankings. Words that appear only inside an attachment are never searchable either way. Narrow with the "
+        + "two rankings. A document attached to a message is searched on the same terms its body is, and an extract "
+        + $"drawn from one arrives in an <{RetrievedMailContextFormatter.AttachmentExtractElementName}> element naming "
+        + "the file and the page, slide, or sheet it was read from; cite those rather than the covering note. An "
+        + $"<{RetrievedMailContextFormatter.ImageDescriptionElementName}> element is a model's account of a picture "
+        + "that nobody wrote, reachable by meaning alone, so a claim resting on one is a claim about a guess and is "
+        + "worth saying so. Narrow with the "
         + "filters rather than by describing the narrowing in the query: a question about one person's mail, one period, "
         + "or mail carrying an attachment is answered far better by the matching filter than by words that have to rank. "
         + "Which accounts and folders are searched is fixed by the caller and is not yours to set. Each call returns one "
@@ -250,9 +255,16 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// inheriting this one.
     /// </para>
     /// <para>
-    /// The extract and the subject are guarded, and the envelope is written afterwards from the guarded values. Guarding
-    /// the written envelope instead would let one detection cover the end of an extract and the element that closes it,
-    /// and replacing that region would take the document's structure with it.
+    /// The extract, the subject, and everything an attachment contributed are guarded, and the envelope is written
+    /// afterwards from the guarded values. Guarding the written envelope instead would let one detection cover the end
+    /// of an extract and the element that closes it, and replacing that region would take the document's structure with
+    /// it.
+    /// </para>
+    /// <para>
+    /// An attachment's extract and the name its sender gave it are guarded on the same terms the message's own extract
+    /// is, because they reach the same provider by the same tool call: a clause a scanner would redact out of a covering
+    /// note is not less sensitive for having been written in the PDF the note attached. The walk position and the page
+    /// number are left alone, being a coordinate and a count rather than text somebody wrote.
     /// </para>
     /// <para>
     /// What the run reports having retrieved is left as it was found. The report is read in this process — by the record
@@ -282,6 +294,39 @@ internal sealed class ScopedMailKnowledgeRetrieval
                 Text = await this.egressGuard.GuardAsync(
                     SensitiveContentEgressPoint.ChatPrompt,
                     passage.Text,
+                    cancellationToken),
+                AttachmentExtracts = await this.GuardedAttachmentsAsync(
+                    passage.AttachmentExtracts,
+                    cancellationToken),
+            });
+        }
+
+        return guarded;
+    }
+
+    /// <summary>Guards what a message's own files contributed, before any of it is written into the envelope.</summary>
+    private async Task<IReadOnlyList<EmailKnowledgeAttachmentExtract>> GuardedAttachmentsAsync(
+        IReadOnlyList<EmailKnowledgeAttachmentExtract> attachmentExtracts,
+        CancellationToken cancellationToken)
+    {
+        if (attachmentExtracts.Count is 0)
+        {
+            return attachmentExtracts;
+        }
+
+        var guarded = new List<EmailKnowledgeAttachmentExtract>(attachmentExtracts.Count);
+
+        foreach (var extract in attachmentExtracts)
+        {
+            guarded.Add(extract with
+            {
+                FileName = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    extract.FileName,
+                    cancellationToken),
+                Text = await this.egressGuard.GuardAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    extract.Text,
                     cancellationToken),
             });
         }

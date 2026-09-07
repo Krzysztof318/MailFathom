@@ -177,6 +177,29 @@ internal static class PersistenceConstraintNames
     internal const string EmailSpamClassificationSignalForeignKeyName =
         "fk_email_spam_classification_signals_classifications";
 
+    /// <summary>The key that keeps one derivation per occurrence, and which a second concurrent run is recognized by.</summary>
+    /// <remarks>
+    /// Named because losing this race is the mechanism rather than a fault: an account run derives from an occurrence
+    /// while a later run reaches the same message, one of them violates this key, and the retry reads back the row the
+    /// winner wrote — which is how deriving twice produces one record.
+    /// </remarks>
+    internal const string EmailEnrichmentPrimaryKeyConstraintName = "pk_email_enrichments";
+
+    /// <summary>What stops one derivation carrying two answers to the same question.</summary>
+    /// <remarks>
+    /// Named because a writer losing this race is how one message ends up with one mark per aspect: two runs cannot see
+    /// each other's uncommitted marks, so the index rather than the writer is what decides.
+    /// </remarks>
+    internal const string EmailEnrichmentMarkAspectUniqueIndexName =
+        "ix_email_enrichment_marks_enrichment_aspect";
+
+    /// <summary>The foreign key that removes a derivation's marks with the derivation.</summary>
+    /// <remarks>
+    /// Named for the reason the classification signals' one is: EF's convention composes one from both table names and
+    /// PostgreSQL truncates an identifier at 63 characters.
+    /// </remarks>
+    internal const string EmailEnrichmentMarkForeignKeyName = "fk_email_enrichment_marks_enrichments";
+
     /// <summary>The key that keeps one whole-mailbox rule run per account, and which a second request is recognized by.</summary>
     /// <remarks>
     /// Named because losing this race is the mechanism rather than a fault: two requests for one account's first run

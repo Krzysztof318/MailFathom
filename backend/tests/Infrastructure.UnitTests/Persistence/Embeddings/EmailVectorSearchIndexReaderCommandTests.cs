@@ -132,10 +132,47 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
         Assert.Contains(nameof(EmailEmbeddingEntity.EmbeddingProfileId), command, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The two rankings ADR 0030 partitions are read as two statements over one eligible set, and each is filtered by
+    /// what the passage's own attachment row says it is. Reading one ranking and sorting it afterwards would need the
+    /// kind in the result, which is the shape the partition was written to avoid.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NearestHitsQuery_EitherRanking_SelectsItsPassagesByTheKindRecordedOnTheirAttachment(bool depicted)
+    {
+        // Act
+        var statement = CommandBody(GeneratedCommand(EmbeddingDistanceMetric.Cosine, depicted: depicted));
+
+        // Assert
+        Assert.Contains(nameof(EmailAttachmentTextEntity.Kind), statement, StringComparison.Ordinal);
+        Assert.Contains(nameof(EmailAttachmentTextEntity.AttachmentPosition), statement, StringComparison.Ordinal);
+        Assert.Contains("EXISTS", statement, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The two rankings are one statement read under two values rather than two statements, which is what keeps the
+    /// filter a parameter the server can plan once. A defect that dropped the value would publish one ranking twice —
+    /// and the picture ranking would then carry the passages a person wrote.
+    /// </summary>
+    [Fact]
+    public void NearestHitsQuery_TheTwoRankings_ReadTheSameStatementUnderDifferentValues()
+    {
+        // Act
+        var written = GeneratedCommand(EmbeddingDistanceMetric.Cosine, depicted: false);
+        var depicted = GeneratedCommand(EmbeddingDistanceMetric.Cosine, depicted: true);
+
+        // Assert
+        Assert.Equal(CommandBody(written), CommandBody(depicted));
+        Assert.NotEqual(ParameterDeclarations(written), ParameterDeclarations(depicted));
+    }
+
     /// <summary>Generates the command the adapter would send, without opening a connection.</summary>
     private static string GeneratedCommand(
         EmbeddingDistanceMetric distanceMetric,
-        MailboxEmailSelection? selection = null)
+        MailboxEmailSelection? selection = null,
+        bool depicted = false)
     {
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 
@@ -146,7 +183,8 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
                 selection ?? UnfilteredSelection,
                 new RegisteredEmbeddingProfile(ProfileId, IdentityWith(distanceMetric)),
                 EmbeddingVector.Create([0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f]),
-                limit: 20)
+                limit: 20,
+                depicted)
             .ToQueryString();
     }
 

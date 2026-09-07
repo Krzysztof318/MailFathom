@@ -1,8 +1,8 @@
 # The arrival pipeline
 
-<!-- describes: backend/src/Application/Synchronization/MailboxSynchronizer.cs, backend/src/Application/Emails/Chunking/MailChunkingPass.cs, backend/src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Threads/EmailThreadAssembly.cs, backend/src/Application/Spam/Gating/**, backend/src/Application/Spam/Runs/SpamClassificationPass.cs, backend/src/Application/Spam/SpamClassificationArrivals.cs, backend/src/Application/Contacts/Collection/MailContactCollector.cs, backend/src/Application/Spam/EmailSpamClassificationHandler.cs, backend/src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: backend/src/Application/Synchronization/MailboxSynchronizer.cs, backend/src/Application/Emails/Chunking/MailChunkingPass.cs, backend/src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Threads/EmailThreadAssembly.cs, backend/src/Application/Spam/Gating/**, backend/src/Application/Spam/Runs/SpamClassificationPass.cs, backend/src/Application/Spam/SpamClassificationArrivals.cs, backend/src/Application/Contacts/Collection/MailContactCollector.cs, backend/src/Application/Spam/EmailSpamClassificationHandler.cs, backend/src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, backend/src/Application/Emails/Enrichment/MailEnrichmentPass.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
-Eight features decide what happens to a message between the moment synchronization fetches it and the moment
+Nine features decide what happens to a message between the moment synchronization fetches it and the moment
 everything derived from it exists. Each of them documents its own half, and none of them can state the order, because
 the order is what they have between them. This page is that order, drawn once.
 
@@ -29,6 +29,7 @@ flowchart TD
         cut["Cut the passages"]
         read["Read the attachments — only where the deployment turned it on"]
         offer(["Offer the message to the embedding backlog"])
+        enrich["Derive the marks — only where the deployment turned it on"]
     end
 
     subgraph sidecars["Sidecars, each optional and each declared apart"]
@@ -40,6 +41,7 @@ flowchart TD
     subgraph remote["Remote providers, reached over the network"]
         direction TB
         vision["Chat provider — shown one image attachment, to describe it"]
+        enricher["Chat provider — shown one message's subject and leading passages, to read it"]
     end
 
     subgraph elsewhere["Executions outside the run"]
@@ -69,6 +71,8 @@ flowchart TD
     cut --> read
     read --> offer
     read -. "one call per picture" .-> vision
+    read --> enrich
+    enrich -. "one call per message" .-> enricher
     offer -.-> worker
     sweeps --> cut
     sweeps --> worker
@@ -203,6 +207,35 @@ without any stored state having to say it was once withheld. What the outcome do
 the gate's answer as each message arrives, because work that never starts leaves no other trace and a mailbox held
 behind classification would otherwise read exactly like a mailbox with no mail in it.
 
+## Why enrichment is the last stage of all
+
+A mark cites passages, so a message enriched before it was cut would have nothing to rest its evidence on — that alone
+puts it behind the cut. It is behind the attachment reading for a harder reason than it looks: a derivation is taken
+once and never revisited, so a message derived from while half of its passages are still to be cut is recorded, for
+good, as a reading of the half that existed. A quotation somebody attached to two lines of covering text is exactly
+that case.
+
+**Being third in the supervisor's sequence does not establish that ordering**, which is why the selection states it as
+a condition of its own. Each of the three passes walks its own queue from its own front, so neither of the first two
+bounds the other's batch: the attachment reading does not wait for a message's body to be cut, and the cut does not
+wait for its attachments to be read. A message can therefore carry an attachment's passages while its body is uncut, or
+its body's while an attachment it names is unread, and both are outside this pass until the stage they are waiting for
+has finished with them. Where a deployment reads no attachments the second half of that condition is satisfied outright
+rather than waited on, because a reading that will never happen would hold every message carrying an attachment here
+for ever.
+The ordering costs nothing beyond the wait: a message enrichment did not reach is simply outstanding for the next run.
+
+**Nothing re-derives a message this pass settled.** Being derived from is what takes a message out of the pass's own
+selection, which is what makes an interrupted pass repeat nothing and skip nothing — and it is also the whole of how a
+mailbox stored before the switch was turned on is backfilled: successive runs drain it, eight messages at a time, and
+each says how far it got. No sweep exists beside it, unlike the cut and the vectors, because nothing here can be made
+stale by a rebuild: what a mark rests on is a passage identifier, and a passage a re-cut replaced resolves to nothing
+rather than to the wrong text.
+
+A pass ends early rather than walking the batch whenever a derivation is withheld, because every reason one is withheld
+— an operator who has not turned it on, a spent period allowance, an unreachable provider — outlives one message and
+would be met again by the next.
+
 ## Why the cut is not part of the commit
 
 The transaction that stores a message contains its metadata, the two judgements above, the conversation its own
@@ -327,5 +360,6 @@ has a scanner switched on.
 | Redaction, the stamp, and the egress guard | [Sensitive-content scanning](../features/sensitive-content-scanning.md) |
 | The boundary rules a cut obeys, and what a passage of an attachment carries | [Message chunks](../features/message-chunks.md) |
 | What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |
+| What a message is about, why it may matter, and what backs each mark | [Message enrichment](../features/message-enrichment.md) |
 | Offering, embedding, and what a ceiling does | [Automatic embedding](../features/automatic-embedding.md) |
 | Reaching mail the live path missed | [Embedding backfill](../features/embedding-backfill.md) |

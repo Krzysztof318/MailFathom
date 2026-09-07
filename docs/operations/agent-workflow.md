@@ -81,6 +81,36 @@ an empty diff measures too — which is still an order below every other step he
 so it belongs in the loop rather than in a checklist somebody reaches for when a
 change looks like it needs one.
 
+Ask whether the design a client screen is built from has moved:
+
+```bash
+bash scripts/design-mirror.sh plan "$WORK_DIR/listing.json"
+```
+
+The client's screens are settled in a design project read through an MCP server,
+and that project is read one windowed call at a time because its prototype file
+is well past the per-call cap. `$read-design` is the step that reads it, and this
+script is the half of that step a session should not be doing by eye: it compares
+one full-depth listing — every path, size and opaque `etag`, no content read at
+all — against the manifest under `artifacts/design/`, and names which screen
+sources still have to be read. An unchanged project costs the listing and nothing
+else. Its other four commands are `extract`, which takes the wrapper off a read
+result the harness saved to a file and copies bytes that never passed through a
+model at all, `decode`, which is for the opposite case — a result small enough to
+come back inline, which the session wrote onto disk by hand — and only undoes the
+entity escaping on what is already there, `record`, which writes the manifest and
+checks every mirrored file against the byte count the project states, and
+`stamp`, which prints the etag set the mirror stands on so the state inventory
+beside it can say whether it still describes the current design.
+
+It reaches no design server itself. What it writes is the mirror and nothing
+else: `extract` and `decode` write a mirrored screen source, `record` writes the
+manifest, and `plan` and `stamp` write nothing at all. Nothing it touches is
+repository content:
+`artifacts/` is gitignored, `.worktreeinclude` copies `artifacts/design/` into a
+linked worktree so a session does not re-fetch what the main checkout holds, and
+no file describing what a screen looks like is committed.
+
 Run the complete gate before committing:
 
 ```bash
@@ -651,6 +681,24 @@ The canonical skills are:
   what stops the session is the order the tracker records rather than a judgement
   the session makes; an issue it opens carries that order out to the tracker in
   the same pass that places it;
+- `read-design` refreshes the local mirror of the design project and points at
+  the state inventory a client screen is built from. It reads that project and
+  never writes to it: not a file, not a screen, not a one-word fix to a label
+  that is provably wrong, because what makes a source of truth one is that a
+  single person writes it. What it exists to prevent is a screen built from a
+  picture — a rendered preview shows the one state it was clicked into, while the
+  source states every screen, every variant and every reaction at once, so the
+  empty state, the failing state, the state that only exists under a coarse
+  pointer, and the state no click reaches at all are each invisible in a
+  screenshot. Its refresh is one full-depth listing compared against a recorded
+  manifest of the server's own etags, then a read of only the paths whose etag
+  moved, which makes an unchanged project cost a listing rather than a windowed
+  re-read of half a megabyte of prototype. The inventory it points at names the
+  etag set it was extracted from, so it says for itself whether it is still
+  describing the current design, and its last section is the one that has to be
+  there: the states the source gates and no preview reaches. One of those is a
+  gap rather than a screen to invent — it goes to the owner as a correction to
+  make in the project, never into the client as a guess;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;

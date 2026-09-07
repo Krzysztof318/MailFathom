@@ -187,6 +187,11 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Embeddings:ImageDescription:Enabled", "true"),
             ],
+            ["mail enriched on arrival"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:Enrichment:Enabled", "true"),
+            ],
             ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
@@ -224,6 +229,7 @@ public sealed class HostCompositionTests
                 .. EmbeddingChain,
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
+                new("Chat:Enrichment:Enabled", "true"),
                 new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),

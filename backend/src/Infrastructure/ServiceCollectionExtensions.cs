@@ -30,12 +30,14 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
@@ -119,6 +121,7 @@ using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
+using MailFathom.Infrastructure.Persistence.Enrichment;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
@@ -411,6 +414,12 @@ public static class ServiceCollectionExtensions
         // The read half, which is a port of its own for the reason the cited-fragment reader is: an attachment passage
         // is content a caller may legitimately receive, and a message passage is not.
         services.AddScoped<IEmailAttachmentPassageReader, EmailAttachmentPassageReader>();
+        // The derivation behind the cut, and the pass that performs it. It is registered for every deployment because
+        // the enricher it resolves answers with a reason rather than by being absent, so an instance that turned
+        // enrichment off runs the pass, is told the deployment has not activated it, and stops without a provider call.
+        services.AddScoped<IStoredEmailEnrichmentStore, StoredEmailEnrichmentStore>();
+        services.AddScoped<IStoredEmailEnrichmentReader, StoredEmailEnrichmentReader>();
+        services.AddScoped<MailEnrichmentPass>();
     }
 
     /// <summary>Registers the tables a message's vectors live in, the ceilings a generation is spent against, and the operator acts on a profile.</summary>
@@ -666,6 +675,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailPreviewReader, StoredEmailPreviewReader>();
         services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
+        services.AddScoped<IEmailAttachmentMatchReader, EmailAttachmentMatchReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
         // The one read-path service built by hand, because its embedding generator is the one dependency a supported
         // deployment may not have: an instance that declared no endpoint chain registers no `ITextEmbeddingGenerator`,

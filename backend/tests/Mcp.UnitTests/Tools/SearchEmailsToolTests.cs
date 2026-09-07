@@ -4,9 +4,12 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
@@ -678,12 +681,129 @@ public sealed class SearchEmailsToolTests
         Assert.True(result.IncludedJunkMail);
     }
 
+    /// <summary>
+    /// The result says which file a hit came out of and where inside it, rather than folding the words into the
+    /// message's own extracts where a caller could not tell the two apart.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AMatchInsideAnAttachment_PublishesTheFileThePlaceAndTheExtractBesideTheMessage()
+    {
+        // Arrange
+        var attachmentMatches = new StubEmailAttachmentMatchReader()
+            .WithWritten(
+                StoredEmailId.Create(EmailIdentityAt(1)),
+                AttachmentMatch(["the **total** is 42 euro"]));
+        var tool = ToolOver(
+            new StubEmailSearchIndexReader(MatchWith(rank: 0.5f, snippets: ["the **invoice** is attached"])),
+            attachmentMatches: attachmentMatches);
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Matches);
+        var attachment = Assert.Single(published.AttachmentMatches);
+
+        Assert.Equal(["the **invoice** is attached"], published.Snippets);
+        Assert.Equal(1, attachment.AttachmentPosition);
+        Assert.Equal("statement.pdf", attachment.FileName);
+        Assert.Equal("application/pdf", attachment.MediaType);
+        Assert.Equal(AttachmentMatchSource.Document, attachment.Source);
+        Assert.Equal(AttachmentSegmentKind.Page, attachment.SegmentKind);
+        Assert.Equal(2, attachment.SegmentNumber);
+        Assert.Equal(["the **total** is 42 euro"], attachment.Extracts);
+        Assert.False(published.IsDepictedMatch);
+    }
+
+    /// <summary>
+    /// A message reached only by what a model said a picture shows is marked as such, so a caller reporting it can say
+    /// the claim rests on a guess about an image rather than on words anybody wrote.
+    /// </summary>
+    /// <remarks>
+    /// Mapped directly rather than driven through the tool, because which messages carry the mark is decided by the
+    /// partition over three rankings and is proved where that partition lives. What is left here is the publication:
+    /// that the mark survives to the wire, and that a description is sourced to itself rather than to a document.
+    /// </remarks>
+    [Fact]
+    public void From_AMatchAPictureDescriptionAloneFound_PublishesItMarkedAndSourcedToTheDescription()
+    {
+        // Arrange
+        var match = MatchWith(rank: 0.5f, snippets: []) with
+        {
+            IsDepictedMatch = true,
+            AttachmentMatches =
+            [
+                new EmailAttachmentMatch(
+                    AttachmentPosition: 2,
+                    FileName: "photo.jpg",
+                    DeclaredMediaType: "image/jpeg",
+                    Kind: AttachmentTextKind.ImageDescription,
+                    Segment: null,
+                    Extracts: ["a photograph of a handwritten invoice"]),
+            ],
+        };
+
+        // Act
+        var published = SearchedEmailMatch.From(
+            match,
+            EmailSearchSnippetBounds.Default,
+            PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)));
+
+        // Assert
+        var attachment = Assert.Single(published.AttachmentMatches);
+
+        Assert.True(published.IsDepictedMatch);
+        Assert.Equal(AttachmentMatchSource.ImageDescription, attachment.Source);
+        Assert.Null(attachment.SegmentKind);
+        Assert.Equal(["a photograph of a handwritten invoice"], attachment.Extracts);
+    }
+
+    /// <summary>
+    /// The same bound the message's own extracts are published under, for the same reason: neither tool returns a whole
+    /// attachment or a whole attachment text, whatever an adapter hands the boundary.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AnAttachmentExtractLongerThanTheBoundsProduce_PublishesItCut()
+    {
+        // Arrange
+        var snippetBounds = EmailSearchSnippetBounds.Create(snippetsPerEmail: 3, wordsPerSnippet: 4);
+        var wholeDocument = new string('a', snippetBounds.MaximumCharacters * 10);
+        var attachmentMatches = new StubEmailAttachmentMatchReader()
+            .WithWritten(StoredEmailId.Create(EmailIdentityAt(1)), AttachmentMatch([wholeDocument]));
+        var tool = ToolOver(
+            new StubEmailSearchIndexReader(MatchWith(rank: 0.5f, snippets: [])),
+            snippetBounds: snippetBounds,
+            attachmentMatches: attachmentMatches);
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(Assert.Single(Assert.Single(result.Matches).AttachmentMatches).Extracts);
+
+        Assert.True(published.Length < wholeDocument.Length, "The attachment text was published whole.");
+        Assert.EndsWith("…", published, StringComparison.Ordinal);
+        Assert.True(
+            published.Length <= (snippetBounds.MaximumCharacters * 3) + 1,
+            $"The cut extract is {published.Length} characters, above the ceiling it was cut to.");
+    }
+
+    /// <summary>Builds a hit on the second page of a document attachment.</summary>
+    private static EmailAttachmentMatch AttachmentMatch(IReadOnlyList<string> extracts) => new(
+        AttachmentPosition: 1,
+        FileName: "statement.pdf",
+        DeclaredMediaType: "application/pdf",
+        Kind: AttachmentTextKind.Document,
+        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 2, Label: null, StartOffset: 0),
+        Extracts: extracts);
+
     private static SearchEmailsTool ToolOver(
         StubEmailSearchIndexReader index,
         StubSynchronizationFreshnessReader? freshness = null,
         EmailSearchSnippetBounds? snippetBounds = null,
         StubJunkMailFolderCatalog? junkFolders = null,
-        SensitiveContentEgressGuard? egressGuard = null)
+        SensitiveContentEgressGuard? egressGuard = null,
+        StubEmailAttachmentMatchReader? attachmentMatches = null)
     {
         // One instance for both, as the host composes them: the use case asks the index to cut extracts by these bounds
         // and the boundary publishes what came back under the same ones.
@@ -692,6 +812,7 @@ public sealed class SearchEmailsToolTests
         return new SearchEmailsTool(
             new MailboxSearchReader(
                 index,
+                attachmentMatches ?? new StubEmailAttachmentMatchReader(),
                 LexicalOnlySemanticSearch(),
                 freshness ?? new StubSynchronizationFreshnessReader(),
                 new MailboxScopeResolver(

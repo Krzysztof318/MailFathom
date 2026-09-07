@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -47,6 +48,14 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 /// pass costs less than a quarter of it.
 /// </para>
 /// <para>
+/// Two rankings come out of one eligible set, on the partition
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+/// requires: what a person wrote — a body, or a document attachment's own words — and what a model said a picture
+/// shows. The two are separated by the kind recorded on the attachment row the passage hangs on, so what decides it is
+/// a stored column rather than a media type re-read per query, and a passage cut from the body belongs to the written
+/// side by carrying no attachment position at all.
+/// </para>
+/// <para>
 /// The query vector reaches PostgreSQL as a parameter, like every other value a request carries. Nothing about a query
 /// is composed into the statement text.
 /// </para>
@@ -55,7 +64,7 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext) : IEmailVectorSearchIndexReader
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
+    public async Task<SemanticEmailRankings> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
         RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
@@ -67,7 +76,62 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
         ArgumentNullException.ThrowIfNull(queryVector);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var hits = await this.NearestHitsQuery(selection, profile, queryVector, limit)
+        // Sequential rather than concurrent: both statements reach the same scoped context, which serves one operation
+        // at a time, so starting them together would fault instead of overlapping.
+        var written = await this.RankAsync(selection, profile, queryVector, limit, depicted: false, cancellationToken);
+        var depicted = await this.RankAsync(selection, profile, queryVector, limit, depicted: true, cancellationToken);
+
+        return new SemanticEmailRankings(written, depicted);
+    }
+
+    /// <summary>Composes the query that ranks the eligible emails by their nearest embedded passage of one kind.</summary>
+    /// <param name="selection">The validated structural filters.</param>
+    /// <param name="profile">The profile whose vectors are searched and whose metric measures the distance.</param>
+    /// <param name="queryVector">Where the query lands in that profile's space.</param>
+    /// <param name="limit">The greatest number of emails to return.</param>
+    /// <param name="depicted">Whether the ranking measures descriptions of pictures rather than words a person wrote.</param>
+    /// <returns>The composed query, which nothing has executed yet.</returns>
+    /// <remarks>
+    /// Exposed for the reason the lexical ranking query is: that the query vector arrives as a parameter, that the
+    /// profile narrows the rows before any distance is measured, and that the two rankings read disjoint passages of one
+    /// eligible set are claims about the generated command, and a test asserting them against anything else would pass
+    /// whatever this method did.
+    /// </remarks>
+    internal IQueryable<StoredEmailVectorHitRow> NearestHitsQuery(
+        MailboxEmailSelection selection,
+        RegisteredEmbeddingProfile profile,
+        EmbeddingVector queryVector,
+        int limit,
+        bool depicted)
+    {
+        var profileId = profile.Id.Value;
+        var target = new Vector(queryVector.Components);
+
+        // Mail this profile has no vector for is excluded here rather than ranked as infinitely distant: the nearest
+        // passage of a message with no embedded passage is nothing at all, and letting the aggregate answer that would
+        // be a null where a distance belongs. The kind narrows the same way, so a message whose only vectors are
+        // descriptions is absent from the written ranking rather than present in it at some distance.
+        var eligibleEmails = StoredEmailSelectionPredicate
+            .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
+            .Where(email => email.Chunks.Any(chunk =>
+                email.AttachmentTexts.Any(text =>
+                    text.AttachmentPosition == chunk.AttachmentPosition
+                    && text.Kind == AttachmentTextKind.ImageDescription) == depicted
+                && chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId)));
+
+        return NearestFirst(eligibleEmails, profile.Identity.DistanceMetric, profileId, target, depicted, limit);
+    }
+
+    /// <summary>Runs one of the two rankings and reads it into candidates.</summary>
+    private async Task<IReadOnlyList<RankedEmailCandidate>> RankAsync(
+        MailboxEmailSelection selection,
+        RegisteredEmbeddingProfile profile,
+        EmbeddingVector queryVector,
+        int limit,
+        bool depicted,
+        CancellationToken cancellationToken)
+    {
+        var hits = await this.NearestHitsQuery(selection, profile, queryVector, limit, depicted)
             .ToArrayAsync(cancellationToken);
 
         return
@@ -78,38 +142,7 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
         ];
     }
 
-    /// <summary>Composes the query that ranks the eligible emails by their nearest embedded passage.</summary>
-    /// <param name="selection">The validated structural filters.</param>
-    /// <param name="profile">The profile whose vectors are searched and whose metric measures the distance.</param>
-    /// <param name="queryVector">Where the query lands in that profile's space.</param>
-    /// <param name="limit">The greatest number of emails to return.</param>
-    /// <returns>The composed query, which nothing has executed yet.</returns>
-    /// <remarks>
-    /// Exposed for the reason the lexical ranking query is: that the query vector arrives as a parameter and that the
-    /// profile narrows the rows before any distance is measured are claims about the generated command, and a test
-    /// asserting them against anything else would pass whatever this method did.
-    /// </remarks>
-    internal IQueryable<StoredEmailVectorHitRow> NearestHitsQuery(
-        MailboxEmailSelection selection,
-        RegisteredEmbeddingProfile profile,
-        EmbeddingVector queryVector,
-        int limit)
-    {
-        var profileId = profile.Id.Value;
-        var target = new Vector(queryVector.Components);
-
-        // Mail this profile has no vector for is excluded here rather than ranked as infinitely distant: the nearest
-        // passage of a message with no embedded passage is nothing at all, and letting the aggregate answer that would
-        // be a null where a distance belongs.
-        var eligibleEmails = StoredEmailSelectionPredicate
-            .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
-            .Where(email => email.Chunks.Any(chunk =>
-                chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId)));
-
-        return NearestFirst(eligibleEmails, profile.Identity.DistanceMetric, profileId, target, limit);
-    }
-
-    /// <summary>Ranks the eligible emails nearest first, each measured by its own nearest passage.</summary>
+    /// <summary>Ranks the eligible emails nearest first, each measured by its own nearest passage of the chosen kind.</summary>
     /// <remarks>
     /// <para>
     /// One branch per metric, each restating the whole query, because the distance operator has to be part of the
@@ -125,16 +158,25 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
     /// into the projection, exactly as the lexical ranking writes its rank expression twice, and PostgreSQL computes it
     /// once.
     /// </para>
+    /// <para>
+    /// The kind test is written as an equality against the caller's choice rather than as two predicates, because the
+    /// two sides are exactly complementary: a passage hangs on a described picture or it does not, and a body passage —
+    /// which hangs on no attachment at all — falls to the written side by the same test.
+    /// </para>
     /// </remarks>
     private static IQueryable<StoredEmailVectorHitRow> NearestFirst(
         IQueryable<StoredEmailEntity> eligibleEmails,
         EmbeddingDistanceMetric distanceMetric,
         Guid profileId,
         Vector target,
+        bool depicted,
         int limit) => distanceMetric switch
         {
             EmbeddingDistanceMetric.Cosine => eligibleEmails
                 .OrderBy(email => email.Chunks
+                    .Where(chunk => email.AttachmentTexts.Any(text =>
+                        text.AttachmentPosition == chunk.AttachmentPosition
+                        && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
                     .Min(vector => vector.Embedding.CosineDistance(target)))
@@ -146,11 +188,17 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
                     email.Id,
                     email.ReceivedAt,
                     email.Chunks
+                        .Where(chunk => email.AttachmentTexts.Any(text =>
+                            text.AttachmentPosition == chunk.AttachmentPosition
+                            && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                         .SelectMany(chunk => chunk.Embeddings)
                         .Where(vector => vector.EmbeddingProfileId == profileId)
                         .Min(vector => vector.Embedding.CosineDistance(target)))),
             EmbeddingDistanceMetric.InnerProduct => eligibleEmails
                 .OrderBy(email => email.Chunks
+                    .Where(chunk => email.AttachmentTexts.Any(text =>
+                        text.AttachmentPosition == chunk.AttachmentPosition
+                        && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
                     .Min(vector => vector.Embedding.MaxInnerProduct(target)))
@@ -162,11 +210,17 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
                     email.Id,
                     email.ReceivedAt,
                     email.Chunks
+                        .Where(chunk => email.AttachmentTexts.Any(text =>
+                            text.AttachmentPosition == chunk.AttachmentPosition
+                            && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                         .SelectMany(chunk => chunk.Embeddings)
                         .Where(vector => vector.EmbeddingProfileId == profileId)
                         .Min(vector => vector.Embedding.MaxInnerProduct(target)))),
             EmbeddingDistanceMetric.EuclideanDistance => eligibleEmails
                 .OrderBy(email => email.Chunks
+                    .Where(chunk => email.AttachmentTexts.Any(text =>
+                        text.AttachmentPosition == chunk.AttachmentPosition
+                        && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                     .SelectMany(chunk => chunk.Embeddings)
                     .Where(vector => vector.EmbeddingProfileId == profileId)
                     .Min(vector => vector.Embedding.L2Distance(target)))
@@ -178,6 +232,9 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
                     email.Id,
                     email.ReceivedAt,
                     email.Chunks
+                        .Where(chunk => email.AttachmentTexts.Any(text =>
+                            text.AttachmentPosition == chunk.AttachmentPosition
+                            && text.Kind == AttachmentTextKind.ImageDescription) == depicted)
                         .SelectMany(chunk => chunk.Embeddings)
                         .Where(vector => vector.EmbeddingProfileId == profileId)
                         .Min(vector => vector.Embedding.L2Distance(target)))),

@@ -36,22 +36,30 @@ public interface IEmailVectorSearchIndexReader
     /// <param name="queryVector">Where the query itself lands in that space.</param>
     /// <param name="limit">The greatest number of candidates to return, at least one.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>At most <paramref name="limit" /> candidates, nearest first, empty when no eligible message is embedded.</returns>
+    /// <returns>Two rankings of at most <paramref name="limit" /> candidates each, nearest first, empty when no eligible message is embedded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is below one.</exception>
     /// <remarks>
     /// <para>
-    /// A message appears once however many of its passages are near, scored by its nearest one. Ranking passages would
-    /// let one long message fill a window with its own paragraphs while a shorter message that answers the query better
-    /// never appears.
+    /// A message appears once per ranking however many of its passages are near, scored by its nearest one. Ranking
+    /// passages would let one long message fill a window with its own paragraphs while a shorter message that answers
+    /// the query better never appears.
     /// </para>
     /// <para>
-    /// The order is deterministic, on the same terms the lexical ranking is: distance ties are broken by the newest-first
-    /// timeline order, which is total. A message with no vector under this profile is absent rather than distant —
-    /// mail that synchronization has stored and generation has not yet reached is not near anything.
+    /// Two rankings out of one eligible set rather than one, because
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md">ADR 0030</see>
+    /// separates a message placed by something a person wrote from one placed by a machine's account of a picture, and
+    /// requires the separation to be made where the passages are still distinguishable. By the time fusion sees a
+    /// ranking, a place in it is just a place; a single ranking labelled afterwards would let a description decide where
+    /// a message sits while the result claimed a body placed it.
+    /// </para>
+    /// <para>
+    /// The order within each is deterministic, on the same terms the lexical ranking is: distance ties are broken by the
+    /// newest-first timeline order, which is total. A message with no vector under this profile is absent rather than
+    /// distant — mail that synchronization has stored and generation has not yet reached is not near anything.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
+    Task<SemanticEmailRankings> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
         RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,

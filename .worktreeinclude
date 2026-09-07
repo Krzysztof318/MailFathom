@@ -26,3 +26,11 @@
 # because what belongs in it is Qwen's decision rather than this file's, and a worktree missing half
 # of it is a session configured differently from the checkout it was branched from.
 .qwen/
+
+# The local mirror of the design project: the screen sources a client task is built from, the
+# manifest of the project's own etags, and the state inventory extracted from them. Gitignored under
+# `artifacts/`, so it exists only in the checkout that fetched it — which is never the worktree the
+# work happens in. Copying it means a session opening a client task compares one listing against a
+# manifest it already has instead of reading half a megabyte of prototype again. `$read-design` is
+# the step that refreshes it; nothing under it is ever staged.
+artifacts/design/

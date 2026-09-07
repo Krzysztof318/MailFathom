@@ -12,8 +12,9 @@ namespace MailFathom.Mcp.Tools.Results;
 /// <summary>Publishes one email an answer was drawn from.</summary>
 /// <remarks>
 /// It carries the identity a caller reads the message by and the two fields that let a reader recognize it before doing
-/// so. No extract of the body travels with it: the passage the run retrieved has already reached a model, and putting it
-/// in the response as well would return mail content from a tool whose result is an answer.
+/// so, plus the files inside it the answer drew on. No extract travels with any of it: the passage the run retrieved has
+/// already reached a model, and putting it in the response as well would return mail content from a tool whose result is
+/// an answer.
 /// </remarks>
 [Description("One email the answer was drawn from. Read it with get_email_content, naming the storedEmailId this carries.")]
 internal sealed record CitedEmail
@@ -56,6 +57,10 @@ internal sealed record CitedEmail
     /// </remarks>
     public required ReportedMachineAuthorship MachineAuthorship { get; init; }
 
+    /// <summary>Gets the files inside this email the answer drew on.</summary>
+    [Description("The attachments of this email the answer drew on, each naming the file and the page, slide, or sheet inside it. Empty when the answer drew on the message itself. Where an entry's source is 'imageDescription' the claim rests on a model's account of a picture rather than on words anybody wrote, which is worth saying when reporting it.")]
+    public required IReadOnlyList<CitedEmailAttachment> Attachments { get; init; }
+
     /// <summary>Publishes one citation the use case produced.</summary>
     /// <param name="citation">The citation to publish.</param>
     /// <param name="accountNames">Reads the name the citation's account is published under.</param>
@@ -76,6 +81,7 @@ internal sealed record CitedEmail
             ReceivedAt = citation.ReceivedAt,
             SenderVerification = ReportedSenderVerification.From(citation.SenderVerification),
             MachineAuthorship = ReportedMachineAuthorship.From(citation.MachineAuthorship),
+            Attachments = [.. citation.Attachments.Select(CitedEmailAttachment.From)],
         };
     }
 }

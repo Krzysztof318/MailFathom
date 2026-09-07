@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
@@ -35,9 +36,9 @@ namespace MailFathom.Application.Emails.BrowseTimeline;
 /// </para>
 /// <para>
 /// A page is one of the points mail content leaves this deployment, and it publishes more of a message than a tool
-/// listing does, so where a sensitive-content scanner is switched on the subject, the sender's display name and the
-/// preview of every row are scanned before the page is returned; a scanner that cannot answer refuses the page rather
-/// than serving it unscanned.
+/// listing does, so where a sensitive-content scanner is switched on the subject, the sender's display name, the
+/// preview and the readings of every row are scanned before the page is returned; a scanner that cannot answer refuses
+/// the page rather than serving it unscanned.
 /// </para>
 /// </remarks>
 public sealed class MailTimelineBrowser
@@ -47,6 +48,7 @@ public sealed class MailTimelineBrowser
 
     private readonly IStoredEmailTimelineReader timelineReader;
     private readonly IStoredEmailPreviewReader previewReader;
+    private readonly IStoredEmailEnrichmentReader enrichmentReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IMailboxReadTelemetry readTelemetry;
@@ -55,6 +57,7 @@ public sealed class MailTimelineBrowser
     /// <summary>Initializes the use case.</summary>
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
     /// <param name="previewReader">Reads the bounded opening of the text of the emails a page returned.</param>
+    /// <param name="enrichmentReader">Reads what a derivation concluded about the emails a page returned.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the list runs against.</param>
     /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
@@ -63,6 +66,7 @@ public sealed class MailTimelineBrowser
     public MailTimelineBrowser(
         IStoredEmailTimelineReader timelineReader,
         IStoredEmailPreviewReader previewReader,
+        IStoredEmailEnrichmentReader enrichmentReader,
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         IMailboxReadTelemetry readTelemetry,
@@ -70,6 +74,7 @@ public sealed class MailTimelineBrowser
     {
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(previewReader);
+        ArgumentNullException.ThrowIfNull(enrichmentReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readTelemetry);
@@ -77,6 +82,7 @@ public sealed class MailTimelineBrowser
 
         this.timelineReader = timelineReader;
         this.previewReader = previewReader;
+        this.enrichmentReader = enrichmentReader;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
         this.readTelemetry = readTelemetry;
@@ -137,14 +143,15 @@ public sealed class MailTimelineBrowser
         var page = SortedPage(walked, pageSize, pageDirection);
         var beyondThePage = walked.Count > pageSize.Value;
 
-        var previews = await this.previewReader.ReadPreviewsAsync(
-            [.. page.Select(static email => email.StoredEmailId)],
-            cancellationToken);
+        var pageIdentities = page.Select(static email => email.StoredEmailId).ToArray();
+
+        var previews = await this.previewReader.ReadPreviewsAsync(pageIdentities, cancellationToken);
+        var enrichments = await this.enrichmentReader.ReadEnrichmentsAsync(pageIdentities, cancellationToken);
 
         // Guarded after the boundaries are taken rather than before. A cursor names a received instant and a stored
         // identity, and redaction touches neither, so issuing one from the guarded page would be the same value
         // arrived at through more work.
-        var rows = await this.GuardedAsync(page, previews, cancellationToken);
+        var rows = await this.GuardedAsync(page, previews, enrichments, cancellationToken);
 
         read.Completed(rows.Count);
 
@@ -273,22 +280,32 @@ public sealed class MailTimelineBrowser
                 pageDirection,
                 "A page continues from its cursor in one of two directions, and no other value names one.");
 
-    /// <summary>Scans the three things a row carries that a message's author wrote.</summary>
+    /// <summary>Scans everything a row carries that was written by a message's author or derived from one.</summary>
     /// <remarks>
     /// The subject and the sender's display name are what a tool listing scans, and for the same reasons. The preview is
-    /// the third because it is the message's own text, which is the one thing on this surface a tool listing never
+    /// next because it is the message's own text, which is the one thing on this surface a tool listing never
     /// publishes — a row whose preview went out unscanned would be the leak the subject beside it was redacted to
-    /// prevent. Everything else on a row is what a screen acts on: the identity a later request names, the folder alias,
-    /// the addresses, the sizes and the flags.
+    /// prevent. A mark and its reason are scanned for the same reason a preview is and no weaker one: a sentence
+    /// derived from a message can quote the message, so what a scanner withholds from the text it was derived from it
+    /// withholds here too. Everything else on a row is what a screen acts on: the identity a later request names, the
+    /// folder alias, the addresses, the sizes and the flags — and a mark's evidence, which names passages rather than
+    /// quoting them.
     /// </remarks>
     private async Task<IReadOnlyList<BrowsedEmail>> GuardedAsync(
         IReadOnlyList<EmailSummary> page,
         IReadOnlyDictionary<StoredEmailId, string> previews,
+        IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments,
         CancellationToken cancellationToken)
     {
         if (!this.egressGuard.IsActive)
         {
-            return [.. page.Select(email => new BrowsedEmail(email, PreviewOf(email, previews)))];
+            return
+            [
+                .. page.Select(email => new BrowsedEmail(
+                    email,
+                    PreviewOf(email, previews),
+                    EnrichmentOf(email, enrichments))),
+            ];
         }
 
         // One report for the page rather than one per row, because the page is what a screen waits for.
@@ -317,6 +334,11 @@ public sealed class MailTimelineBrowser
                 await this.egressGuard.GuardOptionalAsync(
                     SensitiveContentEgressPoint.ClientMailListing,
                     PreviewOf(email, previews),
+                    cancellationToken),
+                await GuardedEmailEnrichment.ScanAsync(
+                    this.egressGuard,
+                    SensitiveContentEgressPoint.ClientMailListing,
+                    EnrichmentOf(email, enrichments),
                     cancellationToken)));
         }
 
@@ -328,6 +350,12 @@ public sealed class MailTimelineBrowser
     /// <summary>Reads the preview of one row, which is absent for a message nothing has extracted yet.</summary>
     private static string? PreviewOf(EmailSummary email, IReadOnlyDictionary<StoredEmailId, string> previews) =>
         previews.TryGetValue(email.StoredEmailId, out var preview) ? EmailPreview.Bounded(preview) : null;
+
+    /// <summary>Reads what was derived about one row, which is absent for a message no derivation has reached.</summary>
+    private static EmailEnrichment? EnrichmentOf(
+        EmailSummary email,
+        IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments) =>
+        enrichments.TryGetValue(email.StoredEmailId, out var enrichment) ? enrichment : null;
 
     /// <summary>Validates what the request asked for and restricts the list to the accounts its owner owns.</summary>
     private EmailTimelineFilter SortedList(BrowseTimelineRequest request) => EmailTimelineFilter.Create(

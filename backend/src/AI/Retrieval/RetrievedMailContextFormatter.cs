@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 
@@ -30,6 +31,12 @@ namespace MailFathom.AI.Retrieval;
 /// Each extract carries the identity it was retrieved under, unchanged: the stable local identifier an answer cites, and
 /// the account and folder alias it was read from. An answer that cannot say which message a claim came from cannot be
 /// checked, and the identity is what survives formatting to make that possible.
+/// </para>
+/// <para>
+/// A file the message carried is written in an element of its own, carrying the file and the page it was read from, and
+/// a model's account of a picture is written in a third element again. The three are separated because they were
+/// written by three different parties — the person who typed the message, the person who wrote the file, and nobody at
+/// all — and an envelope that flattened them would let a model report a machine's guess as something somebody said.
 /// </para>
 /// <para>
 /// Formatting is a pure function of the passages, so the whole envelope is decidable without a provider, and the output
@@ -95,6 +102,34 @@ internal static class RetrievedMailContextFormatter
 
     /// <summary>Names the element carrying the extract itself.</summary>
     internal const string ExtractElementName = "extract";
+
+    /// <summary>Names the element carrying an extract of a file the message carried.</summary>
+    /// <remarks>
+    /// Distinct from <see cref="ExtractElementName" /> because the two were written by different people. A model told a
+    /// contract's clause was part of a message would attribute it to whoever wrote the covering note, and would cite the
+    /// note for a promise the note never made.
+    /// </remarks>
+    internal const string AttachmentExtractElementName = "attachment-extract";
+
+    /// <summary>Names the element carrying a model's account of a picture the message carried.</summary>
+    /// <remarks>
+    /// Its own element rather than an attachment extract with a flag on it, because nobody wrote it. A model reading it
+    /// as quoted evidence would report that somebody said a whiteboard showed a roof plan when nobody did — and it is
+    /// untrusted twice over, a hostile sender being able to compose an image whose description reads as an instruction.
+    /// </remarks>
+    internal const string ImageDescriptionElementName = "attached-picture-described";
+
+    /// <summary>Names the attribute carrying the walk position of the attachment an extract came from.</summary>
+    internal const string AttachmentPositionAttributeName = "attachment";
+
+    /// <summary>Names the attribute carrying the file name the sender gave that attachment.</summary>
+    internal const string AttachmentFileNameAttributeName = "file";
+
+    /// <summary>Names the attribute carrying what the segment inside the file is, in the word its own format uses.</summary>
+    internal const string AttachmentSegmentKindAttributeName = "segment";
+
+    /// <summary>Names the attribute carrying that segment's one-based number in reading order.</summary>
+    internal const string AttachmentSegmentNumberAttributeName = "segment-number";
 
     private static readonly XmlWriterSettings EnvelopeSettings = new()
     {
@@ -225,7 +260,50 @@ internal static class RetrievedMailContextFormatter
             writer.WriteElementString(SubjectElementName, subject);
         }
 
-        writer.WriteElementString(ExtractElementName, passage.Text);
+        // Absent rather than empty where nothing was cut from the body, so a message whose words live entirely in a file
+        // is not presented as one that said nothing.
+        if (passage.Text.Length is not 0)
+        {
+            writer.WriteElementString(ExtractElementName, passage.Text);
+        }
+
+        foreach (var attachmentExtract in passage.AttachmentExtracts)
+        {
+            WriteAttachmentExtract(writer, attachmentExtract);
+        }
+
+        writer.WriteEndElement();
+    }
+
+    /// <summary>Writes one file's contribution, in the element that says who wrote the words in it.</summary>
+    /// <remarks>
+    /// The coordinate is written as attributes rather than into the text, so nothing a sender named a file can be read
+    /// as part of the extract — and so an answer citing page fourteen of a report has the number to cite.
+    /// </remarks>
+    private static void WriteAttachmentExtract(XmlWriter writer, EmailKnowledgeAttachmentExtract extract)
+    {
+        writer.WriteStartElement(extract.Kind is AttachmentTextKind.ImageDescription
+            ? ImageDescriptionElementName
+            : AttachmentExtractElementName);
+
+        writer.WriteAttributeString(
+            AttachmentPositionAttributeName,
+            extract.AttachmentPosition.ToString(CultureInfo.InvariantCulture));
+
+        if (extract.FileName is { } fileName)
+        {
+            writer.WriteAttributeString(AttachmentFileNameAttributeName, fileName);
+        }
+
+        if (extract.Segment is { } segment)
+        {
+            writer.WriteAttributeString(AttachmentSegmentKindAttributeName, segment.Kind.ToString());
+            writer.WriteAttributeString(
+                AttachmentSegmentNumberAttributeName,
+                segment.Number.ToString(CultureInfo.InvariantCulture));
+        }
+
+        writer.WriteString(extract.Text);
 
         writer.WriteEndElement();
     }

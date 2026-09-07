@@ -11,6 +11,7 @@ using MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Configurations;
 using MailFathom.Infrastructure.Persistence.Emails.Threads.Configurations;
 using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
+using MailFathom.Infrastructure.Persistence.Enrichment.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
@@ -102,6 +103,10 @@ internal sealed class MailFathomDbContext : DbContext
         this.Set<EmailSpamClassificationSignalEntity>();
 
     internal DbSet<SpamClassificationRunEntity> SpamClassificationRuns => this.Set<SpamClassificationRunEntity>();
+
+    internal DbSet<EmailEnrichmentEntity> EmailEnrichments => this.Set<EmailEnrichmentEntity>();
+
+    internal DbSet<EmailEnrichmentMarkEntity> EmailEnrichmentMarks => this.Set<EmailEnrichmentMarkEntity>();
 
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
@@ -207,6 +212,8 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EmailContentRepairRequestConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSpamClassificationConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSpamClassificationSignalConfiguration());
+        modelBuilder.ApplyConfiguration(new EmailEnrichmentConfiguration());
+        modelBuilder.ApplyConfiguration(new EmailEnrichmentMarkConfiguration());
         modelBuilder.ApplyConfiguration(new MailRuleEvaluationRunConfiguration());
         modelBuilder.ApplyConfiguration(new SpamClassificationRunConfiguration());
         modelBuilder.ApplyConfiguration(new BackfillPositionConfiguration());

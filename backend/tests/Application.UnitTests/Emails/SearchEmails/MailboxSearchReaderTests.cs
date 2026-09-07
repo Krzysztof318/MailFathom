@@ -5,9 +5,12 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
@@ -715,6 +718,146 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
     }
 
+    /// <summary>What #1557 adds to a result: which file a hit came out of, and where inside it.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AMessageWhoseAttachmentMatched_ReportsTheFileAndThePlaceBesideTheMessage()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: "invoice");
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(matched.StoredEmailId, AttachmentMatch(page: 4, "the invoice total is …"));
+        var reader = ReaderOver(index, attachmentMatches: attachmentMatches);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(result.Matches).AttachmentMatches);
+
+        Assert.Equal("statement.pdf", attachment.FileName);
+        Assert.Equal(AttachmentTextKind.Document, attachment.Kind);
+        Assert.Equal(4, attachment.Segment?.Number);
+        Assert.Equal(["the invoice total is …"], attachment.Extracts);
+    }
+
+    /// <summary>A message nothing matched inside carries no attachment section rather than an empty one that reads as searched.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AMessageWhoseAttachmentsMatchedNothing_ReportsNoAttachmentMatchAtAll()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: "invoice");
+        var reader = ReaderOver(index);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(Assert.Single(result.Matches).AttachmentMatches);
+    }
+
+    /// <summary>
+    /// Only the window is asked about. Reading attachment passages for a ranking depth that reaches past what the search
+    /// publishes would walk mail out of the deployment that no caller was ever going to see.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AWindowNarrowerThanTheRanking_ReadsAttachmentPassagesForTheWindowAlone()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex();
+        foreach (var email in SyntheticEmailSummaries.CreateDailyRun(10, FirstJuly))
+        {
+            index.With(email);
+        }
+
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex();
+        var reader = ReaderOver(index, attachmentMatches: attachmentMatches);
+
+        // Act
+        await reader.SearchEmailsAsync(
+            RequestFor("invoice") with { ResultLimit = 3 },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(3, Assert.Single(attachmentMatches.WrittenRequests).Count);
+    }
+
+    /// <summary>
+    /// A message a description alone put in the result is marked, and its extracts are read on the other method: the
+    /// query's words are not in a picture's description by construction, so a headline over them would cut nothing.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AMessageADescriptionAloneFound_IsMarkedAndItsPassagesReadAsDepicted()
+    {
+        // Arrange
+        var written = SyntheticEmailSummaries.Create(FirstJuly);
+        var depicted = SyntheticEmailSummaries.Create(FirstJuly.AddDays(1));
+        var index = new InMemoryEmailSearchIndex()
+            .With(written, relevanceRank: 0.9f, matchedText: "invoice")
+            .With(depicted, matchedText: "nothing this query asks about");
+        var vectorIndex = new InMemoryEmailVectorSearchIndex().WithDepiction(depicted, distance: 0.1f);
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithDepicted(depicted.StoredEmailId, DescriptionMatch("a photograph of a handwritten invoice"));
+
+        var reader = ReaderOver(
+            index,
+            semanticSearch: SemanticSearchOver(vectorIndex),
+            attachmentMatches: attachmentMatches);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([false, true], result.Matches.Select(match => match.IsDepictedMatch));
+        Assert.Equal([depicted.StoredEmailId], Assert.Single(attachmentMatches.DepictedRequests));
+        Assert.Equal(
+            ["a photograph of a handwritten invoice"],
+            Assert.Single(result.Matches[^1].AttachmentMatches).Extracts);
+    }
+
+    /// <summary>An attachment's name and its extracts are mail content, so the scanner reads them like the subject.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ASwitchedOnScanner_RedactsTheAttachmentNameAndItsExtracts()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched, relevanceRank: 0.9f, matchedText: "invoice");
+        var attachmentMatches = new InMemoryEmailAttachmentMatchIndex()
+            .WithWritten(
+                matched.StoredEmailId,
+                AttachmentMatch(page: 1, $"sign in with {Marker}") with { FileName = $"{Marker}.pdf" });
+        var reader = ReaderOver(index, egressGuard: egress.Guard, attachmentMatches: attachmentMatches);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(Assert.Single(result.Matches).AttachmentMatches);
+
+        Assert.Equal("[redacted:CloudKey].pdf", attachment.FileName);
+        Assert.Equal(["sign in with [redacted:CloudKey]"], attachment.Extracts);
+    }
+
+    /// <summary>Builds a hit in a document attachment, on the page a test names.</summary>
+    private static EmailAttachmentMatch AttachmentMatch(int page, params string[] extracts) => new(
+        AttachmentPosition: 1,
+        FileName: "statement.pdf",
+        DeclaredMediaType: "application/pdf",
+        Kind: AttachmentTextKind.Document,
+        Segment: new AttachmentTextSegment(AttachmentTextSegmentKind.Page, page, Label: null, StartOffset: 0),
+        Extracts: extracts);
+
+    /// <summary>Builds a hit in a model's description of an attached picture, which records no place inside the file.</summary>
+    private static EmailAttachmentMatch DescriptionMatch(string description) => new(
+        AttachmentPosition: 2,
+        FileName: "photo.jpg",
+        DeclaredMediaType: "image/jpeg",
+        Kind: AttachmentTextKind.ImageDescription,
+        Segment: null,
+        Extracts: [description]);
+
     private static MailboxSearchReader ReaderOver(
         InMemoryEmailSearchIndex index,
         ICallerMailAccountCatalog? accountCatalog = null,
@@ -722,8 +865,10 @@ public sealed class MailboxSearchReaderTests
         SemanticEmailSearch? semanticSearch = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
-        AccessAuthorization? authorization = null) => new(
+        AccessAuthorization? authorization = null,
+        InMemoryEmailAttachmentMatchIndex? attachmentMatches = null) => new(
         index,
+        attachmentMatches ?? new InMemoryEmailAttachmentMatchIndex(),
         semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(

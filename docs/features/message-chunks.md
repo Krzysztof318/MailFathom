@@ -222,6 +222,7 @@ from markup and read from a plain-text part are worth different amounts, so they
 
 ## What is not here
 
-Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what a lexical `search_emails` answers with. The semantic half has already
-changed: a message whose only near passage was cut from an attachment now comes back, which
-[Email search](email-search.md) states. Serving an attachment passage or a citation into one through `search_emails`, `ask_mail`, or the client API, which is what those surfaces gain next.
+Anything about what happens to a chunk once it exists. A vector is keyed on the chunk it was produced for — [Stored vectors](../architecture/stored-email-schema.md#stored-vectors) describes the table it lands in, [Embedding generation](embedding-generation.md) the boundary that produces it, and [Automatic embedding](automatic-embedding.md) what decides that a newly synchronized message's chunks should be embedded at all. What is still missing beyond those is the backfill for mail stored before a profile existed, and the index built over the vector column. Ranking of any kind, and any change to what a lexical `search_emails` answers with. What a caller sees of an attachment
+passage is served by two surfaces already — `search_emails` reports which file a hit came out of and where inside it, and
+`ask_mail` cites the same — which [Email search](email-search.md) and [Mail answering](mail-answering.md) state. The client's own
+search route is what gains it next.

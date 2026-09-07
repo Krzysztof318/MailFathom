@@ -60,7 +60,7 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         await StoreEveryVectorAsync(services, farther, profileId, axis: 1, cancellationToken);
 
         // Act
-        var candidates = await services.InScopeAsync(
+        var rankings = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmailVectorSearchIndexReader>().ReadNearestCandidatesAsync(
                 SelectionOf(scope, binding),
                 profile,
@@ -70,11 +70,17 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
             cancellationToken);
 
         // Assert
+        var candidates = rankings.Written;
+
         Assert.Equal(
             [nearest, farther],
             candidates.Select(candidate => candidate.StoredEmailId));
         Assert.DoesNotContain(unembedded, candidates.Select(candidate => candidate.StoredEmailId));
         Assert.True(candidates[0].Score < candidates[1].Score);
+
+        // Every passage here was cut from a body, so nothing a model described placed a message: the depicted ranking
+        // of a mailbox with no image attachment is empty rather than a second copy of the written one.
+        Assert.Empty(rankings.Depicted);
     }
 
     /// <summary>Reads the identity the deterministic generator produces, which is the one the active profile records.</summary>

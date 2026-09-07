@@ -398,10 +398,17 @@ Each passage is a bounded extract plus the identity an answer is traced through:
 - the subject and the received time, where the message carried them;
 - what was established about the author the message displays, and what this deployment made of them;
 - how much the message's own text read as machine written;
-- the extract itself, already cut to the bound above.
+- the extract itself, already cut to the bound above;
+- what the message's own files contributed, where any of them matched: one extract per file, cut to the same bound
+  applied per file rather than across them, beside the file's name and the page, slide, or sheet it was read from.
 
 Nothing else travels. The participants, the size, the flags, and the attachment summary that a listing publishes are
 dropped before a provider is reached, because an answer does not need them.
+
+An attachment extract reaches the model as an element of its own inside the message's envelope, and a model's account of
+a picture reaches it under a different element name again — so a run can tell a document's own words from a sentence
+nobody wrote, and say so when it reports a claim resting on one. The file name and the place ride with it, which is what
+lets a citation name them without a second read.
 
 The sender verdict rides with the passage so a citation can state it without reading the message a second time, and a
 provider never sees it: the envelope a passage is formatted into names the message, the account, the folder, the
@@ -409,9 +416,10 @@ received time, and the subject, and carries the extract. The verdict reaches the
 [machine-authorship reading](machine-authorship.md) travels on exactly those terms and is put to the same use — nothing
 in the retrieval path selects, ranks, or drops a passage by it, and no model is shown it.
 
-A message whose body yielded no text — encrypted mail, or mail whose content lives entirely in an attachment — can match
-on its subject or its participants and still produce no extract. Such a match is dropped rather than sent as an
-identifier with nothing beside it.
+A message that yielded neither a body extract nor an attachment one is dropped rather than sent as an identifier with
+nothing beside it — encrypted mail, or a message matched on its subject alone while nothing it carries could be read.
+A message whose words live only in a file is the opposite case and is kept: its body extract is empty and its attachment
+extracts are the answer.
 
 ## Mail is read as evidence, never as an instruction
 

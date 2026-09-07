@@ -363,7 +363,21 @@ continues the list at each end:
       "hasAttachments": true,
       "attachmentCount": 2,
       "sizeOctets": 48213,
-      "preview": "The release went out this morning and the notes are attached."
+      "preview": "The release went out this morning and the notes are attached.",
+      "enrichment": {
+        "derivedAt": "2026-08-15T10:02:44+00:00",
+        "marks": [
+          {
+            "aspect": "Sense",
+            "text": "The 0.8.0 release notes, with the changelog attached.",
+            "reason": "The opening paragraph announces the release and names the attachment.",
+            "dueAt": null,
+            "source": "Model",
+            "origin": "mailfathom-email-enrichment",
+            "evidence": [ "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92" ]
+          }
+        ]
+      }
     }
   ],
   "nextCursor": "AbCd...",
@@ -383,6 +397,22 @@ text as extraction trimmed it, without quoted history or a signature block, whic
 being the message it was answering. It is `null` for mail this deployment has stored but not yet extracted, which is
 not the same as a message whose text is empty. The bound is fixed: no request may raise it and no deployment may
 change it.
+
+**`enrichment` is what a derivation concluded about the message**, and it is on every row of every response, whether or
+not the deployment turned [message enrichment](../features/message-enrichment.md) on. It carries at most
+three marks, one of each `aspect` — `Sense`, `Significance`, `Commitment` — each with the sentence itself, the `reason`
+behind it, the `source` and `origin` that produced it, and the `evidence` it rests on. `dueAt` is set only on a
+commitment whose message named a date.
+
+Two states reach a client and they mean different things. The field is **`null`** for a message no derivation has
+reached — which is every message on a deployment with the switch off. It is an **object with an empty `marks` array**
+for one a derivation settled with nothing to say. A client may draw the two identically, but it can tell them apart,
+which is what the shape exists for.
+
+**`evidence` names passages rather than carrying them.** Each entry is a passage identifier, resolvable through the
+same citation route an answer's citations use, so a client that wants the words behind a mark asks for them. A row
+carrying the passages themselves would be a list page publishing a body it had no reason to. An identifier that
+resolves to nothing is a message whose text has since been re-cut, not a broken row.
 
 **The cursor is opaque and yours to hold.** It names a row of the page together with the list it was read under, and
 nothing on the server remembers it, so a client may keep one while the screen is closed, or across a restart of the
@@ -630,8 +660,11 @@ what bounds a thread here is how threading is assembled rather than how it is se
 
 **`email` is [the mail list route's](#the-mail-list-route) own row, field for field.** A client parses one message shape
 across this surface, and its `preview` is what that message added with the quoted history and the signature block
-trimmed off — which is what keeps the eighth reply from redrawing the seven above it. There is no body here either: the
-whole of a message is a request of its own, named by the `id` that row already carries.
+trimmed off — which is what keeps the eighth reply from redrawing the seven above it. Field for field includes
+`enrichment`, which carries here exactly what it carries on a list row and means exactly the same thing: a message a
+derivation reached shows its marks whichever screen draws it, and a conversation that answered `null` for a message the
+list shows marks for would be stating that no derivation has reached it. There is no body here either: the whole of a
+message is a request of its own, named by the `id` that row already carries.
 
 **`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's
 own order and continues across pages, so a client that has paged twice still knows what it is holding. `answeredId`

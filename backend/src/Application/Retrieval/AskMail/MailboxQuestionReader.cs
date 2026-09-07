@@ -334,7 +334,41 @@ public sealed class MailboxQuestionReader
                     cancellationToken),
                 passage.ReceivedAt,
                 passage.SenderVerification,
-                passage.MachineAuthorship));
+                passage.MachineAuthorship,
+                await this.CitedAttachmentsAsync(passage.AttachmentExtracts, cancellationToken)));
+        }
+
+        return cited;
+    }
+
+    /// <summary>Reads the files one cited message's answer drew on into the coordinates a reader opens them by.</summary>
+    /// <remarks>
+    /// The file name is the whole of an attachment citation's mail content, and it is scanned for the reason the subject
+    /// is: it is free text a sender wrote, and a document named after the person it concerns discloses as much as a
+    /// sentence about them. The walk position and the page number are coordinates a reader acts on rather than text to
+    /// read, so neither is scanned.
+    /// </remarks>
+    private async Task<IReadOnlyList<MailAnswerAttachmentCitation>> CitedAttachmentsAsync(
+        IReadOnlyList<EmailKnowledgeAttachmentExtract> attachmentExtracts,
+        CancellationToken cancellationToken)
+    {
+        if (attachmentExtracts.Count is 0)
+        {
+            return [];
+        }
+
+        var cited = new List<MailAnswerAttachmentCitation>(attachmentExtracts.Count);
+
+        foreach (var attachmentExtract in attachmentExtracts)
+        {
+            cited.Add(new MailAnswerAttachmentCitation(
+                attachmentExtract.AttachmentPosition,
+                await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    attachmentExtract.FileName,
+                    cancellationToken),
+                attachmentExtract.Kind,
+                attachmentExtract.Segment));
         }
 
         return cited;

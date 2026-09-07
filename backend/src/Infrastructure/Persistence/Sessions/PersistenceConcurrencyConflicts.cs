@@ -85,6 +85,21 @@ internal static class PersistenceConcurrencyConflicts
     /// stage could not have avoided.
     /// </para>
     /// <para>
+    /// The next two are one message's derivation, and they are the pair above one stage further on — over what was
+    /// concluded about a message rather than over what was cut from it. The record's key is the message alone, so an
+    /// account run reaching a message a second time while a retry of itself is still committing has both writers
+    /// reading that nothing was derived and both inserting. The retry re-reads the record the winner wrote and
+    /// replaces it whole, which is what makes a message derived from twice hold one derivation rather than ending the
+    /// account run on a violation the pass could not have avoided.
+    /// </para>
+    /// <para>
+    /// The mark's aspect index is that same race one level down, and it is what makes "one reading of each kind" the
+    /// database's rule rather than the writer's. Neither writer can see the other's uncommitted marks, so two
+    /// derivations of one message would otherwise leave two answers to the same question on the row a screen draws
+    /// from, with nothing saying which is current. The loser violates the index instead, and the retry writes the
+    /// derivation whole over what the winner left.
+    /// </para>
+    /// <para>
     /// The next is the re-derivation cursor of a scope nobody has walked, and it is the mutation identity's case a
     /// third time: two invocations of one refresh, or one request retried, both read no position and both insert it.
     /// The retry reads back what the winner recorded and moves the walk on from there, so the pass continues rather
@@ -178,6 +193,8 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.EmailChunkAttachmentOrdinalUniqueIndexName
                 or PersistenceConstraintNames.EmailAttachmentTextPrimaryKeyName
                 or PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailEnrichmentPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailEnrichmentMarkAspectUniqueIndexName
                 or PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.ContactAddressUniqueIndexName

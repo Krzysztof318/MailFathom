@@ -66,6 +66,29 @@ predicate changes the size of the scan and not its shape.
 times cheaper than no filter at all, and a sender is two hundred and fifty times cheaper. What is expensive is the
 request that narrows nothing.
 
+### One hybrid search runs this query twice
+
+[ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+partitions the semantic half into a written ranking and a depicted one, and `EmailVectorSearchIndexReader` reads them as
+two statements of the shape measured above rather than as one — the two differ only in the value of the correlated
+predicate that asks what kind of passage each vector belongs to, so a hybrid search issues the table's query twice,
+sequentially, on the one scoped context a request holds.
+
+**Treat the numbers above as the cost of one of the two.** The upper bound on a whole hybrid search is therefore twice
+each row, which is what the decision below is read against: an unfiltered full-mailbox search was already a latency a
+caller times out on rather than waits on, and doubling something already past that ceiling changes nothing about which
+way the decision goes. Every figure in this table is measured; **the doubling is not** — no run of the partitioned pair
+has been measured, and the true cost is expected to sit below twice a row rather than at it, because the second
+statement reads the same heap pages the first one has just brought into the buffer cache and the depicted side of a
+mailbox is the smaller of the two by a wide margin on any mailbox that is mostly text. That expectation is reasoning
+rather than evidence, so nothing here rests on it.
+
+What the partition does not change is the shape. It adds no join and no index — the predicate is a correlated `EXISTS`
+on the composite primary key of `email_attachment_texts`, which the attachment row is already looked up by — so the
+readings above hold for each statement, the caller's own filters remain the effective lever, and the request that
+narrows nothing remains the expensive one. Measuring the pair, and deciding whether the two rankings are worth reading
+as one statement, belongs to whatever revisits this page's decision.
+
 ## Where the cost is, which is not where it looks
 
 A 1536-dimension `vector` is 6152 bytes, so PostgreSQL stores every one of them out of line: the table is 35 MB of rows

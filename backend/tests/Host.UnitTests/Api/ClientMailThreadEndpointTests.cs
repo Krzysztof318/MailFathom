@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseThread;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
@@ -167,7 +168,7 @@ public sealed class ClientMailThreadEndpointTests
         var email = SyntheticListedEmail();
         var thread = new BrowsedThread(
             Conversation,
-            [new BrowsedThreadEmail(email, Position: 3, AnsweredStoredEmailId: null, Contribution: "what I added")],
+            [new BrowsedThreadEmail(email, Position: 3, AnsweredStoredEmailId: null, Contribution: "what I added", Enrichment: null)],
             [new ThreadParticipant("anna@example.test", "Anna", MessageCount: 4)],
             MessageCount: 500,
             MoreMessagesNotAssembled: true,
@@ -198,7 +199,7 @@ public sealed class ClientMailThreadEndpointTests
     {
         // Arrange
         var answered = StoredEmailId.Create(Guid.CreateVersion7());
-        var message = new BrowsedThreadEmail(SyntheticListedEmail(), Position: 2, answered, "what I added");
+        var message = new BrowsedThreadEmail(SyntheticListedEmail(), Position: 2, answered, "what I added", Enrichment: null);
 
         // Act
         var response = ClientMailThreadEmailResponse.For(message);
@@ -219,7 +220,8 @@ public sealed class ClientMailThreadEndpointTests
             SyntheticListedEmail(),
             Position: 0,
             AnsweredStoredEmailId: null,
-            Contribution: null);
+            Contribution: null,
+            Enrichment: null);
 
         // Act
         var response = ClientMailThreadEmailResponse.For(message);
@@ -319,10 +321,16 @@ public sealed class ClientMailThreadEndpointTests
             .Returns(Task.FromResult<IReadOnlyDictionary<StoredEmailId, string>>(
                 new Dictionary<StoredEmailId, string>()));
 
+        var enrichments = Substitute.For<IStoredEmailEnrichmentReader>();
+        enrichments.ReadEnrichmentsAsync(Arg.Any<IReadOnlyList<StoredEmailId>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<StoredEmailId, EmailEnrichment>>(
+                new Dictionary<StoredEmailId, EmailEnrichment>()));
+
         return new MailThreadBrowser(
             this.threadReader,
             this.summaryReader,
             previews,
+            enrichments,
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,

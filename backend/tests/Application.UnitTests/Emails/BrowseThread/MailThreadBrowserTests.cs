@@ -5,6 +5,8 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseThread;
+using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
@@ -471,6 +473,55 @@ public sealed class MailThreadBrowserTests
         Assert.Equal(0, threadReader.ReadCount);
     }
 
+    /// <summary>
+    /// A conversation draws a message from the same fields a list row does, so a derivation a list row shows is on the
+    /// conversation's row too — a row answering <see langword="null" /> would be stating that none has reached it.
+    /// </summary>
+    [Fact]
+    public async Task BrowsePageAsync_AMessageADerivationReached_CarriesItsMarksOnTheConversationsRow()
+    {
+        // Arrange
+        var message = Message(1, Inbox, "2026-08-16T09:00:00Z");
+        var enrichments = new InMemoryStoredEmailEnrichments()
+            .With(message.StoredEmailId, Sense("a racking quotation"));
+        var browser = BrowserOver([message], enrichmentReader: enrichments);
+
+        // Act
+        var thread = await browser.BrowsePageAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(thread);
+
+        var enrichment = Assert.Single(thread.Messages).Enrichment;
+
+        Assert.NotNull(enrichment);
+        Assert.Equal("a racking quotation", Assert.Single(enrichment.Marks).Text);
+    }
+
+    /// <summary>A mark is a sentence derived from the message, so it leaves under the same posture the contribution does.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_ADeploymentThatScans_RedactsTheMarkAndItsReasonOnTheConversationsRow()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var message = Message(1, Inbox, "2026-08-16T09:00:00Z");
+        var enrichments = new InMemoryStoredEmailEnrichments().With(
+            message.StoredEmailId,
+            Sense($"a key {Marker} was pasted", $"the passage carries {Marker}"));
+        var browser = BrowserOver([message], enrichmentReader: enrichments, egressGuard: egress.Guard);
+
+        // Act
+        var thread = await browser.BrowsePageAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(thread);
+
+        var mark = Assert.Single(Assert.Single(thread.Messages).Enrichment!.Marks);
+
+        Assert.DoesNotContain(Marker, mark.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Marker, mark.Reason, StringComparison.Ordinal);
+    }
+
     /// <summary>Everything on the page a message's author wrote is scanned, the participant list included, so a header and its rows agree.</summary>
     [Fact]
     public async Task BrowsePageAsync_ADeploymentThatScans_RedactsTheSubjectTheSenderNamesAndTheContribution()
@@ -581,10 +632,20 @@ public sealed class MailThreadBrowserTests
             .Select(ordinal => Message(ordinal, Inbox, $"2026-08-16T{ordinal % 24:D2}:{ordinal % 60:D2}:00Z")),
     ];
 
+    /// <summary>Builds one derivation carrying a single reading of what the message is about.</summary>
+    private static EmailEnrichmentMark Sense(string text, string reason = "the passage says so") =>
+        EmailEnrichmentMark.Create(
+            EmailEnrichmentAspect.Sense,
+            text,
+            reason,
+            [EmailChunkId.Create(Guid.CreateVersion7())],
+            EmailEnrichmentProvenance.FromAgent("mailfathom-email-enrichment"));
+
     private static MailThreadBrowser BrowserOver(
         IReadOnlyList<ThreadedEmailSummary> messages,
         IStoredEmailSummaryReader? summaryReader = null,
         IStoredEmailPreviewReader? previewReader = null,
+        IStoredEmailEnrichmentReader? enrichmentReader = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
         AccessAuthorization? authorization = null,
@@ -592,6 +653,7 @@ public sealed class MailThreadBrowserTests
         new StubEmailThreadReader([.. messages.Select(message => (Conversation, message))]),
         summaryReader ?? new InMemoryStoredEmailSummaries().WithAll(messages.Select(StoredOf)),
         previewReader,
+        enrichmentReader,
         egressGuard,
         readTelemetry,
         authorization,
@@ -601,6 +663,7 @@ public sealed class MailThreadBrowserTests
         StubEmailThreadReader threadReader,
         IStoredEmailSummaryReader? summaryReader = null,
         IStoredEmailPreviewReader? previewReader = null,
+        IStoredEmailEnrichmentReader? enrichmentReader = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
         AccessAuthorization? authorization = null,
@@ -618,6 +681,7 @@ public sealed class MailThreadBrowserTests
             threadReader,
             summaryReader ?? new InMemoryStoredEmailSummaries(),
             previewReader ?? new InMemoryStoredEmailPreviews(),
+            enrichmentReader ?? new InMemoryStoredEmailEnrichments(),
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation

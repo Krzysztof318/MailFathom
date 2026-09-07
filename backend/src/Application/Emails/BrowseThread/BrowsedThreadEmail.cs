@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
 
@@ -12,6 +13,7 @@ namespace MailFathom.Application.Emails.BrowseThread;
 /// <param name="Position">The zero-based place the message holds in the conversation's order.</param>
 /// <param name="AnsweredStoredEmailId">The message this one answers among the ones the caller is shown, or <see langword="null" /> when it is a root of what they are shown.</param>
 /// <param name="Contribution">The bounded opening of what this message added, or <see langword="null" /> where nothing has extracted it yet.</param>
+/// <param name="Enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
 /// <remarks>
 /// <para>
 /// The summary is the listing's own projection rather than a shape of this reading's own, so a client parses one message
@@ -22,9 +24,15 @@ namespace MailFathom.Application.Emails.BrowseThread;
 /// which is what keeps the eighth reply of a thread from redrawing the seven above it. It is what a collapsed row shows;
 /// the whole message, quoted history included, is reached by the identity the summary carries.
 /// </para>
+/// <para>
+/// The derivation is on this shape for the same reason the summary is: a message is one thing across this surface, and
+/// a conversation row that always answered <see langword="null" /> would be stating that no derivation has reached a
+/// message a list row beside it draws marks for.
+/// </para>
 /// </remarks>
 public sealed record BrowsedThreadEmail(
     EmailSummary Email,
     int Position,
     StoredEmailId? AnsweredStoredEmailId,
-    string? Contribution);
+    string? Contribution,
+    EmailEnrichment? Enrichment);
