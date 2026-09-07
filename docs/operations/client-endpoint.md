@@ -2055,6 +2055,12 @@ the page is the one part that is refused rather than warned about, for the reaso
 refusal is about publishing a page rather than about a credential, which is why a deployment can accept a password on
 this port while still having to declare that the page may be served over it.
 
+**A profile this endpoint terminates TLS with is loaded before the server starts**, on the same terms as the other two
+surfaces': material that is missing, expired, or issued for another domain fails startup with nothing listening, rather
+than binding a listener that then refuses every connection. The startup record names each profile it loaded and the
+section it was configured under, so `ClientEndpoint:Https` is what an operator reads this endpoint's profiles back
+from; [rotating a server certificate](secret-rotation.md) is what renewing one takes.
+
 ## Serving the client from the deployment
 
 **Every published image carries the page**, built into it from the client workspace under `frontend/` and copied

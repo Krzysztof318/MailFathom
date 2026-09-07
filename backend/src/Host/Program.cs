@@ -7,8 +7,6 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Observability;
-using MailFathom.Host.Security.Endpoints;
-using MailFathom.Host.Security.Transport;
 
 // Composed before anything else, CreateBuilder included, so that a malformed appsettings.json, a failure during
 // composition, and a failed host start are all reported rather than only printed. The pipeline the container owns
@@ -53,22 +51,11 @@ try
     // Before the server starts rather than from a hosted service, because a hosted service could be started after the
     // web host and a certificate proven then would be proven after the listener was already open. A profile whose
     // material is missing, expired, or issued for another domain therefore fails startup with nothing listening.
-    if (composition.Mcp.Enabled && composition.Mcp.TerminatesTls)
-    {
-        await app.Services.GetRequiredService<TransportServerCertificateStore>()
-            .LoadAsync(app.Lifetime.ApplicationStopping);
-    }
-
-    if (composition.Admin.Enabled && composition.Admin.TerminatesTls)
-    {
-        await app.Services.GetRequiredKeyedService<TransportServerCertificateStore>(HostComposition.AdminCertificateStoreKey)
-            .LoadAsync(app.Lifetime.ApplicationStopping);
-    }
-
-    // For the same reason, and with the same outcome: a TLS transport whose material is unusable fails startup with
-    // nothing listening rather than downgrading the probe port to clear text.
-    await app.Services.GetRequiredService<HealthEndpointCertificate>()
-        .LoadAsync(app.Lifetime.ApplicationStopping);
+    //
+    // In one callable place rather than here, for the reason the service graph and the pipeline are: top-level
+    // statements cannot be called, and a surface whose store is registered but never loaded is one no test could have
+    // caught — it binds its listener and refuses every handshake on it.
+    await HostCertificates.LoadAsync(app.Services, composition, app.Lifetime.ApplicationStopping);
 
     // Every middleware and every route this deployment serves, composed in one callable place rather than here, for
     // the reason the service graph is: top-level statements cannot be called, and a misordered pipeline written in
