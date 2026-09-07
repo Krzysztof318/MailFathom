@@ -36,9 +36,9 @@ namespace MailFathom.Application.Emails.BrowseTimeline;
 /// </para>
 /// <para>
 /// A page is one of the points mail content leaves this deployment, and it publishes more of a message than a tool
-/// listing does, so where a sensitive-content scanner is switched on the subject, the sender's display name and the
-/// preview of every row are scanned before the page is returned; a scanner that cannot answer refuses the page rather
-/// than serving it unscanned.
+/// listing does, so where a sensitive-content scanner is switched on the subject, the sender's display name, the
+/// preview and the readings of every row are scanned before the page is returned; a scanner that cannot answer refuses
+/// the page rather than serving it unscanned.
 /// </para>
 /// </remarks>
 public sealed class MailTimelineBrowser
