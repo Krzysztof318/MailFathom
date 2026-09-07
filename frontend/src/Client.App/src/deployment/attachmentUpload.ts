@@ -5,6 +5,7 @@
 import { createContext, useContext } from 'react';
 import { longestResponseBody, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
+import { deploymentCredentials } from './sendToDeployment';
 
 // Putting one file the author is attaching on the wire. It is the third module in this directory that calls `fetch`
 // and the second that carries octets: `Client.Backend` declares no DOM, so a `File`, a `Blob`, and an `AbortSignal`
@@ -46,6 +47,7 @@ export const uploadAttachment: AttachmentUpload = async (request, file, abandone
         const response = await fetch(request.path, {
             method: request.method,
             headers: { ...request.headers },
+            credentials: deploymentCredentials,
             body: file,
             signal: abandoned,
         });

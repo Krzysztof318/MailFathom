@@ -2,12 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { describe, expect, it } from 'vitest';
-import { answerOf } from './attachmentUpload';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { answerOf, uploadAttachment } from './attachmentUpload';
 
 // What the client decides about an answer to an upload, asked of an answer this file constructed. The request that
-// produces one calls `fetch`, which nothing here patches — `frontend/tests/AGENTS.md` § *What is faked, and where*
-// holds that rule, and it is why the deciding half is a function of its own.
+// produces one calls `fetch`, which nothing here stands a fake network in front of — `frontend/tests/AGENTS.md`
+// § *What is faked, and where* holds that rule, and it is why the deciding half is a function of its own.
+//
+// The one thing asked of the request rather than of the answer is the credentials mode it goes out under, which no
+// constructed `Response` can report; `sendToDeployment.test.ts` states why that is watched on `fetch` itself.
 
 /** An answer whose octets arrive over a stream, which is the shape a ceiling has to hold during rather than after. */
 function answering(body: string, status = 200): Response {
@@ -55,5 +58,30 @@ describe('answerOf', () => {
 
     it('answers nothing for an answer carrying no body at all, rather than reading absence as empty', async () => {
         expect(await answerOf(new Response(null, { status: 204 }), 64)).toMatchObject({ status: 204, body: '' });
+    });
+});
+
+describe('uploadAttachment', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('omits the credentials, as every request this client puts on the wire does', async () => {
+        const sent = vi.spyOn(globalThis, 'fetch').mockResolvedValue(answering('{"attachmentId":"a1"}'));
+
+        await uploadAttachment(
+            {
+                method: 'POST',
+                path: 'https://mail.example/api/client/drafts/d1/attachments',
+                headers: { 'Content-Type': 'text/plain' },
+            },
+            new File(['note'], 'note.txt', { type: 'text/plain' }),
+            new AbortController().signal,
+        );
+
+        expect(sent).toHaveBeenCalledWith(
+            'https://mail.example/api/client/drafts/d1/attachments',
+            expect.objectContaining({ credentials: 'omit' }),
+        );
     });
 });

@@ -11,6 +11,7 @@ import {
 } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
 import { asDataUrl } from './dataUrl';
+import { deploymentCredentials } from './sendToDeployment';
 
 // The two things the client does with one file a message carries: hand it to the person to keep, and show it inside the
 // client. Both are one boundary rather than two — one route, one credential, one bound, one way out — which is why they
@@ -204,6 +205,7 @@ async function fetchedOctets(
         response = await fetch(request.path, {
             method: request.method,
             headers: { ...request.headers },
+            credentials: deploymentCredentials,
             signal: abandoned,
         });
     } catch {

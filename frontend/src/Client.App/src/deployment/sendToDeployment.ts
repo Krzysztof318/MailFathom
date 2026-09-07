@@ -18,11 +18,26 @@ import { longestResponseBody, type MailFathomTransport } from '@mailfathom/clien
  */
 export type DeploymentTransport = (abandoned: AbortSignal) => MailFathomTransport;
 
+/**
+ * The credentials mode every request this client puts on the wire is sent under, stated here for all four call sites.
+ *
+ * The client endpoint refuses an uncredentialed request with `401` and names Basic in the challenge, which is what
+ * `signIn.ts` reads to decide whether a password may be sent to an address at all. The Fetch Standard has the user
+ * agent prompt for a username and password on exactly that answer whenever the request included credentials — and the
+ * default `same-origin` includes them for a client served by the deployment it is signing in to, so the browser's own
+ * dialog opens over the sign-in screen at the first request, before a password has been typed once, and the form is
+ * never reached. Omitting them leaves the challenge for the client to read, which is also what this surface already
+ * says about itself: its CORS policy allows no credentials, because the only one it has is the header
+ * `Client.Backend` composed.
+ */
+export const deploymentCredentials: RequestCredentials = 'omit';
+
 /** Puts one request on the wire, and reports what came back without deciding anything about it. */
 export const sendToDeployment: DeploymentTransport = (abandoned) => async (request) => {
     const response = await fetch(request.path, {
         method: request.method,
         headers: { ...request.headers },
+        credentials: deploymentCredentials,
         // `null` rather than the absent property, because the compiler is told an optional property is genuinely
         // absent rather than present and undefined — and `fetch` reads the two the same way.
         body: request.body ?? null,
