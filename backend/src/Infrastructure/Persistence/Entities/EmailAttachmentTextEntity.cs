@@ -106,9 +106,10 @@ internal sealed class EmailAttachmentTextEntity
     /// <remarks>
     /// Its own stamp rather than the message's, because an attachment is read on a later pass than the body and a
     /// posture republished between the two would otherwise leave one row's stamp standing for text the other never went
-    /// through. What it records is the configuration these words were derived under; nothing reads it back yet, so no
-    /// count and no sweep reaches a row whose stamp is not the one the deployment currently runs — the extraction
-    /// backfill compares the search document's stamp and never this one. Issue #1695 is where that gap is tracked.
+    /// through. The startup report counts the rows whose stamp is not their owner's current one, and a rebuilding
+    /// extraction backfill discards them and takes the message's reading marker off, which puts it back in front of the
+    /// attachment stage — so the words are taken again under that run's own budgets rather than by the walk that
+    /// discarded them.
     /// </remarks>
     public string? SensitiveContentStamp { get; set; }
 

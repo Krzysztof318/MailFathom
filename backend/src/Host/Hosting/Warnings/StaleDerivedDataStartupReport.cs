@@ -73,15 +73,15 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
             return;
         }
 
-        int staleEmailCount;
+        StaleDerivedDataCount stale;
 
         try
         {
             using var scope = this.scopeFactory.CreateScope();
 
-            staleEmailCount = await scope.ServiceProvider
+            stale = await scope.ServiceProvider
                 .GetRequiredService<IStoredEmailExtractionBackfillStore>()
-                .CountEmailsWithStaleDerivedDataAsync(cancellationToken);
+                .CountStaleDerivedDataAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -94,7 +94,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
             return;
         }
 
-        this.Report(staleEmailCount);
+        this.Report(stale);
     }
 
     /// <inheritdoc />
@@ -105,10 +105,15 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
     /// The rebuild being switched on is not the same fact as it doing anything, so the middle case names the walk that
     /// performs it: a deployment that asked for the rebuild and switched the extraction backfill off has asked for work
     /// nothing will do, and the two keys read together are what says so.
+    /// <para>
+    /// The two figures are reported side by side rather than added, because a message and a reading of one of its
+    /// attachments cost different things to repair and neither number contains the other. Either being above zero is
+    /// something to act on, so the quiet case is the one where both are zero.
+    /// </para>
     /// </remarks>
-    private void Report(int staleEmailCount)
+    private void Report(StaleDerivedDataCount stale)
     {
-        if (staleEmailCount == 0)
+        if (stale.IsEmpty)
         {
             this.LogNothingStale();
 
@@ -117,28 +122,28 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
 
         if (this.settings.RebuildStaleDerivedData)
         {
-            this.LogRebuildRequested(staleEmailCount);
+            this.LogRebuildRequested(stale.EmailCount, stale.AttachmentReadingCount);
 
             return;
         }
 
-        this.LogStaleDerivedData(staleEmailCount);
+        this.LogStaleDerivedData(stale.EmailCount, stale.AttachmentReadingCount);
     }
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Every stored message with derived text was derived under the sensitive-content configuration this deployment runs.")]
+        Message = "Every stored message with derived text, and every reading of an attachment, was derived under the sensitive-content configuration this deployment runs.")]
     private partial void LogNothingStale();
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{StaleEmailCount} stored messages have derived text — extracted text, passages, and any vectors built from them — written under an older sensitive-content configuration, or before any scanner was switched on. Those copies are not redacted to what this deployment now scans for, and switching a scanner on does not change them. Set 'SensitiveContent:RebuildStaleDerivedData' to true to have the extraction backfill re-derive them from the stored raw MIME; that costs one pass over every stored message and, where an embedding profile is active, a re-embedding of every passage whose text changed.")]
-    private partial void LogStaleDerivedData(int staleEmailCount);
+        Message = "{StaleEmailCount} stored messages have derived text — extracted text, passages, and any vectors built from them — written under an older sensitive-content configuration, or before any scanner was switched on, and {StaleAttachmentReadingCount} readings of an attachment were taken under one. Those copies are not redacted to what this deployment now scans for, and switching a scanner on does not change them. Set 'SensitiveContent:RebuildStaleDerivedData' to true to have the extraction backfill re-derive them from the stored raw MIME; that costs one pass over every stored message, a re-reading of every attachment whose words it discards, and, where an embedding profile is active, a re-embedding of every passage whose text changed.")]
+    private partial void LogStaleDerivedData(int staleEmailCount, int staleAttachmentReadingCount);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "{StaleEmailCount} stored messages carry derived text written under an older sensitive-content configuration, and 'SensitiveContent:RebuildStaleDerivedData' is set, so the extraction backfill re-derives them. It performs none while 'MailExtractionBackfill:Enabled' is off.")]
-    private partial void LogRebuildRequested(int staleEmailCount);
+        Message = "{StaleEmailCount} stored messages carry derived text written under an older sensitive-content configuration and {StaleAttachmentReadingCount} readings of an attachment were taken under one, and 'SensitiveContent:RebuildStaleDerivedData' is set, so the extraction backfill re-derives the messages and hands the attachments back to the account run's attachment stage. It performs none while 'MailExtractionBackfill:Enabled' is off.")]
+    private partial void LogRebuildRequested(int staleEmailCount, int staleAttachmentReadingCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

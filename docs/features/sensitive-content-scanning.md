@@ -377,12 +377,18 @@ is rarely the length of what it replaced, so each page boundary is carried acros
 before it applied, and only a boundary pointing into text the analyzed ceiling dropped is left out rather than published
 pointing at the wrong place.
 
-**A rebuild does not reach what an attachment yielded.** The startup report and
-`SensitiveContent:RebuildStaleDerivedData` below both read the stamp on a message's derived search document, so an
-attachment reading is neither counted as stale nor re-derived: `stored_emails.AttachmentTextDerivedAt` stays set, and
-text read under an older posture stays as it was written. An owner who switches a scanner on after their attachments
-were read therefore rebuilds the body alone, and re-reading the attachments waits on
-[#1695](https://github.com/Krzysztof318/MailFathom/issues/1695).
+**A reading of an attachment carries a stamp of its own, and the rebuild reaches it.** The body and the attachments are
+read by different stages, so a posture republished between the two leaves one of them current and the other not —
+which is why the startup report and `SensitiveContent:RebuildStaleDerivedData` below judge each row against its own
+stamp rather than reading the message's search document for both. What a rebuild does to an attachment is discard it
+rather than re-read it: the stored words go, the passages cut from them go with them and the vectors built from those
+passages cascade away, `stored_emails.AttachmentTextDerivedAt` is taken off, and the message is back in front of the
+account run's attachment stage, which reads it again under that run's own octet budget, its own format list, and
+whichever image provider the deployment still has configured. Until that stage reaches it the message is findable on
+its own words and not on its attachments', which is the fail-closed half of the same rule the rest of this page
+follows — the passages are the copy a search actually returns, so leaving them would keep exactly what the discard was
+for. A reading whose stamp is already current is left exactly as it is, along with its passages, so a rebuild over a
+mailbox nothing changed for reads no file, calls no provider, and re-embeds nothing.
 
 **Only derived mail text goes through it** — a body and an attachment's words. A subject, a display name, an address, a
 folder alias, and a thread identity are routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
@@ -433,35 +439,45 @@ stored derived text is never edited in place.** The way back is a rebuild, and t
 raw MIME byte-exact — an in-place edit of derived text would leave a chunk whose vector was built from something else,
 with nothing recording which half was which.
 
-So the deployment says so instead. At startup, a deployment where any owner has a scanner on counts the messages whose
-derived text was written under something other than **their own owner's** configuration, and reports that count on its
-own log. A row is stale against the stamp of the person who holds it and against no other, so a mailbox is never called
-stale because somebody else's posture happens to differ from what it was written under:
+So the deployment says so instead. At startup, a deployment where any owner has a scanner on counts what was written
+under something other than **its own owner's** configuration, and reports that on its own log as two figures: the
+messages whose derived body text is stale, and the readings of an attachment that are. They are reported side by side
+rather than added, because they cost different things to repair and neither contains the other — a message is
+re-derived from stored raw MIME, and a reading is taken again by a stage that re-parses a file and may call a
+provider. A row is stale against the stamp of the person who holds it and against no other, so a mailbox is never
+called stale because somebody else's posture happens to differ from what it was written under:
 
-- **A warning** when the count is above zero and no rebuild was asked for, naming `SensitiveContent:RebuildStaleDerivedData`
+- **A warning** when either figure is above zero and no rebuild was asked for, naming `SensitiveContent:RebuildStaleDerivedData`
   as what re-derives them. It is a warning rather than a refusal, because derived text written before a switch is a
   state to act on rather than a misconfiguration, and refusing to start over it would take the deployment down for
   something switching the scanner on had already improved.
-- **An informational line** when the rebuild is already switched on, saying the extraction backfill will re-derive them
-  and that it performs none while `MailExtractionBackfill:Enabled` is off.
-- **An informational line** when nothing is stale, because silence would otherwise read as a figure nobody looked up.
+- **An informational line** when the rebuild is already switched on, saying the extraction backfill will re-derive the
+  messages and hand the attachments back to the account run's attachment stage, and that it performs none while
+  `MailExtractionBackfill:Enabled` is off.
+- **An informational line** when both figures are zero, because silence would otherwise read as a figure nobody looked
+  up.
 
-The count is a count and nothing else — no subject, no address, no identity — like every other line this deployment
-writes. A database that cannot answer it is reported as unavailable and the host starts anyway: the report decides
-nothing, and a failed count is a worse reason to refuse a start than the stale rows it was counting.
+Each is a count and nothing else — no subject, no address, no file name, no identity — like every other line this
+deployment writes. A database that cannot answer them is reported as unavailable and the host starts anyway: the report
+decides nothing, and a failed count is a worse reason to refuse a start than the stale rows it was counting.
 
 The rebuild is opt-in, off by default, and asked for with
 [`SensitiveContent:RebuildStaleDerivedData`](../operations/configuration-ai.md#sensitivecontent). Switched on,
-the extraction backfill stops selecting only messages that never had text and selects every message whose stamp is not
-the current one, walking them at its configured batch size and interval; its cursor is scoped to the stamp, so a switch
-flipped after a walk finished restarts that walk instead of resuming past the rows it must revisit.
+the extraction backfill stops selecting only messages that never had text and selects every message whose body stamp or
+whose attachment readings are not the current one, walking them at its configured batch size and interval; its cursor is
+scoped to the stamp, so a switch flipped after a walk finished restarts that walk instead of resuming past the rows it
+must revisit.
 
 **What it costs is one full re-derivation of the mailbox.** Every selected message is read out of content storage,
 extracted again, scanned, re-chunked, and re-embedded — so it is the same spend as first indexing that mailbox: the
 stored text, the passages, and the vectors are all replaced, and on a deployment with a hosted embedding endpoint the
-embeddings are **billed again**, per message, at that provider's rate. It is off by default for exactly that reason.
-Nothing triggers it automatically: switching a scanner on protects what is derived from that moment onward, and spending
-a mailbox's worth of embedding credit is the operator's decision rather than a side effect of a protection switch.
+embeddings are **billed again**, per message, at that provider's rate. Where a message's attachments were read under an
+older posture it costs their reading again as well, on the account run rather than on the walk: each document is parsed
+a second time, and where an image description was stored and the deployment still has a chat provider configured, that
+picture is described a second time and **billed again** at that provider's rate. It is off by default for exactly that
+reason. Nothing triggers it automatically: switching a scanner on protects what is derived from that moment onward, and
+spending a mailbox's worth of embedding and vision credit is the operator's decision rather than a side effect of a
+protection switch.
 
 With nothing switched on for anybody nothing here runs at all: no detector is constructed, no text is scanned on the way
 to storage, and no stamp is written — a derived row on such a deployment is byte-identical to one written before this
