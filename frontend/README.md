@@ -332,7 +332,13 @@ produces, and the requests the page actually issued. It needs a browser of its o
 `pnpm exec playwright install chromium` — which is why neither verification gate runs it and the pipeline does, on every
 pull request that reaches this stack. Its configuration is `playwright.config.ts` and its specs are under `tests/`.
 
-[`tests/AGENTS.md`](tests/AGENTS.md) is where both suites' policy is decided, including which check belongs to which.
+`tests/fixtures/` beside them is one corpus of example mail — the session, the accounts and folders, the mail, the
+conversations, the drafts, the notifications, and what a change answers with — imported by whatever needs a populated
+screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite reaches
+it with `page.route`, and a unit test would hand it to a transport function.
+
+[`tests/AGENTS.md`](tests/AGENTS.md) is where both suites' policy is decided, including which check belongs to which,
+and where the corpus's own rules are.
 
 ## Whitespace is decided in `.editorconfig`
 

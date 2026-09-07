@@ -184,7 +184,10 @@ real browser, which is what answers the questions jsdom structurally cannot — 
 a document with a history, and the requests a page actually issued; it belongs to neither package, imports neither, and
 therefore does live under `frontend/tests/`, beside the contract governing both.
 [`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) is that
-contract.
+contract. `frontend/tests/fixtures/` beside them is the third thing in that directory and belongs to neither package
+either: one corpus of invented example mail, exported as values, which whatever needs a populated screen imports rather
+than writing out again — the browser suite reaches it with Playwright's own routing, and a unit test would hand it to a
+transport function.
 
 What the workspace builds is a directory of static files under `frontend/src/Client.App/dist/` and nothing else, so no
 Node process joins any deployment shape.

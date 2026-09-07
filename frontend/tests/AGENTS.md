@@ -19,9 +19,10 @@ question is answered again rather than reworded.
   could reach one only through a relative path out of the package, which is the one thing that boundary exists to
   refuse. A test inside the package inherits it instead: a `Client.Backend` test cannot import React, exactly as its
   source cannot, and nothing has to check that it did not.
-- `frontend/tests/` therefore holds this file and the browser suite beside it, and nothing else. A unit test written
-  here would resolve neither package, which is the whole of the argument above; the browser suite is what can live here
-  precisely because it imports neither — it drives a built bundle over HTTP rather than importing a module out of one.
+- `frontend/tests/` therefore holds this file, the browser suite beside it, and [the corpus](#the-corpus) both suites
+  read — and nothing else. A unit test written here would resolve neither package, which is the whole of the argument
+  above; the browser suite is what can live here precisely because it imports neither — it drives a built bundle over
+  HTTP rather than importing a module out of one, and the corpus is data rather than a test.
 - **The two suites are told apart by the name.** A unit test is `*.test.ts` or `*.test.tsx` beside its source; a browser
   spec is `*.spec.ts` under this directory. Each runner's default finds its own and neither finds the other's, so a file
   named for the wrong one silently joins the wrong suite — and a browser spec run by Vitest would fail on an import
@@ -102,6 +103,39 @@ question is answered again rather than reworded.
   was handed.
 - No mock service worker, no request-interception package, and no local HTTP server. A real exchange belongs to the
   browser suite below.
+- **What is faked is the boundary; what travels over it is [the corpus](#the-corpus).** The section below is where the
+  example mail itself is decided, and the two rules do not overlap: this one says nothing may stand between the client
+  and its transport, and that one says the values handed to whatever does stand there are written once.
+
+## The corpus
+
+`fixtures/` is one corpus of example mail, and it is what every client check reads. It exists because the same shapes
+were being invented in three places at once — the browser suite, a throwaway spec, and whatever a session wrote before
+it could take a screenshot — and three copies of one corpus is three places to be wrong about a contract the service
+owns. Reaching a populated screen is most of the work in a client task, and it is work that had already been done.
+
+- **It is data, never routing.** It exports values, and every consumer decides how they reach the client: `page.route`
+  in the browser suite, a transport function in a unit test. Nothing in it parses a request, names a route, or knows
+  what a `fetch` is. Where an answer genuinely depends on what was asked for — how far into a folder somebody has read,
+  whether the reader asked for a sender's pictures — it is stated as a function of that question and the consumer
+  decides what was asked; that is still data, and it is the only shape a mailbox of two hundred thousand messages has.
+- **It states what the service answers, not what the client parses.** No file in it imports a type from
+  `@mailfathom/client-backend`. A fixture typed by the parser that reads it would agree with that parser by
+  construction and say nothing about the deployment, which is the one thing a fixture is for.
+- **Every message body carries a `plainText` object.** It is not an alternative representation a sender may have
+  omitted: it is what MailFathom derived, present on every readable body whatever the message carried. A `null` there
+  is refused by `mailBody.ts` before any screen sees it, and what a reader meets instead is the pane saying the message
+  could not be read — which reads as a defect in the client and is a malformed fixture. What the message route's own
+  `body.plainText` says is a different thing, and it is a `boolean`: whether the _message_ carried a text part.
+- **It covers the states a screen has to be looked at in, not only the resting one.** An empty folder, a message whose
+  sender wrote no text part, a conversation long enough that the screen folds it, a mailbox whose synchronization is
+  failing, and a mailbox that is behind are each in it, because none of them can be reached from the resting corpus by
+  scrolling or clicking and each is a screen somebody has to be able to draw.
+- **Nothing in it is anybody's.** Every address, name, subject, and sentence is invented, and the hosts are reserved
+  names — `.invalid` and `.example` — so no fixture can reach a machine that exists. That is the same rule
+  `frontend/AGENTS.md` states about a capture of a signed-in client, read from the other end.
+- **The browser suite is the proof that it is sufficient.** `client.spec.ts` declares no fixture of its own, so a shape
+  the corpus states wrongly fails a committed suite rather than one session's scratch file.
 
 ## A localized screen
 
