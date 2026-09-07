@@ -1343,6 +1343,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     [InlineData("utf-16le")]
     [InlineData("utf-16be")]
     [InlineData("utf-32le")]
+    [InlineData("utf-32be")]
     public async Task ExtractTextAsync_ATextAttachmentOpeningWithAByteOrderMark_DecodesItAndKeepsNoMark(string encoding)
     {
         // Arrange
@@ -1377,6 +1378,51 @@ public sealed class BoundedAttachmentTextExtractorTests
 
         // Assert
         Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
+    /// <summary>
+    /// The compound-file check is a fact about a package and about nothing else. A renamed <c>.doc</c> arriving under a
+    /// text file's name does not decode, so it is malformed; reporting it as locked would name a remedy that does not
+    /// exist, which is what putting a text format back among the packaged ones would do.
+    /// </summary>
+    [Theory]
+    [InlineData("text/plain", "notes.txt")]
+    [InlineData("text/markdown", "notes.md")]
+    [InlineData("text/csv", "ledger.csv")]
+    public async Task ExtractTextAsync_ATextAttachmentThatIsAnOleCompoundFile_ReportsMalformedRatherThanEncrypted(
+        string mediaType,
+        string fileName)
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            mediaType,
+            fileName,
+            DocumentFixtures.EncryptedOfficePackage());
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
+    /// <summary>A file ending in a newline ends in one: this reader inserts no break, so every trailing one is a person's.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_ATextAttachmentEndingInNewlines_KeepsThemRatherThanTrimmingThem()
+    {
+        // Arrange
+        const string Written = "Roof repair invoice\n\n";
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "text/plain",
+            "invoice.txt",
+            Encoding.UTF8.GetBytes(Written));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(Written, result.Text?.Text);
     }
 
     /// <summary>A run of NUL decodes cleanly and is the one shape of binary a strict decoder would otherwise admit.</summary>
@@ -1459,7 +1505,8 @@ public sealed class BoundedAttachmentTextExtractorTests
             "utf-8" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: true),
             "utf-16le" => new UnicodeEncoding(bigEndian: false, byteOrderMark: true),
             "utf-16be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: true),
-            _ => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
+            "utf-32le" => new UTF32Encoding(bigEndian: false, byteOrderMark: true),
+            _ => new UTF32Encoding(bigEndian: true, byteOrderMark: true),
         };
 
         return [.. written.GetPreamble(), .. written.GetBytes(text)];

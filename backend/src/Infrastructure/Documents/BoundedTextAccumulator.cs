@@ -50,7 +50,17 @@ internal sealed class BoundedTextAccumulator(int maxCharacters)
         this.Add("\n");
     }
 
-    /// <summary>Reads back everything gathered.</summary>
+    /// <summary>Reads back everything gathered, less the trailing break this accumulator itself inserted.</summary>
     /// <returns>The gathered text, with no trailing line break.</returns>
-    public string ToText() => this.text.ToString().TrimEnd('\n');
+    /// <remarks>
+    /// For a reader that closes a paragraph or a page with <see cref="EndLine" />, the last of those breaks separates
+    /// the document's text from nothing and is this accumulator's own rather than the document's. A reader that
+    /// gathers characters straight out of a file inserts none, so every trailing break there is one somebody typed and
+    /// <see cref="ToTextAsGathered" /> is what reads it back.
+    /// </remarks>
+    public string ToText() => this.ToTextAsGathered().TrimEnd('\n');
+
+    /// <summary>Reads back everything gathered, exactly as it was added.</summary>
+    /// <returns>The gathered text, including any trailing line break.</returns>
+    public string ToTextAsGathered() => this.text.ToString();
 }

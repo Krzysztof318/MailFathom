@@ -82,7 +82,9 @@ internal sealed class PlainTextAttachmentTextReader(AttachmentTextExtractionOpti
             text.Add(characters);
         }
 
-        var extracted = text.ToText();
+        // Read back as gathered rather than through the trim, which exists for the readers that close a page with
+        // a break of their own: nothing here inserts one, so a file ending in a newline ends in a newline.
+        var extracted = text.ToTextAsGathered();
 
         // One page, matching the answer a word-processing document already gives, so a citation into a text file
         // resolves through the same coordinate scheme as one into any other document.

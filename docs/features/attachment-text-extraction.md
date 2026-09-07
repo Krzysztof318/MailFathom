@@ -68,7 +68,7 @@ page of replacement characters an owner would then be told matched. A NUL is ref
 worth stating separately, because it decodes cleanly: it is the one shape of binary a strict decoder would
 otherwise admit, so a photograph renamed `notes.txt` ends as a stated reason instead of as indexed noise. Nothing
 else about the file is guessed — not its language, not a legacy code page, and not its line-ending convention.
-The container ceilings do not apply to either format, there being no package to inflate, no part to count, and no
+The container ceilings do not apply to any of the three, there being no package to inflate, no part to count, and no
 element tree to descend; `MaxInputOctets`, `MaxExtractedTextCharacters`, and the timeout hold exactly as they do
 everywhere else.
 
