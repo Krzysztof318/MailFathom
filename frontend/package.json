@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @mailfathom/client-app run dev",
+    "dev:fixtures": "pnpm --filter @mailfathom/client-app run dev:fixtures",
     "build": "pnpm --filter @mailfathom/client-app run build",
     "desktop:dev": "jiti src-tauri/run-tauri.ts dev",
     "desktop:build": "jiti src-tauri/run-tauri.ts build",

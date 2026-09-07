@@ -115,7 +115,9 @@ it could take a screenshot — and three copies of one corpus is three places to
 owns. Reaching a populated screen is most of the work in a client task, and it is work that had already been done.
 
 - **It is data, never routing.** It exports values, and every consumer decides how they reach the client: `page.route`
-  in the browser suite, a transport function in a unit test. Nothing in it parses a request, names a route, or knows
+  in the browser suite, a transport function in a unit test, and a second `MailFathomTransport` under the development
+  server — `frontend/README.md` § _Looking at a screen with mail in it_ is that third consumer, and it is why the
+  corpus is read by something that is not a test at all. Nothing in it parses a request, names a route, or knows
   what a `fetch` is. Where an answer genuinely depends on what was asked for — how far into a folder somebody has read,
   whether the reader asked for a sender's pictures — it is stated as a function of that question and the consumer
   decides what was asked; that is still data, and it is the only shape a mailbox of two hundred thousand messages has.

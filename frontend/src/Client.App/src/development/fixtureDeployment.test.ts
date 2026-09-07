@@ -1,0 +1,183 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
+import {
+    fixtureAnswer,
+    fixtureDeployment,
+    fixtureDeploymentDefaults,
+    fixtureDeploymentState,
+    type FixtureDeploymentOptions,
+} from './fixtureDeployment';
+
+const deploymentAddress = 'https://mailfathom.invalid';
+
+function asking(route: string, method: ClientRequest['method'] = 'GET', body?: string): ClientRequest {
+    return {
+        method,
+        path: `${deploymentAddress}/api/client${route}`,
+        headers: { Accept: 'application/json', Authorization: 'Basic b3duZXI6b3BlbiBzZXNhbWU=' },
+        ...(body === undefined ? {} : { body }),
+    };
+}
+
+function answered(
+    route: string,
+    options: Partial<FixtureDeploymentOptions> = {},
+    draw = 1,
+    method: ClientRequest['method'] = 'GET',
+    body?: string,
+): ClientResponse {
+    const answer = fixtureAnswer(
+        asking(route, method, body),
+        { ...fixtureDeploymentDefaults, ...options },
+        draw,
+        fixtureDeploymentState(),
+    );
+
+    if (answer === null) {
+        throw new Error(`The fixture deployment answered nothing for ${route}.`);
+    }
+
+    return answer;
+}
+
+function stated(answer: ClientResponse): Record<string, unknown> {
+    return JSON.parse(answer.body) as Record<string, unknown>;
+}
+
+afterEach(() => {
+    vi.useRealTimers();
+    delete window.mailfathomFixtures;
+});
+
+describe('fixtureAnswer', () => {
+    it('answers the folder a reader is looking at with the page the cursor names', () => {
+        const page = stated(answered('/emails?direction=forward&cursor=200&pageSize=100'));
+
+        expect(page['emails']).toHaveLength(100);
+        expect(page['previousCursor']).toBe('200');
+    });
+
+    it('answers a message with the identity that was asked for rather than the corpus own', () => {
+        const message = stated(answered('/messages/00000000-0000-4000-8000-0000000000c3'));
+
+        expect(message['storedEmailId']).toBe('00000000-0000-4000-8000-0000000000c3');
+    });
+
+    it('challenges as MailFathom where nothing carried a credential, so a password may be typed', () => {
+        const request: ClientRequest = { method: 'GET', path: `${deploymentAddress}/api/client/session`, headers: {} };
+        const answer = fixtureAnswer(request, fixtureDeploymentDefaults, 1, fixtureDeploymentState());
+
+        expect(answer?.status).toBe(401);
+        expect(answer?.headers['www-authenticate']).toContain('realm="MailFathom"');
+    });
+
+    it('reports what it holds rather than what the corpus states once a preference has been written', () => {
+        const state = fixtureDeploymentState();
+        const written = JSON.stringify({ theme: 'dark' });
+
+        fixtureAnswer(asking('/preferences', 'POST', written), fixtureDeploymentDefaults, 1, state);
+
+        const held = fixtureAnswer(asking('/preferences'), fixtureDeploymentDefaults, 1, state);
+
+        expect(held === null ? null : stated(held)['theme']).toBe('dark');
+    });
+
+    it('answers a route the corpus states nothing for as nothing being there', () => {
+        expect(answered('/cases').status).toBe(404);
+    });
+
+    it('answers every collection empty where the options ask for it', () => {
+        const empty = { emptyCollections: true };
+
+        expect(stated(answered('/emails?direction=forward', empty))['emails']).toStrictEqual([]);
+        expect(stated(answered('/emails/search?text=renewal', empty))['results']).toStrictEqual([]);
+        expect(stated(answered('/notifications?pageSize=20', empty))['notifications']).toStrictEqual([]);
+    });
+
+    it('leaves the mailboxes populated where the collections are asked to be empty', () => {
+        expect(stated(answered('/accounts', { emptyCollections: true }))['accounts']).not.toStrictEqual([]);
+    });
+
+    it('refuses every read while the session is expired, so the client asks for the password again', () => {
+        expect(answered('/accounts', { expiredSession: true }).status).toBe(401);
+    });
+
+    it('refuses signing in while the session is expired, which is what makes it a state rather than one refusal', () => {
+        expect(answered('/session', { expiredSession: true }).status).toBe(401);
+    });
+
+    it('fails a request whose drawn value falls under the failure rate', () => {
+        expect(answered('/accounts', { failureRate: 0.5 }, 0.49).status).toBe(503);
+    });
+
+    it('answers a request whose drawn value does not fall under the failure rate', () => {
+        expect(answered('/accounts', { failureRate: 0.5 }, 0.5).status).toBe(200);
+    });
+
+    it('answers nothing at all while the deployment is unreachable', () => {
+        const answer = fixtureAnswer(
+            asking('/accounts'),
+            { ...fixtureDeploymentDefaults, unreachable: true },
+            1,
+            fixtureDeploymentState(),
+        );
+
+        expect(answer).toBeNull();
+    });
+});
+
+describe('fixtureDeployment', () => {
+    it('publishes the options where they can be changed while the client is running', () => {
+        fixtureDeployment();
+
+        expect(window.mailfathomFixtures).toStrictEqual(fixtureDeploymentDefaults);
+    });
+
+    it('reads the options afresh on every request, so a change takes effect without a reload', async () => {
+        const transport = fixtureDeployment(() => 1)(new AbortController().signal);
+
+        window.mailfathomFixtures = { ...fixtureDeploymentDefaults, expiredSession: true };
+
+        await expect(transport(asking('/accounts'))).resolves.toMatchObject({ status: 401 });
+    });
+
+    it('holds an answer back for as long as the latency asks it to', async () => {
+        vi.useFakeTimers();
+
+        const transport = fixtureDeployment(() => 1)(new AbortController().signal);
+
+        window.mailfathomFixtures = { ...fixtureDeploymentDefaults, latency: 500 };
+
+        const answering = transport(asking('/accounts'));
+        let answeredYet = false;
+
+        void answering.then(() => {
+            answeredYet = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(499);
+        expect(answeredYet).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(answering).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('gives up on a request the screen that started it abandoned', async () => {
+        vi.useFakeTimers();
+
+        const abandoning = new AbortController();
+        const transport = fixtureDeployment(() => 1)(abandoning.signal);
+
+        window.mailfathomFixtures = { ...fixtureDeploymentDefaults, latency: 500 };
+
+        const answering = transport(asking('/accounts'));
+
+        abandoning.abort();
+
+        await expect(answering).rejects.toThrow('abandoned');
+    });
+});

@@ -12,7 +12,7 @@ import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { attachmentExchange, AttachmentExchangeContext } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, uploadAttachment } from './deployment/attachmentUpload';
 import { portraitExchange } from './deployment/portraitExchange';
-import { sendToDeployment } from './deployment/sendToDeployment';
+import { sendToDeployment, type DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
@@ -73,6 +73,7 @@ async function open(root: HTMLElement): Promise<void> {
     const adopted = deployment.outcome === 'resolved' ? deployment.adopted : null;
     const credentials = await credentialStore();
     const signedInWith = adopted === null ? null : await credentials.read(adopted.deployment);
+    const send = await transportForThisRun();
 
     // The root is where what the deployment is told about a failed render is composed, which is why the boundaries
     // below report nothing themselves: one more region is one more boundary rather than one more reporter. React
@@ -113,7 +114,7 @@ async function open(root: HTMLElement): Promise<void> {
                                                         deployment={deployment}
                                                         openSignals={openSignalChannel}
                                                         portraits={portraitExchange}
-                                                        send={sendToDeployment}
+                                                        send={send}
                                                         signalSchedule={browserSchedule}
                                                         signedInWith={signedInWith}
                                                     />
@@ -129,4 +130,23 @@ async function open(root: HTMLElement): Promise<void> {
             </LocalizationProvider>
         </StrictMode>,
     );
+}
+
+/**
+ * How this run reaches its deployment: over the wire, or out of the fixture corpus where a development run asked for it.
+ *
+ * `pnpm dev:fixtures` is the whole of the ask — it runs Vite in a mode of its own, and nothing else in the workspace
+ * uses that mode — so `pnpm dev` against a service somebody is running is unchanged, and so is every other way this
+ * client is served. Both halves of the condition are constants a production build substitutes, so the branch folds
+ * away and the dynamic import behind it is never emitted: example mail has no business in a bundle a deployment
+ * publishes, and the browser suite asserts that rather than assuming it.
+ */
+async function transportForThisRun(): Promise<DeploymentTransport> {
+    if (!import.meta.env.DEV || import.meta.env.MODE !== 'fixtures') {
+        return sendToDeployment;
+    }
+
+    const { fixtureDeployment } = await import('./development/fixtureDeployment');
+
+    return fixtureDeployment();
 }

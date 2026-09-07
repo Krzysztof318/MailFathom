@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:fixtures": "vite --mode fixtures",
     "build": "vite build"
   },
   "dependencies": {
