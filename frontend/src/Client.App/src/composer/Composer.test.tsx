@@ -399,6 +399,22 @@ describe('Composer, a message of its own', () => {
         expect(await screen.findByText(said)).toBeDefined();
     });
 
+    // A send writes the draft before it posts it, and the deployment screens the draft book by the same rules, so the
+    // refusal a send meets is the one the write answered — never the send's own request. Worded as a save's, it would
+    // tell somebody who pressed Send that the message was not filed, and never that it was not sent.
+    it('says a send refused at the write it performs first in the words of a send', async () => {
+        drawComposer({ kind: 'new' }, { save: { status: 409, body: JSON.stringify({ errorCode: 59_003 }) } });
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        expect(
+            await screen.findByText(
+                'One of the attached files could not be read, so nothing screened what would have gone out with it and the message was not sent. Try again in case the read ran out of time; if it is refused again, sending without that file, or attaching it in a form that can be read, is what would change that.',
+            ),
+        ).toBeDefined();
+    });
+
     it('says what is kept while the machine is offline rather than offering a send that cannot happen', () => {
         drawComposer({ kind: 'new' }, {}, [work], false);
 

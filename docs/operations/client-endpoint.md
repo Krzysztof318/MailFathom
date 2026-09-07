@@ -1547,6 +1547,13 @@ what the author already wrote, so no rewriting of the request would help; `503` 
 the only one worth retrying, and means the message was neither refused nor sent because what would have judged it could
 not be reached. Nothing on any of these routes reaches a log, a span attribute, or a telemetry event.
 
+**A save and a revision are screened by the same rules and answer the same way.** The draft book is judged by the
+screening the outbox is judged by, so writing a message down can be refused for what it carries exactly as sending it
+can: `409` with the same error codes where a rule refused what the author wrote, and `503` where what would have judged
+it could not be reached. What the recipient policy and the spending ceilings refuse is the send's alone — a message
+merely written down goes to nobody and costs nothing. A client that reads every non-`200` on those two routes as an
+outage tells an author their deployment did not answer when it answered precisely.
+
 **Nothing has been transmitted when a send answers.** The message is queued, and the outbox routes below are where a
 client watches what becomes of it.
 

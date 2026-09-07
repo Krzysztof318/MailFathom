@@ -374,15 +374,15 @@ export const pl: Catalogue = {
     'compose.refusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie wychodzi, dopóki nie odpowie. Wiadomość nadal tu jest.',
     'compose.saveRefusedContent':
-        'Kontrola treści odrzuciła to, co niesie ta wiadomość, więc nie została zapisana. Zmiana tego, co mówi, albo tego, co załącza, jest tym, co to zmieni. Nic z tego, co napisałeś, nie zginęło.',
+        'Kontrola treści odrzuciła to, co niesie ta wiadomość, więc nie została zapisana. Zmiana tego, co mówi, albo tego, co załącza, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.saveRefusedNotScanned':
-        'Części tej wiadomości nie dało się sprawdzić, więc nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni. Nic z tego, co napisałeś, nie zginęło.',
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.saveRefusedAttachmentNotRead':
         'Jednego z załączonych plików nie dało się odczytać, więc nic nie sprawdziło tego, co miało zostać z nim zapisane, i wiadomość nie została zapisana. Spróbuj jeszcze raz — odczyt mógł przekroczyć czas; jeśli zostanie odrzucona ponownie, zapisanie bez tego pliku albo załączenie go w postaci, którą da się odczytać, jest tym, co to zmieni.',
     'compose.saveRefusedScreeningUnavailable':
         'Kontrola treści nie odpowiada, więc nic nie jest zapisywane, dopóki nie odpowie. Wiadomość nadal tu jest.',
     'compose.saveRefusedForAnotherReason':
-        'Twoje wdrożenie odmówiło zapisania jej. Osoba, która je prowadzi, może powiedzieć dlaczego z jego dziennika. Nic z tego, co napisałeś, nie zginęło.',
+        'Twoje wdrożenie odmówiło zapisania jej. Osoba, która je prowadzi, może powiedzieć dlaczego z jego dziennika. Nic z tego, co zostało napisane, nie zginęło.',
     'compose.refusedForAnotherReason':
         'Twoje wdrożenie odmówiło wysłania. Osoba prowadząca wdrożenie odczyta powód z jego dziennika.',
     'compose.failedUnauthenticated':

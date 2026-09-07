@@ -91,10 +91,12 @@ export type MailAttachmentRefusal =
 /**
  * The refusal an HTTP status stands for, for a status this package did not expect to succeed.
  *
- * `409` is its own answer rather than `unavailable` because it is the one refusal here that is permanent and about the
- * file: a deployment that screens what it serves has read this document and will not serve it, so a reader offered a
- * retry would be offered one that cannot succeed. Nothing about why is on the wire and nothing is read off the body —
- * the deployment deliberately says only that it screened the file.
+ * `409` is its own answer rather than `unavailable` because it is a decision this deployment took about the file
+ * rather than an outage: what screens what it serves was reached and answered. Two of the four things behind that
+ * answer are transient all the same — a read that ran past the extraction timeout, and a scanner that could not be
+ * reached — so a way to ask again belongs on the screen, and a second attempt may well be served. Nothing about which
+ * of the four it was is on the wire and nothing is read off the body: the deployment deliberately says only that it
+ * screened the file.
  */
 export function attachmentRefusalForStatus(status: number): MailAttachmentRefusal {
     switch (status) {
