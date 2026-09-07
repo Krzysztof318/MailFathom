@@ -14,6 +14,7 @@ import type {
     SignalStreamSchedule,
 } from '@mailfathom/client-backend';
 import { App } from './App';
+import { Containment } from './containment/Containment';
 import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { AttachmentExchangeContext, type AttachmentExchange } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, type AttachmentUpload } from './deployment/attachmentUpload';
@@ -478,11 +479,16 @@ export function wasConfiguredWith(baseAddress: string, clearTextPermitted: boole
 /** Nothing at all: no configuration, nothing stored, and nothing that served the client from a deployment. */
 export const nothingAdopted: ClientDeployment = { outcome: 'resolved', adopted: null, clearTextPermitted: null };
 
-// The application is mounted the way `main.tsx` mounts it, `StrictMode` and all five providers included. Nothing below
-// the frame may decide the language, the theme, what the person is carrying, or how a followed link leaves the
-// application, so a test that supplied fewer would be proving a second arrangement — and the mode is half of that
-// arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between a
-// screen that behaves and one that behaves the first time.
+// The application is mounted the way `main.tsx` mounts it: the same nesting in the same order, `StrictMode` and all
+// five providers included, and the application's own last-resort boundary standing inside everything that outlives a
+// screen. Nothing below the frame may decide the language, the theme, what the person is carrying, or how a followed
+// link leaves the application, so a test that supplied fewer would be proving a second arrangement — and the mode is
+// half of that arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference
+// between a screen that behaves and one that behaves the first time. The boundary is part of it for the same reason
+// and one more: a render failure the application would contain and report is one this family would otherwise meet
+// uncaught, so the wiring at the application root would be the one thing ninety-odd whole-application mounts never
+// touch. What differs from `main.tsx` is what it resolves at the edge — a deployment, a credential store, and the
+// shell operations — each of which arrives here as a double rather than as a question about the machine.
 // The portrait is the one read this frame makes that does not go through a transport, octets not being text. Nothing
 // here is about a picture, so the exchange answers that there is none and refuses both writes as unreachable.
 const drawsNobody: PortraitExchange = {
@@ -511,31 +517,33 @@ export function renderApp(
     render(
         <StrictMode>
             <LocalizationProvider>
-                <ThemeProvider>
-                    <ToastsProvider>
+                <ToastsProvider>
+                    <ThemeProvider>
                         <WorkspaceProvider>
                             <LinkOpenerContext value={() => Promise.resolve()}>
                                 <SystemNotifierContext value={raisesNothing}>
                                     <AttachmentExchangeContext value={deliversNothing}>
                                         <AttachmentUploadContext value={uploadsNothing}>
                                             <TelemetryContext value={telemetry}>
-                                                <App
-                                                    credentials={credentials}
-                                                    deployment={deployment}
-                                                    openSignals={noSignalChannel}
-                                                    portraits={drawsNobody}
-                                                    send={send}
-                                                    signalSchedule={neverReopens}
-                                                    signedInWith={signedInWith}
-                                                />
+                                                <Containment region="application">
+                                                    <App
+                                                        credentials={credentials}
+                                                        deployment={deployment}
+                                                        openSignals={noSignalChannel}
+                                                        portraits={drawsNobody}
+                                                        send={send}
+                                                        signalSchedule={neverReopens}
+                                                        signedInWith={signedInWith}
+                                                    />
+                                                </Containment>
                                             </TelemetryContext>
                                         </AttachmentUploadContext>
                                     </AttachmentExchangeContext>
                                 </SystemNotifierContext>
                             </LinkOpenerContext>
                         </WorkspaceProvider>
-                    </ToastsProvider>
-                </ThemeProvider>
+                    </ThemeProvider>
+                </ToastsProvider>
             </LocalizationProvider>
         </StrictMode>,
     );
@@ -642,8 +650,6 @@ export function resetsBetweenTests(): void {
         vi.restoreAllMocks();
         openingAt('/');
         asked.length = 0;
-        window.localStorage.clear();
-        window.sessionStorage.clear();
         document.documentElement.removeAttribute('lang');
         document.documentElement.removeAttribute('data-theme');
     });

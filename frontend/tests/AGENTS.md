@@ -318,10 +318,11 @@ summary goes to the terminal, where a verification gate and a CI job both print 
 `artifacts/coverage/client/` at the repository root, which `.gitignore` covers along with everything else written there.
 
 **What is measured is both packages' `src/`, whether or not a test imported it.** A module nobody covers is the one the
-number exists to show, so it sits at zero in the report instead of being absent from it. Two things are left out and
-neither is a gap: a declaration file states types and runs nothing, and `main.tsx` mounts React into the document and
-decides nothing — the client's counterpart to `Host` and `AppHost`, which the service excludes for the same reason.
-Vitest drops this suite's own test files.
+number exists to show, so it sits at zero in the report instead of being absent from it. Three things are left out and
+none of them is a gap: a declaration file states types and runs nothing, `main.tsx` mounts React into the document and
+decides nothing — the client's counterpart to `Host` and `AppHost`, which the service excludes for the same reason —
+and a `<Subject>.harness.tsx` module is the arrangement a family of test files shares, which runs only under a test and
+asserts nothing itself. Vitest drops this suite's own test files.
 
 **Nothing gates on the figure, in either verification script or any workflow**, and the value that would be easiest to
 add is the one deliberately absent: a threshold. The service enforces 85% and `docs/operations/agent-workflow.md`
