@@ -24,9 +24,11 @@ import { useLocalization } from '../localization/useLocalization';
 import { MessageMarkupFrame } from '../messageBody/MessageMarkupFrame';
 
 // The second surface ADR 0024 takes: what the sender actually sent, drawn away from the reading pane for the reader
-// whose message reduced badly. It is a surface rather than a dialog — the content area where a message is read, or a
-// tab of its own where somebody works in tabs — and what it composes is the head the design project draws, the frame
-// beneath it, and the footer that says what is actually holding each promise.
+// whose message reduced badly. **It composes what stands in it and never where it stands** — the head the design
+// project draws, the frame beneath it, and the footer that says what is actually holding each promise. Where it is
+// drawn is the composition root's: a tab of its own where somebody works in tabs, and `mailSpace/SurfaceWindow.tsx`
+// over the message where they do not. So nothing here opens, closes, or traps anything; what it is handed is the way
+// out of wherever it was put, and it calls that.
 //
 // **The footer states two guarantees and attributes each to what holds it**, per #1483. The frame is what stops the
 // markup running. The representation is what stops it reporting: no sandboxing flag governs what a framed document
@@ -84,7 +86,7 @@ export function FullHtmlSurface({
     /** Whether this machine has a network, which is a different thing from the deployment refusing to answer. */
     readonly online: boolean;
 
-    /** Leaves the surface, which returns to whatever the reading column was drawing before it. */
+    /** Leaves the surface, which returns to the message it was opened from however this one was put on the screen. */
     readonly onClose: () => void;
 }) {
     const { locale, translate } = useLocalization();

@@ -504,7 +504,9 @@ request. A row that ever stops being one height is the argument for reopening th
 degrading quietly.
 
 `src/fullHtml/` is the second surface [ADR 0024](../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
-takes, and it stands in front of the message the same way a conversation does. What the reading pane draws is a closed
+takes, and where somebody works in tabs it opens as a tab of its own. Where they do not it is drawn in a window over
+the message — `mailSpace/SurfaceWindow.tsx`, the platform's own modal dialog, so the message they were reading is still
+where they left it when the window goes. What the reading pane draws is a closed
 document tree; what this draws is the markup the sender actually wrote, and two different mechanisms are what make that
 safe rather than one. The frame it is drawn in carries a `sandbox` attribute naming neither `allow-scripts` nor
 `allow-same-origin`, so nothing in the markup runs whatever the markup holds; and what is drawn in it is the
@@ -521,7 +523,8 @@ letting a call site suppress the rule.
 
 A file a message carries opens on a third surface, in the same place and by the same rule: `readingPane/Attachment.tsx`
 is the row that describes it, and `readingPane/AttachmentView.tsx` is what a press on it opens — a tab of its own where
-somebody works in tabs, and standing in front of the message where they do not. Opening and downloading are two controls
+somebody works in tabs, and the same window over the message where they do not, drawn at the size the design project
+gives a file rather than markup. Opening and downloading are two controls
 on that row rather than one, because they are two acts: the chip opens the file inside the client and the control at its
 end writes it to the person's machine, so looking at something never costs a trip to a downloads folder. It reads the one route the download
 already used, `/api/client/messages/{storedEmailId}/attachments/{position}`, under the size the message declared, so

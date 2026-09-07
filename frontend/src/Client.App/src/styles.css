@@ -188,6 +188,12 @@
     --radius-3xl: 0.875rem;
     --radius-4xl: 1.125rem;
 
+    /* The one corner outside that ladder, and it belongs to two surfaces: the window a message's own markup and an
+       opened file stand in over the message. The design project cuts both at a corner of its own rather than at the
+       one it gives a card, so the value is named here for the surfaces that read it instead of being rounded onto the
+       nearest rung — a rung the ladder does not have. */
+    --radius-window: 0.8125rem;
+
     /* The three widths the shell is composed at, and they are the design project's own numbers rather than three
        roundings of one idea. The project's prototype asks exactly these three questions of the width it was given, and
        the client asks them under these names — so the four compositions the project frames fall out of the same
@@ -267,6 +273,17 @@
        Below the workspace breakpoint neither is read, because the surface is the screen. */
     --spacing-settings: 28.75rem;
     --spacing-settings-card: min(78vh, 37.5rem);
+
+    /* The two windows that stand over the message where somebody does not work in tabs — the sender's own markup and an
+       opened file — in the composition where each is a window rather than the whole screen. Each is a width and a
+       height the design project draws it at, and each stops short of the viewport by the room the project leaves around
+       it, so the window never runs to the edge of the screen it is centred on. The two are separate names rather than
+       one because the project draws them at two sizes; below the pane breakpoint neither is read, the surface being the
+       screen there. */
+    --spacing-markup-window: min(62.5rem, calc(100% - 3.25rem));
+    --spacing-markup-window-tall: min(90vh, calc(100% - 3.25rem));
+    --spacing-file-window: min(58.75rem, calc(100% - 3.5rem));
+    --spacing-file-window-tall: min(88vh, calc(100% - 3.5rem));
 
     /* The share of the sign-in screen its brand column takes above the split breakpoint, which the design draws as a
        proportion of the window rather than as a width — so the column and the form beside it keep their ratio at
