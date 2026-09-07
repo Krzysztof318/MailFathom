@@ -4,6 +4,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
+import * as changes from '../../../../tests/fixtures/changes';
+import * as deployment from '../../../../tests/fixtures/deployment';
+import * as drafts from '../../../../tests/fixtures/drafts';
+import * as mail from '../../../../tests/fixtures/mail';
+import * as messages from '../../../../tests/fixtures/messages';
+import * as notifications from '../../../../tests/fixtures/notifications';
 import {
     fixtureAnswer,
     fixtureDeployment,
@@ -44,9 +50,32 @@ function answered(
     return answer;
 }
 
+function posted(route: string): ClientResponse {
+    return answered(route, {}, 1, 'POST', '{}');
+}
+
 function stated(answer: ClientResponse): Record<string, unknown> {
     return JSON.parse(answer.body) as Record<string, unknown>;
 }
+
+const readRoutes: readonly (readonly [string, unknown])[] = [
+    ['/folders', deployment.troubledFolders],
+    [`/threads/${mail.conversationId}`, mail.conversation],
+    ['/emails/search?text=renewal', mail.searchResults],
+    ['/notifications?pageSize=20', notifications.notificationPage],
+    ['/notifications/unread-count', notifications.unreadNotificationCount],
+    ['/mutations', changes.mutationRecords],
+];
+
+const writtenRoutes: readonly (readonly [string, unknown])[] = [
+    ['/mutations/flags', changes.flagsRecorded],
+    ['/mutations/moves', changes.movesPartlyRecorded],
+    ['/signals/ticket', changes.signalTicket],
+    ['/notifications/read', notifications.everyNotificationMarkedRead],
+    [`/notifications/${notifications.notificationId}/read-state`, notifications.notificationMarkedRead],
+    ['/drafts', drafts.savedDraft],
+    [`/drafts/${drafts.draftId}/send`, drafts.queuedSend],
+];
 
 afterEach(() => {
     vi.useRealTimers();
@@ -88,6 +117,34 @@ describe('fixtureAnswer', () => {
 
     it('answers a route the corpus states nothing for as nothing being there', () => {
         expect(answered('/cases').status).toBe(404);
+    });
+
+    it.each(readRoutes)('answers %s with what the corpus says a deployment holds', (route, held) => {
+        expect(stated(answered(route))).toStrictEqual(held);
+    });
+
+    it.each(writtenRoutes)('answers a write to %s with what the corpus says it becomes', (route, became) => {
+        expect(stated(posted(route))).toStrictEqual(became);
+    });
+
+    it('answers a withdrawn message as the deployment having accepted the withdrawal', () => {
+        expect(stated(posted('/outbox/cancellation'))['outcome']).toBe('Accepted');
+    });
+
+    it('answers a discarded draft with nothing to read', () => {
+        expect(answered(`/drafts/${drafts.draftId}`, {}, 1, 'DELETE').status).toBe(204);
+    });
+
+    it('answers the body of a sender who wrote no text part with what MailFathom derived from the markup', () => {
+        expect(stated(answered(`/messages/${messages.markupOnlyId}/body`))).toStrictEqual(messages.markupOnlyBody);
+    });
+
+    it("carries the sender's own markup into a body only where the reader asked for it", () => {
+        const withheld = stated(answered(`/messages/${messages.newsletterId}/body`));
+        const asked = stated(answered(`/messages/${messages.newsletterId}/body?fullHtml=true`));
+
+        expect(withheld['selfContainedHtml']).toBeNull();
+        expect(asked['selfContainedHtml']).not.toBeNull();
     });
 
     it('answers every collection empty where the options ask for it', () => {
