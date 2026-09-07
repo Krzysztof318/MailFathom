@@ -1127,7 +1127,7 @@ needs a handshake this process terminated, and configuring one here is how it ge
 | `BindAddress` | `0.0.0.0` | The IP address to bind; `::` binds IPv6 |
 | `Port` | `8443` | The TCP port to bind |
 | `MinimumTlsVersion` | `Tls12` | `Tls12` or `Tls13` |
-| `HttpProtocols` | absent — HTTP/1.1 and HTTP/2 | Any of `Http1`, `Http2`, `Http3` |
+| `HttpProtocols` | absent — HTTP/1.1 and HTTP/2 | Any of `Http1`, `Http2`, `Http3`, and never `Http3` on its own |
 | `ServerCertificate` | required | `Bundle`, or `CertificateChain` beside `PrivateKey` |
 
 ### Configuring a profile takes over the host's listeners
@@ -1314,6 +1314,23 @@ needs; install the platform's QUIC support or remove the version rather than hav
 ```
 
 Selecting HTTP/3 does not change the TLS floor for the other versions. QUIC always uses TLS 1.3 of its own accord.
+
+**HTTP/3 is a version a client arrives at rather than one it dials**, which is why it is never configured on its own. A
+client opens a TCP connection, reads the `alt-svc` header Kestrel adds to the answer once HTTP/3 is served, and moves to
+QUIC on a later request; nothing about the QUIC socket is discoverable without that first connection. Naming `Http3`
+with neither `Http1` nor `Http2` beside it therefore binds a listener nothing reaches, and it also removes the version
+the endpoint would have answered on where a firewall or a middlebox drops UDP — which is the fallback the advertisement
+exists to preserve. Startup refuses it:
+
+```text
+McpEndpoint:Https:Endpoints:0:HttpProtocols — 'Http3' is the only version this profile serves, and a client reaches
+HTTP/3 by upgrading from a connection that advertised it rather than by dialling it; name 'Http1' or 'Http2' beside it,
+so the endpoint can be discovered and still answers where QUIC does not get through.
+```
+
+So the serving set for a deployment offering HTTP/3 is `Http1`, `Http2`, and `Http3` together, and the order it is
+written in decides nothing: which version a given exchange uses is settled by ALPN on the TLS connection and by the
+advertisement afterwards, never by the configuration's order.
 
 ### What startup proves before a listener opens
 

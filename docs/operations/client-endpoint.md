@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -2060,6 +2060,71 @@ surfaces': material that is missing, expired, or issued for another domain fails
 than binding a listener that then refuses every connection. The startup record names each profile it loaded and the
 section it was configured under, so `ClientEndpoint:Https` is what an operator reads this endpoint's profiles back
 from; [rotating a server certificate](secret-rotation.md) is what renewing one takes.
+
+### HTTP/3, and what turns it on
+
+A profile serves HTTP/1.1 and HTTP/2, and nothing else unless it says so. `ClientEndpoint:Https:Endpoints:<n>:HttpProtocols`
+is where it says so, and HTTP/3 is opt-in on this surface exactly as it is on the other two —
+[`HttpProtocols`](configuration-endpoints.md#tls-termination--mcpendpointhttpsendpointsn) carries the key and its whole rule, and
+this section is what it means for the surface a browser calls:
+
+```jsonc
+{
+  "ClientEndpoint": {
+    "Transport": "HttpsOnly",
+    "Https": {
+      "Endpoints": [
+        {
+          "Name": "client",
+          "Domain": "mail.example.test",
+          "HttpProtocols": ["Http1", "Http2", "Http3"],
+          "ServerCertificate": { "Bundle": { "Path": "/run/secrets/client-tls.pfx" } }
+        }
+      ]
+    }
+  }
+}
+```
+
+Three things about that set are not a matter of taste. The host has to provide QUIC, and one that cannot fails startup
+rather than serving HTTP/2 under a configuration that named HTTP/3. `Http1` or `Http2` has to stand beside `Http3`,
+because a client reaches HTTP/3 by upgrading from a connection that advertised it and an HTTP/3-only profile is
+therefore a listener nothing discovers — startup refuses that too. And the TLS floor the profile states governs the
+other versions alone: QUIC always uses TLS 1.3, whatever `MinimumTlsVersion` says.
+
+### The client does nothing about it, and that is the whole of its half
+
+**Choosing a version is the browser's, not the application's.** The client puts every request on the wire through one
+`fetch` call, and `fetch` exposes no HTTP version — no request option sets one, no response field reports one, and there
+is nothing a caller could pass. So the client contains no code about HTTP/3, and it is not missing any: the upgrade from
+the first TCP connection, the fallback to HTTP/2 when QUIC does not get through, and the per-origin memory of which
+answered are all the user agent's, and they work for this deployment the moment a profile serves the version.
+
+What that costs is one round trip on a cold origin. The first request a browser makes to a deployment it has never seen
+goes over TCP whatever the endpoint offers, because the `alt-svc` header advertising the QUIC socket travels on the
+answer to it. A deployment that wants the very first connection to be QUIC publishes a DNS `HTTPS` record for the name,
+with `alpn="h3"`; that is a record in the operator's own zone rather than a setting here, and nothing about it changes
+what this endpoint serves.
+
+**The desktop head inherits its platform's answer.** It draws the same bundle in a system WebView, so which versions it
+speaks are that WebView's: WebView2 on Windows is Chromium and does HTTP/3, and WebKitGTK on Linux does not. Neither is
+a posture this deployment configures, and neither changes what a client can reach — a head without HTTP/3 keeps using
+HTTP/2 against the same profile, which is the fallback the older version beside it exists to hold open.
+
+### Which deployment shape serves it
+
+**MailFathom serves HTTP/3 where MailFathom terminates TLS**, which is a host process configured with the profile above
+on a machine providing QUIC. That is the shape this section is written for.
+
+**Every published container shape delegates it**, and this is an arrangement rather than a gap. The image speaks plain
+HTTP and terminates no TLS of its own — [Kubernetes](deployment-kubernetes.md), [Compose](deployment-compose.md), and
+[Quadlet](deployment-quadlet.md) each put a TLS-terminating ingress or reverse proxy in front of it, which is also the
+only place a certificate has to exist. HTTP/3 requires HTTPS, so in those shapes it is the ingress that offers it to a
+browser, configured there beside the certificate an operator already manages. Consistent with that, the image carries no
+QUIC library and no deployment asset here publishes a UDP port: a container asked to serve HTTP/3 itself would fail
+startup on the missing QUIC transport rather than bind a socket nothing could reach. Enabling HTTP/3 at the ingress
+needs nothing from this section, and the client behaves the same way behind it — the ingress advertises, the browser
+upgrades, and MailFathom answers HTTP/1.1 on the hop it was always answering.
 
 ## Serving the client from the deployment
 

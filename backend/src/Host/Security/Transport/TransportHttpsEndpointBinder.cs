@@ -114,8 +114,9 @@ internal static class TransportHttpsEndpointBinder
             authenticationOptions.RemoteCertificateValidationCallback = static (_, _, _, _) => true;
         }
 
-        // Left unset rather than set empty when this listener negotiates nothing over TLS, which is an HTTP/3-only
-        // profile: its versions travel over QUIC, and an empty offer is not the same statement as making none.
+        // Left unset rather than set empty, because an empty offer is not the same statement as making none. Validation
+        // refuses the profile that would reach this with nothing to negotiate — HTTP/3 without an older version beside
+        // it — so what remains here is the binder declining to assert a version list it does not have.
         if (NegotiableProtocols(servedProtocols) is { Count: > 0 } applicationProtocols)
         {
             authenticationOptions.ApplicationProtocols = applicationProtocols;

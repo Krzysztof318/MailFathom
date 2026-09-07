@@ -228,7 +228,7 @@ profile **takes over the host's listeners**: only the profiles' sockets are open
 | `…:BindAddress` | string | `0.0.0.0` | An IP address | restart |
 | `…:Port` | int | `8443` | 1 – 65535 | restart |
 | `…:MinimumTlsVersion` | enum | `Tls12` | `Tls12`, `Tls13` | restart |
-| `…:HttpProtocols` | enum list | `Http1`, `Http2` | `Http1`, `Http2`, `Http3`; selecting `Http3` where the platform provides no QUIC fails startup rather than falling back | restart |
+| `…:HttpProtocols` | enum list | `Http1`, `Http2` | `Http1`, `Http2`, `Http3`; selecting `Http3` where the platform provides no QUIC fails startup rather than falling back, and naming it without `Http1` or `Http2` beside it fails startup because nothing would advertise it | restart |
 | `…:ServerCertificate` | certificate block | — | Required; see below | restart; renewal behind unchanged references — see [secret rotation](secret-rotation.md#renewing-an-mcp-server-certificate) |
 
 A certificate block names either `Bundle` (one PKCS#12 secret block, optionally with a nested `Password`) or the pair
@@ -362,7 +362,7 @@ the MCP endpoint's grants come from, because the client reads the mail an agent 
 | `ClientEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the other endpoints carry, read the same way | restart |
 | `ClientEndpoint:Authentication` | list of methods | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-methods--mcpendpointauthenticationn), with two additions: every `OAuth` block's `Resource` must end in `/api/client`, because that is where these routes answer and what the client appends to find the metadata document; and a client assertion presented here names the audience `urn:mailfathom:client` | restart; material per request |
 | `ClientEndpoint:Cors` | block | every origin | Same shape and rules as [`McpEndpoint:Cors`](#browser-origins--mcpendpointcors), configured separately. The setting a browser-hosted client cannot start without — see [browser origins](client-endpoint.md#browser-origins) | restart |
-| `ClientEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
+| `ClientEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as [`McpEndpoint:Https:Endpoints:<n>`](#tls-termination--mcpendpointhttpsendpointsn), read under the two `Transport` modes that terminate TLS. [HTTP/3 on this surface](client-endpoint.md#http3-and-what-turns-it-on) is what `HttpProtocols` means for a browser | restart; material per handshake |
 | `ClientEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port` | restart |
 | `ClientEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RateLimiting`](#rate-limiting) above; applied whether or not it is written | restart |
 | `ClientEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout) above; applied whether or not it is written | restart |
