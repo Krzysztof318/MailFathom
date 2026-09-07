@@ -292,6 +292,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var readUnderAnOlderPosture = stored.WrittenUnderTheCurrentConfiguration;
 
         await RecordAttachmentReadingAsync(services, readUnderAnOlderPosture, OlderStamp, cancellationToken);
+        var beforeTheRebuild = await ReadAttachmentReadingAsync(services, readUnderAnOlderPosture, cancellationToken);
 
         // Act
         var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
@@ -304,6 +305,8 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         // Assert
         Assert.Contains(readUnderAnOlderPosture, rebuilding);
         Assert.True(counted.AttachmentReadingCount >= 1);
+        Assert.Equal([OlderStamp.Value], beforeTheRebuild.Stamps);
+        Assert.NotEqual(0, beforeTheRebuild.PassageCount);
 
         var afterTheRebuild = await ReadAttachmentReadingAsync(services, readUnderAnOlderPosture, cancellationToken);
 
@@ -324,6 +327,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var current = stored.WrittenUnderAnOlderConfiguration;
 
         await RecordAttachmentReadingAsync(services, current, CurrentStamp, cancellationToken);
+        var beforeTheRebuild = await ReadAttachmentReadingAsync(services, current, cancellationToken);
 
         // Act
         await this.ApplyExtractionAsync(services, binding, current, uid: 3061, "kept", cancellationToken);
@@ -332,56 +336,41 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var afterTheRebuild = await ReadAttachmentReadingAsync(services, current, cancellationToken);
 
         Assert.Equal([CurrentStamp.Value], afterTheRebuild.Stamps);
-        Assert.Equal(1, afterTheRebuild.PassageCount);
+        Assert.NotEqual(0, beforeTheRebuild.PassageCount);
+        Assert.Equal(beforeTheRebuild.PassageCount, afterTheRebuild.PassageCount);
+        Assert.Equal(beforeTheRebuild.ReadAt, afterTheRebuild.ReadAt);
         Assert.NotNull(afterTheRebuild.ReadAt);
     }
 
     /// <summary>Records one attachment reading against a message, as the account run's attachment stage leaves it.</summary>
+    /// <remarks>
+    /// Committed through <see cref="IStoredEmailAttachmentTextStore" /> rather than assembled in the tables, so the
+    /// rebuild is held against the row shape the account run actually writes — the reading, the passages cut from it,
+    /// and the marker that takes the message out of the walk, each written by the code that owns it.
+    /// </remarks>
     private static async Task RecordAttachmentReadingAsync(
         OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         SensitiveContentDerivationStamp stamp,
         CancellationToken cancellationToken)
     {
+        var reading = DerivedAttachmentText.FromExtraction(
+            0,
+            "application/pdf",
+            "contract.pdf",
+            AttachmentTextExtractionResult.Extracted(new ExtractedAttachmentText(
+                SyntheticEmail.BodyTextContaining("contract", wordCount: 120),
+                PageCount: 1,
+                [],
+                [new AttachmentTextSegment(AttachmentTextSegmentKind.Page, 1, Label: null, StartOffset: 0)])));
+
         var commitResult = await services.CommitAsync(
-            async (scope, session, token) =>
-            {
-                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
-                var storedEmail = await dbContext.StoredEmails.SingleAsync(
-                    candidate => candidate.Id == storedEmailId.Value,
-                    token);
-
-                storedEmail.AttachmentCount = 1;
-                storedEmail.AttachmentTextDerivedAt = SyntheticEmail.SentAt;
-
-                dbContext.EmailAttachmentTexts.Add(new EmailAttachmentTextEntity
-                {
-                    StoredEmailId = storedEmail.Id,
-                    StoredEmail = storedEmail,
-                    AttachmentPosition = 0,
-                    Kind = AttachmentTextKind.Document,
-                    DeclaredMediaType = "application/pdf",
-                    Outcome = nameof(AttachmentTextExtractionOutcome.Extracted),
-                    Text = "a contract somebody read",
-                    PageCount = 1,
-                    DerivedAt = SyntheticEmail.SentAt,
-                    SensitiveContentStamp = stamp.Value,
-                });
-
-                // The passage the stage cuts from that reading, which is the copy a search actually returns and which
-                // therefore has to go with the words it was cut from.
-                dbContext.EmailChunks.Add(new EmailChunkEntity
-                {
-                    StoredEmailId = storedEmail.Id,
-                    StoredEmail = storedEmail,
-                    Ordinal = 0,
-                    AttachmentPosition = 0,
-                    StartOffset = 0,
-                    Text = "a contract somebody read",
-                    ContentHash = new string('a', 64),
-                    DerivedAt = SyntheticEmail.SentAt,
-                });
-            },
+            (scope, session, token) => scope.GetRequiredService<IStoredEmailAttachmentTextStore>()
+                .SaveAttachmentTextAsync(
+                    session,
+                    storedEmailId,
+                    new EmailAttachmentTextDerivation([reading], RedactedUnder: stamp),
+                    token),
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);

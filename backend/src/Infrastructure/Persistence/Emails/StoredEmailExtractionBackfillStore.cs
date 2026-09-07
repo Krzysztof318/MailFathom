@@ -196,15 +196,19 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// that stage never comes. Only the passages of the readings that went are removed, so an attachment already read
     /// under the current posture keeps its own and no vector of it is billed again.
     /// </para>
+    /// <para>
+    /// The message's own attachment count is not consulted to skip the statement. The extraction this write is applying
+    /// has just rewritten it from the MIME that was re-parsed, so a message whose files a shorter re-read no longer
+    /// reports would keep its stale readings for good — which is the silent gap the rebuild exists to close. The cost
+    /// of asking anyway is one statement that matches nothing, against a re-parse and a re-embedding.
+    /// </para>
     /// </remarks>
     private async Task DiscardStaleAttachmentReadingsAsync(
         MailFathomDbContext sessionContext,
         StoredEmailEntity storedEmail,
         CancellationToken cancellationToken)
     {
-        // Nothing to discard for a message with no attachments, which is most of a mailbox, and the count is on the row
-        // this write is already holding — so the ordinary message costs no statement at all.
-        if (storedEmail.AttachmentCount == 0 || this.RebuiltTowards.Count == 0)
+        if (this.RebuiltTowards.Count == 0)
         {
             return;
         }
