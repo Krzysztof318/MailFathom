@@ -172,6 +172,10 @@ empty list** for one a derivation settled with nothing to say. That is how a cli
 *nothing to say* without a third field saying which, and both are renderable states rather than failures — a deployment
 with enrichment off draws every row exactly as it did before.
 
+It reaches a conversation's rows the same way, because a message is one shape across that surface and a list row and a
+message inside a conversation are drawn from the same fields. A conversation answering `null` for a message the list
+beside it shows marks for would be stating that no derivation has reached it, which is the one thing that field is for.
+
 ## What is not here
 
 - **Rendering it.** What a row draws, how a mark expands into its evidence, and how a commitment appears on a screen

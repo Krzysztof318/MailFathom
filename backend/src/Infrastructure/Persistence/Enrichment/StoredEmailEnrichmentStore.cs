@@ -176,6 +176,16 @@ internal sealed class StoredEmailEnrichmentStore(
     /// deployment reads no attachment, because it would otherwise hold every message carrying one out of this queue for
     /// ever.
     /// </para>
+    /// <para>
+    /// The search document is required to exist before either of those clauses is read, and that is a third condition
+    /// rather than part of the first. Extraction writes a document for every message it reaches, including one whose
+    /// body it could not read, so an absent document means extraction has not reached the message at all — which the
+    /// backfill walking every message without one shows can go on across runs. Attachment reading asks nothing about
+    /// the document, so such a message can already carry an attachment's passages, and folding the existence test into
+    /// the negation would admit it: the cut would read as finished because the document is missing rather than because
+    /// the body is cut, and the derivation would settle permanently on attachment text for a message whose own words
+    /// arrive on a later run.
+    /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
@@ -191,8 +201,8 @@ internal sealed class StoredEmailEnrichmentStore(
                     && email.MailboxAccountId == mailboxAccountId
                     && email.Chunks.Any()
                     && email.Enrichment == null
-                    && !(email.SearchDocument != null
-                        && email.SearchDocument.BodyText != null
+                    && email.SearchDocument != null
+                    && !(email.SearchDocument.BodyText != null
                         && !email.Chunks.Any(chunk => chunk.AttachmentPosition == null))
                     && !(readsAttachments
                         && email.AttachmentCount > 0

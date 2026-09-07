@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
@@ -42,9 +43,9 @@ namespace MailFathom.Application.Emails.BrowseThread;
 /// </para>
 /// <para>
 /// A page is one of the points mail content leaves this deployment, so where a sensitive-content scanner is switched on
-/// the subject, the sender's display name and the contribution of every message are scanned before the page is returned,
-/// and so is every participant's display name; a scanner that cannot answer refuses the page rather than serving it
-/// unscanned.
+/// the subject, the sender's display name, the contribution and the readings of every message are scanned before the
+/// page is returned, and so is every participant's display name; a scanner that cannot answer refuses the page rather
+/// than serving it unscanned.
 /// </para>
 /// </remarks>
 public sealed class MailThreadBrowser
@@ -52,6 +53,7 @@ public sealed class MailThreadBrowser
     private readonly IEmailThreadReader threadReader;
     private readonly IStoredEmailSummaryReader summaryReader;
     private readonly IStoredEmailPreviewReader previewReader;
+    private readonly IStoredEmailEnrichmentReader enrichmentReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IMailboxReadTelemetry readTelemetry;
@@ -61,6 +63,7 @@ public sealed class MailThreadBrowser
     /// <param name="threadReader">Reads which messages one conversation holds, narrowed to what the caller may see.</param>
     /// <param name="summaryReader">Reads the listing projection of the messages one page names.</param>
     /// <param name="previewReader">Reads the bounded opening of the text of those messages.</param>
+    /// <param name="enrichmentReader">Reads what a derivation concluded about the messages one page names.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the conversation is read across.</param>
     /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
@@ -70,6 +73,7 @@ public sealed class MailThreadBrowser
         IEmailThreadReader threadReader,
         IStoredEmailSummaryReader summaryReader,
         IStoredEmailPreviewReader previewReader,
+        IStoredEmailEnrichmentReader enrichmentReader,
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         IMailboxReadTelemetry readTelemetry,
@@ -78,6 +82,7 @@ public sealed class MailThreadBrowser
         ArgumentNullException.ThrowIfNull(threadReader);
         ArgumentNullException.ThrowIfNull(summaryReader);
         ArgumentNullException.ThrowIfNull(previewReader);
+        ArgumentNullException.ThrowIfNull(enrichmentReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readTelemetry);
@@ -86,6 +91,7 @@ public sealed class MailThreadBrowser
         this.threadReader = threadReader;
         this.summaryReader = summaryReader;
         this.previewReader = previewReader;
+        this.enrichmentReader = enrichmentReader;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
         this.readTelemetry = readTelemetry;
@@ -278,6 +284,7 @@ public sealed class MailThreadBrowser
 
         var summaries = await this.summaryReader.ReadSummariesAsync(identities, cancellationToken);
         var contributions = await this.previewReader.ReadPreviewsAsync(identities, cancellationToken);
+        var enrichments = await this.enrichmentReader.ReadEnrichmentsAsync(identities, cancellationToken);
 
         return
         [
@@ -287,7 +294,8 @@ public sealed class MailThreadBrowser
                     summaries[placed.Email.StoredEmailId],
                     placed.Position,
                     placed.AnsweredStoredEmailId,
-                    ContributionOf(placed.Email.StoredEmailId, contributions))),
+                    ContributionOf(placed.Email.StoredEmailId, contributions),
+                    EnrichmentOf(placed.Email.StoredEmailId, enrichments))),
         ];
     }
 
@@ -296,6 +304,12 @@ public sealed class MailThreadBrowser
         StoredEmailId storedEmailId,
         IReadOnlyDictionary<StoredEmailId, string> contributions) =>
         contributions.TryGetValue(storedEmailId, out var contribution) ? EmailPreview.Bounded(contribution) : null;
+
+    /// <summary>Reads what was derived about one message, which is absent for a message no derivation has reached.</summary>
+    private static EmailEnrichment? EnrichmentOf(
+        StoredEmailId storedEmailId,
+        IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments) =>
+        enrichments.TryGetValue(storedEmailId, out var enrichment) ? enrichment : null;
 
     /// <summary>Scans everything on the page a message's author wrote, and names the participants the list may name.</summary>
     /// <remarks>
@@ -335,6 +349,11 @@ public sealed class MailThreadBrowser
                     SenderDisplayName = await this.GuardedTextAsync(message.Email.SenderDisplayName, cancellationToken),
                 },
                 Contribution = await this.GuardedTextAsync(message.Contribution, cancellationToken),
+                Enrichment = await GuardedEmailEnrichment.ScanAsync(
+                    this.egressGuard,
+                    SensitiveContentEgressPoint.ClientMailListing,
+                    message.Enrichment,
+                    cancellationToken),
             });
         }
 

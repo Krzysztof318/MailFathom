@@ -165,6 +165,33 @@ public sealed class StoredEmailEnrichmentSelectionTests
         Assert.Single(selected);
     }
 
+    /// <summary>
+    /// Extraction has not reached the message at all, which is a different state from having read it and found no body:
+    /// the words of this message arrive on a later run, and a derivation taken now would settle permanently without
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// Reachable because attachment reading asks nothing about the search document, so an attachment can be read and
+    /// cut while extraction is still outstanding — which is exactly what the backfill walking every message without a
+    /// document exists for.
+    /// </remarks>
+    [Fact]
+    public void Selecting_MailExtractionHasNotReachedWhoseAttachmentWasRead_LeavesItOut()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.SearchDocument = null;
+        email.AttachmentCount = 1;
+        email.AttachmentTextDerivedAt = Now;
+        email.Chunks.Add(AttachmentPassage(email, 0));
+
+        // Act
+        var selected = Select(email);
+
+        // Assert
+        Assert.Empty(selected);
+    }
+
     /// <summary>A rule may file the message into a folder mapped differently, and a reading is derived where it settles.</summary>
     [Fact]
     public void Selecting_MailTheRulesHaveNotReachedYet_LeavesItOut()

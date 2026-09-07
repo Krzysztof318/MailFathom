@@ -660,8 +660,11 @@ what bounds a thread here is how threading is assembled rather than how it is se
 
 **`email` is [the mail list route's](#the-mail-list-route) own row, field for field.** A client parses one message shape
 across this surface, and its `preview` is what that message added with the quoted history and the signature block
-trimmed off — which is what keeps the eighth reply from redrawing the seven above it. There is no body here either: the
-whole of a message is a request of its own, named by the `id` that row already carries.
+trimmed off — which is what keeps the eighth reply from redrawing the seven above it. Field for field includes
+`enrichment`, which carries here exactly what it carries on a list row and means exactly the same thing: a message a
+derivation reached shows its marks whichever screen draws it, and a conversation that answered `null` for a message the
+list shows marks for would be stating that no derivation has reached it. There is no body here either: the whole of a
+message is a request of its own, named by the `id` that row already carries.
 
 **`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's
 own order and continues across pages, so a client that has paged twice still knows what it is holding. `answeredId`

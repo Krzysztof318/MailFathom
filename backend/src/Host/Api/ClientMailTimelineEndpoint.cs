@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseTimeline;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Access;
@@ -336,18 +337,24 @@ internal sealed record ClientMailTimelineEntryResponse(
     /// <param name="row">The row the use case read.</param>
     /// <returns>The response body.</returns>
     internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) =>
-        For(row.Email, row.Preview) with { Enrichment = ClientMailEnrichmentResponse.For(row.Enrichment) };
+        For(row.Email, row.Preview, row.Enrichment);
 
     /// <summary>Describes one message for the wire, wherever on this surface a message is drawn.</summary>
     /// <param name="email">The message the use case read.</param>
     /// <param name="preview">The opening of the message's own text, or <see langword="null" /> where nothing has extracted it.</param>
+    /// <param name="enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
     /// <returns>The response body.</returns>
     /// <remarks>
-    /// The pair rather than a reading's own row type, because a message is one shape on this surface: a list row and a
+    /// The three rather than a reading's own row type, because a message is one shape on this surface: a list row and a
     /// message inside a conversation are drawn from the same fields, and a second mapping is how the two would come to
-    /// publish one message two ways.
+    /// publish one message two ways. The derivation is a parameter rather than a default for the same reason — a caller
+    /// that had one and did not pass it would publish <see langword="null" />, which this surface reads as no derivation
+    /// having reached the message rather than as this reading not having asked.
     /// </remarks>
-    internal static ClientMailTimelineEntryResponse For(EmailSummary email, string? preview) => new(
+    internal static ClientMailTimelineEntryResponse For(
+        EmailSummary email,
+        string? preview,
+        EmailEnrichment? enrichment) => new(
         email.StoredEmailId.Value,
         email.AccountId.Value,
         email.FolderAlias.Value,
@@ -365,5 +372,5 @@ internal sealed record ClientMailTimelineEntryResponse(
         email.Attachments.AttachmentCount,
         email.SizeOctets,
         preview,
-        Enrichment: null);
+        ClientMailEnrichmentResponse.For(enrichment));
 }

@@ -335,7 +335,11 @@ public sealed class MailTimelineBrowser
                     SensitiveContentEgressPoint.ClientMailListing,
                     PreviewOf(email, previews),
                     cancellationToken),
-                await this.GuardedEnrichmentAsync(EnrichmentOf(email, enrichments), cancellationToken)));
+                await GuardedEmailEnrichment.ScanAsync(
+                    this.egressGuard,
+                    SensitiveContentEgressPoint.ClientMailListing,
+                    EnrichmentOf(email, enrichments),
+                    cancellationToken)));
         }
 
         scan.Completed();
@@ -352,53 +356,6 @@ public sealed class MailTimelineBrowser
         EmailSummary email,
         IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments) =>
         enrichments.TryGetValue(email.StoredEmailId, out var enrichment) ? enrichment : null;
-
-    /// <summary>Scans the sentences one row's marks carry, leaving everything else about them alone.</summary>
-    /// <remarks>
-    /// A mark's aspect, provenance, date, and evidence are MailFathom's own values and passage identifiers, so nothing
-    /// about them is somebody's mail. What is, is the reading and the reason, and both are scanned exactly as the
-    /// preview beside them is.
-    /// </remarks>
-    private async Task<EmailEnrichment?> GuardedEnrichmentAsync(
-        EmailEnrichment? enrichment,
-        CancellationToken cancellationToken)
-    {
-        if (enrichment is null || enrichment.Marks.Count is 0)
-        {
-            return enrichment;
-        }
-
-        var guarded = new List<EmailEnrichmentMark>(enrichment.Marks.Count);
-
-        foreach (var mark in enrichment.Marks)
-        {
-            var text = await this.egressGuard.GuardAsync(
-                SensitiveContentEgressPoint.ClientMailListing,
-                mark.Text,
-                cancellationToken);
-            var reason = await this.egressGuard.GuardAsync(
-                SensitiveContentEgressPoint.ClientMailListing,
-                mark.Reason,
-                cancellationToken);
-
-            // A mark a scanner withheld entirely is dropped rather than published as an empty sentence. It is the same
-            // decision the scanner already made about the text the mark was derived from, carried one step further.
-            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(reason))
-            {
-                continue;
-            }
-
-            guarded.Add(EmailEnrichmentMark.Create(
-                mark.Aspect,
-                text,
-                reason,
-                mark.Evidence,
-                mark.Provenance,
-                mark.DueAt));
-        }
-
-        return enrichment with { Marks = guarded };
-    }
 
     /// <summary>Validates what the request asked for and restricts the list to the accounts its owner owns.</summary>
     private EmailTimelineFilter SortedList(BrowseTimelineRequest request) => EmailTimelineFilter.Create(
