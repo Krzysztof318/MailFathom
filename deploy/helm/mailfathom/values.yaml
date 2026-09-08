@@ -596,10 +596,11 @@ service:
 # own configuration section enabled it: `/mcp` to `McpEndpoint`, `/api/admin` to `AdminEndpoint`, and `/api/client` to
 # `ClientEndpoint`. Publishing a path whose section is off routes to a listener that answers 404, and enabling a section
 # without publishing its path leaves it reachable only inside the cluster — which is a legitimate posture for the
-# administrative surface and never one for the client, whose caller is somebody's own machine. A browser-hosted client
-# also needs `ClientEndpoint:Cors:AllowedOrigins` to name the origin the page is served from, since the ingress answers
-# no preflight on the application's behalf — unless the page is the one this deployment serves itself, which is same
-# origin and therefore no preflight at all.
+# administrative surface and never one for the client, whose caller is somebody's own machine. Every client but the page
+# this deployment serves itself also needs `ClientEndpoint:Cors:AllowedOrigins` to name the origin it calls from, since
+# the ingress answers no preflight on the application's behalf: a page served elsewhere by its own origin, and a
+# downloaded desktop or Android head by `tauri://localhost` or `http://tauri.localhost`, which its webview enforces
+# exactly as a browser would. The deployment's own page is same origin and therefore no preflight at all.
 #
 # With `client.enabled` on, publish `/` as well: that is where the page is, on the same host it calls.
 ingress:

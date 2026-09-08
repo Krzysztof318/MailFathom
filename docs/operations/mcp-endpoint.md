@@ -989,7 +989,10 @@ agents and command-line tools states it and serves no browser anything.
 
 An origin is a scheme, a host, and a port where the port is not the scheme's default — nothing else. A path, a query, a
 fragment, or user information means a URL was written where an origin belongs and is refused at startup, as is a value
-that is not an origin at all. Entries are normalized to the form a browser sends, so `https://Client.Example.Test:443/`
+that is not an origin at all. Three schemes are accepted, on this endpoint and the other two alike: `http`, `https`, and
+the `tauri` a downloaded MailFathom head is served from — [the origin a downloaded head
+sends](client-endpoint.md#the-origin-a-downloaded-head-sends) is where the last one matters. Anything else is refused
+at startup rather than bound and then never matched. Entries are normalized to the form a browser sends, so `https://Client.Example.Test:443/`
 and `https://client.example.test` are one entry and listing both is refused rather than quietly collapsed.
 
 `*` beside a real origin is refused at startup. It states two policies at once, and guessing would either widen a

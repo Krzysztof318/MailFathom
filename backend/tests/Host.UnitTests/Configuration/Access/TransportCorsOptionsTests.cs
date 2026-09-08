@@ -46,6 +46,25 @@ public sealed class TransportCorsOptionsTests
             policy.AllowedOrigins.Order(StringComparer.Ordinal));
     }
 
+    /// <summary>An operator serving a downloaded head names its custom-protocol origin, which has to validate as an origin rather than as the startup error it used to be.</summary>
+    [Fact]
+    public void ToOriginPolicy_TheOriginOfADownloadedHead_IsAcceptedBesideAPageOrigin()
+    {
+        // Arrange
+        var options = new TransportCorsOptions();
+        options.AllowedOrigins.Add("https://mail.example.test");
+        options.AllowedOrigins.Add("tauri://localhost");
+
+        // Act
+        var policy = options.ToOriginPolicy();
+
+        // Assert
+        Assert.Empty(options.FindConfigurationErrors());
+        Assert.Equal(
+            ["https://mail.example.test", "tauri://localhost"],
+            policy.AllowedOrigins.Order(StringComparer.Ordinal));
+    }
+
     /// <summary>An empty list is the third posture rather than a mistake: no browser is served, and every client that sends no origin still is.</summary>
     [Fact]
     public void ToOriginPolicy_AnEmptyList_ServesNoBrowserAndEveryClientThatSendsNoOrigin()

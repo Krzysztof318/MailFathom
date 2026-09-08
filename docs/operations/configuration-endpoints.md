@@ -210,8 +210,9 @@ expiry, and replay identifier an assertion carries, none of which is a setting �
 | --- | --- | --- | --- | --- |
 | `…:AllowedOrigins` | string list | absent = every origin | `*` for every origin, a list for exactly those, an empty list for none | restart |
 
-The default is deliberately the permissive one — an `Origin` header only exists in browsers, and a native client is
-unaffected — but a deployment reachable from a browser should narrow it.
+The default is deliberately the permissive one — an `Origin` header only exists in browsers, and a client that is not
+one is unaffected — but a deployment reachable from a browser should narrow it. A client rendering in a webview *is* a
+browser here, whatever it was installed as, so narrowing means listing its origin rather than leaving it out.
 [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) explains what the check does and does not
 protect.
 
@@ -361,7 +362,7 @@ the MCP endpoint's grants come from, because the client reads the mail an agent 
 | `ClientEndpoint:Port` | int | `8080` | 1–65535. The other two request-serving endpoints' default as well — see [sharing a socket](#sharing-a-socket) | restart |
 | `ClientEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the other endpoints carry, read the same way | restart |
 | `ClientEndpoint:Authentication` | list of methods | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-methods--mcpendpointauthenticationn), with two additions: every `OAuth` block's `Resource` must end in `/api/client`, because that is where these routes answer and what the client appends to find the metadata document; and a client assertion presented here names the audience `urn:mailfathom:client` | restart; material per request |
-| `ClientEndpoint:Cors` | block | every origin | Same shape and rules as [`McpEndpoint:Cors`](#browser-origins--mcpendpointcors), configured separately. The setting a browser-hosted client cannot start without — see [browser origins](client-endpoint.md#browser-origins) | restart |
+| `ClientEndpoint:Cors` | block | every origin | Same shape and rules as [`McpEndpoint:Cors`](#browser-origins--mcpendpointcors), configured separately. The setting no client but the page this deployment serves itself can start without, a downloaded head included — see [browser origins](client-endpoint.md#browser-origins) and [the origin a downloaded head sends](client-endpoint.md#the-origin-a-downloaded-head-sends) | restart |
 | `ClientEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as [`McpEndpoint:Https:Endpoints:<n>`](#tls-termination--mcpendpointhttpsendpointsn), read under the two `Transport` modes that terminate TLS. [HTTP/3 on this surface](client-endpoint.md#http3-and-what-turns-it-on) is what `HttpProtocols` means for a browser | restart; material per handshake |
 | `ClientEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port` | restart |
 | `ClientEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RateLimiting`](#rate-limiting) above; applied whether or not it is written | restart |

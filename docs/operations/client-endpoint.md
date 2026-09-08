@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -1983,8 +1983,8 @@ must prove, and why the advertised scope list is longer than the checked one, is
 
 ## Browser origins
 
-A WebAssembly head calls this surface from a page, and a preflight this endpoint cannot answer is a client that never
-starts. The same setting exists on the MCP and administrative endpoints, configured separately.
+Every MailFathom head calls this surface from an origin, and a preflight this endpoint cannot answer is a client that
+never starts. The same setting exists on the MCP and administrative endpoints, configured separately.
 
 | `ClientEndpoint:Cors:AllowedOrigins` | What the endpoint answers |
 | --- | --- |
@@ -1995,10 +1995,48 @@ starts. The same setting exists on the MCP and administrative endpoints, configu
 
 The permissive default is deliberate, for the reason [the MCP endpoint's is](mcp-endpoint.md#cors-and-the-origin-header):
 a surface is protected by the credential a caller presents rather than by which page it was called from, and a first run
-that failed a preflight would look like a broken deployment. Narrow it to the origin your own head is served from once
-you know what that is. The empty list is the third posture rather than an oversight — it advertises nothing to a
-browser, which is what a deployment whose client is a desktop or mobile head wants, since neither is subject to CORS at
-all.
+that failed a preflight would look like a broken deployment. Narrow it to the origins your own heads are served from
+once you know what those are — the next section is what a downloaded one sends.
+
+**The empty list is the third posture rather than an oversight, and it fits exactly one deployment: the one whose only
+client is the page it serves itself.** That page is same-origin, so it is never subject to CORS at all and goes on
+working while every other browser origin is refused; so does every non-browser caller, which sends no `Origin`. **It
+does not fit a deployment reached by a downloaded head**, which sends an origin of its own and is refused by it.
+
+### The origin a downloaded head sends
+
+A desktop or mobile head is not exempt from CORS. Both render in a webview — WebKitGTK or WebView2 on the desktop,
+Chromium's on Android — which enforces CORS exactly as a browser does, against the origin the shell served the bundle
+from. That origin is never the deployment's, so it is named here or the head is not served:
+
+| The head | The origin it sends |
+| --- | --- |
+| The desktop head on Linux | `tauri://localhost` |
+| The desktop head on Windows, and the Android head | `http://tauri.localhost` |
+
+Both are accepted as entries. The custom-protocol one is the reason this setting takes a scheme beyond `http` and
+`https` at all: without it, the only posture that served a Linux desktop head was `["*"]`, which is every origin on the
+internet rather than the one head an operator meant. Nothing else is accepted — a scheme MailFathom serves no head from
+is a startup error naming the entry rather than a line that binds and then matches nothing.
+
+```json
+{
+  "ClientEndpoint": {
+    "Cors": {
+      "AllowedOrigins": [
+        "https://mail.example.test",
+        "tauri://localhost",
+        "http://tauri.localhost"
+      ]
+    }
+  }
+}
+```
+
+**A refusal here does not look like a refusal.** The response carries no `Access-Control-Allow-Origin`, so the webview
+rejects the fetch before the client sees a status, and nothing reaches this endpoint's logs — the head reports that the
+deployment did not answer, on its sign-in screen, before a password has been typed. A deployment whose page signs in
+while a downloaded head calls it silent is this setting before it is anything else.
 
 The policy allows `GET` and `POST`, the `Authorization`, `Content-Type`, `Accept`, and `traceparent` request headers,
 and exposes `WWW-Authenticate` so a page can read the challenge that tells it where to authorize and `Retry-After` so a
@@ -2159,7 +2197,8 @@ the client in front of the sign-in the endpoint already required.
 
 Serving it from the same origin as the surface it calls is the point of serving it here at all: the page then needs no
 cross-origin permission and `Cors:AllowedOrigins` has nothing to say about it. A client downloaded and installed rather
-than served reaches the same routes from an origin of its own and does need one.
+than served reaches the same routes from an origin of its own and does need one — [the origin a downloaded head
+sends](#the-origin-a-downloaded-head-sends) is which.
 
 **Clear text is refused rather than warned about**, and that is the one difference from every other posture on this
 page. A page is what a person types their credential into, so a deployment that serves it over a socket this process

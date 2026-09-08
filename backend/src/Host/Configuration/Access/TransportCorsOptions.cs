@@ -12,9 +12,10 @@ namespace MailFathom.Host.Configuration.Access;
 /// <remarks>
 /// <para>
 /// One section shared by the three surfaces a browser can reach, because the question and its three postures are the
-/// same for each: the MCP endpoint, whose browser clients are MCP hosts running in a page; the client endpoint, whose
-/// WebAssembly head calls it from a page origin; and the administrative endpoint, which a page can call the same way.
-/// Each surface binds its own copy, so none of the three's origins reach the others' traffic.
+/// same for each: the MCP endpoint, whose browser clients are MCP hosts running in a page; the client endpoint, which
+/// every MailFathom head calls from an origin — the page a deployment serves from its own origin, and a downloaded
+/// desktop or mobile head from the one its shell served the bundle from; and the administrative endpoint, which a page
+/// can call the same way. Each surface binds its own copy, so none of the three's origins reach the others' traffic.
 /// </para>
 /// <para>
 /// Allowing every origin is the default because a surface is not protected by who is calling it — it is protected by
@@ -117,7 +118,7 @@ internal sealed class TransportCorsOptions
 
             if (!BrowserOriginPolicy.TryNormalize(configuredOrigin, out var normalizedOrigin))
             {
-                yield return $"{settingPath} — '{configuredOrigin}' is not an origin; write a scheme, a host, and a port where the port is not the scheme's default, and nothing else.";
+                yield return $"{settingPath} — '{configuredOrigin}' is not an origin this surface can be called from; write 'http', 'https', or 'tauri' for a downloaded head, then a host, then a port where the port is not the scheme's default, and nothing else.";
             }
             else if (!claimedOrigins.Add(normalizedOrigin))
             {

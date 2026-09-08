@@ -130,8 +130,14 @@ internal static class ClientTransportSecurityExtensions
     /// <remarks>
     /// <para>
     /// A policy that names no origin at all is the deliberate third posture rather than an oversight: it advertises
-    /// nothing to a browser, which is what a deployment whose client is a desktop or mobile head — neither of which is
-    /// subject to CORS — wants.
+    /// nothing to a browser, which is what a deployment whose only client is the page it serves itself wants, since a
+    /// same-origin request is never subject to CORS at all.
+    /// </para>
+    /// <para>
+    /// It is not what a deployment reached by a downloaded head wants. Both native heads render in a webview, which
+    /// enforces CORS exactly as a browser does against the origin their shell served the bundle from, so a head is a
+    /// browser origin to list rather than a client this policy is silent about — and one that answers no preflight
+    /// reports a deployment that never answered rather than a policy that refused it.
     /// </para>
     /// <para>
     /// Credentials are never allowed, under any policy. A browser that could attach an ambient cookie would let a page
