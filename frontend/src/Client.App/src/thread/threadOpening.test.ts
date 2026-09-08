@@ -28,6 +28,7 @@ function message(id: string, position: number, unread = false): MailThreadMessag
             attachmentCount: 0,
             sizeOctets: 1_024,
             preview: 'What this one added.',
+            threadMessageCount: null,
         },
     };
 }

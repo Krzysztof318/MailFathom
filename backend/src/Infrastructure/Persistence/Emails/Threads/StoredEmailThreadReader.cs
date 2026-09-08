@@ -80,6 +80,59 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
         ];
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<EmailThreadId, int>> ReadMessageCountsAsync(
+        IReadOnlyList<EmailThreadId> threadIds,
+        MailboxScope scope,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(threadIds);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (threadIds.Count is 0)
+        {
+            return new Dictionary<EmailThreadId, int>();
+        }
+
+        var identities = threadIds.Select(static threadId => threadId.Value).Distinct().ToArray();
+
+        var rows = await Counted(dbContext.StoredEmails.AsNoTracking(), identities, scope)
+            .ToArrayAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            static row => EmailThreadId.Create(row.EmailThreadId),
+            static row => row.MessageCount);
+    }
+
+    /// <summary>Counts the messages of the named conversations that the scope admits, grouped by conversation.</summary>
+    /// <param name="emails">The stored emails to count over, untracked because nothing here writes.</param>
+    /// <param name="threadIds">The conversations to count, already deduplicated.</param>
+    /// <param name="scope">The accounts and folders configuration admits.</param>
+    /// <returns>One row per conversation the scope admits any message of.</returns>
+    /// <remarks>
+    /// <para>
+    /// The scope narrows the query for the reason it narrows the assembly beside it: a message in a folder an operator
+    /// withheld is in no conversation this surface publishes, so counting it would report that folder's contents one
+    /// integer at a time.
+    /// </para>
+    /// <para>
+    /// It is a member of this class rather than an expression inside the asynchronous read above, and that is
+    /// load-bearing for the reason <see cref="Readable" /> is: the architecture rule holding every mail-returning read
+    /// to the shared narrowing reads the class, and a call made only inside an async method body belongs to the
+    /// compiler-generated state machine instead. It takes the query rather than reaching for the context so the command
+    /// it generates can be read without a database, which is the only place the grouping and the narrowing are visible.
+    /// </para>
+    /// </remarks>
+    internal static IQueryable<StoredEmailThreadSizeRow> Counted(
+        IQueryable<StoredEmailEntity> emails,
+        Guid[] threadIds,
+        MailboxScope scope) =>
+        StoredEmailSelectionPredicate.WithinScope(
+                emails.Where(email => email.EmailThreadId != null && threadIds.Contains(email.EmailThreadId.Value)),
+                scope)
+            .GroupBy(email => email.EmailThreadId!.Value)
+            .Select(conversation => new StoredEmailThreadSizeRow(conversation.Key, conversation.Count()));
+
     /// <summary>Narrows one conversation's messages to the mail the scope admits.</summary>
     /// <remarks>
     /// <para>

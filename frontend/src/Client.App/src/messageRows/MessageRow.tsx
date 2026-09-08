@@ -277,6 +277,25 @@ export function MessageRow({
                         </span>
                     ) : null}
 
+                    {/* How long the correspondence is, drawn where it is longer than the one message. The design
+                        project puts it between the unread mark and the time and draws nothing at all for a message
+                        standing alone, so the pill says this row stands for an exchange rather than repeating what
+                        every row already is. The number is the deployment's count over the whole conversation — a
+                        client counting the rows it holds would answer differently depending on where the page was
+                        cut — and the words beside it are for a reader who is not looking at it, which the design has
+                        no way to draw. */}
+                    {email.threadMessageCount !== null && email.threadMessageCount > 1 ? (
+                        <span className="shrink-0 rounded-full border border-line-soft bg-rail px-1.5 py-px text-2xs text-text-soft">
+                            <span aria-hidden="true">{email.threadMessageCount}</span>
+
+                            <span className="sr-only">
+                                {translate('list.threadMessages', {
+                                    count: String(email.threadMessageCount),
+                                })}
+                            </span>
+                        </span>
+                    ) : null}
+
                     <ReceivedAt at={email.receivedAt} />
                 </div>
 

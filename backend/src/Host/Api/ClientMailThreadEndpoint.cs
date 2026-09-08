@@ -145,7 +145,7 @@ internal sealed record ClientMailThreadResponse(
 
         return new ClientMailThreadResponse(
             thread.ThreadId.Value,
-            [.. thread.Messages.Select(ClientMailThreadEmailResponse.For)],
+            [.. thread.Messages.Select(message => ClientMailThreadEmailResponse.For(message, thread.MessageCount))],
             [.. thread.Participants.Select(ClientMailThreadParticipantResponse.For)],
             thread.MessageCount,
             thread.MoreMessagesNotAssembled,
@@ -178,11 +178,25 @@ internal sealed record ClientMailThreadEmailResponse(
 {
     /// <summary>Describes one message of a conversation for the wire.</summary>
     /// <param name="message">The message the use case read.</param>
+    /// <param name="threadMessageCount">How many messages the conversation holds of those this caller may see.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailThreadEmailResponse For(BrowsedThreadEmail message) => new(
+    /// <remarks>
+    /// The conversation's own count is what the row's <c>threadMessageCount</c> carries here, because that is what the
+    /// field means and every message of one conversation is in the same conversation. A client drawing a message of a
+    /// thread from this row therefore reads the same number the header above it reads — which is the assembled count
+    /// rather than the counted one, so a correspondence past
+    /// <see cref="Application.Emails.Threads.IEmailThreadReader.MaximumAssembledEmails" /> reads here as the bound with
+    /// <c>moreMessagesNotAssembled</c> beside it and reads on a list row as its real length. Agreeing with the list
+    /// instead would mean counting the conversation a second time to publish a number this route already states.
+    /// </remarks>
+    internal static ClientMailThreadEmailResponse For(BrowsedThreadEmail message, int threadMessageCount) => new(
         message.Position,
         message.AnsweredStoredEmailId?.Value,
-        ClientMailTimelineEntryResponse.For(message.Email, message.Contribution, message.Enrichment));
+        ClientMailTimelineEntryResponse.For(
+            message.Email,
+            message.Contribution,
+            message.Enrichment,
+            threadMessageCount));
 }
 
 /// <summary>Somebody who has written in the conversation, and how much of it is theirs.</summary>

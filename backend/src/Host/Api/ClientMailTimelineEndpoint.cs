@@ -295,6 +295,7 @@ internal sealed record ClientMailTimelineResponse(
 /// <param name="SizeOctets">The size the mail server reported for the message.</param>
 /// <param name="Preview">The opening of the message's own text, bounded, or <see langword="null" /> where nothing has extracted the message yet.</param>
 /// <param name="Enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
+/// <param name="ThreadMessageCount">How many messages this user may see in the row's conversation, or <see langword="null" /> where threading has placed the message in none.</param>
 /// <remarks>
 /// <para>
 /// The three flags are published as the states a row draws rather than as the snapshot they came from, because a screen
@@ -311,6 +312,21 @@ internal sealed record ClientMailTimelineResponse(
 /// has not turned enrichment on — and present with an empty <c>marks</c> array for one a derivation answered nothing
 /// about. The two are different states and a screen draws them differently: the first may change on a later run and
 /// the second will not.
+/// </para>
+/// <para>
+/// <c>threadMessageCount</c> counts the whole correspondence rather than the rows one page holds, and is counted across
+/// every folder this user may read with the junk folder included — the same membership the conversation route reads
+/// under. It is absent for a message threading has placed in no conversation, and <c>1</c> for one whose conversation
+/// holds only it.
+/// </para>
+/// <para>
+/// It is counted rather than assembled, so it is the one place on this surface a conversation's length is published
+/// without the assembly bound. The two agree up to
+/// <see cref="Application.Emails.Threads.IEmailThreadReader.MaximumAssembledEmails" /> and part above it: a
+/// correspondence longer than that is published here as the length it actually is, while the conversation route
+/// reports the bound and says so with <c>moreMessagesNotAssembled</c>. That is deliberate rather than a discrepancy to
+/// reconcile — what this field is drawn as says *this row stands for a long exchange*, which a number capped at the
+/// bound would stop saying.
 /// </para>
 /// </remarks>
 internal sealed record ClientMailTimelineEntryResponse(
@@ -331,30 +347,33 @@ internal sealed record ClientMailTimelineEntryResponse(
     int AttachmentCount,
     long SizeOctets,
     string? Preview,
-    ClientMailEnrichmentResponse? Enrichment)
+    ClientMailEnrichmentResponse? Enrichment,
+    int? ThreadMessageCount)
 {
     /// <summary>Describes one row for the wire.</summary>
     /// <param name="row">The row the use case read.</param>
     /// <returns>The response body.</returns>
     internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) =>
-        For(row.Email, row.Preview, row.Enrichment);
+        For(row.Email, row.Preview, row.Enrichment, row.ThreadMessageCount);
 
     /// <summary>Describes one message for the wire, wherever on this surface a message is drawn.</summary>
     /// <param name="email">The message the use case read.</param>
     /// <param name="preview">The opening of the message's own text, or <see langword="null" /> where nothing has extracted it.</param>
     /// <param name="enrichment">What a derivation concluded about the message, or <see langword="null" /> where none has reached it.</param>
+    /// <param name="threadMessageCount">How many messages the caller may see in the message's conversation, or <see langword="null" /> where it is in none.</param>
     /// <returns>The response body.</returns>
     /// <remarks>
-    /// The three rather than a reading's own row type, because a message is one shape on this surface: a list row and a
+    /// The four rather than a reading's own row type, because a message is one shape on this surface: a list row and a
     /// message inside a conversation are drawn from the same fields, and a second mapping is how the two would come to
-    /// publish one message two ways. The derivation is a parameter rather than a default for the same reason — a caller
-    /// that had one and did not pass it would publish <see langword="null" />, which this surface reads as no derivation
-    /// having reached the message rather than as this reading not having asked.
+    /// publish one message two ways. The derivation and the conversation's size are parameters rather than defaults for
+    /// the same reason — a caller that had one and did not pass it would publish <see langword="null" />, which this
+    /// surface reads as nothing having reached the message rather than as this reading not having asked.
     /// </remarks>
     internal static ClientMailTimelineEntryResponse For(
         EmailSummary email,
         string? preview,
-        EmailEnrichment? enrichment) => new(
+        EmailEnrichment? enrichment,
+        int? threadMessageCount) => new(
         email.StoredEmailId.Value,
         email.AccountId.Value,
         email.FolderAlias.Value,
@@ -372,5 +391,6 @@ internal sealed record ClientMailTimelineEntryResponse(
         email.Attachments.AttachmentCount,
         email.SizeOctets,
         preview,
-        ClientMailEnrichmentResponse.For(enrichment));
+        ClientMailEnrichmentResponse.For(enrichment),
+        threadMessageCount);
 }

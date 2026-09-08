@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -210,7 +211,7 @@ public sealed class ClientMailTimelineEndpointTests
         var row = new BrowsedEmail(
             SyntheticListedEmail(subject: "the release is out", attachmentCount: 2),
             "it went out this morning",
-            Enrichment: null);
+            Enrichment: null, ThreadMessageCount: null);
 
         // Act
         var response = ClientMailTimelineEntryResponse.For(row);
@@ -233,7 +234,11 @@ public sealed class ClientMailTimelineEndpointTests
     public void For_ARowTheServerReportedAsSeen_IsNotUnread()
     {
         // Arrange
-        var row = new BrowsedEmail(SyntheticListedEmail(isRemotelySeen: true), Preview: null, Enrichment: null);
+        var row = new BrowsedEmail(
+            SyntheticListedEmail(isRemotelySeen: true),
+            Preview: null,
+            Enrichment: null,
+            ThreadMessageCount: null);
 
         // Act
         var response = ClientMailTimelineEntryResponse.For(row);
@@ -264,7 +269,8 @@ public sealed class ClientMailTimelineEndpointTests
                         EmailEnrichmentProvenance.FromAgent("mailfathom-email-enrichment"),
                         dueAt),
                 ],
-                FirstJuly));
+                FirstJuly),
+            ThreadMessageCount: null);
 
         // Act
         var response = ClientMailTimelineEntryResponse.For(row);
@@ -295,8 +301,9 @@ public sealed class ClientMailTimelineEndpointTests
         var nothingToSay = new BrowsedEmail(
             SyntheticListedEmail(),
             Preview: null,
-            new EmailEnrichment(StoredEmailId.Create(Guid.CreateVersion7()), [], FirstJuly));
-        var neverDerived = new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null);
+            new EmailEnrichment(StoredEmailId.Create(Guid.CreateVersion7()), [], FirstJuly),
+            ThreadMessageCount: null);
+        var neverDerived = new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null, ThreadMessageCount: null);
 
         // Act
         var settled = ClientMailTimelineEntryResponse.For(nothingToSay);
@@ -314,7 +321,7 @@ public sealed class ClientMailTimelineEndpointTests
     {
         // Arrange
         var page = new BrowsedTimelinePage(
-            [new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null)],
+            [new BrowsedEmail(SyntheticListedEmail(), Preview: null, Enrichment: null, ThreadMessageCount: null)],
             NextCursor: "after",
             PreviousCursor: "before",
             PageSize: 25);
@@ -420,10 +427,19 @@ public sealed class ClientMailTimelineEndpointTests
             .Returns(Task.FromResult<IReadOnlyDictionary<StoredEmailId, EmailEnrichment>>(
                 new Dictionary<StoredEmailId, EmailEnrichment>()));
 
+        var conversations = Substitute.For<IEmailThreadReader>();
+        conversations.ReadMessageCountsAsync(
+                Arg.Any<IReadOnlyList<EmailThreadId>>(),
+                Arg.Any<MailboxScope>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<EmailThreadId, int>>(
+                new Dictionary<EmailThreadId, int>()));
+
         return new MailTimelineBrowser(
             this.timeline,
             previews,
             enrichments,
+            conversations,
             new MailboxScopeResolver(
                 catalog,
                 StubMailFolderParticipation.Nothing,

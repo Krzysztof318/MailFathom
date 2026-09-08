@@ -96,6 +96,18 @@ export interface MailTimelineEntry {
 
     /** The opening of the message's own text, or `null` for a message this deployment has stored but not extracted. */
     readonly preview: string | null;
+
+    /**
+     * How many messages the correspondence this row stands for holds, or `null` where the row's surface states none.
+     *
+     * It is the deployment's count over the whole conversation rather than over the page, which is the only place it
+     * could come from: a correspondence spans a page boundary as readily as it sits inside one, and counting the rows
+     * one page happened to hold would answer a different number depending on where the page was cut.
+     *
+     * `null` has two readings and a screen draws them the same way, because neither is a conversation: threading has
+     * placed the message in none, or the route that answered does not count them — which the search results do not.
+     */
+    readonly threadMessageCount: number | null;
 }
 
 /** One page of the list, and the two cursors the pages either side of it are asked with. */
@@ -330,6 +342,14 @@ export function parseTimelineEntry(value: unknown): MailTimelineEntry | null {
         return null;
     }
 
+    const threadMessageCount = record['threadMessageCount'] ?? null;
+
+    // A conversation holds at least the message the row is about, so a count of zero is an answer no deployment
+    // produces and the row is refused rather than drawn from it.
+    if (threadMessageCount !== null && (!isCount(threadMessageCount) || threadMessageCount < 1)) {
+        return null;
+    }
+
     return {
         id,
         account,
@@ -348,6 +368,7 @@ export function parseTimelineEntry(value: unknown): MailTimelineEntry | null {
         attachmentCount,
         sizeOctets,
         preview,
+        threadMessageCount,
     };
 }
 

@@ -2233,6 +2233,15 @@
               "string"
             ]
           },
+          "threadMessageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
           "toAddresses": {
             "items": {
               "type": "string"
@@ -2261,7 +2270,8 @@
           "attachmentCount",
           "sizeOctets",
           "preview",
-          "enrichment"
+          "enrichment",
+          "threadMessageCount"
         ],
         "type": "object"
       },

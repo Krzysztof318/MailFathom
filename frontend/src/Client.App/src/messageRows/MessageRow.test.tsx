@@ -31,6 +31,7 @@ const email: MailTimelineEntry = {
     attachmentCount: 0,
     sizeOctets: 1_024,
     preview: 'The opening of the message.',
+    threadMessageCount: null,
 };
 
 function drawRow(
@@ -39,6 +40,7 @@ function drawRow(
     marking: ReadMarking = nothingMarkedRead,
     acts: MailboxActs = nothingActed,
     flagged = false,
+    threadMessageCount: number | null = null,
 ): HTMLElement {
     render(
         <LocalizationProvider>
@@ -46,7 +48,7 @@ function drawRow(
                 <MailboxActsContext value={acts}>
                     <ul>
                         <MessageRow
-                            email={{ ...email, unread, flagged }}
+                            email={{ ...email, unread, flagged, threadMessageCount }}
                             position={1}
                             open={false}
                             selected={false}
@@ -174,6 +176,22 @@ describe('MessageRow', () => {
         drawRow();
 
         expect(screen.queryByText('Unread')).toBeNull();
+    });
+
+    // How long the correspondence is, which the design draws as a number alone — so the words beside it are what a
+    // reader who is not looking at the row gets, and both are asserted together. A conversation of one is every
+    // message that was never answered, so drawing the pill over it would put a mark on nearly every row in a folder.
+    it('says how many messages the correspondence holds where it holds more than the one', () => {
+        drawRow(undefined, false, nothingMarkedRead, nothingActed, false, 6);
+
+        expect(screen.getByText('6')).toBeDefined();
+        expect(screen.getByText('6 messages in this conversation')).toBeDefined();
+    });
+
+    it('says nothing of the sort where the correspondence is the one message', () => {
+        drawRow(undefined, false, nothingMarkedRead, nothingActed, false, 1);
+
+        expect(screen.queryByText('1 messages in this conversation')).toBeNull();
     });
 
     // The row draws from the pending mutation rather than waiting for the account's own pass to observe the flag,

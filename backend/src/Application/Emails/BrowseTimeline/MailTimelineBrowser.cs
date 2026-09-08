@@ -7,6 +7,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -49,6 +50,7 @@ public sealed class MailTimelineBrowser
     private readonly IStoredEmailTimelineReader timelineReader;
     private readonly IStoredEmailPreviewReader previewReader;
     private readonly IStoredEmailEnrichmentReader enrichmentReader;
+    private readonly IEmailThreadReader threadReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IMailboxReadTelemetry readTelemetry;
@@ -58,6 +60,7 @@ public sealed class MailTimelineBrowser
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
     /// <param name="previewReader">Reads the bounded opening of the text of the emails a page returned.</param>
     /// <param name="enrichmentReader">Reads what a derivation concluded about the emails a page returned.</param>
+    /// <param name="threadReader">Counts the conversations the emails a page returned belong to.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the list runs against.</param>
     /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
@@ -67,6 +70,7 @@ public sealed class MailTimelineBrowser
         IStoredEmailTimelineReader timelineReader,
         IStoredEmailPreviewReader previewReader,
         IStoredEmailEnrichmentReader enrichmentReader,
+        IEmailThreadReader threadReader,
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
         IMailboxReadTelemetry readTelemetry,
@@ -75,6 +79,7 @@ public sealed class MailTimelineBrowser
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(previewReader);
         ArgumentNullException.ThrowIfNull(enrichmentReader);
+        ArgumentNullException.ThrowIfNull(threadReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readTelemetry);
@@ -83,6 +88,7 @@ public sealed class MailTimelineBrowser
         this.timelineReader = timelineReader;
         this.previewReader = previewReader;
         this.enrichmentReader = enrichmentReader;
+        this.threadReader = threadReader;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
         this.readTelemetry = readTelemetry;
@@ -147,11 +153,12 @@ public sealed class MailTimelineBrowser
 
         var previews = await this.previewReader.ReadPreviewsAsync(pageIdentities, cancellationToken);
         var enrichments = await this.enrichmentReader.ReadEnrichmentsAsync(pageIdentities, cancellationToken);
+        var threadSizes = await this.ThreadSizesAsync(page, cancellationToken);
 
         // Guarded after the boundaries are taken rather than before. A cursor names a received instant and a stored
         // identity, and redaction touches neither, so issuing one from the guarded page would be the same value
         // arrived at through more work.
-        var rows = await this.GuardedAsync(page, previews, enrichments, cancellationToken);
+        var rows = await this.GuardedAsync(page, previews, enrichments, threadSizes, cancellationToken);
 
         read.Completed(rows.Count);
 
@@ -295,6 +302,7 @@ public sealed class MailTimelineBrowser
         IReadOnlyList<EmailSummary> page,
         IReadOnlyDictionary<StoredEmailId, string> previews,
         IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments,
+        IReadOnlyDictionary<EmailThreadId, int> threadSizes,
         CancellationToken cancellationToken)
     {
         if (!this.egressGuard.IsActive)
@@ -304,7 +312,8 @@ public sealed class MailTimelineBrowser
                 .. page.Select(email => new BrowsedEmail(
                     email,
                     PreviewOf(email, previews),
-                    EnrichmentOf(email, enrichments))),
+                    EnrichmentOf(email, enrichments),
+                    ThreadSizeOf(email, threadSizes))),
             ];
         }
 
@@ -339,7 +348,8 @@ public sealed class MailTimelineBrowser
                     this.egressGuard,
                     SensitiveContentEgressPoint.ClientMailListing,
                     EnrichmentOf(email, enrichments),
-                    cancellationToken)));
+                    cancellationToken),
+                ThreadSizeOf(email, threadSizes)));
         }
 
         scan.Completed();
@@ -350,6 +360,40 @@ public sealed class MailTimelineBrowser
     /// <summary>Reads the preview of one row, which is absent for a message nothing has extracted yet.</summary>
     private static string? PreviewOf(EmailSummary email, IReadOnlyDictionary<StoredEmailId, string> previews) =>
         previews.TryGetValue(email.StoredEmailId, out var preview) ? EmailPreview.Bounded(preview) : null;
+
+    /// <summary>Counts every conversation the page's rows belong to, in one read for the whole page.</summary>
+    /// <remarks>
+    /// Neither an account nor a folder narrows the count and the junk folder takes part, exactly as they do not narrow
+    /// the conversation <see cref="BrowseThread.MailThreadBrowser" /> reads: a correspondence is threaded across every
+    /// folder it reached, so a count narrowed to the folder somebody is listing would answer one for nearly every row
+    /// in it. What it does not share with that read is the assembly bound — this is a count rather than an assembly, so
+    /// a correspondence past <see cref="IEmailThreadReader.MaximumAssembledEmails" /> is reported here as the length it
+    /// is while the conversation itself is published as the bound with its own flag saying more was not assembled.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<EmailThreadId, int>> ThreadSizesAsync(
+        IReadOnlyList<EmailSummary> page,
+        CancellationToken cancellationToken)
+    {
+        var conversations = page
+            .Where(static email => email.ThreadId is not null)
+            .Select(static email => email.ThreadId!.Value)
+            .Distinct()
+            .ToArray();
+
+        if (conversations.Length is 0)
+        {
+            return new Dictionary<EmailThreadId, int>();
+        }
+
+        return await this.threadReader.ReadMessageCountsAsync(
+            conversations,
+            this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included),
+            cancellationToken);
+    }
+
+    /// <summary>Reads how large one row's conversation is, which is absent for a message threading has not placed.</summary>
+    private static int? ThreadSizeOf(EmailSummary email, IReadOnlyDictionary<EmailThreadId, int> threadSizes) =>
+        email.ThreadId is { } threadId && threadSizes.TryGetValue(threadId, out var counted) ? counted : null;
 
     /// <summary>Reads what was derived about one row, which is absent for a message no derivation has reached.</summary>
     private static EmailEnrichment? EnrichmentOf(

@@ -283,6 +283,36 @@ caller who could raise it could lift what limits how much mail one page draws ou
 preview is scanned wherever a sensitive-content scanner is switched on, at the `client_mail_listing` egress point
 beside the subject and the sender's display name.
 
+### How long a row's correspondence is
+
+A row stands for a message, and a screen drawing a list has to say which of those rows stands for an exchange rather
+than for a single message. `BrowsedEmail` therefore carries how many messages the caller may see in the conversation
+the row's message belongs to, or nothing at all where threading has placed it in none.
+
+**The count is of the conversation rather than of the page**, and that is the whole reason it is read here instead of
+counted by whoever draws the list: a correspondence spans a page boundary as readily as it sits inside one, so counting
+the rows a page happened to hold would answer a different number depending on where the page was cut.
+
+**It is one query for the whole page**, keyed by the distinct conversations that page's rows named, exactly as the
+preview above and the enrichment beside it are read — never a query per row. A page whose rows are in no conversation
+at all asks nothing.
+
+**It counts under the same scope the conversation route reads under**, which is neither the account nor the folder the
+listing was narrowed to, with the junk folder included. A count narrowed to the folder somebody is listing would answer
+one for nearly every row in it, which is the opposite of what the number is drawn for. What the scope does narrow is
+unchanged: a folder [withheld from tools](#folders-withheld-from-tools) is counted nowhere, which is what keeps a
+withheld folder's size from being published one integer at a time.
+
+**What it does not share with that read is the assembly bound.** A conversation is assembled to at most
+`IEmailThreadReader.MaximumAssembledEmails` messages and says `MoreMessagesNotAssembled` when it ran further, so
+`BrowsedThread.MessageCount` never exceeds that; this is a count rather than an assembly and has no such ceiling. So the
+two part above the bound, deliberately: a row says how long the exchange actually is, and the conversation says how much
+of it was assembled and that there is more. Capping the count to make them agree would leave a long correspondence
+drawn as though it were exactly the bound, which is the one thing the number exists to tell a reader apart from.
+
+Being a number rather than text, it reaches no sensitive-content scanner; the egress points are for what a message
+says.
+
 ### The sender verdict a summary carries
 
 The sender's address is what the message wrote about itself, so the summary carries beside it what somebody else
@@ -451,6 +481,13 @@ then produces the one order that conversation has — the reply relation first, 
 the same parent, the local identity settling the rest. Nothing here re-sorts it into a screen's own order, which is what
 keeps two surfaces of one deployment from showing one exchange two ways.
 
+The same port answers one question without assembling anything, and it is what
+[a list row's conversation size](#how-long-a-rows-correspondence-is) is read through: how many messages the caller may
+see in each of a page's conversations. It applies no bound, because a count is what says an exchange is long and cutting
+it at the assembly's 500 would report a long conversation as shorter than it is — and counting is what a database does
+without carrying any of the rows. It follows no merge either: a merge repoints every message of the folded conversation
+at the survivor, so the identifiers a page's rows carry are already the ones the counted rows hold.
+
 **What each message carries is the list row of the page above**, read for the page's messages alone through the
 identity lookup beside the timeline reader, with the same [preview](#the-preview-a-list-row-shows) beside it. That
 preview is what the message added — the trimmed reading, without the quoted history the eight replies above it would
@@ -554,7 +591,8 @@ mirrored or not and withheld or not, is [the administrative status route](../ope
 
 - `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
 - `MailFathom.Application.Emails.BrowseTimeline` — `MailTimelineBrowser`, the same walk read for a screen, with its
-  request, its page, the row that pairs a summary with a preview, and the page direction that says which way a page
+  request, its page, the row that pairs a summary with a preview, what a derivation concluded and how long the
+  conversation the row stands for is, and the page direction that says which way a page
   continues from its cursor. It is a use case of its own rather than a wider listing because both of those are things a
   tool has no use for, and it shares the scope, the filters, the order, the bound and the cursor codec with the listing
   rather than restating any of them.

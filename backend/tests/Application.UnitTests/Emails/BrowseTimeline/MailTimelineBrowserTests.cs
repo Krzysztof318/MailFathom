@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -342,6 +343,91 @@ public sealed class MailTimelineBrowserTests
         Assert.Equal("the release is out", Assert.Single(page.Emails).Preview);
     }
 
+    /// <summary>
+    /// A correspondence longer than the page it is read in reports its own length on every row of it, which is the whole
+    /// reason the number is read here rather than counted from the rows a page happened to hold.
+    /// </summary>
+    [Fact]
+    public async Task BrowsePageAsync_AConversationRunningPastThePage_ReportsWhatTheConversationHolds()
+    {
+        // Arrange
+        var conversation = Guid.CreateVersion7();
+        var threadReader = Substitute.For<IEmailThreadReader>();
+        threadReader.ReadMessageCountsAsync(
+                Arg.Any<IReadOnlyList<EmailThreadId>>(),
+                Arg.Any<MailboxScope>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<EmailThreadId, int>>(
+                new Dictionary<EmailThreadId, int> { [EmailThreadId.Create(conversation)] = 4 }));
+
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().WithAll(
+            [
+                .. Enumerable.Range(0, 4).Select(day =>
+                    SyntheticEmailSummaries.Create(FirstJuly.AddDays(day), threadId: conversation)),
+            ]),
+            threadReader: threadReader);
+
+        // Act
+        var page = await browser.BrowsePageAsync(
+            new BrowseTimelineRequest { PageSize = 2 },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([4, 4], page.Emails.Select(row => row.ThreadMessageCount));
+    }
+
+    /// <summary>One conversation named once for the whole page, because a count per row is a request per row.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_APageWhoseRowsShareOneConversation_CountsItOnceAndNotPerRow()
+    {
+        // Arrange
+        var conversation = Guid.CreateVersion7();
+        var threadReader = Substitute.For<IEmailThreadReader>();
+        threadReader.ReadMessageCountsAsync(
+                Arg.Any<IReadOnlyList<EmailThreadId>>(),
+                Arg.Any<MailboxScope>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<EmailThreadId, int>>(
+                new Dictionary<EmailThreadId, int>()));
+
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().WithAll(
+            [
+                .. Enumerable.Range(0, 3).Select(day =>
+                    SyntheticEmailSummaries.Create(FirstJuly.AddDays(day), threadId: conversation)),
+            ]),
+            threadReader: threadReader);
+
+        // Act
+        await browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        await threadReader.Received(1).ReadMessageCountsAsync(
+            Arg.Is<IReadOnlyList<EmailThreadId>>(named => named!.Count == 1),
+            Arg.Any<MailboxScope>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message threading has placed in no conversation reports no count, so nothing draws a pill over it.</summary>
+    [Fact]
+    public async Task BrowsePageAsync_AMessageInNoConversation_CarriesNoCountAndIsNotCounted()
+    {
+        // Arrange
+        var threadReader = Substitute.For<IEmailThreadReader>();
+        var browser = BrowserOver(
+            new InMemoryStoredEmailTimeline().With(SyntheticEmailSummaries.Create(FirstJuly)),
+            threadReader: threadReader);
+
+        // Act
+        var page = await browser.BrowsePageAsync(new BrowseTimelineRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(page.Emails).ThreadMessageCount);
+
+        Assert.Empty(threadReader.ReceivedCalls());
+    }
+
     /// <summary>Mail this deployment has stored but not yet extracted has no preview, which is not the same as an empty one.</summary>
     [Fact]
     public async Task BrowsePageAsync_AMessageNothingHasExtracted_CarriesNoPreview()
@@ -578,6 +664,7 @@ public sealed class MailTimelineBrowserTests
         InMemoryStoredEmailTimeline timeline,
         IStoredEmailPreviewReader? previewReader = null,
         IStoredEmailEnrichmentReader? enrichmentReader = null,
+        IEmailThreadReader? threadReader = null,
         ICallerMailAccountCatalog? accountCatalog = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
@@ -585,6 +672,7 @@ public sealed class MailTimelineBrowserTests
         timeline,
         previewReader ?? new InMemoryStoredEmailPreviews(),
         enrichmentReader ?? new InMemoryStoredEmailEnrichments(),
+        threadReader ?? new StubEmailThreadReader(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
             StubMailFolderParticipation.Nothing,

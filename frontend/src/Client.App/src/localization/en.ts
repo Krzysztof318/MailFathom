@@ -487,6 +487,7 @@ export const en = {
     'list.attachments': '{count} attached',
     'list.noSubject': 'No subject',
     'list.senderUnknown': 'No sender',
+    'list.threadMessages': '{count} messages in this conversation',
 
     'search.label': 'Find a message',
     'search.placeholder': 'Words from the message you are looking for',
