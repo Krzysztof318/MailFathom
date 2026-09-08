@@ -8,7 +8,7 @@ import type { ControlShape } from '../controls/controlShapes';
 import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from './ActQuestions';
-import { actsDrawn, actsOnAStrip, refusalSaid, underway } from './drawnActs';
+import { actsDrawn, actsOnAStrip, refusalSaid, standsInTheWay } from './drawnActs';
 import { useMailboxActs, type ActedMessage, type MailboxAct } from './useMailboxActs';
 
 // The five things a person does to a mailbox, drawn once for the two strips that offer them: the toolbar, over the
@@ -50,24 +50,14 @@ export function MailboxActControls({
         <>
             {actsOnAStrip.map((asked) => {
                 const { icon, label } = actsDrawn[asked];
-                const refusal = acts.refusalOf(asked, messages);
 
-                // An act already asked for on every message this control is about is one the deployment holds and the
-                // account's pass has not carried out yet, so the control says so rather than offering a second
-                // submission of the same act — which would answer for each message that it is already there.
-                if (refusal === null && underway(acts, asked, messages)) {
-                    return (
-                        <PlannedControl
-                            key={asked}
-                            label={translate(label)}
-                            icon={icon}
-                            shape={shape}
-                            why={translate('act.underway', { control: translate(label) })}
-                        />
-                    );
-                }
+                // Either the deployment's refusal or the fact that this act is already on its way for every message
+                // the control is about — the deployment holding it while the account's pass has not carried it out.
+                // Both end in a control that says why instead of offering a second submission of the same act, which
+                // would answer for each message that it is already there.
+                const inTheWay = standsInTheWay(acts, asked, messages);
 
-                return refusal === null ? (
+                return inTheWay === null ? (
                     <Control
                         key={asked}
                         label={translate(label)}
@@ -89,7 +79,9 @@ export function MailboxActControls({
                         label={translate(label)}
                         icon={icon}
                         shape={shape}
-                        why={translate(refusalSaid[refusal], { control: translate(label) })}
+                        why={translate(inTheWay === 'underway' ? 'act.underway' : refusalSaid[inTheWay], {
+                            control: translate(label),
+                        })}
                     />
                 );
             })}

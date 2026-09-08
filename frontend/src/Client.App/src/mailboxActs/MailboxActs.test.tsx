@@ -158,6 +158,23 @@ describe('MailboxActsProvider', () => {
         expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     });
 
+    it('asks a deployment to take a flag off, which is the other direction of the same change', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        perform(held, 'unflag', [invoice]);
+
+        await screen.findByText('Flag removed');
+
+        expect(submitted(deployment)).toStrictEqual([
+            {
+                path: 'https://mail.example.invalid/api/client/mutations/flags',
+                body: { changes: [{ storedEmailId: 'message-1', flags: { flagged: false } }] },
+            },
+        ]);
+        expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    });
+
     it('marks unread by writing that flag alone, so a message that was starred stays starred', async () => {
         const deployment = deploymentAnswering();
         const { held } = acting(deployment);

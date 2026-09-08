@@ -6,10 +6,11 @@ import { createContext, useContext } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import type { ActRefusal, MoveDestination } from './mailboxDestinations';
 
-// The five things a person does to their own mailbox from the Mail space, as an operation on messages rather than as
-// anything on a screen. It belongs to the application rather than to the toolbar, because four surfaces reach the same
-// five acts — the toolbar over what is open, the bar over a selection, the row that draws one as pending, and the
-// message somebody swiped — and a second implementation of *archive* is how two of them come to file mail differently.
+// The things a person does to their own mailbox from the Mail space, as an operation on messages rather than as
+// anything on a screen. It belongs to the application rather than to the toolbar, because five surfaces reach the same
+// acts — the toolbar over what is open, the bar over a selection, the row that draws one as pending, the message
+// somebody swiped, and the head of the message being read — and a second implementation of *archive* is how two of
+// them come to file mail differently.
 //
 // Nothing here reaches a mail server. Each act writes a durable record through `/api/client` and answers; the account's
 // own convergence pass is what tells the server, which is why an unreachable account leaves an act pending rather than
@@ -19,12 +20,24 @@ import type { ActRefusal, MoveDestination } from './mailboxDestinations';
 // gives: a module Vite hot-reloads may export components alone.
 
 /**
- * The five acts, named for what a person asked for rather than for the route each travels.
+ * The acts, named for what a person asked for rather than for the route each travels.
  *
- * Three of them are folder moves and two are flags, which is a fact about the mail server rather than about the
+ * Three of them are folder moves and three are flags, which is a fact about the mail server rather than about the
  * screen: a control says *archive*, and where that lands is `mailboxDestinations.ts`'s to answer.
+ *
+ * Taking a flag off is an act of its own rather than a direction passed to the one that puts it on. What a surface
+ * holds afterwards is the act it asked for, and only the act says which side of the change the message is converging
+ * towards — so a single name would leave a message asked to be unflagged reading as one still waiting to be flagged.
  */
-export type MailboxAct = 'flag' | 'markUnread' | 'archive' | 'delete' | 'move';
+export type MailboxAct = 'flag' | 'unflag' | 'markUnread' | 'archive' | 'delete' | 'move';
+
+/** The acts that write one of the two flags a mail server keeps, which are the ones no folder is involved in. */
+export type FlagAct = 'flag' | 'unflag' | 'markUnread';
+
+/** Whether the act writes one of those flags rather than filing the message somewhere else. */
+export function changesAFlag(act: MailboxAct): act is FlagAct {
+    return act === 'flag' || act === 'unflag' || act === 'markUnread';
+}
 
 /** One message an act is about: what names it, and where it is, which is what filing and taking that back both need. */
 export interface ActedMessage {
@@ -84,7 +97,8 @@ export function useMailboxActs(): MailboxActs {
  * The act a row is still waiting on, or `null` where it is waiting on none.
  *
  * Nothing polls for convergence: the row itself is what says the change arrived. A flag this client asked for is
- * pending until the deployment reports the message flagged, and a message asked to be marked unread is pending until
+ * pending until the deployment reports the message flagged, one it asked to have taken off is pending until the
+ * deployment reports it unflagged, and a message asked to be marked unread is pending until
  * it is reported unread — so the sentence goes on its own the moment the account's pass has been round. The three that
  * file a message elsewhere have no such flag to watch, and their rows leave the folder on the next read of it.
  */
@@ -93,6 +107,10 @@ export function actPending(acts: MailboxActs, email: MailTimelineEntry): Mailbox
 
     if (act === 'flag') {
         return email.flagged ? null : act;
+    }
+
+    if (act === 'unflag') {
+        return email.flagged ? act : null;
     }
 
     if (act === 'markUnread') {

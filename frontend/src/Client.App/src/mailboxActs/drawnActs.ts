@@ -7,9 +7,10 @@ import type { MessageKey } from '../localization/en';
 import type { ActRefusal } from './mailboxDestinations';
 import type { ActedMessage, MailboxAct, MailboxActs } from './useMailboxActs';
 
-// What the five acts are called and what they are drawn as, for every surface that offers one. It is here rather than
-// beside the controls that draw them because a third surface now does — the toolbar, the selection bar, and a row's own
-// menu — and a name or a symbol written twice is how *archive* comes to be two different-looking things.
+// What the acts are called and what they are drawn as, for every surface that offers one. It is here rather than
+// beside the controls that draw them because a fourth surface now does — the toolbar, the selection bar, a row's own
+// menu, and the head of the message being read — and a name or a symbol written twice is how *archive* comes to be two
+// different-looking things.
 //
 // The two orders below are both the design project's, and they differ on purpose rather than by oversight: a strip
 // reads left to right and puts what destroys beside the act it is nearest to, while a menu reads down a column and
@@ -20,6 +21,7 @@ export const actsDrawn: Readonly<Record<MailboxAct, { readonly icon: IconName; r
     archive: { icon: 'archive', label: 'mail.archive' },
     delete: { icon: 'delete', label: 'mail.delete' },
     flag: { icon: 'flag', label: 'mail.flag' },
+    unflag: { icon: 'flag', label: 'mail.unflag' },
     markUnread: { icon: 'mark_email_unread', label: 'mail.markUnread' },
     move: { icon: 'drive_file_move', label: 'mail.move' },
 };
@@ -32,9 +34,16 @@ export const actsSaidInAMenu: Readonly<Record<MailboxAct, MessageKey>> = {
     archive: 'mail.archive',
     delete: 'mail.delete',
     flag: 'menu.flag',
+    unflag: 'menu.unflag',
     markUnread: 'menu.markUnread',
     move: 'menu.move',
 };
+
+// Taking a flag off is in neither order below, and that is the difference between a strip and a head rather than an
+// omission. A strip and a row's menu stand over whatever is picked out — one message or two hundred, flagged and
+// unflagged among them — so which direction a single control would go in is a question they cannot answer; the head of
+// the message being read is about exactly one message whose flag the screen is already holding, which is why the design
+// draws the toggle there and *Flaga* here.
 
 /** The order a strip of controls draws them in: the toolbar, and the bar that stands over a selection. */
 export const actsOnAStrip: readonly MailboxAct[] = ['archive', 'delete', 'flag', 'markUnread', 'move'];
@@ -56,4 +65,26 @@ export const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {
 /** Whether this act is already being carried out for every message the control is about. */
 export function underway(acts: MailboxActs, act: MailboxAct, messages: readonly ActedMessage[]): boolean {
     return messages.length > 0 && messages.every((message) => acts.asked.get(message.storedEmailId) === act);
+}
+
+/**
+ * Why a control for this act cannot be pressed, or `null` where it can — the two questions every surface asks in order.
+ *
+ * One function rather than the same pair of calls written at each surface, because the order between them is the
+ * decision: an act the deployment refuses is refused whether or not one is already on its way, so the refusal is read
+ * first and *already underway* is what is left over. A surface that asked them the other way round would tell somebody
+ * their archive is on its way to an account that names no archive folder.
+ */
+export function standsInTheWay(
+    acts: MailboxActs,
+    act: MailboxAct,
+    messages: readonly ActedMessage[],
+): ActRefusal | 'underway' | null {
+    const refusal = acts.refusalOf(act, messages);
+
+    if (refusal !== null) {
+        return refusal;
+    }
+
+    return underway(acts, act, messages) ? 'underway' : null;
 }

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailFolder, MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
-import type { ActedMessage, MailboxAct } from './useMailboxActs';
+import { changesAFlag, type ActedMessage, type MailboxAct } from './useMailboxActs';
 
 // Where an act files a message, worked out from the folders each account has rather than guessed from a name.
 //
@@ -101,11 +101,11 @@ export function refusalFor(
         return 'nothingToActOn';
     }
 
-    if (!(act === 'flag' || act === 'markUnread' ? offered.flags : offered.moves)) {
+    if (!(changesAFlag(act) ? offered.flags : offered.moves)) {
         return 'notOffered';
     }
 
-    if (act === 'flag' || act === 'markUnread') {
+    if (changesAFlag(act)) {
         return null;
     }
 

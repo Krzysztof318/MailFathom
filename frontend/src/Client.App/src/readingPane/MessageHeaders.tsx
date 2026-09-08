@@ -9,7 +9,7 @@ import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { BackToList } from '../mailSpace/BackToList';
-import { HeadActs } from '../mailSpace/HeadActs';
+import { HeadActs, type HeadMessage } from '../mailSpace/HeadActs';
 import { useTwoPanes } from '../shell/useWideWorkspace';
 
 // What a message displays above its body: what it is called, who wrote it and when on one line under it, and everybody
@@ -26,9 +26,9 @@ import { useTwoPanes } from '../shell/useWideWorkspace';
 // own card carries it beside what else the copy holds. The two disagree whenever a message sat somewhere, and each
 // keeps the machine-readable form the service sent beside its wording.
 //
-// Beside the subject stand the acts the design offers from the head of a message; `mailSpace/HeadActs.tsx` says what
-// they are and why none of them acts yet. Opening the sender's own markup is not among them; it is a fact about the
-// copy too, and the card carries it beside the instant it was recorded.
+// Beside the subject stand the acts the design offers from the head of a message, over the message being read;
+// `mailSpace/HeadActs.tsx` says what they are. Opening the sender's own markup is not among them; it is a fact about
+// the copy too, and the card carries it beside the instant it was recorded.
 //
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
@@ -48,7 +48,15 @@ const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
     Bcc: 'participant.bcc',
 };
 
-export function MessageHeaders({ headers }: { readonly headers: MailMessageHeaders }) {
+export function MessageHeaders({
+    headers,
+    message,
+}: {
+    readonly headers: MailMessageHeaders;
+
+    /** The message the head's acts are about, which is the one being read. */
+    readonly message: HeadMessage;
+}) {
     const { locale, translate } = useLocalization();
     const twoPanes = useTwoPanes();
 
@@ -88,7 +96,7 @@ export function MessageHeaders({ headers }: { readonly headers: MailMessageHeade
                     {subject}
                 </h2>
 
-                <HeadActs compact={!twoPanes} />
+                <HeadActs compact={!twoPanes} message={message} />
             </div>
 
             {/* A line with nobody behind it is a line rather than a control: a disclosure that unfolds nothing would
