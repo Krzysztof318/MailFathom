@@ -250,7 +250,9 @@ describe('App sign-in', () => {
         fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
             target: { value: 'the renewal Nordwind sent' },
         });
-        fireEvent.change(screen.getByRole('combobox', { name: 'Mailbox in scope' }), { target: { value: 'work' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
+            target: { value: 'account:work' },
+        });
 
         await signOut();
         signIn();
@@ -259,7 +261,7 @@ describe('App sign-in', () => {
         // The next person to sign in on this machine reads their own empty screen rather than the last one's question
         // and the mailbox it was scoped to.
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
-        expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty('value', '');
     });
 
     it('says the password was not kept when the store would not write it, without refusing the sign-in', async () => {

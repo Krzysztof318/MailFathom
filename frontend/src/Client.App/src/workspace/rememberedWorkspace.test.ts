@@ -21,6 +21,8 @@ const kept: Workspace = {
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
+    askScope: { kind: 'account', accountId: 'work' },
+    askedBefore: [{ question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } }],
     recentSearches: ['quarterly figures'],
 };
 
@@ -177,6 +179,28 @@ describe('rememberedWorkspace', () => {
         expect(rememberedWorkspace()).toEqual(emptyWorkspace);
     });
 
+    // The same pair again for what the intent field holds, which is a workspace kept before the field had a scope of
+    // its own: it is one this client wrote, so it opens on what was kept, asking about whatever is on the screen and
+    // with nothing offered back.
+    it('reads a workspace kept before the field held a scope and a history as one holding neither', () => {
+        const { askScope, askedBefore, ...before } = kept;
+
+        stored(before);
+
+        expect(rememberedWorkspace()).toEqual({ ...kept, askScope: null, askedBefore: [] });
+        expect(askScope).not.toBeNull();
+        expect(askedBefore).toHaveLength(1);
+    });
+
+    it('opens on the mailbox the field was pointed at and the questions asked under it', () => {
+        stored(kept);
+
+        expect(rememberedWorkspace().askScope).toEqual({ kind: 'account', accountId: 'work' });
+        expect(rememberedWorkspace().askedBefore).toEqual([
+            { question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } },
+        ]);
+    });
+
     it.each([
         { kind: 'everything' },
         { kind: 'role', role: 'Sent' },
@@ -250,6 +274,42 @@ describe('rememberedWorkspace', () => {
         {
             shape: 'a picked-out identifier longer than any the client wrote there',
             value: JSON.stringify({ ...emptyWorkspace, selected: ['a'.repeat(257)] }),
+        },
+        {
+            shape: 'a scope the field was pointed at that is not one',
+            value: JSON.stringify({ ...emptyWorkspace, askScope: { kind: 'somewhere' } }),
+        },
+        {
+            shape: 'questions asked before kept as something other than a list of them',
+            value: JSON.stringify({ ...emptyWorkspace, askedBefore: 'what did they promise' }),
+        },
+        {
+            shape: 'a question asked before that is not text',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                askedBefore: [{ question: 42, scope: { kind: 'thread', threadId: 'thread-1' } }],
+            }),
+        },
+        {
+            shape: 'a question asked before about nothing at all',
+            value: JSON.stringify({ ...emptyWorkspace, askedBefore: [{ question: 'what did they promise' }] }),
+        },
+        {
+            shape: 'a question asked before about a selection holding no message',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                askedBefore: [{ question: 'what did they promise', scope: { kind: 'selection', messages: [] } }],
+            }),
+        },
+        {
+            shape: 'more questions asked before than one tab keeps',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                askedBefore: Array.from({ length: 9 }, () => ({
+                    question: 'what did they promise',
+                    scope: { kind: 'mail', scope: { kind: 'everything' } },
+                })),
+            }),
         },
         {
             shape: 'searches kept as something other than a list of them',

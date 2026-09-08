@@ -55,9 +55,19 @@ export const en = {
     'intent.label': 'Ask your mail',
     'intent.placeholder': 'What do you want to ask your mail?',
     'intent.ask': 'Ask',
+    'intent.askedBefore': 'Asked before',
+    'intent.forgetAsked': 'Forget these',
 
-    'scope.mailbox': 'Mailbox in scope',
+    'scope.inScope': 'What the question is asked about',
+    'scope.asking': 'Asking about {scope}',
     'scope.allMailboxes': 'All mailboxes',
+    'scope.everyMailbox': '{folder}, every mailbox',
+    'scope.folderIn': '{folder} in {mailbox}',
+    'scope.thread': 'This correspondence',
+    'scope.selection.one': '{count} selected message',
+    'scope.selection.few': '{count} selected messages',
+    'scope.selection.many': '{count} selected messages',
+    'scope.selection.other': '{count} selected messages',
 
     'signIn.claim': 'Your mail stays on your own server.',
     'signIn.claimExplanation':
