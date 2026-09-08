@@ -242,7 +242,7 @@ export function MessageRow({
                     selected
                         ? 'border-s-accent bg-accent-soft'
                         : open
-                          ? 'border-s-accent-line bg-accent-soft'
+                          ? 'border-s-accent-strong bg-accent-soft'
                           : 'border-s-transparent bg-panel hover:bg-hover'
                 }`}
                 // The one value here a token cannot hold: how far this row has been carried is a distance a finger
@@ -250,20 +250,12 @@ export function MessageRow({
                 style={swipe.carried === 0 ? undefined : { transform: `translateX(${String(swipe.carried)}px)` }}
             >
                 <div className="flex items-center gap-2">
-                    {/* Unread is drawn as weight and colour, which is how the design project draws it, and said in as
-                        many words for a reader who is not looking at either. Nothing marks the row visually beside
-                        that: a dot ahead of the avatar would inset every unread row a little further than every read
-                        one, which is the one thing a list of rows that have to scan as a column cannot afford. */}
-                    {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
-
                     <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="row" />
 
                     {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the
                         host is what gives way. Half rather than more because the marks and the time hold their own
                         width: a name allowed past it would push the time out of a row that clips rather than wraps. */}
-                    <span
-                        className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${unread ? 'text-text' : 'text-text-soft'}`}
-                    >
+                    <span className="max-w-1/2 shrink-0 truncate text-md font-semibold">
                         {correspondent(email) ?? translate('list.senderUnknown')}
                     </span>
 
@@ -271,12 +263,23 @@ export function MessageRow({
 
                     <MessageMarkers email={email} />
 
+                    {/* Unread, and the whole of what says so. The design project draws the mark here — at the end of
+                        the marks, between the flag and the time, rather than ahead of the avatar, where it would inset
+                        every unread row a little further than every read one, which is the one thing a column that has
+                        to scan cannot afford — and draws the name and the subject of a read row in the same weight and
+                        the same colour as an unread one. So the dot is the mark rather than a second statement beside
+                        a typographic one, and the words beside it are for a reader who is not looking at it. */}
+                    {unread ? (
+                        <span className="shrink-0">
+                            <span aria-hidden="true" className="block size-2 rounded-full bg-accent" />
+                            <span className="sr-only">{translate('list.unread')}</span>
+                        </span>
+                    ) : null}
+
                     <ReceivedAt at={email.receivedAt} />
                 </div>
 
-                <div className={`truncate text-md ${unread ? 'text-text' : 'text-text-soft'}`}>
-                    {email.subject ?? translate('list.noSubject')}
-                </div>
+                <div className="truncate text-md">{email.subject ?? translate('list.noSubject')}</div>
 
                 {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
                     to say about itself is not announced as one with an empty line in it. */}

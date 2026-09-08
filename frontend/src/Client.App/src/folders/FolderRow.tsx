@@ -143,7 +143,7 @@ export function FolderRow({
                 <span className="min-w-0 flex-1 truncate">{nameOf(row, translate)}</span>
 
                 <State row={row} />
-                <Unread count={row.unreadEmailCount} />
+                <Unread count={row.role === 'Inbox' ? row.unreadEmailCount : null} />
             </span>
 
             {/* A rail has nowhere to put it, and nothing is lost with it: the arrow keys are what fold a row, and the
@@ -209,6 +209,11 @@ function State({ row }: { readonly row: FolderTreeRow }) {
 // What is unread here, of the deployment's own copy rather than of the mailbox, which is what the state beside it
 // says. The words a reader hears are carried, because a bare number on a row is a number of nothing to somebody who
 // cannot see the column it is in. A row with nothing unread carries no number, as the design project draws it.
+//
+// Only an inbox carries one at all. A number on every folder is a column of numbers, and a column of numbers is one
+// nobody reads: what the count is for is the one row somebody is waiting on. Everything else — a sent folder, an
+// archive, a folder with no role, and the headings the accounts are grouped under — carries none, and nothing stands
+// in its place either.
 function Unread({ count }: { readonly count: number | null }) {
     const { locale, translate } = useLocalization();
 

@@ -46,6 +46,16 @@ const tree = {
                     behind: false,
                 },
                 {
+                    alias: 'ARCHIVE',
+                    role: 'Archive',
+                    path: ['Archive'],
+                    storedEmailCount: 3100,
+                    unreadEmailCount: 7,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+                    behind: false,
+                },
+                {
                     alias: 'ARCHIVE-2024',
                     role: null,
                     path: ['Archiwum', '2024'],
@@ -267,10 +277,30 @@ describe('FolderTree', () => {
         expect(row(/^Inbox12 unread/).textContent).not.toContain('4,213');
     });
 
+    // A count belongs to the one row somebody is waiting on, which is the inbox. A number on every row is a column of
+    // numbers nobody reads, so a mailbox, the workspace over all of them, and a folder playing no role each carry none
+    // — and nothing stands in its place either.
+    it('counts what is unread on an inbox and on nothing else', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        expect(row(/^Inbox12 unread/).textContent).toContain('12 unread');
+        expect(row(/^Work/).textContent).not.toContain('unread');
+        expect(row(/^All mailboxes/).textContent).not.toContain('unread');
+        expect(row(/^Archiwum/).textContent).not.toContain('unread');
+
+        // The archive plays a role and holds seven unread, so it is the row that separates "an inbox" from "a folder
+        // the deployment named": a rule reading "any folder with a role" would draw a count here.
+        for (const archive of screen.getAllByRole('treeitem', { name: /^Archive/ })) {
+            expect(archive.textContent).not.toContain('unread');
+        }
+    });
+
     // A count that still named a message the reader has just opened would disagree with the row drawing that message
     // read, which is the one thing about an unread count somebody notices. Every level of the tree is a sum over the
     // same folders, so the correction is applied once to the folders and each of them answers for it.
-    it('takes what this client has marked read off the folder, its mailbox, and the role across mailboxes', async () => {
+    it('takes what this client has marked read off the folder and off the role across mailboxes', async () => {
         renderTree(
             answering(JSON.stringify(tree)),
             true,
@@ -280,17 +310,15 @@ describe('FolderTree', () => {
         await drawn();
 
         expect(row(/^Inbox10 unread/).textContent).toContain('10 unread');
-        expect(row(/^Work10 unread/).textContent).toContain('10 unread');
         expect(row(/^Inbox13 unread/).textContent).toContain('13 unread');
-        expect(row(/^All mailboxes13 unread/).textContent).toContain('13 unread');
     });
 
-    it('leaves a mailbox this client has marked nothing in exactly as the deployment counted it', async () => {
+    it('leaves an inbox this client has marked nothing in exactly as the deployment counted it', async () => {
         renderTree(answering(JSON.stringify(tree)), true, marked({ account: 'work', folder: 'INBOX' }));
 
         await drawn();
 
-        expect(row(/^Personal/).textContent).toContain('3 unread');
+        expect(row(/^Inbox.*[^0-9]3 unread/).textContent).toContain('3 unread');
     });
 
     it('offers every mailbox at once as the scope everything else is read under', async () => {
