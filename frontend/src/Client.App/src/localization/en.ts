@@ -651,7 +651,6 @@ export const en = {
         'Pictures are being loaded from the sender for this message, so their servers can tell it was opened. Nothing about that is kept: leaving this message and coming back asks again.',
 
     'thread.label': 'Conversation',
-    'thread.open': 'Show the whole conversation',
     'thread.close': 'Back to the message',
     'thread.reading': 'Reading this conversation…',
     'thread.readingMore': 'Reading more of this conversation…',
@@ -670,8 +669,14 @@ export const en = {
     'thread.storedIn': 'In {account}, {folder}',
     'thread.openOnItsOwn': 'Open this message on its own',
     'thread.messageBy': 'Message from {sender}',
-    'thread.showEarlier': 'Show earlier messages ({count})',
+    'thread.showEarlier.one': 'Show {count} earlier message',
+    'thread.showEarlier.few': 'Show {count} earlier messages',
+    'thread.showEarlier.many': 'Show {count} earlier messages',
+    'thread.showEarlier.other': 'Show {count} earlier messages',
     'thread.hideEarlier': 'Hide earlier messages',
+    'thread.showAll': 'Show all the messages',
+    'thread.hideOthers': 'Hide the other messages',
+    'thread.messageNotRead': 'The message from {sender} could not be read here. Open it on its own to read it.',
     'thread.openedFromList': 'Opened from the list',
     'thread.landedFromResult': 'Brought here from a search result',
 

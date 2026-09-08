@@ -1016,6 +1016,7 @@ function OpenMail({
                     conversation={conversation}
                     online={online}
                     expandWholeThread={expandWholeThread}
+                    onShowFullHtml={onShowFullHtml}
                 />
             )}
 

@@ -80,6 +80,20 @@ function opening(storedEmailId: string, markup: boolean): Read {
 }
 
 /**
+ * The body a caller already holds, dressed as the answer to the read that would otherwise have fetched it.
+ *
+ * A conversation arrives with every message's body in it, so a surface drawing one of those messages has the answer
+ * before this hook is called and a read of its own would be the request that answer exists to spare. It stands as the
+ * opening read's answer and no more than that: it carries no markup and no remote picture, so a reader who asks for
+ * either is read for exactly as they would have been.
+ */
+function carriedAs(storedEmailId: string, carried: MailBody | null): Answered | null {
+    return carried === null
+        ? null
+        : { read: opening(storedEmailId, false), result: { outcome: 'read', value: carried } };
+}
+
+/**
  * The answer a read may still be drawn under, which is not every answer this hook happens to be holding.
  *
  * It has to be this message's, and it has to have asked for no more than the current read does: a caller that leaves a
@@ -119,12 +133,14 @@ function covers(had: Read | undefined, wants: Read): boolean {
  * message was opened rather than at the moment something else has answered.
  *
  * @param wanted Whether a read may be made at all: this message is the one being shown, and the deployment is reachable.
+ * @param carried The body the caller already holds, which a conversation hands every message of it, or `null`.
  */
 export function useMessageBody(
     session: ClientSession,
     transport: MailFathomTransport,
     storedEmailId: string,
     wanted: boolean,
+    carried: MailBody | null = null,
 ): MessageBodyRead {
     const embeddedHtml = useEmbeddedHtmlMessages();
     const [read, setRead] = useState<Read>(() => opening(storedEmailId, embeddedHtml));
@@ -132,7 +148,7 @@ export function useMessageBody(
     // The answer carries the read it came from, so whether one is still in flight is computed rather than kept beside
     // it: two pieces of state that must agree is one piece of state and a function, and the answer to a previous read
     // is never drawn under the current one.
-    const [answer, setAnswer] = useState<Answered | null>(null);
+    const [answer, setAnswer] = useState<Answered | null>(() => carriedAs(storedEmailId, carried));
 
     // The ask belongs to the one message it was made for, so a message changing under this hook is not state to carry
     // over — the next message would otherwise be read with `remoteImages=true` although nobody asked for its pictures,
@@ -140,6 +156,10 @@ export function useMessageBody(
     // rather than in an effect, which is why this is an assignment and not a second read.
     if (read.storedEmailId !== storedEmailId) {
         setRead(opening(storedEmailId, embeddedHtml));
+
+        // The body handed in belongs to the message handed in with it, so the next message arrives with its own or
+        // with none — never with the previous message's answer still standing as what may be drawn.
+        setAnswer(carriedAs(storedEmailId, carried));
     } else if (read.markup !== embeddedHtml) {
         // The view changed under a message already on the screen. That is a changed ask rather than a changed message,
         // so the pictures and the attempt stay where they are — and the read below is skipped entirely where what is

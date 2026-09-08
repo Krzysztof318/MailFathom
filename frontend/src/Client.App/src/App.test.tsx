@@ -167,7 +167,7 @@ describe('App', () => {
         ).toBe(String(startingListWidth));
     });
 
-    it('opens the conversation a message belongs to, and returns to that message when it is closed', async () => {
+    it('opens the conversation a message belongs to from the row itself, and returns to that message when it is closed', async () => {
         renderApp(servedFrom, heldSession, deploymentDrawingAConversation());
         await framed();
 
@@ -175,8 +175,6 @@ describe('App', () => {
 
         const list = await screen.findByRole('listbox', { name: 'Messages' });
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
-
-        fireEvent.click(await screen.findByRole('button', { name: 'Show the whole conversation' }));
 
         const conversation = await screen.findByRole('region', { name: 'Conversation' });
         expect(within(conversation).getByText('Messages in this conversation: 1')).toBeDefined();
@@ -190,6 +188,26 @@ describe('App', () => {
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
         });
+    });
+
+    // What #1759 is about: a correspondence costs one read of the deployment however many messages are drawn out of
+    // it. The route carries every message's description and words, so nothing under the conversation asks for either.
+    it('reads a whole conversation in one request, and asks for no message of it on its own', async () => {
+        renderApp(servedFrom, heldSession, deploymentDrawingAConversation());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        await screen.findByText('A drawn message.');
+
+        const conversations = routesAsked().filter((path) => path.includes('/threads/'));
+
+        expect(conversations).toHaveLength(1);
+        expect(conversations[0]).toContain('content=true');
+        expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
     // The message this one opens belongs to no conversation, which is deliberate: what is being proven is the shape the

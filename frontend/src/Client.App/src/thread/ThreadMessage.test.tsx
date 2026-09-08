@@ -8,12 +8,15 @@ import type {
     ClientRequest,
     ClientResponse,
     ClientSession,
+    MailBody,
     MailFathomTransport,
+    MailMessage,
     MailThreadMessage,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
+import { WorkspaceProvider } from '../workspace/Workspace';
 import { ThreadMessage } from './ThreadMessage';
 import type { ArrivalMark } from './threadOpening';
 
@@ -35,7 +38,42 @@ const answersNothing: MailFathomTransport = (request) => {
     return new Promise<ClientResponse>(() => undefined);
 };
 
-function message(overrides: Partial<MailThreadMessage['email']> = {}): MailThreadMessage {
+/** The message as the conversation route described it, which is what everything but the words is drawn from. */
+const described: MailMessage = {
+    storedEmailId: 'a-message',
+    account: 'work',
+    folder: 'Sent',
+    threadId: 'a-conversation',
+    sizeOctets: 1_024,
+    headers: {
+        subject: 'The quarterly figures',
+        sentAt: '2026-08-31T09:40:00+00:00',
+        receivedAt: '2026-08-31T09:41:00+00:00',
+        participants: [{ role: 'From', address: 'auditor@example.invalid', displayName: 'The auditor' }],
+        messageId: 'abc@example.invalid',
+        inReplyTo: null,
+        references: [],
+    },
+    body: { availability: 'Readable', plainText: true, html: true },
+    sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
+    attachments: [],
+    carried: null,
+    unread: false,
+    flagged: false,
+    answered: false,
+};
+
+/** The words the same answer carried, which is what makes drawing this message cost nothing on the wire. */
+const said: MailBody = {
+    storedEmailId: 'a-message',
+    availability: 'Readable',
+    plainText: { text: 'The figures you asked for are attached.', originalCharacterCount: 38, truncation: 'None' },
+    document: null,
+    selfContainedHtml: null,
+    remoteImagesRequested: false,
+};
+
+function message(overrides: Partial<MailThreadMessage> = {}): MailThreadMessage {
     return {
         position: 1,
         answeredId: 'the-one-before',
@@ -58,17 +96,23 @@ function message(overrides: Partial<MailThreadMessage['email']> = {}): MailThrea
             sizeOctets: 1_024,
             preview: 'The figures you asked for are attached.',
             threadMessageCount: null,
-            ...overrides,
         },
+        message: described,
+        body: said,
+        ...overrides,
     };
+}
+
+/** The same message with nothing the deployment could open, which is the gap a correspondence is still drawn with. */
+function unopened(): MailThreadMessage {
+    return message({ message: null, body: null });
 }
 
 function drawing(
     held: MailThreadMessage = message(),
     handlers: {
-        readonly collapsed?: boolean;
-        readonly onToggle?: () => void;
         readonly onOpenOnItsOwn?: () => void;
+        readonly onShowFullHtml?: () => void;
         readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
     marking: ReadMarking = nothingMarkedRead,
@@ -76,93 +120,88 @@ function drawing(
 ): void {
     render(
         <LocalizationProvider>
-            <LinkOpenerContext value={() => Promise.resolve()}>
-                <ReadMarkingContext value={marking}>
-                    <ul>
-                        <ThreadMessage
-                            session={session}
-                            transport={answersNothing}
-                            message={held}
-                            mark={mark}
-                            collapsed={handlers.collapsed ?? false}
-                            onToggle={handlers.onToggle ?? (() => undefined)}
-                            onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
-                            onRegion={handlers.onRegion ?? (() => undefined)}
-                        />
-                    </ul>
-                </ReadMarkingContext>
-            </LinkOpenerContext>
+            <WorkspaceProvider>
+                <LinkOpenerContext value={() => Promise.resolve()}>
+                    <ReadMarkingContext value={marking}>
+                        <ul>
+                            <ThreadMessage
+                                session={session}
+                                transport={answersNothing}
+                                message={held}
+                                mark={mark}
+                                online
+                                onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
+                                onShowFullHtml={handlers.onShowFullHtml ?? (() => undefined)}
+                                onRegion={handlers.onRegion ?? (() => undefined)}
+                            />
+                        </ul>
+                    </ReadMarkingContext>
+                </LinkOpenerContext>
+            </WorkspaceProvider>
         </LocalizationProvider>,
     );
 }
 
-/** What a client that has marked exactly this message read carries, which is what the head reads its state through. */
-function marked(storedEmailId: string): ReadMarking {
+/** A marking that records what was opened, so what a drawn message reports is asserted rather than a call count. */
+function recordingMarkings(): { readonly marking: ReadMarking; readonly opened: string[] } {
+    const opened: string[] = [];
+
     return {
-        marked: new Map([[storedEmailId, { account: 'work', folder: 'Sent' }]]),
-        markRead: () => undefined,
+        marking: {
+            marked: new Map(),
+            markRead: (message) => {
+                opened.push(message.storedEmailId);
+            },
+        },
+        opened,
     };
 }
 
 describe('ThreadMessage', () => {
-    it('draws a message as who wrote it, reads what it says, and names where in the mailbox it stands', () => {
+    it('draws the message out in full, as the surface reading one on its own draws it', () => {
         drawing();
 
         expect(screen.getByText('The auditor')).toBeDefined();
+        expect(screen.getByText('The figures you asked for are attached.')).toBeDefined();
         expect(screen.getByText('In work, Sent')).toBeDefined();
-        expect(asked.some((request) => request.path.includes('/messages/a-message/body'))).toBe(true);
     });
 
-    it('draws no contribution line, which the body below it would be saying twice on one screen', () => {
+    // The conversation is one document and every message in it is written out, so there is no control here that would
+    // fold one away: what a reader decides is how much of the correspondence stands in front of them, and that is the
+    // conversation's own decision rather than each message's.
+    it('offers nothing that would collapse the message it draws', () => {
         drawing();
 
-        expect(screen.queryByText('The figures you asked for are attached.')).toBeNull();
+        expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+        expect(screen.queryByRole('button', { expanded: false })).toBeNull();
     });
 
-    it('carries no card while open, which the design project draws on a collapsed message alone', () => {
+    // The words arrived with the conversation, which is the whole of what makes revealing the earlier messages free.
+    it('reads nothing from the deployment for a message the conversation carried', () => {
         drawing();
-
-        const region = screen.getByRole('article');
-
-        expect(region.className).not.toContain('border');
-        expect(region.className).not.toContain('bg-sunken');
-    });
-
-    it('draws a collapsed message as its head on a card, with nothing read and nothing said under it', () => {
-        drawing(message(), { collapsed: true });
-
-        const region = screen.getByRole('article');
-
-        expect(region.className).toContain('border');
-        expect(screen.getByRole('button', { expanded: false })).toBeDefined();
-        expect(screen.queryByText('In work, Sent')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Open this message on its own' })).toBeNull();
-    });
-
-    // The words are what the read costs, and a conversation of thirty messages draws thirty heads: so a collapsed
-    // message reaches the deployment for nothing at all, and pressing it is what asks. The record is what proves it —
-    // a message drawing no words could be one whose read is merely still in flight.
-    it('reads nothing from the deployment while it is collapsed', () => {
-        drawing(message(), { collapsed: true });
 
         expect(asked).toEqual([]);
     });
 
-    it('reads the body from the deployment once it is open', () => {
-        drawing(message());
+    // A message whose local copy the deployment could not open arrives without one. The reader is owed the gap rather
+    // than a message drawn empty, and the way to it is the control that opens the message on its own.
+    it('says a message the conversation could not carry, rather than drawing it empty', () => {
+        drawing(unopened());
 
-        expect(asked.map((request) => request.path)).toEqual([
-            `${session.baseAddress}/api/client/messages/a-message/body`,
-        ]);
+        expect(
+            screen.getByText('The message from The auditor could not be read here. Open it on its own to read it.'),
+        ).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Open this message on its own' })).toBeDefined();
     });
 
-    it('opens and closes from its head, which is the control the design draws it as', () => {
-        const toggled = vi.fn();
+    it('names a message nobody wrote a sender for by something rather than by nothing', () => {
+        const held = unopened();
 
-        drawing(message(), { collapsed: true, onToggle: toggled });
-        fireEvent.click(screen.getByRole('button', { expanded: false }));
+        drawing({ ...held, email: { ...held.email, senderDisplayName: null, senderAddress: null } });
 
-        expect(toggled).toHaveBeenCalledTimes(1);
+        expect(
+            screen.getByText('The message from No sender could not be read here. Open it on its own to read it.'),
+        ).toBeDefined();
     });
 
     it('names the region it puts a reader in, so arriving at a message announces more than a tag', () => {
@@ -175,63 +214,24 @@ describe('ThreadMessage', () => {
         const onRegion = vi.fn();
         drawing(message(), { onRegion });
 
-        expect(onRegion).toHaveBeenCalledWith(screen.getByRole('article'));
+        expect(onRegion).toHaveBeenCalledWith(screen.getByRole('article', { name: 'Message from The auditor' }));
     });
 
-    it('names a message nobody wrote a sender for by something rather than by nothing', () => {
-        drawing(message({ senderDisplayName: null, senderAddress: null }));
+    // A message read inside its conversation was read, which is one rule wherever a message is drawn.
+    it('marks the message read, the words it drew being what opening it means', () => {
+        const { marking, opened } = recordingMarkings();
 
-        expect(screen.getByText('No sender')).toBeDefined();
+        drawing(message(), {}, marking);
+
+        expect(opened).toEqual(['a-message']);
     });
 
-    it('names a message whose sender wrote no display name by the address they wrote from', () => {
-        drawing(message({ senderDisplayName: null }));
+    it('marks nothing read for a message it drew no words for', () => {
+        const { marking, opened } = recordingMarkings();
 
-        expect(screen.getByText('auditor@example.invalid')).toBeDefined();
-    });
+        drawing(unopened(), {}, marking);
 
-    it('marks a message nobody has read', () => {
-        drawing(message({ unread: true }));
-
-        expect(screen.getByText('Unread')).toBeDefined();
-    });
-
-    // The list's row and this head are the same message in two places, so a reader who opened it here would otherwise
-    // find it still unread there.
-    it('draws a message this client has marked read as read, though the deployment still reports it unread', () => {
-        drawing(message({ unread: true }), {}, marked('a-message'));
-
-        expect(screen.queryByText('Unread')).toBeNull();
-    });
-
-    it('recognises a sender by their initials, which is what a conversation of several people is scanned down', () => {
-        drawing();
-
-        expect(screen.getByText('TA')).toBeDefined();
-    });
-
-    it('takes the one initial a sender who wrote a single-word name offers, rather than two', () => {
-        drawing(message({ senderDisplayName: 'Prince' }));
-
-        expect(screen.getByText('P')).toBeDefined();
-    });
-
-    it('takes the initials from the address where the sender wrote no name', () => {
-        drawing(message({ senderDisplayName: null }));
-
-        expect(screen.getByText('A')).toBeDefined();
-    });
-
-    it('invents no initials for a sender this deployment could not name', () => {
-        drawing(message({ senderDisplayName: null, senderAddress: null }));
-
-        expect(screen.queryByText('NS')).toBeNull();
-    });
-
-    it('says a message carries files, which is what a reader looks for on its head', () => {
-        drawing(message({ hasAttachments: true, attachmentCount: 2 }));
-
-        expect(screen.getByText('2 attached')).toBeDefined();
+        expect(opened).toEqual([]);
     });
 
     it('offers the way to the message on its own, where everything a conversation does not draw is', () => {
@@ -241,6 +241,16 @@ describe('ThreadMessage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open this message on its own' }));
 
         expect(onOpenOnItsOwn).toHaveBeenCalled();
+    });
+
+    it('offers the sender own markup, which is the one ask a drawn message still makes of its surface', () => {
+        const onShowFullHtml = vi.fn();
+        drawing(message(), { onShowFullHtml });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+
+        expect(onShowFullHtml).toHaveBeenCalled();
     });
 
     it('says in words that this is the message somebody opened, rather than only drawing a rule beside it', () => {

@@ -251,7 +251,7 @@ const blockRevisions: Readonly<Record<string, number>> = {
  * base64 and are therefore a third longer again, so a newsletter with two photographs in it would be cut off and
  * reported to the reader as a defect. This is that arithmetic plus room for the words around it.
  */
-const longestBodyAnswer = 8 * 1024 * 1024;
+export const longestBodyAnswer = 8 * 1024 * 1024;
 
 const bounds = {
     maximumDepth: 24,
@@ -360,7 +360,21 @@ interface RemainingBudget {
 }
 
 function parseBody(body: string, ask: MailBodyAsk): MailBody | null {
-    const record = asRecord(parsed(body));
+    return parseMailBody(parsed(body), ask);
+}
+
+/**
+ * Reads one body out of an answer that already carries it as a value, which is how a conversation carries its own.
+ *
+ * The conversation route answers with this route's body field for field rather than with a shape of its own, so the
+ * parse — and every bound it holds the document to — is this one rather than a second one written to the same contract.
+ *
+ * @param value The body as it arrived, in whatever shape it arrived in.
+ * @param ask What the read asked for, which decides which representations may be present.
+ * @returns The body, or `null` where what arrived is not one.
+ */
+export function parseMailBody(value: unknown, ask: MailBodyAsk): MailBody | null {
+    const record = asRecord(value);
     if (record === null) {
         return null;
     }

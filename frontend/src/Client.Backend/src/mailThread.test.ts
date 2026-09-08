@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { mailThreadRoute, readMailThread, threadQueryString } from './mailThread';
+import { longestDrawnThreadPage, mailThreadRoute, readMailThread, threadQueryString } from './mailThread';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -36,6 +36,57 @@ const email = {
 };
 
 const participant = { address: 'auditor@example.invalid', displayName: 'The auditor', messageCount: 2 };
+
+// What a conversation read with its messages carries beside each row: the message as the service describes it, and the
+// words it says. Both are the shapes the message and body routes answer with, which is why nothing here parses them a
+// second way.
+const described = {
+    storedEmailId: email.id,
+    account: 'work',
+    folder: 'INBOX',
+    threadId,
+    sizeOctets: 84_213,
+    headers: {
+        subject: 'The quarterly figures',
+        sentAt: '2026-08-31T09:40:00+00:00',
+        receivedAt: '2026-08-31T09:41:00+00:00',
+        participants: [{ role: 'From', address: 'auditor@example.invalid', displayName: 'The auditor' }],
+        messageId: 'abc@example.invalid',
+        inReplyTo: null,
+        references: [],
+    },
+    body: { availability: 'Readable', plainText: true, html: false },
+    sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
+    attachments: [],
+    carried: null,
+    unread: true,
+    flagged: false,
+    answered: false,
+};
+
+const said = {
+    storedEmailId: email.id,
+    availability: 'Readable',
+    plainText: { text: 'The figures you asked for are attached.', originalCharacterCount: 38, truncation: 'None' },
+    document: null,
+    selfContainedHtml: null,
+    remoteImagesRequested: false,
+};
+
+/** A page of the shape the drawn read answers with: at most ten messages, each carrying its description and words. */
+function drawnBodyOf(page: Readonly<Record<string, unknown>> = {}): string {
+    return JSON.stringify({
+        threadId,
+        messages: [{ position: 0, answeredId: null, email, message: described, body: said }],
+        participants: [participant],
+        messageCount: 1,
+        moreMessagesNotAssembled: false,
+        moreParticipantsNotNamed: false,
+        nextCursor: null,
+        pageSize: longestDrawnThreadPage,
+        ...page,
+    });
+}
 
 function bodyOf(page: Readonly<Record<string, unknown>> = {}): string {
     return JSON.stringify({
@@ -88,6 +139,18 @@ describe('threadQueryString', () => {
     it('escapes the cursor a previous page answered with', () => {
         expect(threadQueryString('a+b/c=')).toBe('?pageSize=100&cursor=a%2Bb%2Fc%3D');
     });
+
+    // A conversation drawn out asks for the messages themselves, and for the smaller page the service composes them
+    // at: the whole correspondence a screen shows arrives in that one answer rather than one read per message drawn.
+    it('asks for the messages themselves, at the page the service composes them at', () => {
+        expect(threadQueryString(null, true)).toBe(`?pageSize=${String(longestDrawnThreadPage)}&content=true`);
+    });
+
+    it('reads on from a cursor with the messages still drawn', () => {
+        expect(threadQueryString('onwards', true)).toBe(
+            `?pageSize=${String(longestDrawnThreadPage)}&cursor=onwards&content=true`,
+        );
+    });
 });
 
 describe('readMailThread', () => {
@@ -98,7 +161,7 @@ describe('readMailThread', () => {
             outcome: 'read',
             value: {
                 threadId,
-                messages: [{ position: 0, answeredId: null, email }],
+                messages: [{ position: 0, answeredId: null, email, message: null, body: null }],
                 participants: [participant],
                 messageCount: 1,
                 moreMessagesNotAssembled: false,
@@ -129,7 +192,11 @@ describe('readMailThread', () => {
             null,
         );
 
-        expect(answered.outcome === 'read' && answered.value.messages[1]).toStrictEqual(answer);
+        expect(answered.outcome === 'read' && answered.value.messages[1]).toStrictEqual({
+            ...answer,
+            message: null,
+            body: null,
+        });
     });
 
     it('reads a conversation that names an author for whom no message carried a display name', async () => {
@@ -226,6 +293,79 @@ describe('readMailThread', () => {
             answering({ status: 200, body: bodyOf({ messages }) }),
             threadId,
             null,
+        );
+
+        expect(answered).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+});
+
+describe('readMailThread drawing the messages', () => {
+    it('reads every message of the conversation with its description and its words', async () => {
+        const answered = await readMailThread(
+            session,
+            answering({ status: 200, body: drawnBodyOf() }),
+            threadId,
+            null,
+            true,
+        );
+
+        expect(answered.outcome === 'read' && answered.value.messages[0]?.message).toStrictEqual(described);
+        expect(answered.outcome === 'read' && answered.value.messages[0]?.body).toStrictEqual(said);
+    });
+
+    it('asks the deployment for the conversation and its messages in one request', async () => {
+        const { transport, requests } = recording({ status: 200, body: drawnBodyOf() });
+
+        await readMailThread(session, transport, threadId, null, true);
+
+        expect(requests).toHaveLength(1);
+        expect(requests[0]?.path).toBe(
+            `https://mail.example.invalid/api/client/threads/${threadId}` +
+                `?pageSize=${String(longestDrawnThreadPage)}&content=true`,
+        );
+    });
+
+    // A message whose local copy the deployment could not open arrives without one. That is a gap in the
+    // correspondence for the screen to say, rather than a page to refuse.
+    it('reads a message the deployment could not open as one carrying neither description nor words', async () => {
+        const answered = await readMailThread(
+            session,
+            answering({
+                status: 200,
+                body: drawnBodyOf({ messages: [{ position: 0, answeredId: null, email }] }),
+            }),
+            threadId,
+            null,
+            true,
+        );
+
+        expect(answered.outcome === 'read' && answered.value.messages[0]?.message).toBeNull();
+        expect(answered.outcome === 'read' && answered.value.messages[0]?.body).toBeNull();
+    });
+
+    it.each([
+        ['a page larger than the one messages are composed at', drawnBodyOf({ pageSize: longestDrawnThreadPage + 1 })],
+        [
+            'a description that is not one',
+            drawnBodyOf({ messages: [{ position: 0, answeredId: null, email, message: {}, body: said }] }),
+        ],
+        [
+            'words that are not words',
+            drawnBodyOf({ messages: [{ position: 0, answeredId: null, email, message: described, body: {} }] }),
+        ],
+    ])('refuses %s rather than drawing a conversation with a hole in it', async (_, body) => {
+        const answered = await readMailThread(session, answering({ status: 200, body }), threadId, null, true);
+
+        expect(answered).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses a conversation drawn at the page a read without its messages serves', async () => {
+        const answered = await readMailThread(
+            session,
+            answering({ status: 200, body: drawnBodyOf({ pageSize: 100 }) }),
+            threadId,
+            null,
+            true,
         );
 
         expect(answered).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });

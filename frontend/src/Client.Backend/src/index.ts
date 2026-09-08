@@ -151,6 +151,7 @@ export {
     type MailSemanticSearch,
 } from './mailSearch';
 export {
+    longestDrawnThreadPage,
     longestThreadPage,
     mailThreadRoute,
     readMailThread,

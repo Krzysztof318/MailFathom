@@ -102,7 +102,7 @@ export function MessageList({
      * its own beside what is already open — belongs to the frame, and a list that decided it would be the second
      * implementation of a decision the frame already holds.
      */
-    readonly onOpen: (storedEmailId: string, subject: string | null) => void;
+    readonly onOpen: (storedEmailId: string, subject: string | null, threadId: string | null) => void;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
@@ -456,7 +456,7 @@ export function MessageList({
         const email = rowAt(held, row);
 
         if (email !== null) {
-            onOpen(email.id, email.subject);
+            onOpen(email.id, email.subject, email.threadId);
         }
     }
 
@@ -500,7 +500,7 @@ export function MessageList({
         // as open, and a selection is the modifier's, the drag's, the menu's, or the keyboard's to make.
         dragging.current = true;
         setAnchor(email.id);
-        onOpen(email.id, email.subject);
+        onOpen(email.id, email.subject, email.threadId);
     }
 
     // Closing the menu puts focus back on the row it was opened from, because that is where the reader was: a menu

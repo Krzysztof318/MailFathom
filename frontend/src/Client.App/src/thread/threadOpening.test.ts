@@ -30,6 +30,8 @@ function message(id: string, position: number, unread = false): MailThreadMessag
             preview: 'What this one added.',
             threadMessageCount: null,
         },
+        message: null,
+        body: null,
     };
 }
 

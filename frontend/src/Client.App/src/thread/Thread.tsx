@@ -27,12 +27,17 @@ import { ThreadMessage } from './ThreadMessage';
 // is the presentation, and the presentation is the whole difficulty — a long conversation drawn naively is the same
 // paragraph eight times.
 //
-// Three things answer that. The conversation shows its latest message and hides everything before it behind one
+// Three things answer that. The conversation shows the message it was opened at and hides everything else behind one
 // control naming how many there are, so opening a long conversation is reading the message somebody came for rather
-// than first collapsing eight of them — and a message the control does not show is a body nobody asks the deployment
-// for, so a conversation of thirty messages costs one read rather than thirty. What each message says is trimmed of
+// than first scrolling past eight of them — and pressing that control draws every one of them out in full, because a
+// conversation is a document rather than a list of things to open one at a time. What each message says is trimmed of
 // the history it quoted by the deployment rather than here. And the history that is quoted inside a message is folded
 // away behind a disclosure, because the message it quotes is a message of its own a few lines up.
+//
+// **The whole correspondence arrives in one request**, messages and bodies together, so revealing the history costs
+// nothing on the wire and the setting that opens a conversation expanded costs nothing either. That is what bounds the
+// page: a read carrying the messages themselves is held to the deployment's own content-read ceiling, and a
+// correspondence longer than one page is read on with the control below it.
 //
 // It stands in front of the message it was opened from rather than replacing it: the workspace still holds that
 // message, so closing the conversation returns to it and the place it returns to is still there.
@@ -48,6 +53,32 @@ import { ThreadMessage } from './ThreadMessage';
 // how long something is said for, and the theme decides how movement happens rather than how long a screen speaks.
 const landingHeldFor = 2_200;
 
+// What the one control over the correspondence says, which is a question about two things rather than one: whether the
+// rest of it is standing, and whether the message it was opened at is the newest. A conversation opened in the middle
+// of its history hides messages on both sides of that one, so what it offers is the whole correspondence rather than
+// the earlier part of it — the design project words all four, and each is a different sentence rather than a wording of
+// one.
+//
+// Three of the four are one sentence each. The fourth counts, so it is a form per plural category rather than a number
+// appended to a sentence: Polish words one earlier message, two, and five differently, and the design project writes
+// all three out.
+const earlierHidden: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'thread.showEarlier.other',
+    one: 'thread.showEarlier.one',
+    two: 'thread.showEarlier.other',
+    few: 'thread.showEarlier.few',
+    many: 'thread.showEarlier.many',
+    other: 'thread.showEarlier.other',
+};
+
+function revealLabel(historyShown: boolean, openedIsLatest: boolean, hidden: number, locale: string): MessageKey {
+    if (historyShown) {
+        return openedIsLatest ? 'thread.hideEarlier' : 'thread.hideOthers';
+    }
+
+    return openedIsLatest ? earlierHidden[new Intl.PluralRules(locale).select(hidden)] : 'thread.showAll';
+}
+
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
     unauthorized: 'failure.unauthorized',
@@ -62,6 +93,7 @@ export function Thread({
     conversation,
     online,
     expandWholeThread,
+    onShowFullHtml,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
@@ -70,6 +102,9 @@ export function Thread({
 
     /** Whether the reader asked for conversations to open with every message drawn rather than at the one they came for. */
     readonly expandWholeThread: boolean;
+
+    /** Opens the surface drawing one message's own markup, which each message of the conversation offers. */
+    readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { locale, translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
@@ -89,18 +124,11 @@ export function Thread({
     // does: nothing in a conversation brings one back, and a conversation reached a second time is a second mount.
     const [settled, setSettled] = useState(false);
 
-    // Whether the messages before the latest are drawn. It opens on what the reader asked conversations to open on,
-    // and is then decided by where they arrived — a message the history holds cannot be arrived at while the history
-    // is hidden — and theirs from then on. The preference is read once, on mounting, because it says how a conversation
-    // *opens*: a switch moved while one is on the screen changes the next conversation rather than this one, which is
-    // also why the control below still hides a history the preference showed.
+    // Whether the rest of the correspondence is drawn beside the message it was opened at. It opens on what the reader
+    // asked conversations to open on and is theirs from then on. The preference is read once, on mounting, because it
+    // says how a conversation *opens*: a switch moved while one is on the screen changes the next conversation rather
+    // than this one, which is also why the control below still hides a correspondence the preference showed.
     const [historyShown, setHistoryShown] = useState(expandWholeThread);
-
-    // Which messages a reader has pressed open or closed, against what each opens as on its own: the latest message
-    // and the one the conversation arrived at open, and every earlier one collapsed to its head — or every one open,
-    // where the reader asked conversations to open expanded. Held as the presses rather than as the states, so a page
-    // arriving with a newer latest message collapses nothing the reader opened and opens nothing they closed.
-    const [pressed, setPressed] = useState<readonly string[]>([]);
 
     const regions = useRef(new Map<string, HTMLElement>());
 
@@ -122,21 +150,15 @@ export function Thread({
     }
 
     const held = messagesOf(pages);
-    const drawn = historyShown ? held : held.slice(-1);
     const mark = arrivalMark(conversation, arrival, settled);
     const latest = pages.at(-1) ?? null;
 
-    function opensOnItsOwn(storedEmailId: string): boolean {
-        return expandWholeThread || storedEmailId === held.at(-1)?.email.id || storedEmailId === arrival?.storedEmailId;
-    }
-
-    function toggle(storedEmailId: string): void {
-        setPressed((current) =>
-            current.includes(storedEmailId)
-                ? current.filter((one) => one !== storedEmailId)
-                : [...current, storedEmailId],
-        );
-    }
+    // What stands on the screen: the whole correspondence, or the one message it was opened at. The design draws the
+    // second as the message somebody came for and nothing else — which is not the same as the latest message, because a
+    // conversation opened at a message in the middle of its history was opened at that one.
+    const opened = held.find((message) => message.email.id === arrival?.storedEmailId) ?? held.at(-1) ?? null;
+    const drawn = historyShown || opened === null ? held : [opened];
+    const openedIsLatest = opened !== null && opened.email.id === held.at(-1)?.email.id;
 
     // A conversation opened at a message is read forward until that message is in hand, because the route pages from
     // the beginning and the surrounding history is what somebody arriving from a search result came for. The count the
@@ -165,10 +187,6 @@ export function Thread({
 
         if (arriveAt !== null) {
             setArrival(arriveAt);
-
-            if (arriveAt.amongOthers) {
-                setHistoryShown(true);
-            }
         }
     }
 
@@ -181,7 +199,7 @@ export function Thread({
 
         let listening = true;
 
-        void readMailThread(session, transport, conversation.threadId, wantedCursor).then((result) => {
+        void readMailThread(session, transport, conversation.threadId, wantedCursor, true).then((result) => {
             if (!listening) {
                 return;
             }
@@ -378,7 +396,12 @@ export function Thread({
                         otherwise eight decisions about. It names how many are behind it, so pressing it is a choice
                         rather than a guess, and it stands above them because that is where the design project draws
                         it — between the head of the conversation and the messages themselves. A conversation of one
-                        message has no history to offer, and no control. */}
+                        message has no history to offer, and no control.
+
+                        It says four things rather than two, as the design does, because what it hides is *the rest of
+                        the correspondence* rather than what came before: a conversation opened at a message in the
+                        middle of its history has messages on both sides of it, and a control offering to show the
+                        earlier ones there would be offering something other than what it does. */}
                     {held.length < 2 ? null : (
                         <div className="flex items-center gap-2.5">
                             <span className="h-px flex-1 bg-line" />
@@ -391,11 +414,9 @@ export function Thread({
                                     setHistoryShown(!historyShown);
                                 }}
                             >
-                                {historyShown
-                                    ? translate('thread.hideEarlier')
-                                    : translate('thread.showEarlier', {
-                                          count: new Intl.NumberFormat(locale).format(held.length - 1),
-                                      })}
+                                {translate(revealLabel(historyShown, openedIsLatest, held.length - 1, locale), {
+                                    count: new Intl.NumberFormat(locale).format(held.length - 1),
+                                })}
                             </button>
 
                             <span className="h-px flex-1 bg-line" />
@@ -410,12 +431,12 @@ export function Thread({
                                 transport={transport}
                                 message={message}
                                 mark={message.email.id === arrival?.storedEmailId ? mark : null}
-                                collapsed={opensOnItsOwn(message.email.id) === pressed.includes(message.email.id)}
-                                onToggle={() => {
-                                    toggle(message.email.id);
-                                }}
+                                online={online}
                                 onOpenOnItsOwn={() => {
                                     openOnItsOwn(message.email.id);
+                                }}
+                                onShowFullHtml={() => {
+                                    onShowFullHtml(message.email.id, message.email.subject);
                                 }}
                                 onRegion={(element) => {
                                     if (element === null) {

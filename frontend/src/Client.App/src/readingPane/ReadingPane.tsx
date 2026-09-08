@@ -8,32 +8,23 @@ import {
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
-    type MailCarried,
     type MailFathomTransport,
     type MailMessage,
 } from '@mailfathom/client-backend';
-import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
-import { ReceivedAt } from '../controls/ReceivedAt';
-import { SenderAvatar } from '../controls/SenderAvatar';
-import { ShowFullHtml } from '../fullHtml/ShowFullHtml';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { useEmbeddedHtmlMessages } from '../preferences/messageView';
-import { useReadMarking } from '../readMarking/useReadMarking';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { useOpenAttachment } from '../workspace/openAttachment';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { Message, WordsWaiting } from '../messageBody/Message';
+import { WordsWaiting } from '../messageBody/Message';
 import { Skeleton } from '../controls/Skeleton';
 import { useMessageBody } from '../messageBody/useMessageBody';
 import { BackToList } from '../mailSpace/BackToList';
 import { NothingOpen } from '../mailSpace/NothingOpen';
 import { useTwoPanes } from '../shell/useWideWorkspace';
-import { Attachments } from './Attachments';
 import { MessageHeaders } from './MessageHeaders';
-import { sizeOf } from '../localization/octets';
-import { SenderVerdict } from './SenderVerdict';
+import { OpenedMessage } from './OpenedMessage';
 
 // Reading one message, which is the act everything else in this client exists to support and where the most is on screen
 // at once. What this component owns is the composition and the honesty of it: the headers, what the deployment
@@ -60,11 +51,6 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unreadable: 'failure.unreadable',
     missing: 'failure.missing',
 };
-
-// The most of a selected passage the workspace carries. A question is asked about a fragment somebody pointed at, so a
-// select-all is a gesture rather than a scope, and a whole message in the workspace would travel into every later screen
-// that reads it.
-const longestFragment = 2000;
 
 /** What is being read: which message, which attempt at it, and whether the attempt may show. A change to any reads again. */
 interface Read {
@@ -154,12 +140,10 @@ function OpenMessage({
     readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
     readonly arriving: boolean;
 }) {
-    const { locale, translate } = useLocalization();
+    const { translate } = useLocalization();
     const twoPanes = useTwoPanes();
-    const embeddedHtml = useEmbeddedHtmlMessages();
     const { workspace, revise } = useWorkspace();
     const openAttachment = useOpenAttachment();
-    const { markRead } = useReadMarking();
     const signalledChanges = useSignalledChanges();
     const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0, quietly: false });
     const [answer, setAnswer] = useState<Answered | null>(null);
@@ -175,7 +159,6 @@ function OpenMessage({
     const openCitedFile = useRef(openAttachment);
 
     const opened = useRef<HTMLElement>(null);
-    const body = useRef<HTMLDivElement>(null);
     // The message focus was last placed on, which starts as the one this pane mounted with so that landing on a message
     // does not steal focus. A reader arriving back from the conversation that stood in front of it is not landing, so
     // that mount starts having focused nothing and the effect below places it once the message is drawable.
@@ -293,26 +276,6 @@ function OpenMessage({
         revise({ fragment: null });
     }, [storedEmailId, revise]);
 
-    // What a person selected becomes the scope the intent field asks its next question under. It is read from the
-    // gesture that produced it rather than from an effect watching the document, and it is bounded, trimmed, and
-    // confined to this message's own words: a selection that started outside the body is not part of the message.
-    function capture(): void {
-        const selected = window.getSelection();
-        const region = body.current;
-
-        if (selected === null || region === null) {
-            return;
-        }
-
-        if (!region.contains(selected.anchorNode) || !region.contains(selected.focusNode)) {
-            return;
-        }
-
-        const fragment = selected.toString().trim().slice(0, longestFragment);
-
-        revise({ fragment: fragment === '' ? null : fragment });
-    }
-
     // The answer to the attempt in flight, or — while a quiet attempt is in flight — the one already on the screen,
     // which is what keeps a signalled re-read from blanking a message its reader is part-way through.
     const held =
@@ -396,9 +359,6 @@ function OpenMessage({
     }
 
     const message = held.result.value;
-    const threadId = message.threadId;
-    const author = message.headers.participants.find((participant) => participant.role === 'From') ?? null;
-    const numbers = new Intl.NumberFormat(locale);
 
     // Named by its own subject, which is what a reader arriving in the region needs to hear and what tells one message's
     // region from the body's inside it. The heading below says the same words on the screen; this is what the region
@@ -413,104 +373,14 @@ function OpenMessage({
             <MessageHeaders headers={message.headers} message={message} />
 
             <div className="flex flex-col gap-3 px-5.5 py-4.5">
-                <SenderVerdict verdict={message.sender} />
-
-                {/* The way into the conversation this message belongs to, offered where the service threaded it and
-                    absent where it did not: a control that opened a conversation of one message would be a control
-                    that answers nothing. It carries this message, so the conversation opens at what is being read
-                    rather than at its beginning, and closing it returns here — the selection this pane draws from is
-                    what it was opened from. Drawn as the pill the design project stands between a message and the
-                    conversation behind it. */}
-                {threadId === null ? null : (
-                    <div className="flex justify-center">
-                        <button
-                            type="button"
-                            className="rounded-full border border-line bg-sunken px-3.5 py-1.75 text-base text-text-soft transition hover:bg-hover"
-                            onClick={() => {
-                                revise({ conversation: { threadId, openAt: storedEmailId } });
-                            }}
-                        >
-                            {translate('thread.open')}
-                        </button>
-                    </div>
-                )}
-
-                {/* The message as the design project draws one in the reading column: flat on the column, at the
-                    measure a conversation's messages take, with who wrote it and what the copy holds on its first
-                    line — how many attachments, the sender's own markup where there is one, and when this deployment
-                    recorded it — and what it says under that. */}
-                <div className="mx-auto flex w-full max-w-conversation flex-col gap-3">
-                    <div className="flex items-center gap-2.75">
-                        <SenderAvatar
-                            displayName={author?.displayName ?? null}
-                            address={author?.address ?? null}
-                            place="card"
-                        />
-
-                        <span className="min-w-0 truncate text-md font-semibold text-text">
-                            {author === null ? translate('message.noAuthor') : (author.displayName ?? author.address)}
-                        </span>
-
-                        <span className="flex-1" />
-
-                        {message.attachments.length === 0 ? null : (
-                            <span className="flex shrink-0 items-center gap-0.75 text-xs text-faint">
-                                <Icon name="attach_file" className="size-3.5" />
-                                {numbers.format(message.attachments.length)}
-                            </span>
-                        )}
-
-                        {/* Drawn in the reduced view and in no other. With the embedded HTML view chosen the markup
-                            is already on the screen under this line, so a control offering to open it would open a
-                            second copy of what is being read — which is why it goes rather than being disabled. */}
-                        {embeddedHtml ? null : (
-                            <ShowFullHtml
-                                onShow={() => {
-                                    onShowFullHtml(storedEmailId, message.headers.subject);
-                                }}
-                            />
-                        )}
-
-                        <ReceivedAt at={message.headers.receivedAt} />
-                    </div>
-
-                    {/* The gestures a selection ends on rather than a document-wide subscription: a selection made
-                        with the pointer settles on the release and one made with the keyboard on the key coming back
-                        up, and both of them are events this region already receives. */}
-                    {/* The ceiling this pane reads a message's words under, which binds the content alone: the head
-                        above it, the verdict about who sent it, the files it carries, and the actions have no measure
-                        to keep and take the pane's own width. It is ranged left, so a window wider than the ceiling
-                        leaves its margin on the empty side of the pane rather than pushing the words away from the
-                        list they were opened from. A conversation answers the same question differently, which is why
-                        the measure is stated by each surface rather than inside the message. */}
-                    <div ref={body} onKeyUp={capture} onMouseUp={capture} className="max-w-reading">
-                        {/* The body being drawn is what opening this message means, so it is what marks it read. The
-                            description above already says which account and folder the message is counted in, which is
-                            what a folder's unread count is corrected by. */}
-                        <Message
-                            body={bodyRead}
-                            storedEmailId={storedEmailId}
-                            onBodyDrawn={() => {
-                                markRead({
-                                    storedEmailId: message.storedEmailId,
-                                    account: message.account,
-                                    folder: message.folder,
-                                    unread: message.unread,
-                                });
-                            }}
-                        />
-                    </div>
-
-                    {message.attachments.length === 0 ? null : (
-                        <Attachments
-                            session={session}
-                            storedEmailId={storedEmailId}
-                            attachments={message.attachments}
-                        />
-                    )}
-                </div>
-
-                {message.carried === null ? null : <Carried carried={message.carried} />}
+                <OpenedMessage
+                    session={session}
+                    message={message}
+                    body={bodyRead}
+                    onShowFullHtml={() => {
+                        onShowFullHtml(storedEmailId, message.headers.subject);
+                    }}
+                />
             </div>
         </article>
     );
@@ -540,34 +410,5 @@ function MessageWaiting({ oneColumn }: { readonly oneColumn: boolean }) {
 
             <WordsWaiting />
         </div>
-    );
-}
-
-// What a message carries besides its files, where any of it is true. Each of the three is a fact about the message
-// rather than about a part, which is why they are said here and not on a row: a signature and an unopened `winmail.dat`
-// are not files a reader can open, and drawing them as ones would offer a download that answers with nothing.
-function Carried({ carried }: { readonly carried: MailCarried }) {
-    const { locale, translate } = useLocalization();
-
-    const notes: readonly MessageKey[] = [
-        ...(carried.encrypted ? (['carried.encrypted'] as const) : []),
-        ...(carried.unverifiedSignature ? (['carried.unverifiedSignature'] as const) : []),
-        ...(carried.unexpandedTnefPart ? (['carried.unexpandedTnefPart'] as const) : []),
-    ];
-
-    if (notes.length === 0 && carried.attachmentCount === 0) {
-        return null;
-    }
-
-    return (
-        <aside className="flex flex-col gap-1 text-sm text-muted">
-            {carried.attachmentCount === 0 ? null : (
-                <p>{translate('carried.total', { size: sizeOf(carried.totalSizeOctets, locale) })}</p>
-            )}
-
-            {notes.map((note) => (
-                <p key={note}>{translate(note)}</p>
-            ))}
-        </aside>
     );
 }

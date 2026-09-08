@@ -114,7 +114,7 @@ export interface MailMessage {
 // A description composes to a stated size, so the backstop written for a stranger is far looser than this answer ever
 // needs. It is generous against the bounds below rather than tight against them: the point of failing here is to stop a
 // body being buffered whole, and the point of failing there is to refuse a description this client would not draw.
-const longestMessageAnswer = 4 * 1024 * 1024;
+export const longestMessageAnswer = 4 * 1024 * 1024;
 
 // What the service will compose at most, mirrored so a description larger than that is refused rather than drawn. The
 // part count is the ceiling `MaxMimePartCount` defaults to, rounded up, because every part of a message can be an
@@ -170,15 +170,25 @@ export function readMailMessage(
 }
 
 function parseMessage(body: string): MailMessage | null {
-    let parsed: unknown;
-
     try {
-        parsed = JSON.parse(body);
+        return parseMailMessage(JSON.parse(body));
     } catch {
         return null;
     }
+}
 
-    const record = asRecord(parsed);
+/**
+ * Reads one message out of an answer that already carries it as a value, which is how a conversation carries its own.
+ *
+ * The conversation route answers with this route's message field for field rather than with a shape of its own, so the
+ * parse is this one rather than a second one written to the same contract — two parsers of one message are how a client
+ * comes to draw the same message differently on two screens.
+ *
+ * @param value The message as it arrived, in whatever shape it arrived in.
+ * @returns The message, or `null` where what arrived is not one.
+ */
+export function parseMailMessage(value: unknown): MailMessage | null {
+    const record = asRecord(value);
     if (record === null) {
         return null;
     }
