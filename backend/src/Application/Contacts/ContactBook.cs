@@ -16,20 +16,20 @@ namespace MailFathom.Application.Contacts;
 /// Every surface over the book — the administration tool, the MCP tools, and collection from arriving mail — performs
 /// these acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
 /// A writer names the origin it acts under, and a contact is amendable only by a writer of its own: collection never
-/// touches what an owner wrote down, and an owner promotes a collected contact rather than editing it in place.
-/// Promotion names the writer for the same reason, so the act of taking a record on is the owner's rather than something
+/// touches what a user wrote down, and a user promotes a collected contact rather than editing it in place.
+/// Promotion names the writer for the same reason, so the act of taking a record on is the user's rather than something
 /// collection can perform on its own behalf.
 /// </para>
 /// <para>
-/// A book belongs to one owner, and every act resolves whose through <see cref="ContactBookOwnership" /> before it
-/// reaches the store or the directory. So an identity, an address, or a name from another owner's book is answered as
+/// A book belongs to one user, and every act resolves whose through <see cref="ContactBookOwnership" /> before it
+/// reaches the store or the directory. So an identity, an address, or a name from another user's book is answered as
 /// one this book does not hold, and two people who correspond with the same person each keep their own record of them.
 /// The origin rule above runs within a book rather than across the deployment, for the same reason.
 /// </para>
 /// <para>
 /// Each write is idempotent from a fresh read and is committed through the optimistic concurrency policy, so two callers
 /// claiming one address converge on the same answer instead of one of them meeting a provider failure: the loser's
-/// insert violates the unique constraint over the owner and the address, the retry re-reads, and the second caller is
+/// insert violates the unique constraint over the user and the address, the retry re-reads, and the second caller is
 /// told which contact of their own book holds it.
 /// </para>
 /// <para>
@@ -51,7 +51,7 @@ namespace MailFathom.Application.Contacts;
 /// reachable from the operator and dead from the protocol. Promotion is written the same way and for the same reason: a
 /// collected record exists to be taken on, and an agent that read the book has the same standing to do it as an operator
 /// at a terminal. The alternative stops where the act does — exporting a person answers a data-subject request rather
-/// than an agent's question, and erasing the whole collected half is an owner reversing a decision they made in
+/// than an agent's question, and erasing the whole collected half is a user reversing a decision they made in
 /// configuration.
 /// </para>
 /// <para>
@@ -114,7 +114,7 @@ public sealed class ContactBook
 
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.ReadPageAsync(this.ownership.Owner, query, cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.User, query, cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -126,7 +126,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.User, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -139,7 +139,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.User, address, cancellationToken);
     }
 
     /// <summary>Answers whether the book already holds one address, without answering whose it is.</summary>
@@ -150,14 +150,14 @@ public sealed class ContactBook
     /// <remarks>
     /// The read collection performs before it decides whether to record somebody, and it answers a question rather than
     /// producing a record deliberately: collection needs to know that an address is spoken for, and handing it the
-    /// contact would put a person the owner asserted into the hands of work that may not touch them. It admits the
+    /// contact would put a person the user asserted into the hands of work that may not touch them. It admits the
     /// process identity alone, for the reason <see cref="CollectAsync" /> does.
     /// </remarks>
     public async Task<bool> HoldsAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         this.authorization.RequireProcessIdentity();
 
-        return await this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken) is not null;
+        return await this.directory.FindByAddressAsync(this.ownership.User, address, cancellationToken) is not null;
     }
 
     /// <summary>Records a person collection inferred from arriving mail.</summary>
@@ -177,7 +177,7 @@ public sealed class ContactBook
     /// </para>
     /// <para>
     /// It refuses a record naming any origin but <see cref="ContactOrigin.Collected" />, so the one writer that could
-    /// award itself an owner's authority cannot do it by stating a different origin on the way in.
+    /// award itself a user's authority cannot do it by stating a different origin on the way in.
     /// </para>
     /// </remarks>
     public Task<ContactWriteResult> CollectAsync(NewContact newContact, CancellationToken cancellationToken)
@@ -236,12 +236,12 @@ public sealed class ContactBook
             MailFathomPermission.AdminOperate,
             MailFathomPermission.MailContactsWrite);
 
-        var owner = this.ownership.Owner;
+        var user = this.ownership.User;
 
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(owner, amendment.ContactId, token);
+                var held = await this.directory.FindAsync(user, amendment.ContactId, token);
 
                 if (held is null)
                 {
@@ -260,19 +260,19 @@ public sealed class ContactBook
                     amendment.Note,
                     this.timeProvider.GetUtcNow());
 
-                if (await this.AddressHolderOtherThanAsync(owner, amended, token) is { } holder)
+                if (await this.AddressHolderOtherThanAsync(user, amended, token) is { } holder)
                 {
                     return ContactWriteResult.AddressHeldBy(holder);
                 }
 
-                return await this.store.ReplaceAsync(session, owner, amended, token)
+                return await this.store.ReplaceAsync(session, user, amended, token)
                     ? ContactWriteResult.Written(amended)
                     : ContactWriteResult.NotFound();
             },
             cancellationToken);
     }
 
-    /// <summary>Promotes a collected contact to one the owner has taken responsibility for.</summary>
+    /// <summary>Promotes a collected contact to one the user has taken responsibility for.</summary>
     /// <param name="contactId">The contact to promote.</param>
     /// <param name="writer">The origin the writer acts under.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -281,9 +281,9 @@ public sealed class ContactBook
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" /> or <see cref="MailFathomPermission.MailContactsWrite" />.</exception>
     /// <remarks>
     /// The one act that changes an origin, and it runs one way. It is gated on the writer for the reason an amendment is:
-    /// promotion is the owner taking a record on, so collection asking for it is refused rather than granted the authority
+    /// promotion is the user taking a record on, so collection asking for it is refused rather than granted the authority
     /// it was about to award itself. A contact that is already asserted is answered as such rather than written again, so
-    /// an owner repeating the request learns that nothing was left to do.
+    /// a user repeating the request learns that nothing was left to do.
     /// <para>
     /// The writer and the grant answer different questions and both are asked: the grant says whether this caller may
     /// write to the book at all, and the writer says whether the record's own origin admits what it is about to do.
@@ -305,12 +305,12 @@ public sealed class ContactBook
             MailFathomPermission.AdminOperate,
             MailFathomPermission.MailContactsWrite);
 
-        var owner = this.ownership.Owner;
+        var user = this.ownership.User;
 
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(owner, contactId, token);
+                var held = await this.directory.FindAsync(user, contactId, token);
 
                 if (held is null)
                 {
@@ -329,7 +329,7 @@ public sealed class ContactBook
 
                 var promoted = held.PromotedToAsserted(this.timeProvider.GetUtcNow());
 
-                return await this.store.ReplaceAsync(session, owner, promoted, token)
+                return await this.store.ReplaceAsync(session, user, promoted, token)
                     ? ContactWriteResult.Written(promoted)
                     : ContactWriteResult.NotFound();
             },
@@ -355,22 +355,22 @@ public sealed class ContactBook
             MailFathomPermission.AdminErase,
             MailFathomPermission.MailContactsWrite);
 
-        var owner = this.ownership.Owner;
+        var user = this.ownership.User;
 
         return this.commitPolicy.CommitAsync(
-            (session, token) => this.store.EraseAsync(session, owner, contactId, token),
+            (session, token) => this.store.EraseAsync(session, user, contactId, token),
             cancellationToken);
     }
 
-    /// <summary>Erases every contact this deployment collected, leaving the ones the owner asserted where they are.</summary>
+    /// <summary>Erases every contact this deployment collected, leaving the ones the user asserted where they are.</summary>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the erasure was reached by anything but a caller granted <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
     /// <para>
-    /// The answer to an owner who changed their mind about collection. Everything collection produced is a contact of
+    /// The answer to a user who changed their mind about collection. Everything collection produced is a contact of
     /// its own origin — it keeps no ledger, and the evidence it reads is the mail that was already there — so taking
-    /// that origin out is taking out the whole of what it built, and nothing of what the owner entered goes with it.
+    /// that origin out is taking out the whole of what it built, and nothing of what the user entered goes with it.
     /// </para>
     /// <para>
     /// It stays the operator's act under the erasing grant, beside the erasure of one person and of stored mail, and is
@@ -382,10 +382,10 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminErase);
 
-        var owner = this.ownership.Owner;
+        var user = this.ownership.User;
 
         return this.commitPolicy.CommitAsync(
-            (session, token) => this.store.EraseCollectedAsync(session, owner, token),
+            (session, token) => this.store.EraseCollectedAsync(session, user, token),
             cancellationToken);
     }
 
@@ -399,7 +399,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        var held = await this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
+        var held = await this.directory.FindAsync(this.ownership.User, contactId, cancellationToken);
 
         return held is null ? null : new ContactExport(held, this.timeProvider.GetUtcNow());
     }
@@ -413,7 +413,7 @@ public sealed class ContactBook
     /// </remarks>
     private Task<ContactWriteResult> WriteNewContactAsync(NewContact newContact, CancellationToken cancellationToken)
     {
-        var owner = this.ownership.Owner;
+        var user = this.ownership.User;
         var recordedAt = this.timeProvider.GetUtcNow();
         var contact = Contact.Create(
             ContactId.Create(Guid.CreateVersion7(recordedAt)),
@@ -428,12 +428,12 @@ public sealed class ContactBook
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                if (await this.AddressHolderOtherThanAsync(owner, contact, token) is { } holder)
+                if (await this.AddressHolderOtherThanAsync(user, contact, token) is { } holder)
                 {
                     return ContactWriteResult.AddressHeldBy(holder);
                 }
 
-                await this.store.AddAsync(session, owner, contact, token);
+                await this.store.AddAsync(session, user, contact, token);
 
                 return ContactWriteResult.Written(contact);
             },
@@ -449,11 +449,11 @@ public sealed class ContactBook
     /// retried rather than reported.
     /// </remarks>
     private async Task<ContactId?> AddressHolderOtherThanAsync(
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken)
     {
-        var holders = await this.directory.FindHoldersOfAsync(owner, contact.Addresses, cancellationToken);
+        var holders = await this.directory.FindHoldersOfAsync(user, contact.Addresses, cancellationToken);
         var otherHolders = holders.Values.Where(holder => holder != contact.Id).ToArray();
 
         return otherHolders.Length == 0 ? null : otherHolders[0];

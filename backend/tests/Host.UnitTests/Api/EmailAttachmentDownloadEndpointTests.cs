@@ -71,7 +71,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()),
                 egress.Screen),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -101,7 +101,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -135,7 +135,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 "text/html",
                 "<script>alert(1)</script>"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -165,7 +165,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -195,7 +195,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 "application/pdf",
                 "bytes"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -227,7 +227,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -251,7 +251,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -280,7 +280,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(null),
             AttachmentOpening(principals, null),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -289,7 +289,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(ticket),
             AttachmentOpening(principals, null),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -318,7 +318,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(storedEmailId, 3)),
             AttachmentOpening(principals, null),
             principals,
-            DeploymentOwner(),
+            DeploymentUser(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -330,20 +330,20 @@ public sealed class EmailAttachmentDownloadEndpointTests
     }
 
     /// <summary>
-    /// A ticket names an attachment rather than a person, so this route resolves the owner from the deployment and has
+    /// A ticket names an attachment rather than a person, so this route resolves the user from the deployment and has
     /// no answer where it serves several. The refusal is the classified conflict the route groups' filter composes,
     /// which is what this route being mapped outside every group would otherwise leave as an unhandled fault carrying
     /// the presented capability into a framework log.
     /// </summary>
     [Fact]
-    public async Task DownloadAsync_ADeploymentServingSeveralOwners_AnswersTheConflictRatherThanFaulting()
+    public async Task DownloadAsync_ADeploymentServingSeveralUsers_AnswersTheConflictRatherThanFaulting()
     {
         // Arrange
         var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
-        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
+        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
 
-        deploymentOwner.Owner.Returns(_ => throw DeploymentMailOwnerUnresolvedException.NoSoleOwnerToActFor());
+        deploymentUser.User.Returns(_ => throw DeploymentMailUserUnresolvedException.NoSoleUserToActFor());
 
         // Act
         var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
@@ -351,7 +351,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
-            deploymentOwner,
+            deploymentUser,
             context,
             TestContext.Current.CancellationToken);
 
@@ -360,7 +360,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
 
         Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
         Assert.Equal(
-            MailFathomErrorCode.DeploymentMailOwnerUnresolved.Value,
+            MailFathomErrorCode.DeploymentMailUserUnresolved.Value,
             refusal.ProblemDetails.Extensions[RouteAuthorization.ErrorCodeExtension]);
     }
 
@@ -385,19 +385,19 @@ public sealed class EmailAttachmentDownloadEndpointTests
         // the route states once the ticket has verified.
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
-            DeploymentOwner(),
+            DeploymentUser(),
             Options.Create(new McpEndpointOptions()),
             Options.Create(new AdminEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
     }
 
-    /// <summary>Names the owner this deployment serves, which is the owner a redeemed capability acts for.</summary>
-    private static IDeploymentMailOwnerSource DeploymentOwner()
+    /// <summary>Names the user this deployment serves, which is the user a redeemed capability acts for.</summary>
+    private static IDeploymentMailUserSource DeploymentUser()
     {
-        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
-        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
+        var deploymentUser = Substitute.For<IDeploymentMailUserSource>();
+        deploymentUser.User.Returns(SyntheticMailUser.Deployment);
 
-        return deploymentOwner;
+        return deploymentUser;
     }
 
     private static IAttachmentDownloadTicketReader TicketReaderRedeeming(AttachmentDownloadTicket? ticket)
@@ -466,7 +466,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     private static EmailSummary SummaryOf() => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary")),
+        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         InternetMessageId = "<abc@example.test>",
         Subject = "Quarterly invoice",

@@ -23,7 +23,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </para>
 /// <para>
 /// The author is provenance rather than an idempotency identity. Asking twice for a draft leaves two drafts, which
-/// costs an owner a deletion rather than a recipient a second message, so nothing here is enforced by a unique index.
+/// costs a user a deletion rather than a recipient a second message, so nothing here is enforced by a unique index.
 /// </para>
 /// </remarks>
 public sealed record MailDraftRequest

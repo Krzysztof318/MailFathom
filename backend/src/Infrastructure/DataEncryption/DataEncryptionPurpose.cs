@@ -46,7 +46,7 @@ public readonly record struct DataEncryptionPurpose
     public static DataEncryptionPurpose MailboxRefreshToken { get; } = new("mailbox-refresh-token");
 
     /// <summary>Gets the purpose of secret material stored behind a database secret reference.</summary>
-    /// <remarks>The subject binds the owner, stored-secret identifier, and secret name, so moving any one of them makes the value fail to open.</remarks>
+    /// <remarks>The subject binds the user, stored-secret identifier, and secret name, so moving any one of them makes the value fail to open.</remarks>
     public static DataEncryptionPurpose StoredSecret { get; } = new("stored-secret");
 
     /// <summary>Gets the purpose of the key that signs the short-lived capability an attachment is fetched with.</summary>

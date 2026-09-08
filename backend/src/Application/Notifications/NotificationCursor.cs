@@ -18,10 +18,10 @@ namespace MailFathom.Application.Notifications;
 /// between two pages would shift an offset window and repeat or skip a row on every page after it.
 /// </para>
 /// <para>
-/// The fingerprint every keyset cursor here carries is the owner rather than a set of filters, because the owner is
+/// The fingerprint every keyset cursor here carries is the user rather than a set of filters, because the user is
 /// the only thing this reading narrows by and it comes off the credential rather than out of the request. So a cursor
 /// is refused when it is presented by somebody it was not issued to, which is a signed-out and signed-in-again client
-/// resuming a stale walk rather than an attack — the page it would continue is scoped to the caller's own owner either
+/// resuming a stale walk rather than an attack — the page it would continue is scoped to the caller's own user either
 /// way.
 /// </para>
 /// <para>
@@ -31,11 +31,11 @@ namespace MailFathom.Application.Notifications;
 /// </remarks>
 public readonly record struct NotificationCursor
 {
-    private NotificationCursor(DateTimeOffset occurredAt, NotificationId notificationId, string ownerFingerprint)
+    private NotificationCursor(DateTimeOffset occurredAt, NotificationId notificationId, string userFingerprint)
     {
         this.OccurredAt = occurredAt;
         this.NotificationId = notificationId;
-        this.OwnerFingerprint = ownerFingerprint;
+        this.UserFingerprint = userFingerprint;
     }
 
     /// <summary>Gets the instant the last notification the page returned describes.</summary>
@@ -44,29 +44,29 @@ public readonly record struct NotificationCursor
     /// <summary>Gets the identity of that notification, which breaks a tie between two describing the same instant.</summary>
     public NotificationId NotificationId { get; }
 
-    /// <summary>Gets the fingerprint of the owner this cursor was issued for.</summary>
-    public string OwnerFingerprint { get; }
+    /// <summary>Gets the fingerprint of the user this cursor was issued for.</summary>
+    public string UserFingerprint { get; }
 
-    /// <summary>Reduces an owner to the short stable text a cursor carries to prove whose walk it belongs to.</summary>
-    /// <param name="owner">The owner the page was read for.</param>
+    /// <summary>Reduces a user to the short stable text a cursor carries to prove whose walk it belongs to.</summary>
+    /// <param name="user">The user the page was read for.</param>
     /// <returns>The fingerprint.</returns>
-    public static string FingerprintOf(MailOwnerId owner) =>
-        PageFilterFingerprint.Of(owner.Value.ToString("N", CultureInfo.InvariantCulture));
+    public static string FingerprintOf(MailUserId user) =>
+        PageFilterFingerprint.Of(user.Value.ToString("N", CultureInfo.InvariantCulture));
 
     /// <summary>Creates the cursor that continues a walk after one position in the centre.</summary>
     /// <param name="occurredAt">The instant the page ended on.</param>
     /// <param name="notificationId">The identity of the notification at that instant.</param>
-    /// <param name="ownerFingerprint">The fingerprint of the owner the page was read for.</param>
+    /// <param name="userFingerprint">The fingerprint of the user the page was read for.</param>
     /// <returns>The cursor.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="ownerFingerprint" /> is blank.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="userFingerprint" /> is blank.</exception>
     public static NotificationCursor After(
         DateTimeOffset occurredAt,
         NotificationId notificationId,
-        string ownerFingerprint)
+        string userFingerprint)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ownerFingerprint);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userFingerprint);
 
-        return new NotificationCursor(occurredAt, notificationId, ownerFingerprint);
+        return new NotificationCursor(occurredAt, notificationId, userFingerprint);
     }
 
     /// <summary>Reads a cursor a caller presented.</summary>
@@ -75,7 +75,7 @@ public readonly record struct NotificationCursor
     /// <returns><see langword="true" /> when the text decoded into a usable cursor; otherwise <see langword="false" />.</returns>
     /// <remarks>
     /// Every notification describes a known instant, so a payload carrying none names no boundary here and is refused.
-    /// Whether a decoded cursor belongs to the caller is a separate question its <see cref="OwnerFingerprint" />
+    /// Whether a decoded cursor belongs to the caller is a separate question its <see cref="UserFingerprint" />
     /// answers, and one this method deliberately does not ask.
     /// </remarks>
     public static bool TryDecode(string? text, out NotificationCursor? cursor)
@@ -98,5 +98,5 @@ public readonly record struct NotificationCursor
     /// <summary>Writes the cursor as the opaque string a caller presents to continue the walk.</summary>
     /// <returns>The encoded cursor.</returns>
     public string Encode() =>
-        KeysetCursorPayload.At(this.OccurredAt, this.NotificationId.Value, this.OwnerFingerprint).Encode();
+        KeysetCursorPayload.At(this.OccurredAt, this.NotificationId.Value, this.UserFingerprint).Encode();
 }

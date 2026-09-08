@@ -471,7 +471,7 @@ public sealed class EmailAttachmentTextDeriverTests
     }
 
     /// <summary>
-    /// A file's words are derived mail content exactly as a body's are, so what is stored is what the owner's scanner
+    /// A file's words are derived mail content exactly as a body's are, so what is stored is what the user's scanner
     /// left behind — a bank statement's account number never reaches a row because it arrived as an attachment.
     /// </summary>
     [Fact]
@@ -649,7 +649,7 @@ public sealed class EmailAttachmentTextDeriverTests
 
     private static EmailAwaitingAttachmentText Awaiting() => new(
         Message,
-        ScanningSensitiveContentDerivation.Owner,
+        ScanningSensitiveContentDerivation.User,
         DerivedWorkAdmission.Admitted);
 
     private EmailAttachmentTextDeriver Deriver(

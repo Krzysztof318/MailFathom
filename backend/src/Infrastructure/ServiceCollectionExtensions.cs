@@ -128,7 +128,6 @@ using MailFathom.Infrastructure.Persistence.Enrichment;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
-using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Portraits;
 using MailFathom.Infrastructure.Persistence.Preferences;
 using MailFathom.Infrastructure.Persistence.Rules;
@@ -137,6 +136,7 @@ using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.Synchronization;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
@@ -342,7 +342,7 @@ public static class ServiceCollectionExtensions
         // The adapter that composed the pool is the only thing that knows which setting currently supplies the
         // credential, so it is also what answers whether a reloaded candidate can be adopted.
         services.AddSingleton<IDatabaseConnectionSettingsValidator>(provider => provider.GetRequiredService<PostgresConnectionStringProvider>());
-        // The container both creates and disposes the data source, so no second owner can leave its pool open. The
+        // The container both creates and disposes the data source, so no second user can leave its pool open. The
         // credential is not part of the composed string: it is retrieved per physical connection so that rotating it
         // needs neither a restart nor a rebuilt pool.
         services.AddSingleton(provider =>
@@ -520,18 +520,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailThreadStore, EmailThreadStore>();
         services.AddScoped<EmailThreadAssembly>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
-        // Who this deployment holds owner records for. Read once while the host comes up rather than per request, which
+        // Who this deployment holds user records for. Read once while the host comes up rather than per request, which
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
-        services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
-        // The envelope a declared owner is given, beside the read that establishes who is already there. Scoped for the
+        services.AddScoped<IMailUserDirectory, PersistedMailUserDirectory>();
+        // The envelope a declared user is given, beside the read that establishes who is already there. Scoped for the
         // same reason and used from the same startup step: a declaration reaches this exactly once per start, and never
         // while a request is being served.
-        services.AddScoped<IMailOwnerProvisioning, PersistedMailOwnerProvisioning>();
-        // The credentials an owner is admitted by, of every method. Scoped because it reads and writes through the
-        // request's own context, and separate from the directory above because that answers which owners exist and this
+        services.AddScoped<IMailUserProvisioning, PersistedMailUserProvisioning>();
+        // The credentials a user is admitted by, of every method. Scoped because it reads and writes through the
+        // request's own context, and separate from the directory above because that answers which users exist and this
         // answers what one of them may present.
-        services.AddScoped<IOwnerCredentialStore, PersistedOwnerCredentials>();
+        services.AddScoped<IUserCredentialStore, PersistedUserCredentials>();
         // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
         // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
@@ -546,51 +546,51 @@ public static class ServiceCollectionExtensions
         // Judging a presented username and password. Scoped rather than singleton, unlike the API key authenticator,
         // because it reads the credential store through the request's own context; everything it holds that is
         // expensive to build is one of the singletons above.
-        services.AddScoped<OwnerPasswordAuthenticator>();
-        // What draws a key an owner's client presents and reduces a presented one to the digest a row is resolved by. A
+        services.AddScoped<UserPasswordAuthenticator>();
+        // What draws a key a user's client presents and reduces a presented one to the digest a row is resolved by. A
         // singleton because it holds nothing: the entropy is drawn per call and the digest is a pure function of what
         // was presented.
-        services.AddSingleton<IOwnerApiKeyMinter, OwnerApiKeyMinter>();
+        services.AddSingleton<IUserApiKeyMinter, UserApiKeyMinter>();
         // Reading a client's public key into what a row stores and what resolves it. A singleton for the same reason.
         services.AddSingleton<IClientPublicKeyReader, ClientPublicKeyReader>();
-        // Judging a presented key, and resolving a validated subject to the owner it stands for. Both scoped, because
+        // Judging a presented key, and resolving a validated subject to the user it stands for. Both scoped, because
         // both read the credential store through the request's own context.
-        services.AddScoped<OwnerApiKeyAuthenticator>();
-        services.AddScoped<OwnerOAuthSubjectResolver>();
-        // Where a change to who can reach an owner's mail is written down.
-        services.AddScoped<IOwnerCredentialAuditor, LoggedOwnerCredentialAuditor>();
+        services.AddScoped<UserApiKeyAuthenticator>();
+        services.AddScoped<UserOAuthSubjectResolver>();
+        // Where a change to who can reach a user's mail is written down.
+        services.AddScoped<IUserCredentialAuditor, LoggedUserCredentialAuditor>();
         // What an administrator does to those credentials, registered beside the ports it composes so a port added to
         // it and a port registered here stay in one place.
-        services.AddScoped<OwnerCredentialAdministration>();
-        // One owner's own record, read by key and bounded in the statement rather than in the process. A singleton
+        services.AddScoped<UserCredentialAdministration>();
+        // One user's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for
         // a person.
-        services.AddSingleton<IOwnerSettingsDocumentReader, PersistedOwnerSettingsDocumentReader>();
+        services.AddSingleton<IUserSettingsDocumentReader, PersistedUserSettingsDocumentReader>();
         // The other direction of travel over the same row, registered as a singleton over the pool beside the read for
         // the same reason. It is a second service rather than a second method on the reader because a deployment that
-        // never administers an owner still reads one on every start, and the two are granted separately in the
+        // never administers a user still reads one on every start, and the two are granted separately in the
         // database.
-        services.AddSingleton<IOwnerSettingsDocumentWriter, PersistedOwnerSettingsDocumentWriter>();
+        services.AddSingleton<IUserSettingsDocumentWriter, PersistedUserSettingsDocumentWriter>();
         // What one person set about their own client, which is beside the record above rather than in it: this is a
         // preference about the client and that document is configuration. Scoped because both the read and the upsert
         // are ordinary statements on the request's own context, and registered unconditionally because it is a store
         // rather than a capability a deployment switches on.
         services.AddScoped<IClientPreferencesStore, ClientPreferencesStore>();
         // The caller-facing use case over it, separate from the store for the reason the contact book's two are: it
-        // carries the grant a caller has to hold and the owner the act is resolved for, and the store carries neither.
+        // carries the grant a caller has to hold and the user the act is resolved for, and the store carries neither.
         services.AddScoped<OwnClientPreferences>();
-        // The picture a person is drawn by, which hangs off the owner row beside that document rather than inside it:
+        // The picture a person is drawn by, which hangs off the user row beside that document rather than inside it:
         // a megabyte of octets is not a small closed document, and a read of a switch should not carry one. Scoped and
         // registered unconditionally for the same reasons the preferences store is.
-        services.AddScoped<IOwnerPortraitStore, OwnerPortraitStore>();
+        services.AddScoped<IUserPortraitStore, UserPortraitStore>();
         services.AddScoped<OwnPortrait>();
-        // Taking an owner off the deployment, with everything it recorded for them. Scoped because the whole walk runs
+        // Taking a user off the deployment, with everything it recorded for them. Scoped because the whole walk runs
         // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
         // on every start and is idempotent while this runs when a person asked for it and cannot be undone.
-        services.AddScoped<IMailOwnerErasure, PersistedMailOwnerErasure>();
+        services.AddScoped<IMailUserErasure, PersistedMailUserErasure>();
         // Whose mail a background unit of work is acting on. A worker acts for nobody, so the ceilings it is bounded by
-        // reach an owner through this rather than through a principal, and it is scoped because both reads are ordinary
+        // reach a user through this rather than through a principal, and it is scoped because both reads are ordinary
         // queries on the caller's context.
         services.AddScoped<IMailOwnership, PersistedMailOwnership>();
         // Composed by hand for one parameter: the object store is registered only when the deployment selected the
@@ -602,10 +602,10 @@ public static class ServiceCollectionExtensions
             provider.GetService<IEmailContentObjectStore>()));
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IObjectBackedContentInventory, ObjectBackedContentInventory>();
-        // What one owner's stored content holds. Beside the inventory rather than part of it, because the inventory is
+        // What one user's stored content holds. Beside the inventory rather than part of it, because the inventory is
         // read-only over the mail graph while this keeps a figure of its own, moved by whichever adapter owns the
         // payloads.
-        services.AddScoped<IOwnerStoredContentLedger, OwnerStoredContentLedger>();
+        services.AddScoped<IUserStoredContentLedger, UserStoredContentLedger>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         // What the move of already-stored content reads and rewrites: the four content tables as one walk, and the one
         // row that says what an operator asked for. Registered whatever the selected backend is, because reading how
@@ -797,11 +797,11 @@ public static class ServiceCollectionExtensions
                     provider.GetRequiredService<ISenderTrustPolicyReader>()),
                 provider.GetRequiredService<MachineAuthorshipProfile>());
 
-            // Wrapped whatever the postures say today, because they change while a scope is open: an owner committing a
+            // Wrapped whatever the postures say today, because they change while a scope is open: a user committing a
             // record that switches a provided scanner on flips the guard's answer, and a synchronization or backfill
-            // scope that had decided at construction would go on writing that owner's mail unredacted and unstamped for
-            // the rest of its run. The decorator asks per owner per call and is inert — no detector, no permit, no
-            // stamp — for an owner nothing scans, so a deployment scanning nobody pays a delegating call and nothing else.
+            // scope that had decided at construction would go on writing that user's mail unredacted and unstamped for
+            // the rest of its run. The decorator asks per user per call and is inert — no detector, no permit, no
+            // stamp — for a user nothing scans, so a deployment scanning nobody pays a delegating call and nothing else.
             return new RedactingEmailMimeReader(
                 reader,
                 provider.GetRequiredService<SensitiveContentDerivationGuard>());
@@ -877,8 +877,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailAccountFreshnessReader>();
         services.AddScoped<MailFolderDirectoryReader>();
         // The guard every egress point calls, registered for every deployment rather than only where a scanner is
-        // switched on. What is conditional is the redaction behind it, and it is conditional per owner rather than per
-        // deployment: the guard asks the postures for the owner the flow is acting for, and an owner nothing scans for
+        // switched on. What is conditional is the redaction behind it, and it is conditional per user rather than per
+        // deployment: the guard asks the postures for the user the flow is acting for, and a user nothing scans for
         // meets a posture that holds no redactor, constructs no detector, and returns each argument unchanged.
         // Registering it conditionally instead would put a null check and a second code path into each consumer, which
         // is how two of them end up disagreeing about what an unguarded egress looks like.
@@ -887,16 +887,16 @@ public static class ServiceCollectionExtensions
         // a scoped instance would create a meter per request.
         services.AddSingleton<IDerivedWorkGateTelemetry, DerivedWorkGateTelemetry>();
         services.AddSingleton<SensitiveContentEgressGuard>();
-        // Its refusing counterpart, registered on the same terms and inert in the same two ways for the same owner: no
+        // Its refusing counterpart, registered on the same terms and inert in the same two ways for the same user: no
         // redactor where nothing is switched on for them, and a policy that stops nothing where neither the deployment
-        // nor that owner named a scanner to stop an act with. A consumer therefore calls it unconditionally and never
+        // nor that user named a scanner to stop an act with. A consumer therefore calls it unconditionally and never
         // asks whether screening exists.
         services.AddSingleton<SensitiveContentEgressScreen>();
 
         // Its counterpart on the way in, registered on the same terms and for the same reasons. The stamp a row records
-        // is the owner's rather than the deployment's, because what a row has to record is which detectors, revisions,
-        // categories, and suppressions produced its text — so a message of an owner who switched a scanner on carries a
-        // different stamp from one belonging to an owner who did not, and each is answerable on its own.
+        // is the user's rather than the deployment's, because what a row has to record is which detectors, revisions,
+        // categories, and suppressions produced its text — so a message of a user who switched a scanner on carries a
+        // different stamp from one belonging to a user who did not, and each is answerable on its own.
         services.AddSingleton<ISensitiveContentDerivationTelemetry, SensitiveContentDerivationTelemetry>();
         services.AddSingleton<SensitiveContentDerivationGuard>();
         services.AddScoped<MailboxTimelineReader>();
@@ -1165,7 +1165,7 @@ public static class ServiceCollectionExtensions
         // governed without anything here changing.
         services.AddScoped<IOutboxOperationStore, OutboxOperationStore>();
         services.AddScoped<OutboxOperations>();
-        // A message an owner asked to have sent again is a declaration beside the outbox rather than a queue of its
+        // A message a user asked to have sent again is a declaration beside the outbox rather than a queue of its
         // own: it produces an ordinary record on every occasion, through the outbox above, and the occasions come from
         // the job model's recurring dispatch.
         services.AddScoped<IRecurringSendStore, RecurringSendStore>();
@@ -1238,14 +1238,14 @@ public static class ServiceCollectionExtensions
         // every bound this deployment sets is asked again at the moment the message would leave rather than only when
         // it was written.
         services.AddScoped<MailDraftPromotion>();
-        // The owner-facing half of everything above, registered beside what each one delegates to. They exist because
-        // the acts above admit a caller on the grant alone, which is what a deployment holding one owner needs and not
+        // The user-facing half of everything above, registered beside what each one delegates to. They exist because
+        // the acts above admit a caller on the grant alone, which is what a deployment holding one user needs and not
         // what a surface serving a person may rely on: these are where an identifier becomes a draft, or a send, that
-        // the caller's own owner holds. Scoped with the catalog that answers which owner that is.
+        // the caller's own user holds. Scoped with the catalog that answers which user that is.
         services.AddScoped<MailDraftDirectory>();
         services.AddScoped<MailDraftAttachments>();
-        services.AddScoped<OwnerMailDrafts>();
-        services.AddScoped<OwnerOutbox>();
+        services.AddScoped<UserMailDrafts>();
+        services.AddScoped<UserOutbox>();
     }
 
     /// <summary>Registers what a finished mutation leaves behind, the pass that converges an unfinished one, and the gauges both publish.</summary>
@@ -1372,7 +1372,7 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// <para>
     /// Called by every deployment, because this detector runs in this process and needs nothing deployed beside it, so
-    /// any owner may switch it on for their own mail whatever the deployment's own switch says. Registering it
+    /// any user may switch it on for their own mail whatever the deployment's own switch says. Registering it
     /// constructs nothing: the corpus is compiled when the first posture that runs this scanner resolves it, and a
     /// deployment nobody asked for scanning on resolves none. What the scanner declares it can find is registered by
     /// <see cref="AddSensitiveContentCatalogs" /> separately, for the reason stated there.
@@ -1429,16 +1429,16 @@ public static class ServiceCollectionExtensions
     /// <para>
     /// Called only where the deployment stood an analyzer up, which is what keeps an opt-in nobody took from opening
     /// anything: with no address configured no client is registered, and none of the three descriptors below exists.
-    /// It is the address rather than the <c>Pii</c> switch that gates this, because an owner may switch that scanner on
+    /// It is the address rather than the <c>Pii</c> switch that gates this, because a user may switch that scanner on
     /// for their own mail and no roster exists while services are being registered — so what is registered is what the
-    /// deployment can provide, and which owners meet it is their postures. The composed
+    /// deployment can provide, and which users meet it is their postures. The composed
     /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
     /// configuration this project does not bind.
     /// </para>
     /// <para>
     /// The probe is registered beside the scanner rather than always, because it answers for a client this deployment
     /// only opens where an analyzer was configured: a probe without a scanner would report on an analyzer nothing
-    /// reaches. Whether any owner's mail is actually scanned with it is the readiness check's own first question. The
+    /// reaches. Whether any user's mail is actually scanned with it is the readiness check's own first question. The
     /// catalog is neither here nor conditional, for the reason <see cref="AddSensitiveContentCatalogs" /> gives.
     /// </para>
     /// </remarks>

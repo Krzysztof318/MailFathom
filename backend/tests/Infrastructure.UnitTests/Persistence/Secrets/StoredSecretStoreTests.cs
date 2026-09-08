@@ -28,11 +28,11 @@ public sealed class StoredSecretStoreTests
 {
     private const string ActiveKeyId = "2026-08";
 
-    private static readonly MailOwnerId Owner =
-        MailOwnerId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
+    private static readonly MailUserId User =
+        MailUserId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
 
-    private static readonly MailOwnerId OtherOwner =
-        MailOwnerId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
+    private static readonly MailUserId OtherUser =
+        MailUserId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
 
     [Fact]
     public async Task StoreAsync_ADeploymentWithNoKeyRing_RefusesBeforeJoiningTheSession()
@@ -51,7 +51,7 @@ public sealed class StoredSecretStoreTests
         var storing = async () => await store.StoreAsync(
             session,
             DatabaseSecretReference.Create(new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2")),
-            MailOwnerId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d")),
+            MailUserId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d")),
             name,
             material,
             TestContext.Current.CancellationToken);
@@ -62,7 +62,7 @@ public sealed class StoredSecretStoreTests
     }
 
     [Fact]
-    public async Task StoreAsync_TheOwnerAndNameAlreadyPending_RotatesTheSameReference()
+    public async Task StoreAsync_TheUserAndNameAlreadyPending_RotatesTheSameReference()
     {
         // Arrange
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
@@ -78,7 +78,7 @@ public sealed class StoredSecretStoreTests
         var reference = await store.StoreAsync(
             session,
             DatabaseSecretReference.Create(new Guid("c5902058-d701-4ba3-99b5-88d9d2bb1d86")),
-            Owner,
+            User,
             name,
             material,
             TestContext.Current.CancellationToken);
@@ -87,7 +87,7 @@ public sealed class StoredSecretStoreTests
         Assert.Equal(DatabaseSecretReference.Create(existingId), reference);
         Assert.Equal(ActiveKeyId, existing.DataEncryptionKeyId);
         var opened = await encryptor.OpenAsync(
-            StoredSecretBinding.Create(Owner, reference, name),
+            StoredSecretBinding.Create(User, reference, name),
             new SealedValue(existing.DataEncryptionKeyId, existing.SealedMaterial),
             TestContext.Current.CancellationToken);
         Assert.Equal("the-rotated-material", Encoding.UTF8.GetString(opened));
@@ -126,7 +126,7 @@ public sealed class StoredSecretStoreTests
         await store.StoreAsync(
             session,
             reference,
-            Owner,
+            User,
             name,
             material,
             TestContext.Current.CancellationToken);
@@ -150,7 +150,7 @@ public sealed class StoredSecretStoreTests
         var removed = await store.RemoveAsync(
             session,
             reference,
-            Owner,
+            User,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -159,7 +159,7 @@ public sealed class StoredSecretStoreTests
     }
 
     [Fact]
-    public async Task RemoveAsync_AReferenceOwnedByAnotherOwner_LeavesTheRowPending()
+    public async Task RemoveAsync_AReferenceOwnedByAnotherUser_LeavesTheRowPending()
     {
         // Arrange
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
@@ -173,7 +173,7 @@ public sealed class StoredSecretStoreTests
         var removed = await store.RemoveAsync(
             session,
             reference,
-            OtherOwner,
+            OtherUser,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -202,7 +202,7 @@ public sealed class StoredSecretStoreTests
     private static StoredSecretEntity Stored(Guid id) => new()
     {
         Id = id,
-        OwnerId = Owner.Value,
+        UserId = User.Value,
         Name = "primary-password",
         SealedMaterial = new byte[StoredSecretEntity.MinimumSealedMaterialByteCount],
         DataEncryptionKeyId = "old-key",

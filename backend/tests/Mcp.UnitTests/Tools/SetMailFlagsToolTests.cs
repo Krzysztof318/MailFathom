@@ -332,7 +332,7 @@ public sealed class SetMailFlagsToolTests
         targets
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AuthoredMailboxTarget?>(new AuthoredMailboxTarget(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(9), ImapUid.Create(41)),
                 folder)));
 
@@ -401,14 +401,14 @@ public sealed class SetMailFlagsToolTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-            MailOwnerId owner,
+            MailUserId user,
             IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
             IPersistenceSession session,
-            MailOwnerId owner,
+            MailUserId user,
             IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();

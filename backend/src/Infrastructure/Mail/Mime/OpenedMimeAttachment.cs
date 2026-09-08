@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// <para>
 /// The parse is kept alive because the part is a view over it: MimeKit reads a persistent message's content straight
 /// from the stream it was parsed from, so disposing either before the octets are written would leave nothing to write.
-/// Both are disposed here, in the order that releases the part's owner last.
+/// Both are disposed here, in the order that releases the part's user last.
 /// </para>
 /// <para>
 /// This is the one type that puts MimeKit behind an application contract without copying anything: what crosses the

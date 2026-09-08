@@ -35,9 +35,9 @@ public sealed class MailFolderErasureEndpointTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
-    /// <summary>The account as the mirror store is asked about it, which is the owner and the identifier together.</summary>
+    /// <summary>The account as the mirror store is asked about it, which is the user and the identifier together.</summary>
     private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
@@ -239,7 +239,7 @@ public sealed class MailFolderErasureEndpointTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

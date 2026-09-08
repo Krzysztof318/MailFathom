@@ -10,9 +10,9 @@ using Xunit;
 
 namespace MailFathom.SharedSources.UnitTests;
 
-/// <summary>Covers the caller-scoped catalog several suites arrange the owner axis with.</summary>
+/// <summary>Covers the caller-scoped catalog several suites arrange the user axis with.</summary>
 /// <remarks>
-/// Every test that asserts one owner cannot reach another's mailbox is arranged through this helper, so a helper that
+/// Every test that asserts one user cannot reach another's mailbox is arranged through this helper, so a helper that
 /// answered with nothing whoever asked would make all of them pass while proving the opposite of what they claim. Both
 /// answers are asserted here rather than in each suite for that reason.
 /// </remarks>
@@ -21,11 +21,11 @@ public sealed class OwnedMailAccountCatalogsTests
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
     [Fact]
-    public void OwnedAccounts_ForTheOwnerEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
+    public void OwnedAccounts_ForTheUserEveryConfiguredAccountBelongsTo_AreTheAccountsServed()
     {
         // Arrange
         var catalog = OwnedMailAccountCatalogs.For(
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
             SyntheticServedAccount.Of(Work));
 
         // Act
@@ -36,11 +36,11 @@ public sealed class OwnedMailAccountCatalogsTests
     }
 
     [Fact]
-    public void OwnedAccounts_ForAnotherOwner_AreNone()
+    public void OwnedAccounts_ForAnotherUser_AreNone()
     {
         // Arrange
         var catalog = OwnedMailAccountCatalogs.For(
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
             SyntheticServedAccount.Of(Work));
 
         // Act
@@ -52,7 +52,7 @@ public sealed class OwnedMailAccountCatalogsTests
 
     /// <summary>A principal acting for nobody is refused rather than answered, so the two never look alike in a test.</summary>
     [Fact]
-    public void OwnedAccounts_ForAPrincipalActingForNoOwner_AreRefused()
+    public void OwnedAccounts_ForAPrincipalActingForNoUser_AreRefused()
     {
         // Arrange
         var catalog = OwnedMailAccountCatalogs.For(
@@ -65,11 +65,11 @@ public sealed class OwnedMailAccountCatalogsTests
 
     /// <summary>The switch is the deployment's and says nothing about who owns what, so it reaches every caller.</summary>
     [Fact]
-    public void SynchronizationEnabled_WhicheverOwnerAsks_IsTheDeploymentsOwnAnswer()
+    public void SynchronizationEnabled_WhicheverUserAsks_IsTheDeploymentsOwnAnswer()
     {
         // Arrange
         var catalog = OwnedMailAccountCatalogs.For(
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another),
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another),
             SyntheticServedAccount.Of(Work));
 
         // Act & Assert
@@ -82,7 +82,7 @@ public sealed class OwnedMailAccountCatalogsTests
     {
         // Arrange
         var catalog = OwnedMailAccountCatalogs.For(
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Deployment),
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment),
             SyntheticServedAccount.Of("private"),
             SyntheticServedAccount.Of("archive"));
 

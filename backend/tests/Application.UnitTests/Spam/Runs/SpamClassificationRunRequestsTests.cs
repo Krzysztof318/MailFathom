@@ -23,7 +23,7 @@ public sealed class SpamClassificationRunRequestsTests
     private static readonly DateTimeOffset RequestedAt = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 

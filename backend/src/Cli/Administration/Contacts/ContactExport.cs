@@ -11,7 +11,7 @@ namespace MailFathom.Cli.Administration.Contacts;
 /// <param name="ProducedAt">When the export was produced, absent together with the contact.</param>
 /// <remarks>
 /// The data-subject access path. The command prints this document as it arrived rather than a rendering of it, so what
-/// an owner hands to the person who asked is the deployment's own answer and not one surface's summary of it.
+/// a user hands to the person who asked is the deployment's own answer and not one surface's summary of it.
 /// </remarks>
 internal sealed record ContactExport(
     [property: JsonPropertyName("contact")] ContactRecord? Contact,

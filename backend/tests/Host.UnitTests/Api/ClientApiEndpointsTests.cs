@@ -168,10 +168,10 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountsRoute}",
-                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.RecordRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.RecordRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}",
                 .. ClientTelemetrySignal.All
@@ -242,7 +242,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -261,9 +261,9 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
-                $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
-                $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
-                $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientUserRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
@@ -342,7 +342,7 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>Reports whether a route was published under one of the grants a write is provisioned by.</summary>
-    /// <remarks>The grant rather than the path, because what makes a write admissible on an owner-facing surface is that it is separately provisioned: a path renamed keeps the claim, and a route quietly published under the read grant breaks it.</remarks>
+    /// <remarks>The grant rather than the path, because what makes a write admissible on a user-facing surface is that it is separately provisioned: a path renamed keeps the claim, and a route quietly published under the read grant breaks it.</remarks>
     private static bool IsPublishedAsAWrite(Endpoint endpoint) =>
         endpoint.Metadata.GetOrderedMetadata<RoutePermission>()
             .Any(published =>
@@ -451,9 +451,9 @@ public sealed class ClientApiEndpointsTests
     /// </summary>
     /// <param name="route">The route the write is made on.</param>
     [Theory]
-    [InlineData(ClientOwnerRecordEndpoint.RecordRoute)]
-    [InlineData(ClientOwnerRecordEndpoint.MailAccountsRoute)]
-    [InlineData(ClientOwnerRecordEndpoint.MailAccountRemovalRoute)]
+    [InlineData(ClientUserRecordEndpoint.RecordRoute)]
+    [InlineData(ClientUserRecordEndpoint.MailAccountsRoute)]
+    [InlineData(ClientUserRecordEndpoint.MailAccountRemovalRoute)]
     public void MapClientApi_ARecordRouteThatReadsABody_CarriesTheRequestBodyBound(string route)
     {
         // Arrange
@@ -470,7 +470,7 @@ public sealed class ClientApiEndpointsTests
                 && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
 
         Assert.Equal(
-            OwnerRecordEndpoints.MaxWriteRequestBytes,
+            UserRecordEndpoints.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 

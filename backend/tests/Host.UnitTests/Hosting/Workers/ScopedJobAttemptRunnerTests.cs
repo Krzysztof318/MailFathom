@@ -195,7 +195,7 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         JobIdempotencyKey.Create($"account-a/inbox/1/{uid}"),
         new ClassifyEmailSpamJobPayload
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             AccountId = "account-a",
             FolderAlias = "inbox",
             FolderResolutionGeneration = 1,

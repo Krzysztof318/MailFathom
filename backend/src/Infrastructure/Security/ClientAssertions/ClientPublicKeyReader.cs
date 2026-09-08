@@ -52,7 +52,7 @@ internal sealed class ClientPublicKeyReader : IClientPublicKeyReader
 
         var canonicalMaterial = key.ExportSubjectPublicKeyInfoPem();
 
-        if (canonicalMaterial.Length > OwnerCredentialEntity.MaximumMaterialLength)
+        if (canonicalMaterial.Length > UserCredentialEntity.MaximumMaterialLength)
         {
             return false;
         }
@@ -60,7 +60,7 @@ internal sealed class ClientPublicKeyReader : IClientPublicKeyReader
         Span<byte> digest = stackalloc byte[SHA256.HashSizeInBytes];
         SHA256.HashData(key.ExportSubjectPublicKeyInfo(), digest);
 
-        if (!OwnerCredentialLookup.TryCreate(Base64Url.EncodeToString(digest), out var lookup))
+        if (!UserCredentialLookup.TryCreate(Base64Url.EncodeToString(digest), out var lookup))
         {
             return false;
         }

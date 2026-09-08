@@ -26,12 +26,12 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// same reason, a remote address being personal data in its own right.
 /// </para>
 /// <para>
-/// <strong>Two different things are bounded here, and conflating them refuses an owner.</strong> One is how many wrong
+/// <strong>Two different things are bounded here, and conflating them refuses a user.</strong> One is how many wrong
 /// passwords a minute an axis admits, which is what <c>AttemptsPerMinute</c> states. The other is how many derivations
 /// may be in flight for one axis at once, which is what stops a caller opening five hundred connections from making
 /// this process perform five hundred concurrent PBKDF2 derivations. They are separate limiters because a permit held
 /// across a derivation is also a cap on simultaneous requests, and HTTP Basic re-presents the credential on every
-/// request with no session — so a single limit serving both would refuse an owner's eleventh parallel call with the
+/// request with no session — so a single limit serving both would refuse a user's eleventh parallel call with the
 /// answer a wrong password gets, however right their password was.
 /// </para>
 /// <para>
@@ -68,13 +68,13 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// <para>
 /// <strong>An attempt whose source this deployment cannot tell apart is bounded by username alone.</strong> Behind a
 /// reverse proxy every request arrives from the proxy's own address, so a per-source partition there would be one
-/// partition for the whole world — and a single guesser emptying it would close password sign-in for every owner at
+/// partition for the whole world — and a single guesser emptying it would close password sign-in for every user at
 /// once. <see cref="PasswordAttempt.Source" /> is therefore null in that arrangement, and the source axis is skipped
 /// rather than applied to a value that distinguishes nobody.
 /// </para>
 /// <para>
-/// <strong>The per-username failure axis is shared with the owner it protects, deliberately.</strong> Somebody who
-/// knows a username can spend its allowance on wrong passwords and have that owner's correct password refused until the
+/// <strong>The per-username failure axis is shared with the user it protects, deliberately.</strong> Somebody who
+/// knows a username can spend its allowance on wrong passwords and have that user's correct password refused until the
 /// window elapses. Nothing can avoid it while the answer is unknowable before the derivation, which is what the axis
 /// exists to bound; what the design chooses is the cost of it being one minute rather than a lockout an operator has to
 /// lift. The source axis is what catches the caller doing it, wherever this deployment can tell one caller from another.
@@ -91,13 +91,13 @@ public sealed class PasswordAttemptLimiter : IDisposable
     /// Sized for the traffic a surface actually carries rather than for the guessing allowance: a browser opens several
     /// connections to one origin and an agent may issue calls in parallel, and every one of them re-presents the
     /// credential. It is deliberately unrelated to <c>AttemptsPerMinute</c>, which an operator lowers to make guessing
-    /// expensive and which must not become a cap on an owner's own parallelism.
+    /// expensive and which must not become a cap on a user's own parallelism.
     /// </remarks>
     internal const int ConcurrentVerificationsPerPartition = 32;
 
     /// <summary>How many password verifications one transport surface may have in flight at once, whatever they name.</summary>
     /// <remarks>
-    /// Four times the per-partition ceiling, so several owners' partitions can be busy together and the smaller bound
+    /// Four times the per-partition ceiling, so several users' partitions can be busy together and the smaller bound
     /// still means something, while the process is never asked for an unbounded number of derivations by a caller that
     /// varies the username. It is per surface rather than per process so a flood at one endpoint does not close
     /// password sign-in at the other, which is the same isolation the endpoint limiters keep.

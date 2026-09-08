@@ -14,15 +14,15 @@ namespace MailFathom.Application.UnitTests.Notifications;
 
 /// <summary>
 /// Covers the use case a person reads and marks their own notification centre through. What it has to hold is that the
-/// owner acted on is the one the credential authenticated rather than one a caller could name, that a page is bounded
+/// user acted on is the one the credential authenticated rather than one a caller could name, that a page is bounded
 /// and clamped rather than refused, that the walk continues from a boundary this deployment issued to this caller, and
 /// that a notification somebody else holds answers exactly as one that does not exist.
 /// </summary>
 public sealed class OwnNotificationsTests
 {
-    private static readonly MailOwnerId Owner = SyntheticMailOwner.Deployment;
+    private static readonly MailUserId User = SyntheticMailUser.Deployment;
 
-    private static readonly MailOwnerId SomebodyElse = MailOwnerId.Create(
+    private static readonly MailUserId SomebodyElse = MailUserId.Create(
         new Guid("6d0b6a1c-6f5e-4a7e-9a1a-8d2a3f4b5c60"));
 
     private static readonly DateTimeOffset FirstInstant = new(2026, 9, 1, 9, 0, 0, TimeSpan.Zero);
@@ -32,8 +32,8 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "oldest");
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 10, "newest");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "oldest");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 10, "newest");
         await RecordAsync(store, SomebodyElse, occurredAtOffsetMinutes: 5, "somebody-else");
 
         var notifications = SignedIn(store);
@@ -73,8 +73,8 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "oldest");
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 10, "newest");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "oldest");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 10, "newest");
 
         var notifications = SignedIn(store);
         var first = await notifications.ReadPageAsync(1, null, TestContext.Current.CancellationToken);
@@ -95,7 +95,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "only");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "only");
 
         var notifications = SignedIn(store);
 
@@ -112,7 +112,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "only");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "only");
 
         // Act
         var page = await SignedIn(store).ReadPageAsync(
@@ -130,7 +130,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "only");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "only");
 
         // Act
         var page = await SignedIn(store).ReadPageAsync(10, "  ", TestContext.Current.CancellationToken);
@@ -139,9 +139,9 @@ public sealed class OwnNotificationsTests
         Assert.Equal("only", Assert.Single(page!.Notifications).DeduplicationKey.Value);
     }
 
-    /// <summary>The fingerprint is the owner, so a cursor issued to somebody else names no boundary in this caller's own walk.</summary>
+    /// <summary>The fingerprint is the user, so a cursor issued to somebody else names no boundary in this caller's own walk.</summary>
     [Fact]
-    public async Task ReadPageAsync_ACursorIssuedForAnotherOwner_IsRefused()
+    public async Task ReadPageAsync_ACursorIssuedForAnotherUser_IsRefused()
     {
         // Arrange
         var store = new InMemoryNotificationStore();
@@ -166,7 +166,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "mine");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "mine");
         await RecordAsync(store, SomebodyElse, occurredAtOffsetMinutes: 0, "theirs");
         await RecordAsync(store, SomebodyElse, occurredAtOffsetMinutes: 5, "theirs-too");
 
@@ -182,7 +182,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        var notification = await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "mine");
+        var notification = await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "mine");
         var notifications = SignedIn(store);
 
         // Act
@@ -226,11 +226,11 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        var older = await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "credential-refused");
+        var older = await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "credential-refused");
         var notifications = SignedIn(store);
 
         await notifications.SetReadAsync(older.Id, true, TestContext.Current.CancellationToken);
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 10, "credential-refused");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 10, "credential-refused");
 
         // Act
         var outcome = await notifications.SetReadAsync(older.Id, false, TestContext.Current.CancellationToken);
@@ -245,8 +245,8 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var store = new InMemoryNotificationStore();
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 0, "mine");
-        await RecordAsync(store, Owner, occurredAtOffsetMinutes: 5, "mine-too");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "mine");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 5, "mine-too");
         var theirs = await RecordAsync(store, SomebodyElse, occurredAtOffsetMinutes: 0, "theirs");
 
         var notifications = SignedIn(store);
@@ -266,7 +266,7 @@ public sealed class OwnNotificationsTests
     {
         // Arrange
         var notifications = new OwnNotifications(
-            AccessAuthorizations.ForOwnerGranted(Owner, MailFathomPermission.MailSend),
+            AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailSend),
             new InMemoryNotificationStore());
 
         // Act and assert
@@ -275,19 +275,19 @@ public sealed class OwnNotificationsTests
     }
 
     private static OwnNotifications SignedIn(INotificationStore store) => new(
-        AccessAuthorizations.ForOwnerGranted(Owner, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
         store);
 
     private static async Task<Notification> RecordAsync(
         InMemoryNotificationStore store,
-        MailOwnerId owner,
+        MailUserId user,
         int occurredAtOffsetMinutes,
         string deduplicationKey)
     {
         var occurredAt = FirstInstant + TimeSpan.FromMinutes(occurredAtOffsetMinutes);
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(occurredAt)),
-            owner,
+            user,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",
@@ -310,7 +310,7 @@ public sealed class OwnNotificationsTests
             Task.FromResult(true);
 
         public Task<IReadOnlyList<Notification>> ReadPageAsync(
-            MailOwnerId owner,
+            MailUserId user,
             NotificationCursor? after,
             int limit,
             CancellationToken cancellationToken)
@@ -320,21 +320,21 @@ public sealed class OwnNotificationsTests
             return Task.FromResult<IReadOnlyList<Notification>>([]);
         }
 
-        public Task<int> CountUnreadAsync(MailOwnerId owner, CancellationToken cancellationToken) =>
+        public Task<int> CountUnreadAsync(MailUserId user, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<NotificationReadOutcome> SetReadAsync(
-            MailOwnerId owner,
+            MailUserId user,
             NotificationId notification,
             bool isRead,
             CancellationToken cancellationToken) =>
             Task.FromResult(NotificationReadOutcome.Applied);
 
-        public Task<int> MarkAllReadAsync(MailOwnerId owner, CancellationToken cancellationToken) =>
+        public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<int> EraseOccurredBeforeAsync(
-            MailOwnerId owner,
+            MailUserId user,
             DateTimeOffset occurredBefore,
             int limit,
             CancellationToken cancellationToken) =>

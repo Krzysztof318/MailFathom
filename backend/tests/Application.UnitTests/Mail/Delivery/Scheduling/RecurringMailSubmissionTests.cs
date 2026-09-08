@@ -188,18 +188,18 @@ public sealed class RecurringMailSubmissionTests
     }
 
     /// <summary>
-    /// An account another owner owns is refused exactly as one nobody serves, so a repetition cannot be declared
-    /// against a mailbox this caller may not even read — which would otherwise send as that owner on every occasion.
+    /// An account another user owns is refused exactly as one nobody serves, so a repetition cannot be declared
+    /// against a mailbox this caller may not even read — which would otherwise send as that user on every occasion.
     /// </summary>
     [Fact]
-    public async Task DeclareAsync_AnAccountTheCallersOwnerDoesNotOwn_IsRefusedAndDeclaresNothing()
+    public async Task DeclareAsync_AnAccountTheCallersUserDoesNotOwn_IsRefusedAndDeclaresNothing()
     {
         // Arrange
         var store = new InMemoryRecurringSendStore();
         var submission = SubmissionOver(
             store,
             out _,
-            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailSend));
+            AccessAuthorizations.ForUserGranted(SyntheticMailUser.Another, MailFathomPermission.MailSend));
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(

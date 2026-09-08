@@ -43,7 +43,7 @@ public sealed class EmbeddingSpendGateTests
         var gate = CreateGate(ledger, Bounded(1_000), new FakeTimeProvider(Midday));
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 1_000,
             TestContext.Current.CancellationToken);
 
@@ -69,7 +69,7 @@ public sealed class EmbeddingSpendGateTests
         var gate = CreateGate(ledger, Bounded(1_000), timeProvider);
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 1_200,
             TestContext.Current.CancellationToken);
         var exhausted = await gate.ReadCurrentPeriodAsync(TestContext.Current.CancellationToken);
@@ -99,7 +99,7 @@ public sealed class EmbeddingSpendGateTests
         // Act
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 5_000,
             TestContext.Current.CancellationToken);
         var period = await gate.ReadCurrentPeriodAsync(TestContext.Current.CancellationToken);
@@ -111,117 +111,117 @@ public sealed class EmbeddingSpendGateTests
         Assert.True(period.AdmitsRequest);
     }
 
-    /// <summary>An owner's own ceiling stops that owner alone, which is what a per-owner bound is for.</summary>
+    /// <summary>A user's own ceiling stops that user alone, which is what a per-user bound is for.</summary>
     [Fact]
-    public async Task ReadCurrentPeriodForAsync_OneOwnerHasSpentTheirShare_RefusesThemAndAdmitsEverybodyElse()
+    public async Task ReadCurrentPeriodForAsync_OneUserHasSpentTheirShare_RefusesThemAndAdmitsEverybodyElse()
     {
         // Arrange
         var ledger = new InMemoryEmbeddingSpendLedger();
-        var gate = CreateGate(ledger, BoundedPerOwner(10_000, 1_000), new FakeTimeProvider(Midday));
+        var gate = CreateGate(ledger, BoundedPerUser(10_000, 1_000), new FakeTimeProvider(Midday));
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 1_000,
             TestContext.Current.CancellationToken);
 
         // Act
         var spent = await gate.ReadCurrentPeriodForAsync(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
         var other = await gate.ReadCurrentPeriodForAsync(
-            SyntheticMailOwner.Another,
+            SyntheticMailUser.Another,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(spent.AdmitsRequest);
-        Assert.Equal(EmbeddingSpendBound.Owner, spent.ReachedBound);
+        Assert.Equal(EmbeddingSpendBound.User, spent.ReachedBound);
         Assert.True(other.AdmitsRequest);
         Assert.Equal(EmbeddingSpendBound.None, other.ReachedBound);
 
-        // What one owner spent is still part of what the deployment spent, which is the figure the wider ceiling reads.
+        // What one user spent is still part of what the deployment spent, which is the figure the wider ceiling reads.
         Assert.Equal(1_000, other.Deployment.ConsumedInputCharacterCount);
-        Assert.Equal(0, other.Owner.ConsumedInputCharacterCount);
+        Assert.Equal(0, other.User.ConsumedInputCharacterCount);
     }
 
     /// <summary>The deployment's ceiling is the wider fact, so it is what a refusal names when both are reached.</summary>
     /// <remarks>
-    /// Raising one owner's share answers nothing while the deployment itself has stopped spending, so a worker reading
-    /// the owner's bound there would pause the wrong thing and an operator would act on the wrong figure.
+    /// Raising one user's share answers nothing while the deployment itself has stopped spending, so a worker reading
+    /// the user's bound there would pause the wrong thing and an operator would act on the wrong figure.
     /// </remarks>
     [Fact]
     public async Task ReadCurrentPeriodForAsync_BothCeilingsAreReached_NamesTheDeployment()
     {
         // Arrange
         var ledger = new InMemoryEmbeddingSpendLedger();
-        var gate = CreateGate(ledger, BoundedPerOwner(1_000, 1_000), new FakeTimeProvider(Midday));
+        var gate = CreateGate(ledger, BoundedPerUser(1_000, 1_000), new FakeTimeProvider(Midday));
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 1_000,
             TestContext.Current.CancellationToken);
 
         // Act
         var admission = await gate.ReadCurrentPeriodForAsync(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmbeddingSpendBound.Deployment, admission.ReachedBound);
     }
 
-    /// <summary>Another owner's spend fills the deployment's window, and everybody under it is refused with it.</summary>
+    /// <summary>Another user's spend fills the deployment's window, and everybody under it is refused with it.</summary>
     [Fact]
-    public async Task ReadCurrentPeriodForAsync_SomebodyElseFilledTheDeploymentsWindow_RefusesThisOwnerToo()
+    public async Task ReadCurrentPeriodForAsync_SomebodyElseFilledTheDeploymentsWindow_RefusesThisUserToo()
     {
         // Arrange
         var ledger = new InMemoryEmbeddingSpendLedger();
-        var gate = CreateGate(ledger, BoundedPerOwner(1_000, 900), new FakeTimeProvider(Midday));
+        var gate = CreateGate(ledger, BoundedPerUser(1_000, 900), new FakeTimeProvider(Midday));
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Another,
+            SyntheticMailUser.Another,
             inputCharacterCount: 1_000,
             TestContext.Current.CancellationToken);
 
         // Act
         var admission = await gate.ReadCurrentPeriodForAsync(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmbeddingSpendBound.Deployment, admission.ReachedBound);
-        Assert.Equal(0, admission.Owner.ConsumedInputCharacterCount);
+        Assert.Equal(0, admission.User.ConsumedInputCharacterCount);
     }
 
-    /// <summary>Charging names the owner, so what the ledger holds is attributable rather than a deployment total.</summary>
+    /// <summary>Charging names the user, so what the ledger holds is attributable rather than a deployment total.</summary>
     [Fact]
-    public async Task RecordSpendAsync_TwoOwnersSpendingInOnePeriod_ChargesEachToTheirOwnRow()
+    public async Task RecordSpendAsync_TwoUsersSpendingInOnePeriod_ChargesEachToTheirOwnRow()
     {
         // Arrange
         var ledger = new InMemoryEmbeddingSpendLedger();
-        var gate = CreateGate(ledger, BoundedPerOwner(10_000, 10_000), new FakeTimeProvider(Midday));
+        var gate = CreateGate(ledger, BoundedPerUser(10_000, 10_000), new FakeTimeProvider(Midday));
         var periodStart = new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
         // Act
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             inputCharacterCount: 300,
             TestContext.Current.CancellationToken);
         await gate.RecordSpendAsync(
             Substitute.For<IPersistenceSession>(),
-            SyntheticMailOwner.Another,
+            SyntheticMailUser.Another,
             inputCharacterCount: 700,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(300, ledger.ConsumedByPeriodAndOwner[(periodStart, SyntheticMailOwner.Deployment)]);
-        Assert.Equal(700, ledger.ConsumedByPeriodAndOwner[(periodStart, SyntheticMailOwner.Another)]);
+        Assert.Equal(300, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticMailUser.Deployment)]);
+        Assert.Equal(700, ledger.ConsumedByPeriodAndUser[(periodStart, SyntheticMailUser.Another)]);
         Assert.Equal(1_000, ledger.ConsumedByPeriod[periodStart]);
     }
 
     /// <summary>Work is performed for somebody, so a charge that names nobody is a defect rather than a deployment charge.</summary>
     [Fact]
-    public async Task ReadCurrentPeriodForAsync_AnOwnerNamingNobody_IsRefused()
+    public async Task ReadCurrentPeriodForAsync_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var gate = CreateGate(new InMemoryEmbeddingSpendLedger(), Bounded(1_000), new FakeTimeProvider(Midday));
@@ -254,8 +254,8 @@ public sealed class EmbeddingSpendGateTests
     private static EmbeddingSpendBudget Bounded(long ceiling) =>
         EmbeddingSpendBudget.Create(ceiling, 0, TimeSpan.FromDays(1));
 
-    private static EmbeddingSpendBudget BoundedPerOwner(long ceiling, long ownerCeiling) =>
-        EmbeddingSpendBudget.Create(ceiling, ownerCeiling, TimeSpan.FromDays(1));
+    private static EmbeddingSpendBudget BoundedPerUser(long ceiling, long userCeiling) =>
+        EmbeddingSpendBudget.Create(ceiling, userCeiling, TimeSpan.FromDays(1));
 
     private static EmbeddingSpendGate CreateGate(
         IEmbeddingSpendLedger ledger,

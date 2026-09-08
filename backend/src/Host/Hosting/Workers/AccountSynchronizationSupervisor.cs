@@ -57,14 +57,14 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
-    /// <param name="account">The account this supervisor synchronizes, named by its owner and its identifier together; the identifier is what it logs.</param>
+    /// <param name="account">The account this supervisor synchronizes, named by its user and its identifier together; the identifier is what it logs.</param>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
     /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
     /// <param name="runLedger">Holds what this supervisor is doing for the administrative surface, which is what an operator without a metrics stack reads it from.</param>
-    /// <param name="signals">Tells whatever the owner has open that mail arrived and that the run finished, so a screen catches up without waiting for its own interval.</param>
+    /// <param name="signals">Tells whatever the user has open that mail arrived and that the run finished, so a screen catches up without waiting for its own interval.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     public AccountSynchronizationSupervisor(
         MailAccountIdentity account,
@@ -309,7 +309,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
                 await this.ReadAttachmentsOfCutMailAsync(runSettings, workUnitToken);
                 await this.DeriveMarksOfCutMailAsync(runSettings, workUnitToken);
-                await this.ReportRunToItsOwnerAsync(
+                await this.ReportRunToItsUserAsync(
                     runSettings,
                     scheduledFolders.Length,
                     failedFolderCount,
@@ -482,7 +482,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
 
         // A copy that is not where it should be is a warning rather than an error, because nobody is missing a message
-        // over it: the mail was delivered, and what is lost is the owner seeing it in their own client. Nothing sends
+        // over it: the mail was delivered, and what is lost is the user seeing it in their own client. Nothing sends
         // anything again over one, and nothing files it again either — a settled send is claimed by nothing.
         if (report.NotFiledCount > 0)
         {
@@ -494,13 +494,13 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <remarks>
     /// <para>
     /// All four age out here — the trail of the changes MailFathom made to the mailbox, the record of the questions
-    /// answered from it, the history of what the rules concluded about its mail, and what its owner has been told
+    /// answered from it, the history of what the rules concluded about its mail, and what its user has been told
     /// about any of it. The first three are separate operator decisions with separate windows and the last is the
     /// record's own bound, and they are one pass because the pass is what the account's own loop already provides: a
     /// second schedule would be another thing to configure and watch for work that is four bounded deletes.
     /// </para>
     /// <para>
-    /// The notifications are the owner's rather than the account's, so an owner holding several accounts is swept once
+    /// The notifications are the user's rather than the account's, so a user holding several accounts is swept once
     /// per account. That costs a query that erases nothing rather than a mechanism of its own, which is the cheaper of
     /// the two.
     /// </para>
@@ -556,7 +556,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             var erasedNotificationCount = await scope.ServiceProvider
                 .GetRequiredService<NotificationRetention>()
-                .EraseExpiredAsync(this.account.Owner, cancellationToken);
+                .EraseExpiredAsync(this.account.User, cancellationToken);
 
             if (erasedNotificationCount > 0)
             {
@@ -573,7 +573,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
     }
 
-    /// <summary>Tells this account's owner what the run observed that they were not at the screen for.</summary>
+    /// <summary>Tells this account's user what the run observed that they were not at the screen for.</summary>
     /// <remarks>
     /// <para>
     /// Last, and after every pass that can still commit mail, so the count reported is the run's whole arrival rather
@@ -588,8 +588,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// replayed, because a stale count is worse than a missing one.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Reporting a run to its owner is not a mail operation; a report that failed is logged rather than putting the account into backoff.")]
-    private async Task ReportRunToItsOwnerAsync(
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Reporting a run to its user is not a mail operation; a report that failed is logged rather than putting the account into backoff.")]
+    private async Task ReportRunToItsUserAsync(
         MailSynchronizationOptions runSettings,
         int scheduledFolderCount,
         int failedFolderCount,
@@ -627,7 +627,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogOwnerNotificationFailed(exception, this.account.Id.Value);
+            this.LogUserNotificationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -862,7 +862,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             // Reported apart from the line above, and whether or not the pass read anything, because it is the one
             // outcome an operator has to act on: the step names which key to raise, and the bound says whether raising
-            // an owner's share would achieve anything while the deployment's own ceiling is what stopped spending.
+            // a user's share would achieve anything while the deployment's own ceiling is what stopped spending.
             if (report.PeriodCeilingReachedFor is { } reachedFor)
             {
                 this.LogAttachmentPeriodCeilingReached(
@@ -1409,7 +1409,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         Guid storedEmailId,
         Guid mutationRecordId);
 
-    /// <summary>Reports the flag changes the mailbox owner made, which stay changes to react to however many of MailFathom's own were withheld beside them.</summary>
+    /// <summary>Reports the flag changes the mailbox user made, which stay changes to react to however many of MailFathom's own were withheld beside them.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Mail server reports a moved \\Seen flag on {SeenStateChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
@@ -1418,7 +1418,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         int seenStateChangedEmailCount);
 
-    /// <summary>Reports the stars the mailbox owner set or cleared themselves, which no change of MailFathom's explains.</summary>
+    /// <summary>Reports the stars the mailbox user set or cleared themselves, which no change of MailFathom's explains.</summary>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Mail server reports a moved \\Flagged flag on {FlaggedStateChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
@@ -1427,8 +1427,8 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         int flaggedStateChangedEmailCount);
 
-    /// <summary>Reports the labels the mailbox owner put on or took off themselves, counted per message rather than per keyword.</summary>
-    /// <remarks>The keywords themselves never reach the line. A label is text the owner or their client chose and can name a person, a case, or a diagnosis, so it is treated as derived from the message like any other part of it.</remarks>
+    /// <summary>Reports the labels the mailbox user put on or took off themselves, counted per message rather than per keyword.</summary>
+    /// <remarks>The keywords themselves never reach the line. A label is text the user or their client chose and can name a person, a case, or a diagnosis, so it is treated as derived from the message like any other part of it.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Mail server reports different keywords on {KeywordsChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
@@ -1487,7 +1487,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Reports the copies of delivered mail that are not in the folder the account asked for.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{NotFiledCount} copy/copies of mail sent for account {AccountId} could not be put into the folder it files them in, so the owner will not see them in their own client. The messages were delivered, none is sent again, and nothing files the copies again on its own.")]
+        Message = "{NotFiledCount} copy/copies of mail sent for account {AccountId} could not be put into the folder it files them in, so the user will not see them in their own client. The messages were delivered, none is sent again, and nothing files the copies again on its own.")]
     private partial void LogOutboxCopiesNotFiled(string accountId, int notFiledCount);
 
     /// <summary>Reports what the account's own run found waiting in its outbox; a recipient names a person and never reaches a log.</summary>
@@ -1728,12 +1728,12 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Reporting the run of account {AccountId} to its owner ended unexpectedly; the account is not backed off for it and its next run reports what this one observed.")]
-    private partial void LogOwnerNotificationFailed(Exception exception, string accountId);
+        Message = "Reporting the run of account {AccountId} to its user ended unexpectedly; the account is not backed off for it and its next run reports what this one observed.")]
+    private partial void LogUserNotificationFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Erased {ErasedCount} expired notifications of the owner of account {AccountId}.")]
+        Message = "Erased {ErasedCount} expired notifications of the user of account {AccountId}.")]
     private partial void LogNotificationsErased(string accountId, int erasedCount);
 
     /// <summary>States what one account run produced for the two decisions that follow it.</summary>

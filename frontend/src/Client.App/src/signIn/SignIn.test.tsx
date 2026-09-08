@@ -115,7 +115,7 @@ function typeAddress(entry: string): void {
     fireEvent.change(screen.getByRole('textbox', { name: 'Server' }), { target: { value: entry } });
 }
 
-function typeCredential(userName = 'owner', password = 'open sesame'): void {
+function typeCredential(userName = 'user', password = 'open sesame'): void {
     fireEvent.change(screen.getByRole('textbox', { name: 'Login' }), { target: { value: userName } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
 }
@@ -214,7 +214,7 @@ describe('SignIn', () => {
     it('asks for the half of the credential that is missing, rather than sending the other one', () => {
         const { presented } = renderScreen(signedIn, servingDeployment);
 
-        typeCredential('owner', '');
+        typeCredential('user', '');
         submit();
 
         expect(screen.getByRole('alert').textContent).toBe('Type the login and the password your deployment gave you.');
@@ -236,7 +236,7 @@ describe('SignIn', () => {
     it('refuses a credential longer than it will present, rather than sending a truncated one', () => {
         const { presented } = renderScreen(signedIn, servingDeployment);
 
-        typeCredential('owner', 'p'.repeat(longestCredentialPart + 1));
+        typeCredential('user', 'p'.repeat(longestCredentialPart + 1));
         submit();
 
         expect(screen.getByRole('alert').textContent).toBe(
@@ -248,7 +248,7 @@ describe('SignIn', () => {
     it('lets a credential exactly as long as the bound through, so the bound is where it says it is', async () => {
         const { presented } = renderScreen(signedIn, servingDeployment);
 
-        typeCredential('owner', 'p'.repeat(longestCredentialPart));
+        typeCredential('user', 'p'.repeat(longestCredentialPart));
         submit();
 
         await vi.waitFor(() => {
@@ -342,7 +342,7 @@ describe('SignIn', () => {
             expect(presented).toEqual([
                 {
                     deployment: { baseAddress: 'http://mail.example.test' },
-                    authorization: 'Basic b3duZXI6b3BlbiBzZXNhbWU=',
+                    authorization: 'Basic dXNlcjpvcGVuIHNlc2FtZQ==',
                 },
             ]);
         });
@@ -353,7 +353,7 @@ describe('SignIn', () => {
             'http://mail.example.test/api/client/session',
             'http://mail.example.test/api/client/session',
         ]);
-        expect(credentialsSent(asked)).toEqual([undefined, 'Basic b3duZXI6b3BlbiBzZXNhbWU=']);
+        expect(credentialsSent(asked)).toEqual([undefined, 'Basic dXNlcjpvcGVuIHNlc2FtZQ==']);
     });
 
     // The fields stay editable while an attempt runs, so somebody who spots a typo can correct it without waiting.
@@ -412,7 +412,7 @@ describe('SignIn', () => {
             expect(presented).toEqual([
                 {
                     deployment: { baseAddress: 'https://mail.example.test:8443' },
-                    authorization: 'Basic b3duZXI6b3BlbiBzZXNhbWU=',
+                    authorization: 'Basic dXNlcjpvcGVuIHNlc2FtZQ==',
                 },
             ]);
         });
@@ -432,7 +432,7 @@ describe('SignIn', () => {
 
         // The property is the order rather than the count: the credential goes out only after an answer came back
         // establishing that MailFathom is at the address somebody typed.
-        expect(credentialsSent(asked)).toEqual([undefined, 'Basic b3duZXI6b3BlbiBzZXNhbWU=']);
+        expect(credentialsSent(asked)).toEqual([undefined, 'Basic dXNlcjpvcGVuIHNlc2FtZQ==']);
     });
 
     it('sends no password at all to a typed address that did not answer as MailFathom', async () => {
@@ -537,7 +537,7 @@ describe('SignIn', () => {
 
     it('says the credential was accepted and reads nothing when the deployment holds no grant for it', async () => {
         renderScreen(grantMissing, servingDeployment);
-        typeCredential('owner', 'open sesame');
+        typeCredential('user', 'open sesame');
         submit();
 
         // The one refusal that is not about what was typed: retyping the password would change nothing, so the
@@ -561,7 +561,7 @@ describe('SignIn', () => {
         }
 
         renderScreen(transport, servingDeployment);
-        typeCredential('owner', 'open sesame');
+        typeCredential('user', 'open sesame');
         submit();
 
         // Every path out of a refusal at once, because the obligation is about all of them rather than about the one a
@@ -570,7 +570,7 @@ describe('SignIn', () => {
         await screen.findByRole('alert');
         expect(reported).toEqual([]);
         expect(document.body.textContent).not.toContain('open sesame');
-        expect(document.body.textContent).not.toContain('b3duZXI6b3BlbiBzZXNhbWU=');
+        expect(document.body.textContent).not.toContain('dXNlcjpvcGVuIHNlc2FtZQ==');
     });
 
     it('says the password lasts only as long as the tab where nothing may be kept beyond it', () => {

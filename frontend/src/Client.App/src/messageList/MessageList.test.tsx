@@ -51,7 +51,7 @@ function message(at: number, carried: Record<string, unknown> = {}): Record<stri
         sentAt: null,
         senderAddress: `writer-${String(at)}@nordwind.example`,
         senderDisplayName: `Writer ${String(at)}`,
-        toAddresses: ['owner@example.invalid'],
+        toAddresses: ['user@example.invalid'],
         unread: false,
         flagged: false,
         answered: false,
@@ -709,7 +709,7 @@ describe('MessageList', () => {
     it('falls back to who a message was written to where it carries no sender at all', async () => {
         renderList(answering(pageOf([message(0, { senderDisplayName: null, senderAddress: null })])));
 
-        expect((await rows())[0]?.textContent).toContain('owner@example.invalid');
+        expect((await rows())[0]?.textContent).toContain('user@example.invalid');
     });
 
     it('draws no time for a message no header carried a usable date on', async () => {

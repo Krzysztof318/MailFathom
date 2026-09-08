@@ -10,7 +10,7 @@ MIME**, a **reply or a forward is authored** from mail this deployment already h
 before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
 deployment that configures a submission endpoint and turns sending on for the account sends mail, and `send_email` on
 [the MCP surface](mcp-tools.md#send_email) is how a caller asks it to. The same composition also **writes a message
-without sending it**: a draft is held here, kept in step with the folder the owner's own mail client reads, and offered
+without sending it**: a draft is held here, kept in step with the folder the user's own mail client reads, and offered
 to a submission server only when somebody promotes it.
 
 Each of those is a piece the ones after it rest on, and each is provable on its own: the session is the piece with a
@@ -99,7 +99,7 @@ refuses leaves nothing written down, nothing queued, and nothing for a delivery 
 
 **Sending is off until an account is turned on.** `Delivery:Enabled` is `false` on every account of every deployment, so
 an installation upgrading into a release that can send does not thereby become able to — the release meets a
-configuration that never asked for the capability. It is per account because an owner may want one identity able to
+configuration that never asked for the capability. It is per account because a user may want one identity able to
 write and another purely archival. An account enabled with no submission host fails startup, since it is a permission
 nothing could act on.
 
@@ -172,9 +172,9 @@ every time is the loop being bounded.
 
 **An address the caller named and nothing here vouches for is the signal.** A recipient of an authored send is one of
 two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
-resolved from a contact the caller named, by the identity the book gave it or by the whole name the owner recorded —
+resolved from a contact the caller named, by the identity the book gave it or by the whole name the user recorded —
 or an address the caller wrote out itself. Only the second is judged.
-Against it stands what this installation already holds a record of: the contact book of the owner the send is authored
+Against it stands what this installation already holds a record of: the contact book of the user the send is authored
 for, and the addresses its own accounts send as. An address that is neither is what an injected instruction looks like,
 and
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
@@ -202,9 +202,9 @@ the strict reading, so every address on one is the caller's own word.
 **Every send from this surface is recorded**: the calling principal, the grant it held, which of the five acts was
 asked for — a new message, either reply, a forward, or a draft dispatched as it stands — the account, the identity of
 the outgoing record, how many people it names, and how many of those nothing here vouched for. A send that reached somebody unvouched for is recorded at a level of its own, because that is the
-line an owner looking for an odd send is looking for. What is **not** recorded is everything about the message — no
+line a user looking for an odd send is looking for. What is **not** recorded is everything about the message — no
 prompt, no mail content, no subject, no body, and no address. The record answers *who asked for this and under what*,
-which turns "an agent sent something odd" from a suspicion into something an owner can read; what was sent is the
+which turns "an agent sent something odd" from a suspicion into something a user can read; what was sent is the
 stored MIME the outgoing record already points at. Today it is written to the structured log, under the deployment's
 own log retention; the port behind it is what a durable evidence store would replace without any caller changing. One
 send is one entry: a call repeated under the idempotency key it first carried is answered with the record the first one
@@ -382,17 +382,17 @@ out of the deployment: what it produces is an ordinary address, indistinguishabl
 bound, refusal, and check a written-down address meets it meets as well. Naming a contact can therefore reach no mailbox
 that naming an address could not.
 
-**A contact is named by the identity the book gave it or by the whole name the owner recorded**, and a name addresses a
+**A contact is named by the identity the book gave it or by the whole name the user recorded**, and a name addresses a
 message only where exactly one contact carries it. Nothing ranks candidates, nothing prefers the most recently written
 down, and nothing falls back to a near match: a recipient chosen that way is a message delivered to somebody nobody
 named. The name is compared on the form the book compares its own values in, so the casing an author wrote is immaterial,
 and it is the whole name rather than part of one — text that merely appears inside somebody's name is not that person
 being named, which is what separates addressing from the contained match a search of the book performs.
 
-**The address used is the one the owner made preferred**, unless the authored act names another address of that same
+**The address used is the one the user made preferred**, unless the authored act names another address of that same
 contact — and an address that contact does not hold is refused rather than sent to and rather than quietly replaced by
 the preferred one. The value that reaches the message is the book's own spelling of it. The name written beside it in the
-header is the name the owner recorded, which is the point of addressing somebody by it: the message reads as one to a
+header is the name the user recorded, which is the point of addressing somebody by it: the message reads as one to a
 person rather than to a mailbox.
 
 **One unresolved recipient refuses the whole message.** Sending to everybody else would tell an author their message went
@@ -608,13 +608,13 @@ scanner switched on nothing here runs, and an enqueue costs exactly what it did 
 
 `AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
 the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts the
-caller's owner owns, the people named become addresses, the addresses and the text become MIME, and the MIME and the
+caller's user owns, the people named become addresses, the addresses and the text become MIME, and the MIME and the
 request become the durable record. Composing them in one place is what keeps a second entrypoint from doing two of the
 three and inventing the middle one, and it is what `send_email` calls and the whole of what that tool does.
 
-The account resolution is the caller's owner's rather than the deployment's wherever a caller names one, which is the
+The account resolution is the caller's user's rather than the deployment's wherever a caller names one, which is the
 send, the draft, and the repeating send alike, and it is what vouches for a recipient as one of the caller's own
-addresses. An account the caller's owner does not own is refused exactly as one this deployment does not serve — the
+addresses. An account the caller's user does not own is refused exactly as one this deployment does not serve — the
 same failure, with nothing in it that separates *not yours* from *not here* — so a refusal enumerates neither the
 accounts another person owns nor whether the name was one at all. A send is where getting this wrong costs most: mail
 would leave as somebody else rather than merely be shown to the wrong reader.
@@ -697,7 +697,7 @@ refusal states the rule and never repeats the instant, the address, or the subje
 decides it. `MailDelivery:AllowedSendLateness` is how much later than its due time a message may still be delivered as
 written; the default is a working day. Up to that, the pass sends it. Past it, the send is refused with `28016`, stands
 in the outbox where an operator can see it, and counts under the delivery outcome `missed_due_time` — neither outcome is
-silent, and nothing decides on the owner's behalf that a message which missed its moment should still go out. The bound
+silent, and nothing decides on the user's behalf that a message which missed its moment should still go out. The bound
 applies to a message written for a named time and to nothing else: a send that named none is never late, however long a
 retry or an unreachable provider has held it.
 
@@ -717,7 +717,7 @@ nothing — the record is the truth about what will be sent.
 Today the due time is a property of the application-level submission rather than an argument on an MCP tool:
 [`send_email`](mcp-tools.md#send_email) names no time, so every message a tool call submits is due at once.
 
-## A message the owner asked to be sent again
+## A message the user asked to be sent again
 
 A **recurring send** is one message written once and sent again on every occasion a schedule names.
 `RecurringMailSubmission` is the use case, and it is the authored submission's counterpart stopping one step earlier:
@@ -753,7 +753,7 @@ declaration still advances past the occasion it passed over, so the next one is 
 
 **Stopping a declaration and withdrawing a message are two acts.** `RecurringMailSubmission.CancelAsync` stops every
 occasion still to come and touches no message: an occurrence already written down goes out as it was going to, because
-it is a message the owner asked for at a moment that has already come, and stopping that one is asked for against its
+it is a message the user asked for at a moment that has already come, and stopping that one is asked for against its
 own record. A stopped declaration is read by nothing that dispatches, from the moment it is stopped, and keeps its row —
 what it last did and when it was stopped are the account of a mailbox that used to send something every week, and
 deleting the row would make that indistinguishable from a repetition nobody ever declared.
@@ -766,7 +766,7 @@ something wrong with it rather than a bound to raise.
 
 The declaration is derived personal data of the same kind an outgoing record is, and inherits the same retention,
 deletion, and export obligations —
-[the stored email schema](../architecture/stored-email-schema.md#what-an-owner-asked-to-be-sent-again) holds the
+[the stored email schema](../architecture/stored-email-schema.md#what-a-user-asked-to-be-sent-again) holds the
 columns and says why it says more about a relationship than a single send does.
 
 ## How a written-down send reaches a server
@@ -801,9 +801,9 @@ every send left in that batch until its lease expired, over a failure that says 
 stands where the failed write left it, and its lease is what makes it claimable again.
 
 **A pass claims before it attempts.** One statement takes a batch of the account's due sends, oldest first, and stamps
-each with an owner, an expiry, and the attempt it is about to be given — so no instant exists in which a send is chosen
+each with a user, an expiry, and the attempt it is about to be given — so no instant exists in which a send is chosen
 but unheld, and two passes over one account take disjoint sets rather than queueing behind each other. Every write about
-that send afterwards carries the lease it was claimed under and is refused if the row no longer names that owner, which
+that send afterwards carries the lease it was claimed under and is refused if the row no longer names that user, which
 is what stops an attempt whose lease ran out from recording an outcome over the attempt that has since taken the
 message. The attempt itself is bounded below the lease, so that case stays rare rather than routine, and startup
 refuses a configuration stating otherwise. That budget opens before the first thing the attempt waits on rather than
@@ -954,7 +954,7 @@ answering about nothing and is dropped.
 ## The copy in the account's own folders
 
 SMTP files nothing. A message a submission server accepted leaves no trace in the mailbox it was sent from, so a
-deployment that only submits sends mail its owner's mail client shows they never sent. **Filing** is the answer: one
+deployment that only submits sends mail its user's mail client shows they never sent. **Filing** is the answer: one
 mechanism appends a copy of an outgoing message to the folder playing the role the message's own state calls for, and
 takes it back out when that state changes.
 
@@ -986,11 +986,11 @@ Nothing is mirrored until somebody writes that mapping.
 `Delivery:FileSentCopy`, a per-account setting that defaults to on and is configured rather than detected: a provider
 that files the copy itself does so asynchronously, so looking in the folder immediately after a delivery cannot tell
 *will appear shortly* from *will never appear*. Turn it off for an account whose provider files the copy, and leave it
-alone otherwise — a duplicate an owner deletes beats a record of what they sent that never existed.
+alone otherwise — a duplicate a user deletes beats a record of what they sent that never existed.
 
 **The bytes are the ones the recipients received.** The append reuses the stored MIME rather than recomposing it, for
 the reason a retry does: a recomposed message carries a different `Message-ID` and threads as a second message in every
-client, including the owner's own.
+client, including the user's own.
 
 **A copy is appended once, and an append whose answer never came back is never repeated.** The filing is written down
 before the command goes out, so a process that died in between leaves a row saying the copy may be there — and nothing
@@ -1003,15 +1003,15 @@ again.
 RFC 4315 `UIDPLUS`, its `APPENDUID` response names the occurrence exactly and that is the join; where it does not, the
 `Message-ID` this system minted, read back off the appended bytes, is what recognizes it. Either way the stored message
 is marked as this deployment's own, which is what keeps [a rule](mail-rules.md#when-rules-run) conditioned on arriving
-mail from firing on what the owner just sent, and what keeps
+mail from firing on what the user just sent, and what keeps
 [spam classification](spam-classification.md#mail-is-classified-as-it-arrives) from scoring a message this system
 composed.
 
 **Nothing else about the copy is treated differently, and that is deliberate.** It is stored, extracted, searchable,
 cut into passages, and embedded exactly as any other message in that folder — a question asked of the mailbox is
-answered from the mail the owner sent as well as the mail they received. Contacts are collected from it too, because
+answered from the mail the user sent as well as the mail they received. Contacts are collected from it too, because
 which header a message contributes is decided by the role of its folder: a copy in the sent folder contributes the
-people the owner wrote to, which is the same answer the copy would get had the provider filed it. What the join changes
+people the user wrote to, which is the same answer the copy would get had the provider filed it. What the join changes
 is the two things that would otherwise be this system reacting to its own act.
 
 **Filing is never part of delivering.** A send is delivered or it is not, and where its copies are is a second account
@@ -1026,10 +1026,10 @@ that — and the message is untouched either way.
 
 The withdrawal of an outbox mirror reaches that copy and nothing else: `\Deleted` followed by `UID EXPUNGE` against the
 UID the append reported. A server without `UIDPLUS` leaves the copy standing rather than expunging the folder, and so
-does a copy the server never named — one copy of the owner's own message in a folder they mapped, deletable with the
+does a copy the server never named — one copy of the user's own message in a folder they mapped, deletable with the
 gesture they would have used anyway. A mirror whose append the server never answered is left alone entirely: nobody
 knows whether that copy reached the folder, so the record goes on reporting the outcome as unknown rather than claiming
-the copy was taken back out. A sent copy is withdrawn by nothing: it is what the owner keeps.
+the copy was taken back out. A sent copy is withdrawn by nothing: it is what the user keeps.
 
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
@@ -1040,13 +1040,13 @@ A **draft** is a message this deployment holds and will offer to nobody until so
 the same way a send is — an authored message composed into MIME, or a reply or forward authored from mail this
 deployment already holds — and then it stops there: no submission endpoint is opened, no recipient is required, and
 nothing claims it. A message addressed to nobody at all is an ordinary draft rather than a refused one, which is what
-saving something half-written means. It is not what [a repeated send](#a-message-the-owner-asked-to-be-sent-again)
+saving something half-written means. It is not what [a repeated send](#a-message-the-user-asked-to-be-sent-again)
 stores under the same word: that draft is a template an occasion is composed from and reaches no folder, while this one
-is a message somebody is writing and is the message the owner's own client shows them.
+is a message somebody is writing and is the message the user's own client shows them.
 
-**Every draft reaches the owner's own drafts folder, whichever surface wrote it.** There is no second kind held only
-here: a draft is a message the owner is meant to find in the mail client they already open, and one this deployment
-kept to itself would be a message prepared where its owner never looks — with two places to look for the same thing,
+**Every draft reaches the user's own drafts folder, whichever surface wrote it.** There is no second kind held only
+here: a draft is a message the user is meant to find in the mail client they already open, and one this deployment
+kept to itself would be a message prepared where its user never looks — with two places to look for the same thing,
 which is the divergence the arrangement exists to avoid. What that costs is a round trip to a mail server per revision,
 so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
 save, and the writing between those moments is the client's own.
@@ -1070,18 +1070,18 @@ and is found by that role rather than by name, the copy carries `\Draft`, its in
 instant, and the append and the withdrawal are the two operations the write session opens for exactly this. What is not
 shared is the durable account of it: a filed copy is written once and kept, while a draft's copy is written, replaced,
 and eventually taken back out, so the copies hang off the draft with one row per revision. An account that maps no
-folder to that role holds its drafts and puts none of them in front of the owner — the destination is reported as
+folder to that role holds its drafts and puts none of them in front of the user — the destination is reported as
 unavailable, the draft is untouched, and mapping the role is the whole of what changes it.
 
 **Editing replaces the copy: append the new version, then remove the one it replaced, in that order.** IMAP has no
 command that changes a stored message, and the order is the safety rather than a preference. Removing first and then
-failing to append leaves the owner with no draft at all — the version they were working on, gone — while appending
+failing to append leaves the user with no draft at all — the version they were working on, gone — while appending
 first and then failing to remove leaves them with two, which is untidy and loses nothing. **The revision is durable
 before either command goes out**, so a process that dies between them is recognized for what it is and the pass that
-follows finishes the pair. That is why an owner who edits a draft is looking at one draft rather than at two.
+follows finishes the pair. That is why a user who edits a draft is looking at one draft rather than at two.
 
 **The only occurrence anything here ever removes is one an append of its own reported.** There is no path from a
-supplied UID, a folder search, or a message identity to a removal, so a draft the owner wrote in their own mail client
+supplied UID, a folder search, or a message identity to a removal, so a draft the user wrote in their own mail client
 is unreachable by construction rather than spared by a check. Where the tracked copy stops being provably this
 deployment's — the role now resolves to another folder, the folder was recreated since the append, the server named no
 placement, an append was never answered — the message is left exactly where it is and the divergence is written onto
@@ -1090,7 +1090,7 @@ the draft, which is what an operator reads instead of a message that quietly wen
 **Giving a draft up removes what this system put there and nothing else.** The record is marked before anything is
 issued and removed once the copies are settled, so a process that dies in between leaves a draft the pass finishes. A
 copy that could not be reached does not make the draft undeletable: it is marked as one nothing will touch again, the
-reason is recorded, and the owner is left with one message in a folder they can delete with the gesture they would have
+reason is recorded, and the user is left with one message in a folder they can delete with the gesture they would have
 used anyway. **A draft that has been promoted is not given up this way**: its message is a queued send that giving the
 draft up would leave untouched, so the answer is `53008` `MailDraftNotFound` — the same one revising it gives — and
 what stops the message is cancelling the send rather than deleting the draft it came from.
@@ -1117,7 +1117,7 @@ round trip after the mark is written. Two callers arriving together are the
 case that read cannot settle — neither of them can see a write that has not happened yet — so the request's identity is
 the draft rather than a key whoever asked supplies: their two asks compose one identity, and the outbox answers the
 second with the record the first opened. It is the same mechanism [an occasion of a repeated
-send](#a-message-the-owner-asked-to-be-sent-again) is keyed by, and it is here for the same reason: a message put in
+send](#a-message-the-user-asked-to-be-sent-again) is keyed by, and it is here for the same reason: a message put in
 somebody's mailbox twice is the one duplication nothing downstream can withdraw.
 
 **A draft is screened on the way in as well as on the way out.** What a deployment [must not
@@ -1126,8 +1126,8 @@ when it is saved rather than held until somebody tries to promote it — and a d
 switched on is refused at the promotion, like every other bound tightened after a draft was stored.
 
 **A promotion that fails leaves the draft exactly as it was.** Nothing about the draft is written until the outgoing
-record exists, so a refusal is a message the owner still has. And the draft is given up on **delivery** rather than on
-promotion: a send that is refused, deferred, or left with an unknown outcome leaves the draft standing, so an owner
+record exists, so a refusal is a message the user still has. And the draft is given up on **delivery** rather than on
+promotion: a send that is refused, deferred, or left with an unknown outcome leaves the draft standing, so a user
 whose message did not leave still has what they wrote. Once the server has accepted it, the draft's copy is taken out
 of the drafts folder in the same pass that files the sent copy — which is what leaves the message in one place rather
 than in two.
@@ -1158,8 +1158,8 @@ belongs between an agent and a recipient.
 **[The client endpoint](../operations/client-endpoint.md#the-drafts-routes) reaches the same drafts as a person rather
 than as an agent**, under the same two grants and with the same meaning: composing, listing, opening, revising, giving
 up, and attaching are `mailfathom.mail.drafts.write`, and promoting one is `mailfathom.mail.send`. Every route there is
-scoped to the caller's own owner, so a draft another owner holds answers exactly as one nobody holds — and because a
-draft is a row, a stored message, and a copy in the owner's folder rather than anything a client keeps, the one
+scoped to the caller's own user, so a draft another user holds answers exactly as one nobody holds — and because a
+draft is a row, a stored message, and a copy in the user's folder rather than anything a client keeps, the one
 somebody started in the browser is the one the desktop shell opens and the one their phone's mail client shows.
 [The outbox routes](../operations/client-endpoint.md#the-outbox-routes) beside them are where that client watches what
 became of a send, withdraws one still queued, and offers a failed one again.
@@ -1277,7 +1277,7 @@ the draft unpromoted queueing one message between them, and a delivery that fail
 assembled: that it settles an outstanding draft before it claims anything, and that a delivered send takes the draft it
 came from out of the drafts folder.
 
-The integration suite runs the whole loop once against the orchestrated server, with the owner's own draft appended
+The integration suite runs the whole loop once against the orchestrated server, with the user's own draft appended
 beside MailFathom's as the control: a written draft reaches the folder under the UID the record names, an edit leaves
 exactly one of this deployment's drafts there, a promotion delivers the message and leaves none — the copy taken out of
 the drafts folder in the same pass that files the sent one — and the draft appended by hand is still there under the

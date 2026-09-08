@@ -20,7 +20,7 @@ import { deviceKeys, deviceStore } from '../device/deviceStore';
 // Unset reads as on, which is the default the operating system's own grant makes true — and a refusal is written here
 // as the permanent off, so a machine that said no is never asked again by a client that had forgotten.
 //
-// The store is the one owner of the value and a screen never keeps a second copy, because the person moving the switch
+// The store is the one user of the value and a screen never keeps a second copy, because the person moving the switch
 // is not the only writer: an arrival the operating system refuses writes the same key from `useNotificationCentre.ts`,
 // and a switch holding its own copy would still read *on* while the machine had already decided otherwise.
 // `useSyncExternalStore` is what React reads a value living outside it through, so what is subscribed to below is the

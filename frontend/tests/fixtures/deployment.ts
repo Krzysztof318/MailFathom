@@ -12,13 +12,13 @@
 // trouble changes what every summary above it says.
 
 /** The name typed into the sign-in screen, which belongs to nobody: it reaches a preview server or a fake transport. */
-export const userName = 'owner';
+export const userName = 'user';
 
 /** @see userName */
 export const password = 'open sesame';
 
 /** The RFC 7617 value a client composes out of the two above, which is what a request on this surface presents. */
-export const expectedAuthorization = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
+export const expectedAuthorization = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
 
 /**
  * What the session route answers, which is what decides how much of the client is offered at all.

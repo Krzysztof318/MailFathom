@@ -12,7 +12,7 @@ namespace MailFathom.Host.Configuration.Administration;
 /// <remarks>
 /// <para>
 /// Two documents in this system are handed out redacted and taken back edited — the deployment's own persisted
-/// configuration, and one owner's record — and both are JSON objects of configuration keys carrying secret references
+/// configuration, and one user's record — and both are JSON objects of configuration keys carrying secret references
 /// among their settings. The rules for reading a save are therefore one set of rules, stated here once: what a saved
 /// buffer changes, and which redaction markers a save is allowed to leave standing.
 /// </para>

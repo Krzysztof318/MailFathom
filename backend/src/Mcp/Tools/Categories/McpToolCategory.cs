@@ -45,7 +45,7 @@ public readonly record struct McpToolCategory
 
     /// <summary>Gets the category of the tool that changes the flags and keywords on mail this deployment holds.</summary>
     /// <remarks>
-    /// Apart from <see cref="Mailbox" /> because marking mail is not reading it: the effect reaches the owner's own mail
+    /// Apart from <see cref="Mailbox" /> because marking mail is not reading it: the effect reaches the user's own mail
     /// server and is visible in every client they open, which is exactly what a deployment publishing the reading
     /// surface alone means to withhold.
     /// </remarks>

@@ -33,7 +33,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </remarks>
 public sealed class StoredEmailChunkingSelectionTests
 {
-    private static readonly Guid Owner = SyntheticMailOwner.Deployment.Value;
+    private static readonly Guid User = SyntheticMailUser.Deployment.Value;
 
     private static readonly DateTimeOffset Now = new(2026, 8, 13, 10, 0, 0, TimeSpan.Zero);
 
@@ -53,7 +53,7 @@ public sealed class StoredEmailChunkingSelectionTests
         var emails = Emails(Email("work", "INBOX"));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(emails, Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(emails, User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Single(selected.AsEnumerable());
@@ -71,7 +71,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.RulesEvaluatedAt = null;
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -92,7 +92,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.FiledFromOutgoingEmailId = Guid.CreateVersion7();
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Single(selected.AsEnumerable());
@@ -107,7 +107,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.Chunks.Add(new EmailChunkEntity { StoredEmailId = email.Id, StoredEmail = email, Text = "a", ContentHash = "h" });
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -126,7 +126,7 @@ public sealed class StoredEmailChunkingSelectionTests
         // Act
         var selected = StoredEmailChunkingStore.Selecting(
             Emails(withoutDocument, withoutBody),
-            Owner,
+            User,
             "work",
             [WorkInbox],
             ClassificationOff);
@@ -143,7 +143,7 @@ public sealed class StoredEmailChunkingSelectionTests
         var emails = Emails(Email("work", "INBOX"));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(emails, Owner, "work", [WorkArchive], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(emails, User, "work", [WorkArchive], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -157,7 +157,7 @@ public sealed class StoredEmailChunkingSelectionTests
         var emails = Emails(Email("work", "INBOX"));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(emails, Owner, "work", [], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(emails, User, "work", [], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -173,7 +173,7 @@ public sealed class StoredEmailChunkingSelectionTests
         // Act
         var selected = StoredEmailChunkingStore.Selecting(
             emails,
-            Owner,
+            User,
             "work",
             [WorkInbox, new MailFolderIdentity(MailAccountId.Create("home"), MailFolderAlias.Create("INBOX"))],
             ClassificationOff);
@@ -197,7 +197,7 @@ public sealed class StoredEmailChunkingSelectionTests
         };
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOn);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOn);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -211,7 +211,7 @@ public sealed class StoredEmailChunkingSelectionTests
         var emails = Emails(Email("work", "INBOX"));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(emails, Owner, "work", [WorkInbox], ClassificationOn);
+        var selected = StoredEmailChunkingStore.Selecting(emails, User, "work", [WorkInbox], ClassificationOn);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -226,7 +226,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.RemoteExpungeObservedAt = Now;
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -249,7 +249,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
@@ -266,7 +266,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Single(selected.AsEnumerable());
@@ -284,7 +284,7 @@ public sealed class StoredEmailChunkingSelectionTests
         email.Mutations.Add(Mutation(email, MailboxMutation.Copy, MailboxMutationStage.Recorded));
 
         // Act
-        var selected = StoredEmailChunkingStore.Selecting(Emails(email), Owner, "work", [WorkInbox], ClassificationOff);
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), User, "work", [WorkInbox], ClassificationOff);
 
         // Assert
         Assert.Single(selected.AsEnumerable());
@@ -305,15 +305,15 @@ public sealed class StoredEmailChunkingSelectionTests
     {
         var email = new StoredEmailEntity
         {
-            OwnerId = Owner,
+            UserId = User,
             MailboxAccountId = accountId,
             MailFolder = new MailFolderEntity
             {
-                OwnerId = Owner,
+                UserId = User,
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { OwnerId = Owner, Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { UserId = User, Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,
@@ -340,7 +340,7 @@ public sealed class StoredEmailChunkingSelectionTests
         {
             StoredEmailId = email.Id,
             StoredEmail = email,
-            OwnerId = email.OwnerId,
+            UserId = email.UserId,
             MailboxAccountId = email.MailboxAccountId,
             MailFolder = email.MailFolder,
             Mutation = mutation.Name,

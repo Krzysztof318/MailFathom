@@ -15,7 +15,7 @@ namespace MailFathom.Domain.Delivery;
 /// that answers both — so the name a sender chose to write stays in the stored MIME and nowhere else.
 /// </para>
 /// <para>
-/// A recipient address is personal data of somebody who is not this mailbox's owner. It is on the record because a send
+/// A recipient address is personal data of somebody who is not this mailbox's user. It is on the record because a send
 /// cannot be resumed without it, and it reaches no log line, metric dimension, span attribute, or exception message.
 /// </para>
 /// <para>
@@ -32,7 +32,7 @@ public readonly record struct OutgoingRecipient
     /// It is the addr-spec RFC 5321 permits — 64 octets of local part, an at-sign, and 255 of domain. A longer one is
     /// refused where the request is built rather than dropped from it, which is the opposite of what a received
     /// message's participants get: dropping an address there costs a filter one participant, and dropping one here
-    /// would be a person the owner wrote to who never receives the message and is told nothing about it.
+    /// would be a person the user wrote to who never receives the message and is told nothing about it.
     /// </remarks>
     public const int MaximumAddressLength = 320;
 

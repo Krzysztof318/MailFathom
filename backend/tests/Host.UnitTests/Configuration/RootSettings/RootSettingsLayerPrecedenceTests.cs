@@ -278,7 +278,7 @@ public sealed class RootSettingsLayerPrecedenceTests
     }
 
     /// <summary>
-    /// The mailbox declarations carry the same word and are not the owner collection, so a deployment persisting them
+    /// The mailbox declarations carry the same word and are not the user collection, so a deployment persisting them
     /// still composes. This is the case the refusal above must not reach.
     /// </summary>
     [Fact]

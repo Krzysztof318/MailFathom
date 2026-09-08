@@ -45,7 +45,7 @@ public sealed class DiscoveryRun
     /// <param name="capability">Whether this deployment answers questions about mail, and whether it currently can.</param>
     /// <param name="retrieval">The retrieval a derived plan is run through.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
-    /// <param name="egressGuard">Withholds from a provider whatever this owner's posture withholds.</param>
+    /// <param name="egressGuard">Withholds from a provider whatever this user's posture withholds.</param>
     /// <param name="coverageReader">Reads which accounts the run drew on and how current each one's local copy was.</param>
     /// <param name="spendLedger">Admits the run against what the current period may still spend, and is what stops the next question.</param>
     /// <param name="planner">The derivation, absent on a deployment that composes no chat agent.</param>
@@ -133,11 +133,11 @@ public sealed class DiscoveryRun
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }
 
-        // Stated before the derivation rather than inside it, because the question is this owner's text and the guard
+        // Stated before the derivation rather than inside it, because the question is this user's text and the guard
         // refuses to judge text on a flow acting for nobody wherever the deployment scans somebody. Read from the
         // authorization rather than from the scope, which names nobody where the caller owns no served account — a run
-        // whose question would then leave under the deployment's floor instead of under this owner's posture.
-        using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireOwner());
+        // whose question would then leave under the deployment's floor instead of under this user's posture.
+        using var actingFor = this.egressGuard.ActingFor(this.authorization.RequireUser());
 
         var plan = await derivation.DerivePlanAsync(question, cancellationToken);
         var evidence = await this.retrieval.RetrieveAsync(question, plan.Retrieval, progress, cancellationToken);

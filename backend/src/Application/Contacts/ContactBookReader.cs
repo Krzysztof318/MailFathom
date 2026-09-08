@@ -21,7 +21,7 @@ namespace MailFathom.Application.Contacts;
 /// </para>
 /// <para>
 /// Which book is read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
-/// caller reads the book of the owner they were admitted to act for and no request of theirs can name another. A
+/// caller reads the book of the user they were admitted to act for and no request of theirs can name another. A
 /// contact of somebody else's book is answered as one this book does not hold.
 /// </para>
 /// <para>
@@ -73,7 +73,7 @@ public sealed class ContactBookReader
 
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.ReadPageAsync(this.ownership.Owner, QueryFrom(request), cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.User, QueryFrom(request), cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -85,7 +85,7 @@ public sealed class ContactBookReader
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.User, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -95,14 +95,14 @@ public sealed class ContactBookReader
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     /// <remarks>
     /// The lookup a caller reaches for once it has an address out of mail, answered from the unique index over the
-    /// owner and the address comparison form rather than from a search over the book. At most one contact of that
-    /// owner's book can answer, which is the book's own uniqueness rule rather than a property of this method.
+    /// user and the address comparison form rather than from a search over the book. At most one contact of that
+    /// user's book can answer, which is the book's own uniqueness rule rather than a property of this method.
     /// </remarks>
     public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.User, address, cancellationToken);
     }
 
     /// <summary>Reads the query a request states, refusing every part of it the book does not serve.</summary>

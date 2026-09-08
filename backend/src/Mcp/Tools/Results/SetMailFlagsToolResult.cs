@@ -17,7 +17,7 @@ namespace MailFathom.Mcp.Tools.Results;
 /// <para>
 /// Nothing derived from the message appears. The email's own identifier, the account, the folder alias, and MailFathom's
 /// record identities are all its own names for things, and the keywords the caller sent are not repeated back — a label
-/// is text the owner chose and can name a person or a case, and the caller already holds what it wrote.
+/// is text the user chose and can name a person or a case, and the caller already holds what it wrote.
 /// </para>
 /// </remarks>
 [Description("What the change was written down as: one durable record per value asked for, each carried to the mail server by the account's next run.")]

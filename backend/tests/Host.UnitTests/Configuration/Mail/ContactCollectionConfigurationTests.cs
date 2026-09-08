@@ -19,7 +19,7 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_AnAccountThatConfiguredNothing_CollectsNobody()
     {
         // Act
-        var settings = OptionsFor(AccountAt("work", "owner@work.example")).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
+        var settings = OptionsFor(AccountAt("work", "user@work.example")).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
 
         // Assert
         Assert.False(settings.IsEnabled);
@@ -30,7 +30,7 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_AnAccountThatSwitchedCollectionOn_CarriesTheBoundsItStated()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Enabled = true,
@@ -52,9 +52,9 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_CollectionSwitchedOnForOneAccount_LeavesTheOtherCollectingNobody()
     {
         // Arrange
-        var work = AccountAt("work", "owner@work.example");
+        var work = AccountAt("work", "user@work.example");
         work.ContactCollection = new ContactCollectionOptions { Enabled = true };
-        var options = OptionsFor(work, AccountAt("personal", "owner@personal.example"));
+        var options = OptionsFor(work, AccountAt("personal", "user@personal.example"));
 
         // Act
         var onWork = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
@@ -70,7 +70,7 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_AnAccountThisSnapshotNoLongerNames_CollectsNobody()
     {
         // Arrange
-        var work = AccountAt("work", "owner@work.example");
+        var work = AccountAt("work", "user@work.example");
         work.ContactCollection = new ContactCollectionOptions { Enabled = true };
 
         // Act
@@ -81,21 +81,21 @@ public sealed class ContactCollectionConfigurationTests
         Assert.Equal(0, settings.MaxContactsPerRun);
     }
 
-    /// <summary>An owner writing from one of their mailboxes to another is not a correspondent of themselves.</summary>
+    /// <summary>A user writing from one of their mailboxes to another is not a correspondent of themselves.</summary>
     [Fact]
     public void SettingsFor_AnAddressAnotherConfiguredAccountReads_IsNotCollectable()
     {
         // Arrange
-        var work = AccountAt("work", "owner@work.example");
+        var work = AccountAt("work", "user@work.example");
         work.ContactCollection = new ContactCollectionOptions { Enabled = true };
-        var options = OptionsFor(work, AccountAt("personal", "owner@personal.example"));
+        var options = OptionsFor(work, AccountAt("personal", "user@personal.example"));
 
         // Act
         var policy = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
 
         // Assert
-        Assert.False(policy.Admits(AddressOf("owner@personal.example")));
-        Assert.False(policy.Admits(AddressOf("owner@work.example")));
+        Assert.False(policy.Admits(AddressOf("user@personal.example")));
+        Assert.False(policy.Admits(AddressOf("user@work.example")));
         Assert.True(policy.Admits(AddressOf("anna@partner.example")));
     }
 
@@ -108,7 +108,7 @@ public sealed class ContactCollectionConfigurationTests
         bool expectedAdmitted)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Enabled = true,
@@ -130,12 +130,12 @@ public sealed class ContactCollectionConfigurationTests
         Assert.False(policy.Admits(AddressOf("anna@partner.example")));
     }
 
-    /// <summary>A pattern is written over the whole address, which is what an owner excluding one family of names needs.</summary>
+    /// <summary>A pattern is written over the whole address, which is what a user excluding one family of names needs.</summary>
     [Fact]
     public void SettingsFor_AnExcludedAddressPattern_KeepsOutOnlyTheAddressesItMatches()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Enabled = true,
@@ -155,7 +155,7 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_AnEntryNobodyCouldRead_IsSkippedRatherThanRaisedOver()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Enabled = true,
@@ -181,7 +181,7 @@ public sealed class ContactCollectionConfigurationTests
     public void ValidateForSynchronization_AThresholdOutsideTheBounds_IsRefused(int threshold)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions { MinimumMessagesFromSender = threshold };
 
         // Act
@@ -198,7 +198,7 @@ public sealed class ContactCollectionConfigurationTests
     public void ValidateForSynchronization_ARunBoundOutsideTheBounds_IsRefused(int perRun)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions { MaxContactsPerRun = perRun };
 
         // Act
@@ -221,7 +221,7 @@ public sealed class ContactCollectionConfigurationTests
         bool includeSubdomains)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Exclusions =
@@ -252,7 +252,7 @@ public sealed class ContactCollectionConfigurationTests
     public void ValidateForSynchronization_AUsableBlock_IsAccepted()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.ContactCollection = new ContactCollectionOptions
         {
             Enabled = true,

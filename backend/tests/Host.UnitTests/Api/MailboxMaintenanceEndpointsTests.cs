@@ -36,9 +36,9 @@ public sealed class MailboxMaintenanceEndpointsTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
-    /// <summary>The account as the store is asked about it, which is the owner and the identifier together.</summary>
+    /// <summary>The account as the store is asked about it, which is the user and the identifier together.</summary>
     private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     /// <summary>
@@ -403,7 +403,7 @@ public sealed class MailboxMaintenanceEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -483,7 +483,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             return Task.CompletedTask;
         }
 
-        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Owner.Value} {scope.Account.Id.Value} {scope.Folder?.Value}";
+        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.User.Value} {scope.Account.Id.Value} {scope.Folder?.Value}";
     }
 
     private sealed class CommittingSession : IPersistenceSession

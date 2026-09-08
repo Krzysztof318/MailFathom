@@ -19,7 +19,7 @@ namespace MailFathom.Host.Signals;
 /// connection, and the hub spends it.
 /// </para>
 /// <para>
-/// <b>A ticket authenticates one connection and authorizes nothing.</b> It names the owner the credential behind it
+/// <b>A ticket authenticates one connection and authorizes nothing.</b> It names the user the credential behind it
 /// already named, it is drawn from a cryptographically secure source, it lives for <see cref="Lifetime" />, and it is
 /// removed the first time it is presented — so a ticket read out of a log or a browser history is a ticket that has
 /// already been spent or has already expired.
@@ -76,10 +76,10 @@ internal sealed class ClientSignalTickets
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Mints a ticket for one owner, or reports that too many stand outstanding.</summary>
-    /// <param name="owner">The owner the credential that reached the minting route named.</param>
+    /// <summary>Mints a ticket for one user, or reports that too many stand outstanding.</summary>
+    /// <param name="user">The user the credential that reached the minting route named.</param>
     /// <returns>The minted ticket and when it expires, or <see langword="null" /> when the bound is reached.</returns>
-    internal MintedClientSignalTicket? Mint(MailOwnerId owner)
+    internal MintedClientSignalTicket? Mint(MailUserId user)
     {
         var identifier = RandomText(IdentifierByteCount);
         var secret = RandomNumberGenerator.GetBytes(SecretByteCount);
@@ -104,7 +104,7 @@ internal sealed class ClientSignalTickets
                 return null;
             }
 
-            this.outstanding[identifier] = new OutstandingTicket(owner, secret, expiresAt);
+            this.outstanding[identifier] = new OutstandingTicket(user, secret, expiresAt);
         }
 
         return new MintedClientSignalTicket(
@@ -112,11 +112,11 @@ internal sealed class ClientSignalTickets
             expiresAt);
     }
 
-    /// <summary>Spends a presented ticket, reporting the owner it named.</summary>
+    /// <summary>Spends a presented ticket, reporting the user it named.</summary>
     /// <param name="presented">What the connection carried, which is whatever a caller wrote and is therefore untrusted.</param>
-    /// <returns>The owner, or <see langword="null" /> where the ticket is malformed, unknown, expired, or already spent.</returns>
+    /// <returns>The user, or <see langword="null" /> where the ticket is malformed, unknown, expired, or already spent.</returns>
     /// <remarks>Removing before comparing is what makes a ticket single-use even against two connections presenting it at once: the loser finds nothing to remove and is refused, whichever of them wrote the value first.</remarks>
-    internal MailOwnerId? Redeem(string? presented)
+    internal MailUserId? Redeem(string? presented)
     {
         // Bounded before it is walked rather than after, which is the order every other untrusted length here is read
         // in: a value past this is refused without an index, a slice, or a decode having been spent on it.
@@ -150,7 +150,7 @@ internal sealed class ClientSignalTickets
             return null;
         }
 
-        return this.timeProvider.GetUtcNow() <= ticket.ExpiresAt ? ticket.Owner : null;
+        return this.timeProvider.GetUtcNow() <= ticket.ExpiresAt ? ticket.User : null;
     }
 
     private static string RandomText(int byteCount) =>
@@ -172,5 +172,5 @@ internal sealed class ClientSignalTickets
         }
     }
 
-    private sealed record OutstandingTicket(MailOwnerId Owner, byte[] Secret, DateTimeOffset ExpiresAt);
+    private sealed record OutstandingTicket(MailUserId User, byte[] Secret, DateTimeOffset ExpiresAt);
 }

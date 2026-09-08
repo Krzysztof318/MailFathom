@@ -6,7 +6,7 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Spam.Actions;
 
-/// <summary>Answers what one owner asked to happen to mail a classification calls junk.</summary>
+/// <summary>Answers what one user asked to happen to mail a classification calls junk.</summary>
 /// <remarks>
 /// <para>
 /// It is a port of its own rather than a second property on <see cref="ISpamClassificationSettingsReader" /> because the
@@ -15,18 +15,18 @@ namespace MailFathom.Application.Spam.Actions;
 /// nothing but its own record — it never resolves this reader and cannot reach a mailbox through it.
 /// </para>
 /// <para>
-/// The answer is one owner's because the act is on that owner's own mail server: moving a message and marking it read
+/// The answer is one user's because the act is on that user's own mail server: moving a message and marking it read
 /// are things done to somebody's mailbox, and nobody else's settings may decide them.
 /// </para>
 /// </remarks>
 public interface ISpamActionSettingsReader
 {
-    /// <summary>Gets what one owner decided, as it stands now.</summary>
-    /// <param name="owner">The owner whose mailbox would be written to.</param>
-    /// <returns>Their settings, or <see cref="SpamActionSettings.None" /> where this deployment serves no such owner.</returns>
+    /// <summary>Gets what one user decided, as it stands now.</summary>
+    /// <param name="user">The user whose mailbox would be written to.</param>
+    /// <returns>Their settings, or <see cref="SpamActionSettings.None" /> where this deployment serves no such user.</returns>
     /// <remarks>
-    /// Read per request rather than captured, so an owner switching filing on reaches the next verdict without a
+    /// Read per request rather than captured, so a user switching filing on reaches the next verdict without a
     /// restart — and so one switching it off stops the next one.
     /// </remarks>
-    SpamActionSettings ActionsFor(MailOwnerId owner);
+    SpamActionSettings ActionsFor(MailUserId user);
 }

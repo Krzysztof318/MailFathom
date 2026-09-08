@@ -12,24 +12,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Contacts;
 
-/// <summary>Reads the contact books from PostgreSQL, one owner's at a time.</summary>
+/// <summary>Reads the contact books from PostgreSQL, one user's at a time.</summary>
 /// <remarks>
 /// <para>
 /// Every read uses the scoped context and joins no transaction, and every one of them is bounded: a contact carries at
 /// most the addresses the domain admits, and a page carries at most what the query asked for. Every lookup is answered
-/// from an index — the primary key, the unique index the owner and the address comparison form lead, and the listing
-/// index the owner and the name's comparison form lead — rather than from a scan.
+/// from an index — the primary key, the unique index the user and the address comparison form lead, and the listing
+/// index the user and the name's comparison form lead — rather than from a scan.
 /// </para>
 /// <para>
-/// The owner is the leading column of both of those indexes, so a read of one book is a walk of that book rather than
+/// The user is the leading column of both of those indexes, so a read of one book is a walk of that book rather than
 /// of every book the deployment holds narrowed afterwards. The identity lookups carry it as a predicate beside the key
-/// rather than for a plan's sake: a contact of another owner's book is answered as one this book does not hold, which
+/// rather than for a plan's sake: a contact of another user's book is answered as one this book does not hold, which
 /// is what keeps an identifier learned elsewhere from reading somebody else's record.
 /// </para>
 /// <para>
 /// A page narrowed by a search is the one read no index answers, because a contained match has no prefix to seek on. It
 /// stays bounded by the page size like every other page, and the book it scans is an assembled record of the people one
-/// owner wrote down rather than a table that grows with the mail. A book large enough for the scan to matter is what
+/// user wrote down rather than a table that grows with the mail. A book large enough for the scan to matter is what
 /// would earn a trigram index and the migration that comes with it, which no deployment has asked for.
 /// </para>
 /// </remarks>
@@ -38,18 +38,18 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 {
     /// <inheritdoc />
     public async Task<Contact?> FindAsync(
-        MailOwnerId owner,
+        MailUserId user,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
         var contactValue = contactId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var entity = await readContext.Contacts
             .AsNoTracking()
             .Include(record => record.Addresses)
             .FirstOrDefaultAsync(
-                record => record.Id == contactValue && record.OwnerId == ownerValue,
+                record => record.Id == contactValue && record.UserId == userValue,
                 cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
@@ -57,7 +57,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken)
     {
@@ -77,12 +77,12 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         }
 
         var contactValues = contactIds.Select(contactId => contactId.Value).Distinct().ToArray();
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var entities = await readContext.Contacts
             .AsNoTracking()
             .Include(record => record.Addresses)
-            .Where(record => record.OwnerId == ownerValue && contactValues.Contains(record.Id))
+            .Where(record => record.UserId == userValue && contactValues.Contains(record.Id))
             .ToArrayAsync(cancellationToken);
 
         return entities.ToDictionary(entity => ContactId.Create(entity.Id), ContactMapping.ToContact);
@@ -90,23 +90,23 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<Contact?> FindByAddressAsync(
-        MailOwnerId owner,
+        MailUserId user,
         EmailAddress address,
         CancellationToken cancellationToken)
     {
         var normalizedAddress = address.NormalizedAddress;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
-        // The inner predicate carries the owner as well, so the address rows are sought on the unique index the owner
+        // The inner predicate carries the user as well, so the address rows are sought on the unique index the user
         // leads rather than on the whole table's worth of that address; the outer one keeps the book's own scope even
         // if the two ever disagreed.
         var entity = await readContext.Contacts
             .AsNoTracking()
             .Include(record => record.Addresses)
             .FirstOrDefaultAsync(
-                record => record.OwnerId == ownerValue
+                record => record.UserId == userValue
                     && record.Addresses.Any(held =>
-                        held.OwnerId == ownerValue && held.NormalizedAddress == normalizedAddress),
+                        held.UserId == userValue && held.NormalizedAddress == normalizedAddress),
                 cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
@@ -121,7 +121,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
     /// addresses of the people a shared name matched are never loaded at all.
     /// </remarks>
     public async Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken)
     {
@@ -140,11 +140,11 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         }
 
         var sortKeys = displayNames.Select(displayName => displayName.SortKey).Distinct().ToArray();
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var carrierCounts = await readContext.Contacts
             .AsNoTracking()
-            .Where(record => record.OwnerId == ownerValue && sortKeys.Contains(record.DisplayNameSortKey))
+            .Where(record => record.UserId == userValue && sortKeys.Contains(record.DisplayNameSortKey))
             .GroupBy(record => record.DisplayNameSortKey)
             .Select(carriers => new { SortKey = carriers.Key, CarrierCount = carriers.Count() })
             .ToArrayAsync(cancellationToken);
@@ -155,7 +155,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             StringComparer.Ordinal);
 
         var carriersBySortKey = await this.ReadCarriersOfAsync(
-            owner,
+            user,
             [.. carrierCounts.Where(row => row.CarrierCount == 1).Select(row => row.SortKey)],
             cancellationToken);
 
@@ -170,7 +170,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)
     {
@@ -194,12 +194,12 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
         }
 
         var normalizedAddresses = suppliedByNormalizedAddress.Keys.ToArray();
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var held = await readContext.ContactAddresses
             .AsNoTracking()
             .Where(address =>
-                address.OwnerId == ownerValue && normalizedAddresses.Contains(address.NormalizedAddress))
+                address.UserId == userValue && normalizedAddresses.Contains(address.NormalizedAddress))
             .Select(address => new { address.NormalizedAddress, address.ContactId })
             .ToArrayAsync(cancellationToken);
 
@@ -210,13 +210,13 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     public async Task<ContactPage> ReadPageAsync(
-        MailOwnerId owner,
+        MailUserId user,
         ContactQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var entities = await this.Filter(owner, query)
+        var entities = await this.Filter(user, query)
             .Include(record => record.Addresses)
             .OrderBy(record => record.DisplayNameSortKey)
             .ThenBy(record => record.Id)
@@ -270,7 +270,7 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
     /// count still holds and a second carrier has to be visible to it.
     /// </remarks>
     private async Task<IReadOnlyDictionary<string, ContactEntity[]>> ReadCarriersOfAsync(
-        MailOwnerId owner,
+        MailUserId user,
         string[] sortKeys,
         CancellationToken cancellationToken)
     {
@@ -279,12 +279,12 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             return new Dictionary<string, ContactEntity[]>(StringComparer.Ordinal);
         }
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var entities = await readContext.Contacts
             .AsNoTracking()
             .Include(record => record.Addresses)
-            .Where(record => record.OwnerId == ownerValue && sortKeys.Contains(record.DisplayNameSortKey))
+            .Where(record => record.UserId == userValue && sortKeys.Contains(record.DisplayNameSortKey))
             .ToArrayAsync(cancellationToken);
 
         return entities
@@ -292,15 +292,15 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             .ToDictionary(carriers => carriers.Key, carriers => carriers.ToArray(), StringComparer.Ordinal);
     }
 
-    /// <summary>Narrows to one owner's book, applies the filter and the boundary a query names, and leaves the ordering to the caller.</summary>
+    /// <summary>Narrows to one user's book, applies the filter and the boundary a query names, and leaves the ordering to the caller.</summary>
     /// <remarks>
-    /// The owner is applied first because it is the leading column of the listing index the ordering is taken from, so
+    /// The user is applied first because it is the leading column of the listing index the ordering is taken from, so
     /// a page is a walk of one book from the boundary rather than a walk of the table.
     /// </remarks>
-    private IQueryable<ContactEntity> Filter(MailOwnerId owner, ContactQuery query)
+    private IQueryable<ContactEntity> Filter(MailUserId user, ContactQuery query)
     {
-        var ownerValue = owner.Value;
-        var records = readContext.Contacts.AsNoTracking().Where(record => record.OwnerId == ownerValue);
+        var userValue = user.Value;
+        var records = readContext.Contacts.AsNoTracking().Where(record => record.UserId == userValue);
 
         if (query.Origin is { } origin)
         {

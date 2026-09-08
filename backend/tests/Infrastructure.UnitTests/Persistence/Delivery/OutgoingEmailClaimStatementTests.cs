@@ -22,7 +22,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Delivery;
 public sealed class OutgoingEmailClaimStatementTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset ClaimedAt = DateTimeOffset.UnixEpoch.AddHours(9);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
 
@@ -42,24 +42,24 @@ public sealed class OutgoingEmailClaimStatementTests
 
     /// <summary>
     /// The claim takes one account's sends, which is what keeps a pass out of every other account's outbox — and the
-    /// account it names is the pair, so a second owner's account of the same configured name is another outbox.
+    /// account it names is the pair, so a second user's account of the same configured name is another outbox.
     /// </summary>
     [Fact]
-    public void Compose_Always_TakesTheOwnersAccountItWasAskedAbout()
+    public void Compose_Always_TakesTheUsersAccountItWasAskedAbout()
     {
         // Act
         var statement = Compose();
 
         // Assert
         Assert.Contains(
-            $"""candidate."{nameof(OutgoingEmailEntity.OwnerId)}" =""",
+            $"""candidate."{nameof(OutgoingEmailEntity.UserId)}" =""",
             statement.Format,
             StringComparison.Ordinal);
         Assert.Contains(
             $"""candidate."{nameof(OutgoingEmailEntity.MailboxAccountId)}" =""",
             statement.Format,
             StringComparison.Ordinal);
-        Assert.Contains(Account.Owner.Value, statement.GetArguments().OfType<Guid>());
+        Assert.Contains(Account.User.Value, statement.GetArguments().OfType<Guid>());
         Assert.Contains(Account.Id.Value, statement.GetArguments().OfType<string>());
     }
 

@@ -146,7 +146,7 @@ public sealed class OutboxCommandTests : IDisposable
             deployment.LastOutboxQuery());
     }
 
-    /// <summary>A page of an outbox is a page of who this owner writes to, so no address reaches the listing at all.</summary>
+    /// <summary>A page of an outbox is a page of who this user writes to, so no address reaches the listing at all.</summary>
     [Fact]
     public async Task List_ASendAddressedToSomebody_PrintsNoAddress()
     {

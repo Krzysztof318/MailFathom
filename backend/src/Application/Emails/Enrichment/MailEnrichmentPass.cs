@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.Enrichment;
 /// <para>
 /// The last stage of the arrival pipeline, behind the cut, and behind it because a mark cites passages: a message
 /// derived before it was cut would have nothing to rest its evidence on. Everything the earlier stages settle is
-/// settled by the time this runs — the classification gate has admitted the message, the owner's rules have finished
+/// settled by the time this runs — the classification gate has admitted the message, the user's rules have finished
 /// with it, and it is not still on its way out of the folder it is sitting in.
 /// </para>
 /// <para>
@@ -67,7 +67,7 @@ public sealed class MailEnrichmentPass
     /// <summary>Initializes the pass from the state it walks and the derivation it asks.</summary>
     /// <param name="enrichmentStore">Reads what is awaiting a derivation and writes down what one produced.</param>
     /// <param name="enricher">Derives one message's marks, in whichever state the deployment left it.</param>
-    /// <param name="egressGuard">States whose mail the passages are, so the derivation scans them under that owner's posture.</param>
+    /// <param name="egressGuard">States whose mail the passages are, so the derivation scans them under that user's posture.</param>
     /// <param name="commitPolicy">Commits one message's record, retrying a conflict with a competing writer.</param>
     /// <param name="timeProvider">Reads when a derivation ran.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -118,7 +118,7 @@ public sealed class MailEnrichmentPass
 
         // Established for the whole pass rather than per message, because whose mail a passage is decides the posture it
         // is scanned under and every message in the batch belongs to the one account this pass walks.
-        using var actingFor = this.egressGuard.ActingFor(account.Owner);
+        using var actingFor = this.egressGuard.ActingFor(account.User);
 
         var batch = await this.enrichmentStore.GetEmailsAwaitingEnrichmentAsync(
             account,

@@ -44,7 +44,7 @@ internal sealed class MailAnsweringAuditEntryStore(
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var runId = entry.RunId.Value;
-        var ownerValue = entry.Account.Owner.Value;
+        var userValue = entry.Account.User.Value;
         var accountId = entry.Account.Id.Value;
 
         // Looked up by the run and account rather than by the key, because a retried append generates a fresh key and
@@ -55,7 +55,7 @@ internal sealed class MailAnsweringAuditEntryStore(
             writeContext.MailAnsweringAuditEntries,
             writeContext.MailAnsweringAuditEntries,
             candidate => candidate.RunId == runId
-                && candidate.OwnerId == ownerValue
+                && candidate.UserId == userValue
                 && candidate.MailboxAccountId == accountId,
             cancellationToken);
 
@@ -75,11 +75,11 @@ internal sealed class MailAnsweringAuditEntryStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var ownerValue = query.Account.Owner.Value;
+        var userValue = query.Account.User.Value;
         var accountValue = query.Account.Id.Value;
 
         var entities = await this.Filter(query)
-            .Where(record => record.OwnerId == ownerValue && record.MailboxAccountId == accountValue)
+            .Where(record => record.UserId == userValue && record.MailboxAccountId == accountValue)
 
             // The emails are the point of the entry, so they are loaded with it rather than left to a second read per
             // row. The page is bounded and so is what one run may retrieve, which is what keeps the join bounded too.
@@ -135,12 +135,12 @@ internal sealed class MailAnsweringAuditEntryStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         var expiringIds = await readContext.MailAnsweringAuditEntries
             .AsNoTracking()
-            .Where(record => record.OwnerId == ownerValue
+            .Where(record => record.UserId == userValue
                 && record.MailboxAccountId == accountValue
                 && record.CompletedAt < completedBefore)
             .OrderBy(record => record.CompletedAt)

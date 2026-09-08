@@ -116,7 +116,7 @@ Until all six are true, a mobile head is a client that reaches its deployment or
 
 ## Validation
 
-- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the owner authoring the change that carries it.
+- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the user authoring the change that carries it.
 - The `describes:` marker names both stores, the three session-scoped modules, the connection hook, and the summary that renders its states, which is what tells a later pull request under any of them that it is read against this decision. `scripts/review-obligations.sh` and `Fathom review` both resolve it.
 - The rule is enforced by review rather than by a script, which is why it is stated as a closed list of what a store may hold rather than as a principle: a value written to `device/deviceStore.ts` or to either session store is visible in a diff, and the question a reviewer asks is whether it is a setting, a place, or something the deployment answered. `frontend/src/AGENTS.md` § *State* carries the pointer here, so somebody about to add a store meets it at the moment it matters.
 - The offline obligations are enforced where they already are: `frontend/src/AGENTS.md` § *UX* requires the five states of every screen, and `shell/ConnectionSummary.test.tsx` and `App.test.tsx` assert the separation between a machine with no network and a deployment that is not answering.

@@ -26,15 +26,15 @@ internal static class StoredMailInScope
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Within(IQueryable<StoredEmailEntity> emails, StoredMailScope scope)
     {
-        var owner = scope.Account.Owner.Value;
+        var user = scope.Account.User.Value;
         var account = scope.Account.Id.Value;
         var alias = scope.Folder?.Value;
 
-        // The owner leads the account, which is the order the index leads in: an identifier names one account within
-        // its owner, so narrowing on it alone would admit another owner's account carrying the same name.
+        // The user leads the account, which is the order the index leads in: an identifier names one account within
+        // its user, so narrowing on it alone would admit another user's account carrying the same name.
         return emails
             .Where(StoredEmailTombstone.IsNotTombstoned)
-            .Where(email => email.OwnerId == owner
+            .Where(email => email.UserId == user
                 && email.MailboxAccountId == account
                 && (alias == null || email.MailFolder.Alias == alias));
     }

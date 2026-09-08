@@ -128,7 +128,7 @@ MailFathom is being built to change what mail *is* to software: keep the local c
 
 ## Where it is going
 
-The tools are the foundation, not the product. Sending was the capability whose effect first reached somebody who is not this mailbox's owner; what remains of writing to a mailbox is moving, filing, and deleting. Every later capability takes the route these took: a named permission, a recorded change, and a pass of its own that owns the mail server.
+The tools are the foundation, not the product. Sending was the capability whose effect first reached somebody who is not this mailbox's user; what remains of writing to a mailbox is moving, filing, and deleting. Every later capability takes the route these took: a named permission, a recorded change, and a pass of its own that owns the mail server.
 
 **MailFathom's own client travels inside the image**, built from the React and TypeScript workspace under [`frontend/`](https://github.com/Krzysztof318/MailFathom/tree/main/frontend) and served from a deployment setting — no second container, no second process, about 230 kB whether or not you serve it. The same client is published as a desktop application too — a `.deb`, an `.rpm`, and a Windows installer attached to every release, for a machine that would rather have an application than a tab. It is early: the page draws its own sample data rather than your mail, and what a deployment serves beside it is the client *surface*, an HTTP API under `/api/client` that a client of your own can call too. → [The client endpoint](https://krzysztof318.github.io/MailFathom/operations/client-endpoint.html), [The desktop client](https://krzysztof318.github.io/MailFathom/operations/desktop-client.html)
 

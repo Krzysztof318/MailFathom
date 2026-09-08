@@ -16,7 +16,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <remarks>
 /// <para>
 /// It is the sibling of <see cref="Submission.AuthoredMailSubmission" /> and composes the same three steps in the same
-/// order: the account a caller named is resolved against the accounts the caller's owner owns, the people named become
+/// order: the account a caller named is resolved against the accounts the caller's user owns, the people named become
 /// addresses, and the addresses and the text become MIME. What replaces the outbox at the end is the draft book, which
 /// stores the message instead of queueing it.
 /// </para>
@@ -32,7 +32,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// server would turn out to say. What that server does decide is asked again where the promotion writes the send.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's owner owns, and therefore which one a caller may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a caller may name.</param>
 /// <param name="recipientResolver">Turns the people the author named into addresses, asking the contact book for the ones named as somebody.</param>
 /// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
 /// <param name="drafts">Writes the record and the message down together, and brings the drafts folder into step.</param>
@@ -49,8 +49,8 @@ public sealed class AuthoredMailDrafting(
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
     /// <returns>The draft as it stands once the mailbox has been brought into step with it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's owner does not own, which includes every account this deployment does not serve.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailDraftRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, the account configures no address to send from, or the draft being revised is not one of this account's.</exception>
     public async Task<MailDraftRecord> SaveAsync(
         MailDraftRequest request,
@@ -60,8 +60,8 @@ public sealed class AuthoredMailDrafting(
 
         authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
-        // Resolved against the accounts the caller's owner owns for the reason the send is, and a draft lands in a
-        // folder rather than in the world: one written into another owner's account is a message that person may read
+        // Resolved against the accounts the caller's user owns for the reason the send is, and a draft lands in a
+        // folder rather than in the world: one written into another user's account is a message that person may read
         // in their own mailbox as their own.
         var account = accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);

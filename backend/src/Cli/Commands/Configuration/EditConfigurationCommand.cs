@@ -99,10 +99,10 @@ internal static class EditConfigurationCommand
         }
     }
 
-    /// <summary>Opens the session's own directory and writes the document into it, readable by their owner alone.</summary>
+    /// <summary>Opens the session's own directory and writes the document into it, readable by their user alone.</summary>
     /// <exception cref="CliFailure">Thrown when the temporary directory cannot be written, which is a situation rather than a defect.</exception>
     /// <remarks>
-    /// A temporary directory that is full, read-only, or on a filesystem that will not take an owner-only mode is
+    /// A temporary directory that is full, read-only, or on a filesystem that will not take a user-only mode is
     /// something the operator can act on, so it is reported as a sentence naming the path rather than left to reach
     /// <c>CliRunner</c> as a stack trace — the same answer the credential store and the token protector give for the
     /// same situation.
@@ -111,7 +111,7 @@ internal static class EditConfigurationCommand
     {
         try
         {
-            OwnerOnlyStorage.CreateDirectory(session);
+            UserOnlyStorage.CreateDirectory(session);
 
             SettingsBuffer.Write(buffer, document);
         }
@@ -147,7 +147,7 @@ internal static class EditConfigurationCommand
     /// full disk.
     /// </para>
     /// <para>
-    /// What is left behind on that path is the session's own directory, which is readable by its owner alone whatever
+    /// What is left behind on that path is the session's own directory, which is readable by its user alone whatever
     /// the editor did to the file inside it. That is why the buffer sits in a directory of its own rather than in the
     /// temporary directory itself: an editor that saves by writing a sibling and renaming it over the target creates
     /// that sibling under the process umask, so the mode this command set at creation does not survive the first save

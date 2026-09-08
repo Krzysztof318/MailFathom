@@ -46,7 +46,7 @@ public sealed class DraftToolMetadataTests
         Assert.Equal("Send draft", send.Title);
     }
 
-    /// <summary>A write that creates, leaves two drafts when it is called twice, and reaches the owner's own server and nobody else.</summary>
+    /// <summary>A write that creates, leaves two drafts when it is called twice, and reaches the user's own server and nobody else.</summary>
     /// <remarks>
     /// <c>destructiveHint</c> is <see langword="false" /> because saving a draft takes nothing away and one call
     /// undoes it, and <c>idempotentHint</c> is <see langword="false" /> because there is no idempotency key: two calls
@@ -165,7 +165,7 @@ public sealed class DraftToolMetadataTests
         Assert.Contains("the result says queued", description, StringComparison.Ordinal);
     }
 
-    /// <summary>An edit replaces the message, which is the one thing a caller must not learn from the owner.</summary>
+    /// <summary>An edit replaces the message, which is the one thing a caller must not learn from the user.</summary>
     [Fact]
     public void AddMailFathomServer_AdvertisesADescriptionStatingThatAnUpdateStatesTheWholeMessage()
     {

@@ -34,7 +34,7 @@ export function DiscardConfirmation({
     /** Closes the composer, giving up what was written and any draft the deployment already holds for it. */
     readonly onDiscard: () => void;
 
-    /** Files the draft in the owner's own drafts folder and closes. */
+    /** Files the draft in the user's own drafts folder and closes. */
     readonly onKeep: () => void;
 }) {
     const { translate } = useLocalization();

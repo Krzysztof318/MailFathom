@@ -37,7 +37,7 @@ public sealed class MailAnsweringAgentTests
 {
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("was the invoice attached"),
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
+        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []));
 
     /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";
@@ -145,7 +145,7 @@ public sealed class MailAnsweringAgentTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         using var provider = ScriptedTransport.Answering(Completion("It is rotated now."));
         var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
 
@@ -168,7 +168,7 @@ public sealed class MailAnsweringAgentTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         using var provider = ScriptedTransport.Answering(Completion("never reached"));
         var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
 

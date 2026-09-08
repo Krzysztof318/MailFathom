@@ -10,12 +10,12 @@ namespace MailFathom.Application.Accounts;
 /// This is the deployment's own answer and it belongs to work the deployment does for itself: the synchronization
 /// coordinator that starts a run per account, the schedule that evaluates rules against each of them, the status an
 /// operator reads, and the administrative operations an operator performs on an account they name. None of those acts
-/// for one owner, and each of them would be wrong if it saw one owner's half of the deployment.
+/// for one user, and each of them would be wrong if it saw one user's half of the deployment.
 /// </para>
 /// <para>
 /// It is deliberately not what a caller-facing use case reads. A read that answers a person about their own mail asks
 /// <see cref="ICallerMailAccountCatalog" /> instead, and the two are separate ports with differently named members so a
-/// read model that reaches for the wrong one names the wrong member rather than compiling and answering across owners.
+/// read model that reaches for the wrong one names the wrong member rather than compiling and answering across users.
 /// The rule is on the operation rather than on the surface: an administrative operation reaches this one, and an
 /// operation a person performs about their own accounts reaches the other, and an operation that is both is two
 /// operations.

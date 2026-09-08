@@ -49,7 +49,7 @@ internal static class OutgoingEmailClaimStatement
                                           SELECT candidate."Id"
                                           FROM outgoing_emails AS candidate
                                           WHERE candidate."{{nameof(OutgoingEmailEntity.Stage)}}" = {0}
-                                            AND candidate."{{nameof(OutgoingEmailEntity.OwnerId)}}" = {1}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.UserId)}}" = {1}
                                             AND candidate."{{nameof(OutgoingEmailEntity.MailboxAccountId)}}" = {2}
                                             AND candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}" <= {3}
                                             AND (candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" IS NULL
@@ -79,7 +79,7 @@ internal static class OutgoingEmailClaimStatement
         return FormattableStringFactory.Create(
             ClaimText,
             nameof(OutgoingEmailStage.Recorded),
-            request.Account.Owner.Value,
+            request.Account.User.Value,
             request.Account.Id.Value,
             claimedAt,
             request.BatchSize,

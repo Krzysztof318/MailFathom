@@ -32,7 +32,7 @@ const result = {
     sentAt: null,
     senderAddress: 'accounts@nordwind.example',
     senderDisplayName: 'Nordwind Accounting',
-    toAddresses: ['owner@example.invalid'],
+    toAddresses: ['user@example.invalid'],
     unread: false,
     flagged: false,
     answered: false,

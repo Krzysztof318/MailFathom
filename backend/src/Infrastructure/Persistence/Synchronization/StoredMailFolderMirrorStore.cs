@@ -34,13 +34,13 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var aliasValue = folderAlias.Value;
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountIdValue = account.Id.Value;
 
         // One more than the bound is read so the answer says whether a later pass is owed without a second count over
         // the same rows.
         var erased = await sessionContext.StoredEmails
-            .Where(email => email.OwnerId == ownerValue
+            .Where(email => email.UserId == userValue
                 && email.MailboxAccountId == accountIdValue
                 && email.MailFolder.Alias == aliasValue)
             .OrderBy(email => email.Id)
@@ -50,12 +50,12 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
         var emailsRemain = erased.Length > maxEmails;
         var removed = emailsRemain ? erased[..maxEmails] : erased;
 
-        // What these messages hold leaves storage with them, so their owner's figure gives it back inside the same
+        // What these messages hold leaves storage with them, so their user's figure gives it back inside the same
         // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
         // session commits rather than before the line below it: the removal below only stages a delete the change
         // tracker applies at that commit, so neither statement sees the other's effect until then. A later change
         // making the removal set-based would execute immediately and turn that ordering into a real one.
-        await OwnerStoredContentLedger.RemoveAsync(
+        await UserStoredContentLedger.RemoveAsync(
             sessionContext,
             [.. removed.Select(email => email.Id)],
             cancellationToken);
@@ -71,7 +71,7 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
 
         if (!emailsRemain)
         {
-            await ClearCheckpointsAsync(sessionContext, ownerValue, accountIdValue, aliasValue, cancellationToken);
+            await ClearCheckpointsAsync(sessionContext, userValue, accountIdValue, aliasValue, cancellationToken);
         }
 
         return new MailFolderMirrorErasure(emailsRemain ? maxEmails : erased.Length, emailsRemain);
@@ -85,13 +85,13 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
     /// </remarks>
     private static async Task ClearCheckpointsAsync(
         MailFathomDbContext sessionContext,
-        Guid ownerValue,
+        Guid userValue,
         string accountIdValue,
         string aliasValue,
         CancellationToken cancellationToken)
     {
         var checkpoints = await sessionContext.SynchronizationCheckpoints
-            .Where(checkpoint => checkpoint.MailFolder.OwnerId == ownerValue
+            .Where(checkpoint => checkpoint.MailFolder.UserId == userValue
                 && checkpoint.MailFolder.MailboxAccountId == accountIdValue
                 && checkpoint.MailFolder.Alias == aliasValue)
             .ToArrayAsync(cancellationToken);

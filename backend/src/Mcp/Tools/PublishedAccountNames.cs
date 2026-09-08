@@ -28,8 +28,8 @@ internal sealed class PublishedAccountNames
     private PublishedAccountNames(Dictionary<string, string> displayNamesByAccountId) =>
         this.displayNamesByAccountId = displayNamesByAccountId;
 
-    /// <summary>Reads the published names of the accounts the caller's owner owns.</summary>
-    /// <param name="accountCatalog">Describes the accounts the caller's owner owns.</param>
+    /// <summary>Reads the published names of the accounts the caller's user owns.</summary>
+    /// <param name="accountCatalog">Describes the accounts the caller's user owns.</param>
     /// <returns>The lookup a result mapping reads names from.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountCatalog" /> is <see langword="null" />.</exception>
     public static PublishedAccountNames From(ICallerMailAccountCatalog accountCatalog)
@@ -45,10 +45,10 @@ internal sealed class PublishedAccountNames
 
     /// <summary>Reads the name one account is published under.</summary>
     /// <param name="accountId">The account a result names.</param>
-    /// <returns>The account's display name, or its identifier when the caller's owner no longer owns it.</returns>
+    /// <returns>The account's display name, or its identifier when the caller's user no longer owns it.</returns>
     /// <remarks>
     /// Every account a result can name is one the read was bounded to, so the fallback is reachable only when
-    /// configuration was reloaded, or what the owner owns changed, between the query and the mapping of its answer. The
+    /// configuration was reloaded, or what the user owns changed, between the query and the mapping of its answer. The
     /// identifier is what is published then, because MailFathom's own name for the account is a truthful answer and
     /// failing a read that already succeeded is not.
     /// </remarks>

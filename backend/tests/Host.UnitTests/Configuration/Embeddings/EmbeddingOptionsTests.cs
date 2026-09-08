@@ -505,12 +505,12 @@ public sealed class EmbeddingOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.SpendPeriod)));
     }
 
-    /// <summary>The per-owner ceiling is checked beside the deployment's, because either alone already applies.</summary>
+    /// <summary>The per-user ceiling is checked beside the deployment's, because either alone already applies.</summary>
     [Fact]
-    public void Validate_APerOwnerCeilingThatCouldBoundNothing_IsRefusedWithNoChainDeclared()
+    public void Validate_APerUserCeilingThatCouldBoundNothing_IsRefusedWithNoChainDeclared()
     {
         // Arrange
-        var settings = new EmbeddingOptions { MaxInputCharactersPerPeriodPerOwner = -1 };
+        var settings = new EmbeddingOptions { MaxInputCharactersPerPeriodPerUser = -1 };
 
         // Act
         var errors = ValidateEveryProperty(settings);
@@ -519,22 +519,22 @@ public sealed class EmbeddingOptionsTests
         Assert.False(settings.IsConfigured);
         Assert.Contains(
             errors,
-            error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxInputCharactersPerPeriodPerOwner)));
+            error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxInputCharactersPerPeriodPerUser)));
     }
 
-    /// <summary>A per-owner ceiling of zero declares none, which is what a deployment serving one owner wants.</summary>
+    /// <summary>A per-user ceiling of zero declares none, which is what a deployment serving one user wants.</summary>
     [Fact]
-    public void Validate_APerOwnerCeilingOfZero_IsAccepted()
+    public void Validate_APerUserCeilingOfZero_IsAccepted()
     {
         // Arrange
-        var settings = new EmbeddingOptions { MaxInputCharactersPerPeriodPerOwner = 0 };
+        var settings = new EmbeddingOptions { MaxInputCharactersPerPeriodPerUser = 0 };
 
         // Act
         var errors = ValidateEveryProperty(settings);
 
         // Assert
         Assert.Empty(errors);
-        Assert.Equal(0, settings.MaxInputCharactersPerPeriodPerOwner);
+        Assert.Equal(0, settings.MaxInputCharactersPerPeriodPerUser);
     }
 
     /// <summary>A ceiling of zero declares none, which the documentation states and the operator chose.</summary>

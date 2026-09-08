@@ -80,7 +80,7 @@ Kestrel's own default address.
 
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
-| Startup | `/started` | The host's own startup gates: every secret reference the deployment's own sections carry resolved, the database schema verified, every owner the deployment serves reconciled against the rows it holds and their own mailboxes' secrets resolved with them, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
+| Startup | `/started` | The host's own startup gates: every secret reference the deployment's own sections carry resolved, the database schema verified, every user the deployment serves reconciled against the rows it holds and their own mailboxes' secrets resolved with them, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
 | Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where something actually runs against it — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
@@ -105,15 +105,15 @@ health scrape from spending an operator's money. [Chat generation](../features/c
 records the states and what each asks of an operator.
 
 **The personal-data analyzer is the opposite case.** Where the personal-data scanner runs for anybody the deployment
-serves — the deployment's own switch, or [an owner who asked for
-it](../features/sensitive-content-scanning.md#each-owners-own-posture) — the
+serves — the deployment's own switch, or [a user who asked for
+it](../features/sensitive-content-scanning.md#each-users-own-posture) — the
 scanner fails closed, so an instance whose analyzer cannot answer refuses every read, derived write, and egress that
 scanner guards — it is not serving a narrower service, it is serving nothing the scanner covers. So the
 `personal-data-analyzer` check reports **unhealthy**, `/health` answers `503`, and the instance leaves the load balancer.
 It never reaches the liveness probe: restarting this process cannot start the container beside it, and doing so would
 turn one sidecar's outage into a restart loop.
 
-The check is skipped entirely where no owner's posture runs that scanner, which is what keeps a deployment carrying a
+The check is skipped entirely where no user's posture runs that scanner, which is what keeps a deployment carrying a
 leftover analyzer address from reporting itself unready over a scanner nobody is running.
 
 Like the database check and unlike the two above it, this one reaches its dependency on each scrape. The analyzer is a
@@ -168,32 +168,32 @@ the `ContentStorage:ObjectStorage` block the content was stored through, and the
 reads no mail to find out** — the query asks which backend a row names and nothing about the message, the account, or
 the folder.
 
-**The owner gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
-holds unless the owner who owns it declares it, so the gate settles the question before anything serves a request: it
-reads the owners the file declares, gives each of them the `settings_accounts` row the mail graph's foreign keys hang
-on, serves every owner whose record is already their own and whom no file names, proves the secrets their own mailboxes
+**The user gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
+holds unless the user who owns it declares it, so the gate settles the question before anything serves a request: it
+reads the users the file declares, gives each of them the `settings_accounts` row the mail graph's foreign keys hang
+on, serves every user whose record is already their own and whom no file names, proves the secrets their own mailboxes
 carry, and reports which of them is read from configuration and which from a document of their own. It runs behind the
 schema gate, because that table is the schema's, and a deployment it cannot reconcile does not come up:
 
 | What the gate found | What it means | What to do |
 |---|---|---|
-| Several owner records still reading the deployment's section, and no owner declared | The deployment has acquired owners while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each owner in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is; an owner whose record is already their own is not one of these, and a deployment whose owners have all been adopted starts without declaring anybody |
-| More owner records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
-| A start that would leave more owner records than a deployment serves | The records held and the owners newly declared each fit within the 256, and only their sum does not — an owner the file no longer declares keeps their record | Nothing was written: remove the owner records this deployment no longer serves, then declare the new owners |
-| An owner declared under an identifier the deployment does not hold them under | The identifier every mail account, stored message, and job of theirs hangs on was changed in the file | Restore the identifier the deployment holds, or give the new one a label of its own if it is meant to be a second person |
-| A label declared for one owner while another still carries it | Two owners would be told apart by one label, which the unique index refuses | Relabel the owner holding it in one start and declare it for its new owner in the next; removing them from the file frees nothing, because a held owner keeps their record and their label |
-| Several owners while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single owner the deployment holds | Require a credential on those two surfaces — every one of them is a record naming its owner, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every owner-scoped route there names the owner it is for |
-| An owner's own document that will not bind | That owner is served from their document rather than from configuration, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
-| An owner's own mailbox whose secret reference or trust anchor cannot be resolved | An owner's mailboxes are declared outside the section the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the owner and the `Accounts:<index>` path to it |
+| Several user records still reading the deployment's section, and no user declared | The deployment has acquired users while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each user in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is; a user whose record is already their own is not one of these, and a deployment whose users have all been adopted starts without declaring anybody |
+| More user records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
+| A start that would leave more user records than a deployment serves | The records held and the users newly declared each fit within the 256, and only their sum does not — a user the file no longer declares keeps their record | Nothing was written: remove the user records this deployment no longer serves, then declare the new users |
+| A user declared under an identifier the deployment does not hold them under | The identifier every mail account, stored message, and job of theirs hangs on was changed in the file | Restore the identifier the deployment holds, or give the new one a label of its own if it is meant to be a second person |
+| A label declared for one user while another still carries it | Two users would be told apart by one label, which the unique index refuses | Relabel the user holding it in one start and declare it for its new user in the next; removing them from the file frees nothing, because a held user keeps their record and their label |
+| Several users while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single user the deployment holds | Require a credential on those two surfaces — every one of them is a record naming its user, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every user-scoped route there names the user it is for |
+| A user's own document that will not bind | That user is served from their document rather than from configuration, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
+| A user's own mailbox whose secret reference or trust anchor cannot be resolved | A user's mailboxes are declared outside the section the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the user and the `Accounts:<index>` path to it |
 
 Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
 while it cannot say whose mail it is serving.
 
-**A deployment that declares no owner is the ordinary shape and is not refused.** Its mail accounts stay in
-`MailSynchronization:Accounts` and belong to the one owner such a deployment holds — the row the release's schema
-provisions, or one the gate records where the deployment holds none at all. An owner the deployment holds and the file
-no longer declares is not refused either: where their record is their own — every owner recorded through `mfctl owner
-add`, and every one that has been adopted — they are served from it, after the owners a file names; where it is not,
+**A deployment that declares no user is the ordinary shape and is not refused.** Its mail accounts stay in
+`MailSynchronization:Accounts` and belong to the one user such a deployment holds — the row the release's schema
+provisions, or one the gate records where the deployment holds none at all. A user the deployment holds and the file
+no longer declares is not refused either: where their record is their own — every user recorded through `mfctl user
+add`, and every one that has been adopted — they are served from it, after the users a file names; where it is not,
 they are kept, they are not served, and a warning names them, because their mail is neither read nor refreshed while
 they stay that way.
 
@@ -201,7 +201,7 @@ The startup gates are reported rather than re-run. The probe reads a flag the ga
 opens no connection and costs nothing, and once it turns healthy it stays healthy.
 
 Only the secret-reference gate runs before the listener opens, because it is the one registered as a hosted *lifecycle*
-service and the host runs that stage ahead of every hosted service's start. The schema gate, the owner gate, and the
+service and the host runs that stage ahead of every hosted service's start. The schema gate, the user gate, and the
 spam-scanner gate are ordinary hosted services, and the web host registers its own while the builder runs, so it starts
 first and the port is already accepting connections while those three run. That window is exactly what the probe is
 for: hold traffic off an instance until `/started` succeeds rather than inferring readiness from the port answering.

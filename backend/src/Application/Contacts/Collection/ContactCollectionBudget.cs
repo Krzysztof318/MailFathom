@@ -18,7 +18,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// several folders may reach the ceiling once for each of them in one synchronization cycle. That is the bound the
 /// configuration reference states, and pacing a first synchronization is what it is sized against. The claim is
 /// interlocked all the same, because a budget that leaked under contention would leak precisely where a book is
-/// filling fastest, and an owner reading the ceiling is entitled to it holding.
+/// filling fastest, and a user reading the ceiling is entitled to it holding.
 /// </para>
 /// </remarks>
 public sealed class ContactCollectionBudget

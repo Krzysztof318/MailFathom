@@ -26,18 +26,18 @@ internal static class MailFolderEntityResolver
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountId = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
 
         // Looked up by its alternate key, so the change-tracker pass is explicit rather than handled by FindAsync. The
-        // owner leads the alternate key exactly as it leads the index, so a binding of another owner's account carrying
+        // user leads the alternate key exactly as it leads the index, so a binding of another user's account carrying
         // the same identifier is not a candidate at all.
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.MailFolders,
             dbContext.MailFolders,
-            candidate => candidate.OwnerId == owner
+            candidate => candidate.UserId == user
                 && candidate.MailboxAccountId == accountId
                 && candidate.Alias == alias
                 && candidate.ResolutionGeneration == generation,
@@ -60,13 +60,13 @@ internal static class MailFolderEntityResolver
         CancellationToken cancellationToken)
     {
         // The account is keyed by the identity itself, so FindAsync already resolves a pending insert without a query.
-        // The key is the owner and the identifier in that order, which is the order MailAccountIdentity states them in.
+        // The key is the user and the identifier in that order, which is the order MailAccountIdentity states them in.
         var accountRow = await dbContext.MailboxAccounts.FindAsync(
-            [account.Owner.Value, account.Id.Value],
+            [account.User.Value, account.Id.Value],
             cancellationToken);
 
-        // The row is composed rather than looked up when it is not there yet, and the owner comes from the identity the
-        // caller resolved the account through rather than from a read of the deployment's owner record. That is what
+        // The row is composed rather than looked up when it is not there yet, and the user comes from the identity the
+        // caller resolved the account through rather than from a read of the deployment's user record. That is what
         // makes the whole mail graph beneath this folder attributable without the account table being consulted at all.
         accountRow ??= AddedAccount(dbContext, account);
 
@@ -75,8 +75,8 @@ internal static class MailFolderEntityResolver
             MailboxAccountId = account.Id.Value,
 
             // Taken from the identity this binding was resolved under: the folder is the first row of the mail graph
-            // and every row beneath it inherits the owner from here.
-            OwnerId = account.Owner.Value,
+            // and every row beneath it inherits the user from here.
+            UserId = account.User.Value,
             Alias = resolution.Alias.Value,
             ResolutionGeneration = resolution.Generation.Value,
             RemotePath = resolution.RemotePath.Value,
@@ -89,15 +89,15 @@ internal static class MailFolderEntityResolver
         return folder;
     }
 
-    /// <summary>Writes down the account row a first binding needs, under the owner the caller resolved it through.</summary>
+    /// <summary>Writes down the account row a first binding needs, under the user the caller resolved it through.</summary>
     /// <remarks>
     /// An account MailFathom has never stored mail for has no row yet, and the binding below needs one for its foreign
-    /// key. The owner is not minted here and not read here either: it arrived with the account, so what an operator
+    /// key. The user is not minted here and not read here either: it arrived with the account, so what an operator
     /// configured decides whose mail this is rather than the order in which folders happened to bind.
     /// </remarks>
     private static MailboxAccountEntity AddedAccount(MailFathomDbContext dbContext, MailAccountIdentity account)
     {
-        var added = new MailboxAccountEntity { Id = account.Id.Value, OwnerId = account.Owner.Value };
+        var added = new MailboxAccountEntity { Id = account.Id.Value, UserId = account.User.Value };
 
         dbContext.MailboxAccounts.Add(added);
 

@@ -22,18 +22,18 @@ namespace MailFathom.Application.Spam.Gating;
 /// so a batch read later releases what an earlier one held and never the reverse.
 /// </para>
 /// <para>
-/// Everything here is named by account, which is how one owner's decision reaches a walk that spans owners: an account
-/// belongs to exactly one owner, so an account absent from <paramref name="ClassifyingAccounts" /> is one whose owner
+/// Everything here is named by account, which is how one user's decision reaches a walk that spans users: an account
+/// belongs to exactly one user, so an account absent from <paramref name="ClassifyingAccounts" /> is one whose user
 /// classifies nothing and whose mail is admitted with no verdict expected about it.
 /// </para>
 /// </remarks>
 /// <param name="ClassifyingAccounts">
-/// The accounts whose owner has classification switched on. Empty for a deployment nobody classifies for, which is what
+/// The accounts whose user has classification switched on. Empty for a deployment nobody classifies for, which is what
 /// makes such a deployment behave exactly as it did before the gate existed.
 /// </param>
 /// <param name="JunkFolders">
 /// The junk folder of each classifying account, whose mail is withheld with nothing having to score it. An account
-/// whose owner classifies nothing contributes none, so its junk folder is ordinary mail here.
+/// whose user classifies nothing contributes none, so its junk folder is ordinary mail here.
 /// </param>
 /// <param name="ClassifiedFolders">
 /// The folders classification runs over, each within its own account. Mail outside them is admitted rather than left
@@ -51,14 +51,14 @@ public sealed record DerivedWorkAdmissionTerms(
 {
     /// <summary>Gets whether the gate reaches anything at all.</summary>
     /// <remarks>
-    /// False where no owner classifies, which lets a walk skip the narrowing altogether rather than composing a
+    /// False where no user classifies, which lets a walk skip the narrowing altogether rather than composing a
     /// predicate that excludes nothing.
     /// </remarks>
     public bool IsApplied => this.ClassifyingAccounts.Count > 0;
 
     /// <summary>Reports whether the gate reaches one account's mail.</summary>
     /// <param name="accountId">The account the occurrence belongs to.</param>
-    /// <returns><see langword="true" /> when that account's owner has classification switched on.</returns>
+    /// <returns><see langword="true" /> when that account's user has classification switched on.</returns>
     public bool IsAppliedFor(MailAccountId accountId) => this.ClassifyingAccounts.Contains(accountId);
 
     /// <summary>Reports whether classification runs over one folder.</summary>

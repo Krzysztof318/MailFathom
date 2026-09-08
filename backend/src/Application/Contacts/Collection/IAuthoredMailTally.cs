@@ -11,12 +11,12 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <remarks>
 /// <para>
 /// This is what makes a threshold possible without collection keeping a ledger of its own. The evidence that somebody
-/// writes to the owner is the mail this deployment already holds, so it is read rather than accumulated — which is the
-/// whole of why collection derives no personal data beyond the contacts it records. An owner who erases the collected
+/// writes to the user is the mail this deployment already holds, so it is read rather than accumulated — which is the
+/// whole of why collection derives no personal data beyond the contacts it records. A user who erases the collected
 /// half of their book erases everything collection produced, because there is nothing else it wrote.
 /// </para>
 /// <para>
-/// The count is over one account's mail rather than the whole store, so mail belonging to an account whose owner never
+/// The count is over one account's mail rather than the whole store, so mail belonging to an account whose user never
 /// switched collection on never becomes the reason a contact was recorded.
 /// </para>
 /// </remarks>

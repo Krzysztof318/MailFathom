@@ -27,7 +27,7 @@ public enum MailDraftFilingOutcome
     /// <summary>The account maps no folder playing the drafts role, so there is nowhere to put a copy.</summary>
     DestinationUnavailable = 4,
 
-    /// <summary>The tracked copy stopped being one MailFathom may touch, and was left as the owner's.</summary>
+    /// <summary>The tracked copy stopped being one MailFathom may touch, and was left as the user's.</summary>
     Diverged = 5,
 
     /// <summary>An append went out and the server's answer to it never came back, so nothing more is attempted.</summary>

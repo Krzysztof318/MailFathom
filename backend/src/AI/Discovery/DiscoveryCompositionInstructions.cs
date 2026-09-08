@@ -165,7 +165,7 @@ internal static class DiscoveryCompositionInstructions
 /// <param name="Extract">The passage, guarded the same way.</param>
 /// <remarks>
 /// Separate from <see cref="DiscoveryComposedSource" /> because the two carry the same mail for different readers. What
-/// reaches a provider is withheld under the deployment's egress posture; what reaches the plan is the owner's own mail
-/// going back to the owner, and redacting it there would hide from somebody what they already have.
+/// reaches a provider is withheld under the deployment's egress posture; what reaches the plan is the user's own mail
+/// going back to the user, and redacting it there would hide from somebody what they already have.
 /// </remarks>
 internal sealed record DiscoveryTurnSource(string Name, string Label, string Extract);

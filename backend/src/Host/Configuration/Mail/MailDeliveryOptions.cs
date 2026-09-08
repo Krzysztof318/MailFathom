@@ -108,7 +108,7 @@ internal sealed class MailDeliveryOptions : IValidatableObject
     /// <para>
     /// The address inside an injected instruction is the address nobody here has corresponded with, and this is the
     /// setting that decides whether such a recipient is admitted or refused. What vouches for one is the contact book —
-    /// whoever the owner wrote down and whoever collection recorded from mail that arrived — and the mailboxes this
+    /// whoever the user wrote down and whoever collection recorded from mail that arrived — and the mailboxes this
     /// deployment sends as; a recipient this system derived itself, out of the book or out of the headers of the
     /// message being answered, is never judged by it, so a plain reply is addressable whatever this says.
     /// </para>

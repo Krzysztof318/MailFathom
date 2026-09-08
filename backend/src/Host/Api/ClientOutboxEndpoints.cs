@@ -14,38 +14,38 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves what the signed-in owner does about their own outbox: watch it, and decide about one send in it.</summary>
+/// <summary>Serves what the signed-in user does about their own outbox: watch it, and decide about one send in it.</summary>
 /// <remarks>
 /// <para>
-/// It is what a client draws after a message has been sent. Sending queues, so the send the owner just asked for has
+/// It is what a client draws after a message has been sent. Sending queues, so the send the user just asked for has
 /// not left yet, and these routes are where the screen watches it go — and where a send that is still queued is taken
 /// back, or one that failed is offered another chance.
 /// </para>
 /// <para>
 /// <b>A listing names an account and never the deployment.</b> The narrowing is required rather than optional, so
-/// there is no unnarrowed reading here at all: one that fell back to every account would page through every owner's
-/// outgoing mail, which is the deployment-wide catalog an owner-facing surface must never compose. An account another
-/// owner owns is refused exactly as one nobody configured, and a send another owner made answers exactly as one
+/// there is no unnarrowed reading here at all: one that fell back to every account would page through every user's
+/// outgoing mail, which is the deployment-wide catalog a user-facing surface must never compose. An account another
+/// user owns is refused exactly as one nobody configured, and a send another user made answers exactly as one
 /// nobody made.
 /// </para>
 /// <para>
 /// What the answers may carry is what the administrative outbox already settled and for the same reasons. A page names
-/// no recipient and no subject, because a page of an outbox would otherwise be an export of who this owner writes to,
+/// no recipient and no subject, because a page of an outbox would otherwise be an export of who this user writes to,
 /// a page at a time; one send read by identity names its recipients and what the server told this deployment about
 /// each, because that is the question it was asked. Neither reads the message, at any size.
 /// </para>
 /// <para>
-/// Every route here is <c>mailfathom.mail.send</c>, including the two readings. What an outbox says is what this owner
+/// Every route here is <c>mailfathom.mail.send</c>, including the two readings. What an outbox says is what this user
 /// is sending, so a credential granted to read a mailbox learns nothing here — and withdrawing a send is part of
 /// sending rather than a power beside it.
 /// </para>
 /// </remarks>
 internal static class ClientOutboxEndpoints
 {
-    /// <summary>The route one page of the owner's outbox is read from, relative to the client prefix.</summary>
+    /// <summary>The route one page of the user's outbox is read from, relative to the client prefix.</summary>
     internal const string OutboxRoute = "/outbox";
 
-    /// <summary>The route one of the owner's sends is read from.</summary>
+    /// <summary>The route one of the user's sends is read from.</summary>
     internal const string OutboxSendRoute = $"{OutboxRoute}/{{outgoingEmailId:guid}}";
 
     /// <summary>The route one send is withdrawn on.</summary>
@@ -84,16 +84,16 @@ internal static class ClientOutboxEndpoints
             .RequirePermission(MailFathomPermission.MailSend);
     }
 
-    /// <summary>Serves one page of what the named account of the acting owner is sending, newest first.</summary>
+    /// <summary>Serves one page of what the named account of the acting user is sending, newest first.</summary>
     /// <param name="account">The account to read, by its identifier or its display name, which is required rather than optional.</param>
     /// <param name="stage">The stage to narrow to, or <see langword="null" /> for every stage.</param>
     /// <param name="pageSize">How many sends the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
-    /// <param name="outbox">Reads the page, for the owner the credential names.</param>
+    /// <param name="outbox">Reads the page, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
-    /// An account this owner does not own is <c>400</c> rather than <c>404</c>, which is how every other narrowing on
+    /// An account this user does not own is <c>400</c> rather than <c>404</c>, which is how every other narrowing on
     /// this surface answers one: it is a mistake in the request the client wrote rather than a missing resource, and it
     /// answers identically for an account nobody configured so that nothing here reports whose accounts exist.
     /// </remarks>
@@ -102,7 +102,7 @@ internal static class ClientOutboxEndpoints
         [FromQuery] string? stage,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] OwnerOutbox outbox,
+        [FromServices] UserOutbox outbox,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outbox);
@@ -139,23 +139,23 @@ internal static class ClientOutboxEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
     }
 
-    /// <summary>Serves one of the acting owner's sends, with what each of its recipients was told.</summary>
+    /// <summary>Serves one of the acting user's sends, with what each of its recipients was told.</summary>
     /// <param name="outgoingEmailId">The send to read.</param>
-    /// <param name="outbox">Reads the record, for the owner the credential names.</param>
+    /// <param name="outbox">Reads the record, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the send, or <c>404</c> where this owner has no send under that identifier.</returns>
+    /// <returns><c>200</c> with the send, or <c>404</c> where this user has no send under that identifier.</returns>
     /// <remarks>
-    /// A send another owner made and one nobody made answer identically. This route addresses one record by identity,
+    /// A send another user made and one nobody made answer identically. This route addresses one record by identity,
     /// so its absence is the absence of the thing addressed — unlike the two decisions beside it, which address the
     /// outbox and report what became of the send they named.
     /// </remarks>
     internal static async Task<Results<Ok<OutboxSendResponse>, NotFound>> ReadSendAsync(
         [FromRoute] Guid outgoingEmailId,
-        [FromServices] OwnerOutbox outbox,
+        [FromServices] UserOutbox outbox,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outbox);
@@ -170,19 +170,19 @@ internal static class ClientOutboxEndpoints
             : TypedResults.NotFound();
     }
 
-    /// <summary>Withdraws one of the acting owner's sends that has not begun transmitting.</summary>
+    /// <summary>Withdraws one of the acting user's sends that has not begun transmitting.</summary>
     /// <param name="request">The send to cancel.</param>
-    /// <param name="outbox">Performs the decision, for the owner the credential names.</param>
+    /// <param name="outbox">Performs the decision, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
     /// <returns><c>200</c> with what happened, or <c>400</c> where the request named no send.</returns>
     /// <remarks>
-    /// A send that cannot be withdrawn is an outcome rather than a refusal, and so is one this owner does not hold:
+    /// A send that cannot be withdrawn is an outcome rather than a refusal, and so is one this user does not hold:
     /// the caller asked a question this deployment can answer, and being told the message has gone past the point of
     /// recall is exactly what somebody acting on a screen a moment old needs.
     /// </remarks>
     internal static async Task<Results<Ok<OutboxDecisionResponse>, ProblemHttpResult>> CancelAsync(
         [FromBody] OutboxCancellationRequest? request,
-        [FromServices] OwnerOutbox outbox,
+        [FromServices] UserOutbox outbox,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outbox);
@@ -197,9 +197,9 @@ internal static class ClientOutboxEndpoints
         return TypedResults.Ok(OutboxDecisionResponse.For(identifier, outcome));
     }
 
-    /// <summary>Offers one of the acting owner's sends again, which is the decision this system will not take on its own.</summary>
+    /// <summary>Offers one of the acting user's sends again, which is the decision this system will not take on its own.</summary>
     /// <param name="request">The send to offer again, and whether a permanent refusal was restated.</param>
-    /// <param name="outbox">Performs the decision, for the owner the credential names.</param>
+    /// <param name="outbox">Performs the decision, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
     /// <returns><c>200</c> with what happened, or <c>400</c> where the request named no send.</returns>
     /// <remarks>
@@ -209,7 +209,7 @@ internal static class ClientOutboxEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<OutboxDecisionResponse>, ProblemHttpResult>> RequeueAsync(
         [FromBody] OutboxRequeueRequest? request,
-        [FromServices] OwnerOutbox outbox,
+        [FromServices] UserOutbox outbox,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outbox);

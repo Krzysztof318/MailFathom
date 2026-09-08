@@ -25,7 +25,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// <summary>Covers what the three Discover routes accept off the wire, what they refuse, and what a reader is streamed.</summary>
 /// <remarks>
 /// The run itself is covered where it happens. What is asserted here is the transport: which questions are refused
-/// before a run is opened at all, that a run belongs to the owner who asked for it whether it is being read or stopped,
+/// before a run is opened at all, that a run belongs to the user who asked for it whether it is being read or stopped,
 /// and that a reconnecting client stating where it left off is given what it missed rather than the run over again.
 /// </remarks>
 public sealed class ClientDiscoveryRunEndpointTests
@@ -42,9 +42,9 @@ public sealed class ClientDiscoveryRunEndpointTests
     public void DiscoveryRunEventsRoute_IsThePathAClientComposes() =>
         Assert.Equal("/discovery/runs/{runId:guid}/events", ClientDiscoveryRunEndpoints.DiscoveryRunEventsRoute);
 
-    /// <summary>A question the owner may ask opens a run and answers with where that run is read, which is all a client needs.</summary>
+    /// <summary>A question the user may ask opens a run and answers with where that run is read, which is all a client needs.</summary>
     [Fact]
-    public void Start_AQuestionOverTheOwnersOwnMail_OpensARunAndNamesWhereItIsRead()
+    public void Start_AQuestionOverTheUsersOwnMail_OpensARunAndNamesWhereItIsRead()
     {
         // Arrange
         var registry = NewRegistry();
@@ -102,9 +102,9 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.Equal(0, registry.HeldCount);
     }
 
-    /// <summary>An account this owner does not own is refused as a request to change rather than narrowed away in silence.</summary>
+    /// <summary>An account this user does not own is refused as a request to change rather than narrowed away in silence.</summary>
     [Fact]
-    public void Start_AnAccountThisOwnerDoesNotOwn_RefusesTheQuestion()
+    public void Start_AnAccountThisUserDoesNotOwn_RefusesTheQuestion()
     {
         // Arrange
         var registry = NewRegistry();
@@ -131,7 +131,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         // Act
         var answered = ClientDiscoveryRunEndpoints.Start(
             new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null),
-            ResolverFor(SyntheticMailOwner.Deployment),
+            ResolverFor(SyntheticMailUser.Deployment),
             principals,
             registry,
             LauncherOver(registry));
@@ -149,7 +149,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         var registry = NewRegistry();
         Enumerable.Range(0, DiscoveryRunBounds.MaximumConcurrentRuns)
             .ToList()
-            .ForEach(run => registry.TryOpen(SyntheticMailOwner.Deployment, out _));
+            .ForEach(run => registry.TryOpen(SyntheticMailUser.Deployment, out _));
 
         // Act
         var answered = Start(new ClientDiscoveryRunRequest("which supplier quoted least", null, null, null, null), registry);
@@ -162,11 +162,11 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     /// <summary>An identifier alone says nothing about whether a run exists, so somebody else's reads as no such run.</summary>
     [Fact]
-    public void Watch_ARunAnotherOwnerStarted_ReportsNoSuchRun()
+    public void Watch_ARunAnotherUserStarted_ReportsNoSuchRun()
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Another, out var journal);
+        registry.TryOpen(SyntheticMailUser.Another, out var journal);
         Assert.NotNull(journal);
 
         // Act
@@ -183,11 +183,11 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     /// <summary>Each event reaches the client under its own sequence and its own name, which is what a client renders on.</summary>
     [Fact]
-    public async Task Watch_ARunThisOwnerHolds_StreamsEveryEventUnderItsSequenceAndItsName()
+    public async Task Watch_ARunThisUserHolds_StreamsEveryEventUnderItsSequenceAndItsName()
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
@@ -210,11 +210,11 @@ public sealed class ClientDiscoveryRunEndpointTests
     /// fails when an event is added without repeating it.
     /// </remarks>
     [Fact]
-    public async Task Watch_ARunThisOwnerHolds_WritesTheKindOnceAndNothingThisProcessReadsTheRunBy()
+    public async Task Watch_ARunThisUserHolds_WritesTheKindOnceAndNothingThisProcessReadsTheRunBy()
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
@@ -239,7 +239,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunFailed(DiscoveryRunFailure.TimedOut, MailAnsweringRunSpend.Nothing));
@@ -262,7 +262,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunCompleted(
@@ -293,7 +293,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunCompleted([PresentationLimitation.RetrievalTruncated], [], MailAnsweringRunSpend.Nothing));
@@ -317,7 +317,7 @@ public sealed class ClientDiscoveryRunEndpointTests
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
         journal.Append(new DiscoveryRunStarted());
         journal.Append(new DiscoveryRunCompleted([], [], MailAnsweringRunSpend.Nothing));
@@ -334,13 +334,13 @@ public sealed class ClientDiscoveryRunEndpointTests
     public void DiscoveryRunRoute_IsThePathAClientComposes() =>
         Assert.Equal("/discovery/runs/{runId:guid}", ClientDiscoveryRunEndpoints.DiscoveryRunRoute);
 
-    /// <summary>A run this owner started is stopped and answered with nothing, which is all a client that stopped reading needs.</summary>
+    /// <summary>A run this user started is stopped and answered with nothing, which is all a client that stopped reading needs.</summary>
     [Fact]
-    public void Stop_ARunThisOwnerHolds_StopsItAndAnswersWithNoContent()
+    public void Stop_ARunThisUserHolds_StopsItAndAnswersWithNoContent()
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Deployment, out var journal);
+        registry.TryOpen(SyntheticMailUser.Deployment, out var journal);
         Assert.NotNull(journal);
 
         // Act
@@ -353,11 +353,11 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     /// <summary>An identifier is a bearer value, so stopping somebody else's run reads as no such run and leaves it running.</summary>
     [Fact]
-    public void Stop_ARunAnotherOwnerStarted_ReportsNoSuchRunAndLeavesItRunning()
+    public void Stop_ARunAnotherUserStarted_ReportsNoSuchRunAndLeavesItRunning()
     {
         // Arrange
         var registry = NewRegistry();
-        registry.TryOpen(SyntheticMailOwner.Another, out var journal);
+        registry.TryOpen(SyntheticMailUser.Another, out var journal);
         Assert.NotNull(journal);
 
         // Act
@@ -374,15 +374,15 @@ public sealed class ClientDiscoveryRunEndpointTests
         Assert.IsType<NotFound>(Stop(Guid.Empty, NewRegistry()).Result);
 
     private static Results<NoContent, NotFound> Stop(Guid runId, DiscoveryRunRegistry registry) =>
-        ClientDiscoveryRunEndpoints.Stop(runId, ResolverFor(SyntheticMailOwner.Deployment), registry);
+        ClientDiscoveryRunEndpoints.Stop(runId, ResolverFor(SyntheticMailUser.Deployment), registry);
 
     private static Results<Accepted<ClientDiscoveryRunResponse>, ProblemHttpResult> Start(
         ClientDiscoveryRunRequest request,
         DiscoveryRunRegistry registry) =>
         ClientDiscoveryRunEndpoints.Start(
             request,
-            ResolverFor(SyntheticMailOwner.Deployment),
-            AdmittedCaller(SyntheticMailOwner.Deployment),
+            ResolverFor(SyntheticMailUser.Deployment),
+            AdmittedCaller(SyntheticMailUser.Deployment),
             registry,
             LauncherOver(registry));
 
@@ -393,7 +393,7 @@ public sealed class ClientDiscoveryRunEndpointTests
         ClientDiscoveryRunEndpoints.Watch(
             runId,
             context ?? new DefaultHttpContext(),
-            ResolverFor(SyntheticMailOwner.Deployment),
+            ResolverFor(SyntheticMailUser.Deployment),
             registry);
 
     /// <summary>Runs the streaming result against a request stating where the caller left off, and reads what went out.</summary>
@@ -430,20 +430,20 @@ public sealed class ClientDiscoveryRunEndpointTests
 
     private static DiscoveryRunRegistry NewRegistry() => new(new FakeTimeProvider(Now));
 
-    private static IAuthorizedPrincipalSource AdmittedCaller(MailOwnerId owner)
+    private static IAuthorizedPrincipalSource AdmittedCaller(MailUserId user)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(
-            AuthorizedPrincipal.CallerActingFor(owner, "test-caller", [MailFathomPermission.MailAsk]));
+            AuthorizedPrincipal.CallerActingFor(user, "test-caller", [MailFathomPermission.MailAsk]));
 
         return principals;
     }
 
-    private static MailboxScopeResolver ResolverFor(MailOwnerId owner) =>
+    private static MailboxScopeResolver ResolverFor(MailUserId user) =>
         new(
             OwnedMailAccountCatalogs.For(
-                AccessAuthorizations.ForOwnerGranted(owner, MailFathomPermission.MailAsk),
-                SyntheticServedAccount.Of("primary", owner)),
+                AccessAuthorizations.ForUserGranted(user, MailFathomPermission.MailAsk),
+                SyntheticServedAccount.Of("primary", user)),
             StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);

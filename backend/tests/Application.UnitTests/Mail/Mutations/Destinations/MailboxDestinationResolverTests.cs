@@ -21,7 +21,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Destinations;
 public sealed class MailboxDestinationResolverTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
 

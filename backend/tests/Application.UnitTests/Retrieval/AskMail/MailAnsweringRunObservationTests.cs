@@ -93,6 +93,6 @@ public sealed class MailAnsweringRunObservationTests
 
     private static MailAnsweringRunObservation Observation() => new(
         MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("work")], []),
+        MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("work")], []),
         StartedAt);
 }

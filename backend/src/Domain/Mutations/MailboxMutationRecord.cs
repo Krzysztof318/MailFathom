@@ -30,14 +30,14 @@ public sealed record MailboxMutationRecord
     /// <summary>Gets the change that was asked for, restored exactly as it was written down.</summary>
     public required MailboxMutationRequest Request { get; init; }
 
-    /// <summary>Gets the owner whose account the change was asked about.</summary>
+    /// <summary>Gets the user whose account the change was asked about.</summary>
     /// <remarks>
     /// Taken from the request rather than stored again, because the request is what names the account and the two halves
     /// of one account reference must not be able to disagree. It is named here because every row written beside this
     /// one — the audit entry above all — records whose mail the change was about, and reads that better than
-    /// <c>Request.Owner</c> does.
+    /// <c>Request.User</c> does.
     /// </remarks>
-    public MailOwnerId Owner => this.Request.Owner;
+    public MailUserId User => this.Request.User;
 
     /// <summary>Gets how far along its protocol sequence the mutation has durably reached.</summary>
     public required MailboxMutationStage Stage { get; init; }
@@ -170,7 +170,7 @@ public sealed record MailboxMutationRecord
     /// was, so its presence says nothing about either and neither is settled here.
     /// </para>
     /// <para>
-    /// The one way this reads wrong is an owner who deleted the source message themselves between the command going out
+    /// The one way this reads wrong is a user who deleted the source message themselves between the command going out
     /// and the folder being read again, which would credit the move for a disappearance it did not cause. The mutation
     /// is completed anyway, deliberately: the email has left the source folder either way, nothing is duplicated by
     /// saying so, and reissuing a <c>MOVE</c> against a UID the folder no longer holds could only fail. It is the same
@@ -241,7 +241,7 @@ public sealed record MailboxMutationRecord
     /// <para>
     /// The direction is compared as well as the occurrence, so a record that asked for the flag to be set accounts for
     /// the flag becoming set and never for it becoming clear. A rule that marks mail read is therefore not re-triggered
-    /// by its own store, while the owner clearing that flag afterwards reaches evaluation as the change it is.
+    /// by its own store, while the user clearing that flag afterwards reaches evaluation as the change it is.
     /// </para>
     /// <para>
     /// A record no <c>STORE</c> has gone out for matches nothing, whether it is waiting to be attempted or was
@@ -253,7 +253,7 @@ public sealed record MailboxMutationRecord
     /// synchronization only as a value the flag now stands at, so the reading that first sees the mailbox after the
     /// store is the whole of what this record can account for — every reading after that is a mailbox somebody else has
     /// had the chance to change. Anchoring on the row instead would answer only for the readings that happened to
-    /// differ: an owner who reverted the flag before the first reading would leave the record unspent and have their
+    /// differ: a user who reverted the flag before the first reading would leave the record unspent and have their
     /// own later change silenced by it.
     /// </para>
     /// </remarks>
@@ -295,7 +295,7 @@ public sealed record MailboxMutationRecord
     /// The set this mutation would have produced is computed from the earlier reading and compared whole, which is what
     /// makes the answer exact in both directions. Asking only whether the named keywords are carried, or are not, would
     /// be satisfied by a reading the mutation cannot have produced: a removal of <c>$Todo</c> would account for the
-    /// owner attaching <c>$Invoice</c> to a message that never carried <c>$Todo</c>, and their label would be withheld
+    /// user attaching <c>$Invoice</c> to a message that never carried <c>$Todo</c>, and their label would be withheld
     /// from evaluation as though MailFathom had caused it. A set the mutation cannot explain is somebody else's, which
     /// is the direction this has to fail in.
     /// </para>

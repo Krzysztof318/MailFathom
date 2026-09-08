@@ -22,7 +22,7 @@ namespace MailFathom.Application.UnitTests.Spam;
 public sealed class EmailSpamClassificationHandlerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -52,7 +52,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -71,7 +71,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -85,7 +85,7 @@ public sealed class EmailSpamClassificationHandlerTests
     {
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -101,7 +101,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead, SpamClassificationSettings.Disabled).RunAsync(
-            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailUser.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -155,7 +155,7 @@ public sealed class EmailSpamClassificationHandlerTests
         SpamClassificationSettings? settings = null)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(settings ?? SettingsCovering(Inbox));
+        settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings ?? SettingsCovering(Inbox));
 
         var sessionFactory = this.harness.CommittingSessions();
         var commitPolicy = this.harness.CommitPolicyOver(sessionFactory);

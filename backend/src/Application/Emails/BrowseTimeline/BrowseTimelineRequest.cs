@@ -25,7 +25,7 @@ namespace MailFathom.Application.Emails.BrowseTimeline;
 /// </remarks>
 public sealed record BrowseTimelineRequest
 {
-    /// <summary>Gets the accounts to draw from, or empty for every account the caller's owner owns.</summary>
+    /// <summary>Gets the accounts to draw from, or empty for every account the caller's user owns.</summary>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
     /// <summary>Gets the folders to draw from, or empty for every folder of those accounts.</summary>

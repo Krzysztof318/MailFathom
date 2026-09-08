@@ -98,7 +98,7 @@ internal sealed class InMemoryRecurringSendStore(TimeProvider? timeProvider = nu
                 .Take(limit)
                 .Select(declaration => new RecurringSendDeclaration(
                     declaration.Id,
-                    MailAccountIdentity.Create(SyntheticMailOwner.Deployment, declaration.AccountId),
+                    MailAccountIdentity.Create(SyntheticMailUser.Deployment, declaration.AccountId),
                     declaration.Schedule)),
         ];
 

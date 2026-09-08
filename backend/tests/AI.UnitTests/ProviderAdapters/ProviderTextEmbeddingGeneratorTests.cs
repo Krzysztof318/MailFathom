@@ -282,7 +282,7 @@ public sealed class ProviderTextEmbeddingGeneratorTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         using var provider = ScriptedProvider.Answering(VectorsOfWidth(Dimension, 2));
         var generator = provider.GeneratorOver(EmbeddingDeclarations.Plan(), egressGuard: egress.Guard);
 
@@ -304,7 +304,7 @@ public sealed class ProviderTextEmbeddingGeneratorTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         using var provider = ScriptedProvider.Answering(VectorsOfWidth(Dimension, 1));
         var generator = provider.GeneratorOver(EmbeddingDeclarations.Plan(), egressGuard: egress.Guard);
 

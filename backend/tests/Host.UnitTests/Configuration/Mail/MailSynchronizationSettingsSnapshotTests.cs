@@ -5,7 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 
@@ -13,25 +13,25 @@ namespace MailFathom.Host.UnitTests.Configuration.Mail;
 
 public sealed class MailSynchronizationSettingsSnapshotTests
 {
-    private static readonly MailOwnerId Owner =
-        MailOwnerId.Create(new Guid("b4306d24-b373-4101-8cc3-9f81b6b1be87"));
+    private static readonly MailUserId User =
+        MailUserId.Create(new Guid("b4306d24-b373-4101-8cc3-9f81b6b1be87"));
 
-    /// <summary>A run already under way keeps one owner-document version while the next run observes the commit.</summary>
+    /// <summary>A run already under way keeps one user-document version while the next run observes the commit.</summary>
     [Fact]
-    public void Current_OwnerDocumentChanges_PublishesANewSnapshotWithoutChangingTheCapturedOne()
+    public void Current_UserDocumentChanges_PublishesANewSnapshotWithoutChangingTheCapturedOne()
     {
         // Arrange
         var original = Account("original");
         var changed = Account("changed");
-        var owners = new ServedMailOwners();
-        owners.Resolved([Serving(original)]);
+        var users = new ServedMailUsers();
+        users.Resolved([Serving(original)]);
         var boundSettings = new StubSettingsSnapshot<MailSynchronizationOptions>(new MailSynchronizationOptions());
-        var settings = new MailSynchronizationSettingsSnapshot(boundSettings, owners);
+        var settings = new MailSynchronizationSettingsSnapshot(boundSettings, users);
         var captured = settings.Current;
         var reload = settings.GetReloadToken();
 
         // Act
-        owners.OwnerDocumentPublished(Owner, "owner", new OwnerAccountOptions { MailAccounts = [changed] }, 2);
+        users.UserDocumentPublished(User, "user", new UserAccountOptions { MailAccounts = [changed] }, 2);
         var current = settings.Current;
 
         // Assert
@@ -42,8 +42,8 @@ public sealed class MailSynchronizationSettingsSnapshotTests
         Assert.Same(changed, current.FindConfiguredAccount(MailAccountId.Create("changed")));
     }
 
-    private static ServedMailOwner Serving(params MailSynchronizationAccountOptions[] accounts) =>
-        new(Owner, "owner", MailOwnerAccountSource.OwnerDocument, accounts);
+    private static ServedMailUser Serving(params MailSynchronizationAccountOptions[] accounts) =>
+        new(User, "user", MailUserAccountSource.UserDocument, accounts);
 
     private static MailSynchronizationAccountOptions Account(string accountId) => new() { AccountId = accountId };
 }

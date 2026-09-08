@@ -27,7 +27,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 public sealed class MailboxChangeWithdrawerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -207,7 +207,7 @@ public sealed class MailboxChangeWithdrawerTests
     private static MailboxMutationRequest FlagRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.SetSeen(
             StoredEmailId.Create(Guid.CreateVersion7()),
-            Account.Owner,
+            Account.User,
             OccurrenceIn(folderAlias, uid),
             Requester,
             isSeen: true);
@@ -215,7 +215,7 @@ public sealed class MailboxChangeWithdrawerTests
     private static MailboxMutationRequest RelocateRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.Relocate(
             StoredEmailId.Create(Guid.CreateVersion7()),
-            Account.Owner,
+            Account.User,
             OccurrenceIn(folderAlias, uid),
             Requester,
             RemoteFolderPath.Create("Archive"));

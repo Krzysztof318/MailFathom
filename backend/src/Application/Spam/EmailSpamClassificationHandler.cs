@@ -90,7 +90,7 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
 
         var account = occurrence.ToAccountIdentity();
         var storedEmailId = await this.emails.FindStoredEmailIdAsync(
-            account.Owner,
+            account.User,
             occurrence.ToOccurrenceId(),
             cancellationToken);
 
@@ -99,12 +99,12 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
             return;
         }
 
-        var classification = await this.ClassifyAsync(account.Owner, emailId, cancellationToken);
+        var classification = await this.ClassifyAsync(account.User, emailId, cancellationToken);
 
         if (classification is not null)
         {
             await this.actionRecorder.RecordAsync(
-                account.Owner,
+                account.User,
                 classification,
                 SpamActionPosture.Acting,
                 cancellationToken);
@@ -120,12 +120,12 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// not stored — and none of them has anything for the mailbox to be asked about.
     /// </remarks>
     private async Task<SpamClassification?> ClassifyAsync(
-        MailOwnerId owner,
+        MailUserId user,
         StoredEmailId emailId,
         CancellationToken cancellationToken)
     {
         var result = await this.classifier.ClassifyAsync(
-            owner,
+            user,
             emailId,
             SpamClassificationMode.FirstTimeOnly,
             cancellationToken);

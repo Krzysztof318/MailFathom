@@ -77,7 +77,7 @@ internal static class ClientTransportSecurityExtensions
             return services;
         }
 
-        services.AddOwnerFacingTransportAuthentication(
+        services.AddUserFacingTransportAuthentication(
             TransportSurface.Client,
             [.. endpointSettings.Authentication],
             ChallengeSchemeFor(endpointSettings));

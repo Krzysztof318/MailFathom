@@ -42,9 +42,9 @@ public sealed class SpamClassificationEndpointsTests
 
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
-    /// <summary>The account a stored run names, which is the owner and the identifier together.</summary>
+    /// <summary>The account a stored run names, which is the user and the identifier together.</summary>
     private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -426,7 +426,7 @@ public sealed class SpamClassificationEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -438,7 +438,7 @@ public sealed class SpamClassificationEndpointsTests
     private static ISpamClassificationSettingsReader SettingsReader(SpamClassificationSettings settings)
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
-        reader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(settings);
+        reader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings);
 
         return reader;
     }

@@ -78,7 +78,7 @@ public sealed record SpamClassificationSettings
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scannedFolderAliases" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="scannerThreshold" /> is not a finite number.</exception>
     /// <remarks>
-    /// How long a message may wait on a verdict is not among these, because it is not one owner's to decide: it bounds
+    /// How long a message may wait on a verdict is not among these, because it is not one user's to decide: it bounds
     /// how long the index may be held back by a scanner that has stopped answering, which is a cost the process bears.
     /// <see cref="SpamClassificationScope.MaximumClassificationWait" /> is where the deployment states it.
     /// </remarks>

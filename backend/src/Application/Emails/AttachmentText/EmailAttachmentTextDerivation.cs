@@ -17,7 +17,7 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// the rows would never be revisited.
 /// </remarks>
 /// <param name="Attachments">What each attachment yielded, in walk order, which is empty for a message that yielded nothing.</param>
-/// <param name="RedactedUnder">What the owner's mail was redacted under, or <see langword="null" /> where nothing scans it.</param>
+/// <param name="RedactedUnder">What the user's mail was redacted under, or <see langword="null" /> where nothing scans it.</param>
 /// <param name="AwaitsRepair">Whether the stored copy was missing or unparseable, so a repair request was recorded for it.</param>
 /// <param name="ExtractedOctetCount">The octets a parser was handed, which is what the deployment's extraction ceiling is charged.</param>
 /// <param name="ProviderDescriptionCount">The chat calls this reading made, which is what the deployment's description ceiling is charged.</param>

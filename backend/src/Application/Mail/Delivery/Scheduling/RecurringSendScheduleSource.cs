@@ -8,11 +8,11 @@ using MailFathom.Application.Jobs.Scheduling;
 
 namespace MailFathom.Application.Mail.Delivery.Scheduling;
 
-/// <summary>Declares one recurring dispatch for every message an owner asked to have sent again.</summary>
+/// <summary>Declares one recurring dispatch for every message a user asked to have sent again.</summary>
 /// <remarks>
 /// <para>
-/// The declarations are read from the database rather than from configuration, because that is where they are made: an
-/// owner writes a message and names a repetition, and neither is something an operator's file could hold. What the
+/// The declarations are read from the database rather than from configuration, because that is where they are made: a
+/// user writes a message and names a repetition, and neither is something an operator's file could hold. What the
 /// dispatch mechanism gets is the same shape a configured schedule gives it, so a message that repeats reaches the same
 /// worker, the same occasion arithmetic, the same one-run-at-a-time answer, and the same capacity bounds as a rule that
 /// does.

@@ -20,7 +20,7 @@ public sealed class LoggedAuthoredSendAuditorTests
     private static readonly OutgoingEmailId Record =
         OutgoingEmailId.Create(new Guid("2f9d5f52-5d4c-4a1e-9d0b-2f1a3c4d5e6f"));
 
-    /// <summary>An owner asking who sent something is answered by the record, so it names the caller and its grant.</summary>
+    /// <summary>A user asking who sent something is answered by the record, so it names the caller and its grant.</summary>
     [Fact]
     public async Task RecordAuthoredSendAsync_OrdinarySend_RecordsWhoAskedAndUnderWhichGrant()
     {
@@ -45,7 +45,7 @@ public sealed class LoggedAuthoredSendAuditorTests
         Assert.Equal(OccurredAt, record.Properties["OccurredAt"]);
     }
 
-    /// <summary>A send reaching somebody nobody here vouches for is the line an owner looks for, so it stands out.</summary>
+    /// <summary>A send reaching somebody nobody here vouches for is the line a user looks for, so it stands out.</summary>
     [Fact]
     public async Task RecordAuthoredSendAsync_SendReachingSomebodyNobodyVouchesFor_RecordsTheCountAsAWarning()
     {

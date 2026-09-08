@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Contacts;
 
-/// <summary>Keeps the contact books in PostgreSQL, one owner's at a time.</summary>
+/// <summary>Keeps the contact books in PostgreSQL, one user's at a time.</summary>
 /// <remarks>
 /// <para>
 /// Every operation here writes through the context enlisted in the caller's session, erasure included, so nothing can
@@ -22,13 +22,13 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 /// outcome it was handed.
 /// </para>
 /// <para>
-/// Which contact may hold an address is enforced by the unique index over the owner and the comparison form rather than
+/// Which contact may hold an address is enforced by the unique index over the user and the comparison form rather than
 /// by a read before the insert. Two callers claiming one address both read nothing, so only the constraint closes that
 /// window — and losing it is a race the retry above resolves into the answer that names the holder.
 /// </para>
 /// <para>
-/// Every statement here carries the owner whose book is being written, beside the identity it was given. A contact
-/// identifier that belongs to another owner's book therefore matches no row rather than reaching one, so a replacement
+/// Every statement here carries the user whose book is being written, beside the identity it was given. A contact
+/// identifier that belongs to another user's book therefore matches no row rather than reaching one, so a replacement
 /// and an erasure are as scoped as a read is, and neither can be aimed across books by a caller that learned an
 /// identifier elsewhere.
 /// </para>
@@ -39,7 +39,7 @@ internal sealed class ContactStore : IContactStore
     /// <inheritdoc />
     public async Task AddAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken)
     {
@@ -48,13 +48,13 @@ internal sealed class ContactStore : IContactStore
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        writeContext.Contacts.Add(ContactMapping.ToEntity(owner, contact));
+        writeContext.Contacts.Add(ContactMapping.ToEntity(user, contact));
     }
 
     /// <inheritdoc />
     public async Task<bool> ReplaceAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact,
         CancellationToken cancellationToken)
     {
@@ -62,7 +62,7 @@ internal sealed class ContactStore : IContactStore
         ArgumentNullException.ThrowIfNull(contact);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         // Tracked rather than projected, so the amendment is applied to the row as it stands now and the concurrency
         // token travels with it: a contact erased between this read and the commit makes the write affect no row, which
@@ -70,7 +70,7 @@ internal sealed class ContactStore : IContactStore
         var held = await writeContext.Contacts
             .Include(record => record.Addresses)
             .FirstOrDefaultAsync(
-                record => record.Id == contact.Id.Value && record.OwnerId == ownerValue,
+                record => record.Id == contact.Id.Value && record.UserId == userValue,
                 cancellationToken);
 
         if (held is null)
@@ -89,7 +89,7 @@ internal sealed class ContactStore : IContactStore
         held.Origin = contact.Origin;
         held.AmendedAt = contact.AmendedAt;
 
-        ReplaceAddresses(writeContext, held, owner, contact);
+        ReplaceAddresses(writeContext, held, user, contact);
 
         return true;
     }
@@ -97,7 +97,7 @@ internal sealed class ContactStore : IContactStore
     /// <inheritdoc />
     public async Task<ContactErasure> EraseAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         ContactId contactId,
         CancellationToken cancellationToken)
     {
@@ -105,18 +105,18 @@ internal sealed class ContactStore : IContactStore
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var contactValue = contactId.Value;
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         // Deleted rather than counted and then cascaded, so the number reported is the number of rows this statement
         // removed. Counting first would report what a separate statement saw, which a write committed between the two
         // makes a different set. The foreign key still cascades and is still what guarantees no address outlives its
         // person; this only takes the same rows first, inside the caller's transaction, to be able to report them.
         var erasedAddresses = await writeContext.ContactAddresses
-            .Where(address => address.ContactId == contactValue && address.OwnerId == ownerValue)
+            .Where(address => address.ContactId == contactValue && address.UserId == userValue)
             .ExecuteDeleteAsync(cancellationToken);
 
         var erasedContacts = await writeContext.Contacts
-            .Where(record => record.Id == contactValue && record.OwnerId == ownerValue)
+            .Where(record => record.Id == contactValue && record.UserId == userValue)
             .ExecuteDeleteAsync(cancellationToken);
 
         return new ContactErasure(contactId, erasedContacts > 0, erasedAddresses);
@@ -125,23 +125,23 @@ internal sealed class ContactStore : IContactStore
     /// <inheritdoc />
     public async Task<CollectedContactErasure> EraseCollectedAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         // The addresses go first, and by their contact's origin rather than by a list of identifiers this method read:
         // a set-based delete keeps a book of collected people out of memory, and taking the rows in the same order and
         // the same transaction the single-contact erasure does means the counts reported are the rows removed.
         var collected = writeContext.Contacts
-            .Where(record => record.OwnerId == ownerValue && record.Origin == ContactOrigin.Collected);
+            .Where(record => record.UserId == userValue && record.Origin == ContactOrigin.Collected);
 
         var erasedAddresses = await writeContext.ContactAddresses
             .Where(address =>
-                address.OwnerId == ownerValue && collected.Any(record => record.Id == address.ContactId))
+                address.UserId == userValue && collected.Any(record => record.Id == address.ContactId))
             .ExecuteDeleteAsync(cancellationToken);
 
         var erasedContacts = await collected.ExecuteDeleteAsync(cancellationToken);
@@ -158,7 +158,7 @@ internal sealed class ContactStore : IContactStore
     private static void ReplaceAddresses(
         MailFathomDbContext writeContext,
         ContactEntity held,
-        MailOwnerId owner,
+        MailUserId user,
         Contact contact)
     {
         var named = contact.Addresses.ToDictionary(
@@ -180,7 +180,7 @@ internal sealed class ContactStore : IContactStore
 
         foreach (var added in named.Values)
         {
-            held.Addresses.Add(ContactMapping.ToAddressEntity(owner, contact, added));
+            held.Addresses.Add(ContactMapping.ToAddressEntity(user, contact, added));
         }
     }
 }

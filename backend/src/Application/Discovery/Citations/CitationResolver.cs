@@ -23,7 +23,7 @@ namespace MailFathom.Application.Discovery.Citations;
 /// </para>
 /// <para>
 /// <b>Resolution is an access decision before it is a lookup.</b> Every message is read through the same use case the
-/// reading pane reads one with, so the accounts and folders the caller's owner may read decide what a citation resolves
+/// reading pane reads one with, so the accounts and folders the caller's user may read decide what a citation resolves
 /// to, and a citation composed to name somebody else's mail reads nothing. A source outside that scope is reported as
 /// private rather than as a failure: a plan is a thing to be shared, and a reader shown a fact whose source they may
 /// not open has to be able to tell that from an answer that is broken.
@@ -93,7 +93,7 @@ public sealed class CitationResolver
     /// <returns>One resolution per citation, in the order the request named them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="citations" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the request names no citation, or more than <see cref="MaximumCitations" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no user.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what a passage or a message carries, which refuses the resolution rather than serving it unscanned.</exception>
     /// <remarks>
     /// The order is the contract, as it is for the content read this is built on: a resolution names the message it
@@ -188,7 +188,7 @@ public sealed class CitationResolver
             return passages;
         }
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
         using var scan = this.egressGuard.BeginGuardedOperation(
             SensitiveContentEgressPoint.ClientCitationResolution,
             cancellationToken);

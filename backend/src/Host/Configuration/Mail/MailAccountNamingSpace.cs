@@ -10,11 +10,11 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>Refuses a set of mail-account declarations in which one name could select two mailboxes.</summary>
 /// <remarks>
 /// <para>
-/// An account identifier and a display name share one naming space, and both are unique within the owner who declared
+/// An account identifier and a display name share one naming space, and both are unique within the user who declared
 /// them rather than across the deployment — two people may each call an account <c>work</c>, and neither is refused
-/// for it. So this is asked of one owner's declarations at a time, and every caller of it holds exactly that: the
-/// deployment's own configuration section, where every account belongs to the one owner such a deployment serves, and
-/// an owner's persisted record, where every account belongs to the owner the row is keyed by.
+/// for it. So this is asked of one user's declarations at a time, and every caller of it holds exactly that: the
+/// deployment's own configuration section, where every account belongs to the one user such a deployment serves, and
+/// a user's persisted record, where every account belongs to the user the row is keyed by.
 /// </para>
 /// <para>
 /// It is stated once because the two callers must not answer it differently. A rule that held for a configured
@@ -24,8 +24,8 @@ namespace MailFathom.Host.Configuration.Mail;
 /// </remarks>
 internal static class MailAccountNamingSpace
 {
-    /// <summary>Finds every name in one owner's declarations that a request could not resolve to one mailbox.</summary>
-    /// <param name="accounts">The mail accounts one owner declares.</param>
+    /// <summary>Finds every name in one user's declarations that a request could not resolve to one mailbox.</summary>
+    /// <param name="accounts">The mail accounts one user declares.</param>
     /// <param name="memberName">The member the results are reported against, which is the collection the caller bound.</param>
     /// <returns>One result per ambiguity, empty when every identifier and every name selects one account.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
@@ -63,7 +63,7 @@ internal static class MailAccountNamingSpace
         if (repeated.Length > 0)
         {
             yield return new ValidationResult(
-                $"An account identifier names one mailbox within its owner, and this owner declares more than one account under each of: {string.Join(", ", repeated)}. Identifiers are compared after normalization and without regard to case.",
+                $"An account identifier names one mailbox within its user, and this user declares more than one account under each of: {string.Join(", ", repeated)}. Identifiers are compared after normalization and without regard to case.",
                 [memberName]);
         }
     }

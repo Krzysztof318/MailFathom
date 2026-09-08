@@ -83,7 +83,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
@@ -142,7 +142,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             occurrence,
             "mutation-identity",
             cancellationToken);
-        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isSeen: true);
+        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, isSeen: true);
 
         // Act
         var commits = await services.InTwoScopesAsync(

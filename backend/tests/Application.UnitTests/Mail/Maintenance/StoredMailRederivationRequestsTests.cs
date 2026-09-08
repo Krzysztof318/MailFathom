@@ -28,7 +28,7 @@ public sealed class StoredMailRederivationRequestsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")), null);
 
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private readonly IJobStore jobs = Substitute.For<IJobStore>();
@@ -156,7 +156,7 @@ public sealed class StoredMailRederivationRequestsTests
         StoredMailRederivationRun run = new()
         {
             RunId = StoredMailRederivationRunId.Create(Guid.Parse("0199a0c0-0000-7000-8000-00000000000f")),
-            Scope = new StoredMailScope(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(longestName)), folder),
+            Scope = new StoredMailScope(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(longestName)), folder),
             RequestedAt = Now,
             SegmentCount = int.MaxValue,
         };

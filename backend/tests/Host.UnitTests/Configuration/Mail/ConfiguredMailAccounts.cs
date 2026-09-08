@@ -42,15 +42,15 @@ internal static class ConfiguredMailAccounts
 
     /// <summary>Builds the catalog of accounts a configuration serves, as the composition root builds it.</summary>
     /// <param name="options">The configuration the accounts are declared in.</param>
-    /// <returns>The catalog, answering with every declared account under the deployment's own owner.</returns>
+    /// <returns>The catalog, answering with every declared account under the deployment's own user.</returns>
     /// <remarks>
     /// The roster is supplied here rather than read out of the configuration, because the deployment's own section
-    /// names no owner: a start establishes which owner that section's accounts belong to, and the catalog is composed
+    /// names no user: a start establishes which user that section's accounts belong to, and the catalog is composed
     /// where that answer is resolvable. A test asking what a configuration serves therefore states the roster the way
     /// the composition root ends up with it.
     /// </remarks>
     internal static IDeploymentMailAccountCatalog CatalogOver(MailSynchronizationOptions options) =>
-        new ConfiguredMailAccountCatalog(options, ResolvedServedMailOwners.TheSoleOwner());
+        new ConfiguredMailAccountCatalog(options, ResolvedServedMailUsers.TheSoleUser());
 
     /// <summary>Builds a complete reading account, which is what a delivery rule is added to and judged over.</summary>
     /// <returns>The account.</returns>

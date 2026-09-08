@@ -49,7 +49,7 @@ public interface ISensitiveContentEgressTelemetry
 
     /// <summary>Opens the report of one guarded operation, which is what a caller actually waits on.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
-    /// <param name="owner">Whose mail this operation is publishing, which the span records so a scan is attributable.</param>
+    /// <param name="user">Whose mail this operation is publishing, which the span records so a scan is attributable.</param>
     /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a shutdown from an operation that broke.</param>
     /// <returns>The scope, which the caller must dispose exactly once and inside which the scanning happens.</returns>
     /// <remarks>
@@ -59,7 +59,7 @@ public interface ISensitiveContentEgressTelemetry
     /// scan is quick while a read that ran fifty of them was not.
     /// </para>
     /// <para>
-    /// The owner is here and on none of the instruments above, because postures now differ between the people one
+    /// The user is here and on none of the instruments above, because postures now differ between the people one
     /// deployment serves and a scan that cannot be attributed to one of them cannot be read against what that person
     /// asked for. It is a span attribute rather than a metric dimension for the reason every tag above is a closed set:
     /// an identifier on a counter incremented per text is an unbounded series, while a span already carries the one
@@ -68,6 +68,6 @@ public interface ISensitiveContentEgressTelemetry
     /// </remarks>
     ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken);
 }

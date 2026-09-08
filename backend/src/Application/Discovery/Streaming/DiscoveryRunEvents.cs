@@ -173,7 +173,7 @@ public sealed record DiscoveryRunFailed(DiscoveryRunFailure Failure, MailAnsweri
     /// <see langword="null" /> for every other ending, including the run's own ceiling: asking the same question again
     /// reaches that one by the same route, so there is no instant to name. Nothing here says how much was consumed —
     /// how much of the period is left is a fact about what everybody on the deployment has been asking, and on a
-    /// deployment serving several owners it would report one person's activity to another.
+    /// deployment serving several users it would report one person's activity to another.
     /// </para>
     /// </remarks>
     public DateTimeOffset? RetryAt { get; init; }

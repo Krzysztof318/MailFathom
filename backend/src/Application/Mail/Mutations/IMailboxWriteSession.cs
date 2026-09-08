@@ -10,7 +10,7 @@ using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Mail.Mutations;
 
-/// <summary>Changes one folder of a remote mailbox, on behalf of an act the mailbox owner authored.</summary>
+/// <summary>Changes one folder of a remote mailbox, on behalf of an act the mailbox user authored.</summary>
 /// <remarks>
 /// <para>
 /// This is the only type in MailFathom able to change a mailbox, and it is deliberately a different type from
@@ -34,7 +34,7 @@ namespace MailFathom.Application.Mail.Mutations;
 /// Neither can reach a message somebody sent to this mailbox, because neither takes an occurrence — an append names no
 /// message at all and a withdrawal names a UID the append itself reported. That is also why <c>\Draft</c> is writable
 /// here and nowhere else: it is an assertion about a message being composed, which is true of exactly these and of
-/// nothing an owner received.
+/// nothing a user received.
 /// </para>
 /// <para>
 /// Every operation names what the caller asked for and never how the server was made to do it. Which protocol
@@ -242,13 +242,13 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <remarks>
     /// <para>
     /// This is the one operation here that creates a message rather than changing one, and the one that takes no
-    /// occurrence — an <c>APPEND</c> names a folder and a body, so there is no message of the owner's it could reach.
+    /// occurrence — an <c>APPEND</c> names a folder and a body, so there is no message of the user's it could reach.
     /// The folder is this session's own selection rather than an argument, which is what keeps a caller from appending
     /// into a folder it did not open the session for.
     /// </para>
     /// <para>
     /// It is never repeated on the caller's behalf, for the reason a copy is not: an <c>APPEND</c> issued twice is a
-    /// second message in the owner's folder rather than a repeat of the first, and nothing the folder shows afterwards
+    /// second message in the user's folder rather than a repeat of the first, and nothing the folder shows afterwards
     /// tells them apart. There is no journal here because the durable record of the append is the caller's outgoing
     /// record, which is written before this is called and confirmed after it returns.
     /// </para>
@@ -275,7 +275,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <para>
     /// It exists so a mirrored copy of an undelivered message does not outlive the wait it was showing. The UID is one
     /// the server itself named when it accepted the copy, so this reaches a message MailFathom put there and can reach
-    /// no other — which is what separates it from the delete a mutation performs on the owner's own mail.
+    /// no other — which is what separates it from the delete a mutation performs on the user's own mail.
     /// </para>
     /// <para>
     /// The UIDVALIDITY is compared before anything is issued, because a folder recreated since the append renumbered
@@ -284,7 +284,7 @@ public interface IMailboxWriteSession : IAsyncDisposable
     /// <c>\Deleted</c> is not a side effect this may have.
     /// </para>
     /// <para>
-    /// A copy the folder no longer holds is not an error. The owner deleting it themselves is the ordinary case, and
+    /// A copy the folder no longer holds is not an error. The user deleting it themselves is the ordinary case, and
     /// what was asked for — that the copy is gone — is already true.
     /// </para>
     /// </remarks>

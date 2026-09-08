@@ -61,10 +61,10 @@ configured and the `displayName` they gave it — and **either one names the acc
 matched without regard to case. Quote the display name to a person; the identifier is what other results report and what
 stays stable if the readable name is changed.
 
-**Both names belong to the account's owner and are unique within that owner rather than across the deployment.** Either
+**Both names belong to the account's user and are unique within that user rather than across the deployment.** Either
 one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it survives
-a rename. What neither may be treated as is a name for the mailbox on its own: two owners may each call an account
-`work`, so a stored name is only ever this owner's name and is never compared with one read for somebody else or from a
+a rename. What neither may be treated as is a name for the mailbox on its own: two users may each call an account
+`work`, so a stored name is only ever this user's name and is never compared with one read for somebody else or from a
 second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
 same refusal whether nothing carries that name or somebody else's mailbox does.
 

@@ -20,7 +20,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     SealedMaterial = table.Column<byte[]>(type: "bytea", nullable: false),
                     DataEncryptionKeyId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
@@ -33,7 +33,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     table.CheckConstraint("ck_stored_secrets_material_length", "octet_length(\"SealedMaterial\") BETWEEN 29 AND 1048604");
                     table.ForeignKey(
                         name: "fk_stored_secrets_settings_accounts",
-                        column: x => x.OwnerId,
+                        column: x => x.UserId,
                         principalTable: "settings_accounts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -45,9 +45,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 column: "DataEncryptionKeyId");
 
             migrationBuilder.CreateIndex(
-                name: "ix_stored_secrets_owner_name",
+                name: "ix_stored_secrets_user_name",
                 table: "stored_secrets",
-                columns: new[] { "OwnerId", "Name" },
+                columns: new[] { "UserId", "Name" },
                 unique: true);
         }
 

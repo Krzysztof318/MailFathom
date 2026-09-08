@@ -27,12 +27,12 @@ public sealed class JobEnqueueStatementTests
     private static readonly DateTimeOffset EnqueuedAt = new(2026, 8, 12, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("account-a"));
 
     private static JobEnqueueRequest Request => JobEnqueueRequest.Create(
         JobIdempotencyKey.Create("account-a/INBOX#1/12345/4711"),
         ClassifyEmailSpamJobPayload.For(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             EmailOccurrenceId.Create(
                 MailAccountId.Create("account-a"),
                 new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
@@ -88,14 +88,14 @@ public sealed class JobEnqueueStatementTests
     }
 
     /// <summary>
-    /// The turn is one spacing past the latest one the same owner's waiting work already holds, which is the whole of
+    /// The turn is one spacing past the latest one the same user's waiting work already holds, which is the whole of
     /// what makes the claim fair: it is what spreads a backlog over the clock instead of leaving every job of it at the
-    /// instant it was queued. The peers are found on the job row's own owner column rather than through a join back to
+    /// instant it was queued. The peers are found on the job row's own user column rather than through a join back to
     /// the account table, so a person with several mailboxes gets one share rather than one per mailbox and the read
     /// stays an index scan over the queue.
     /// </summary>
     [Fact]
-    public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheOwnersLatestWaitingTurn()
+    public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheUsersLatestWaitingTurn()
     {
         // Act
         var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
@@ -106,7 +106,7 @@ public sealed class JobEnqueueStatementTests
             statement.Format,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"waiting.\"{nameof(JobEntity.OwnerId)}\" = ",
+            $"waiting.\"{nameof(JobEntity.UserId)}\" = ",
             statement.Format,
             StringComparison.Ordinal);
         Assert.DoesNotContain("JOIN mailbox_accounts", statement.Format, StringComparison.Ordinal);
@@ -132,12 +132,12 @@ public sealed class JobEnqueueStatementTests
     }
 
     /// <summary>
-    /// Where the owner's work has reached is measured over the states a claim can still take, so a turn is a position
-    /// in a backlog rather than in a history: an owner whose queue has drained starts again at the instant its next job
+    /// Where the user's work has reached is measured over the states a claim can still take, so a turn is a position
+    /// in a backlog rather than in a history: a user whose queue has drained starts again at the instant its next job
     /// is due, which is what stops a burst last week costing it its place today.
     /// </summary>
     [Fact]
-    public void Compose_AnEnqueue_MeasuresTheOwnersWaitingWorkByTheClaimableStatesAlone()
+    public void Compose_AnEnqueue_MeasuresTheUsersWaitingWorkByTheClaimableStatesAlone()
     {
         // Act
         var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);

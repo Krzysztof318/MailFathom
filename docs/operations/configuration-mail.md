@@ -15,7 +15,7 @@ budget or the coordinator loop itself are marked *restart* below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or under a [declared owner](configuration-runtime.md#accounts) | restart |
+| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or under a [declared user](configuration-runtime.md#accounts) | restart |
 | `MailSynchronization:Interval` | TimeSpan | `00:05:00` | 10 s – 1 day; measured end-of-run to start-of-run | restart |
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |
@@ -31,7 +31,7 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:MaxMetadataBatchesPerRun` | int | `10` | 1 – 1000 | reload |
 | `MailSynchronization:MaxContentBytesPerRun` | long | `1073741824` (1 GiB) | 1024 – 1099511627776; how much raw MIME one folder run may fetch before it ends at its checkpoint. Must be at least `MaxRawMimeBytes` | reload |
 | `MailSynchronization:MaxStoredContentBytes` | long | *(none)* | 1024 – `9223372036854775807`; how much storage stored content may occupy before ingestion degrades to metadata only. Unset means no ceiling. Must be at least `MaxRawMimeBytes` | restart |
-| `MailSynchronization:MaxStoredContentBytesPerOwner` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one owner's** mail may occupy before that owner's ingestion degrades to metadata only, leaving every other owner's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. Unset means no per-owner ceiling, which is what a deployment serving one owner wants and what leaves a deployment serving several exposed to one mailbox filling the instance. Must be at least `MaxRawMimeBytes` | restart |
+| `MailSynchronization:MaxStoredContentBytesPerUser` | long | *(none)* | 1024 – `9223372036854775807`; how much stored content **one user's** mail may occupy before that user's ingestion degrades to metadata only, leaving every other user's whole. Counted as what their payloads hold rather than as what the table occupies, so it is not the same quantity as `MaxStoredContentBytes`. Unset means no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one mailbox filling the instance. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxInFlightRawMimeBytes` | long | `134217728` (128 MiB) | 1024 – 4294967296; how much raw MIME every folder work unit together may hold in memory. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxReconciledEmailsPerRun` | int | `500` | 1 – 10000 | reload |
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |
@@ -49,7 +49,7 @@ budget or the coordinator loop itself are marked *restart* below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:AccountId` | string | — | Required; unique within the owner declaring it, after normalization and without regard to case | reload |
+| `…:AccountId` | string | — | Required; unique within the user declaring it, after normalization and without regard to case | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
 | `…:Host` | string | — | Required when synchronization is enabled | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
@@ -162,13 +162,13 @@ a Discover result, which names every account the run read, so startup refuses on
 written as markup, or runs past four thousand characters — a name a result cannot carry would otherwise start and
 synchronize, and then refuse every question.
 
-**That naming space belongs to the owner, not to the deployment.** An account identifier names one mailbox within the
-owner who declared it, and MailFathom stores it that way — the account row is keyed by the owner and the identifier
+**That naming space belongs to the user, not to the deployment.** An account identifier names one mailbox within the
+user who declared it, and MailFathom stores it that way — the account row is keyed by the user and the identifier
 together — so two people served by one deployment may each call an account `work` and neither reaches the other's mail.
-Startup refuses a *repeat* within one owner, comparing after normalization and without regard to case, by the same rule
-that governs the display names beside it; it has nothing to refuse across two owners. What follows for you is that an
-identifier is only ever quoted with the owner it belongs to: a support question, a log line, or an ad-hoc SQL statement
-that names the identifier alone names a mailbox per owner rather than a mailbox.
+Startup refuses a *repeat* within one user, comparing after normalization and without regard to case, by the same rule
+that governs the display names beside it; it has nothing to refuse across two users. What follows for you is that an
+identifier is only ever quoted with the user it belongs to: a support question, a log line, or an ad-hoc SQL statement
+that names the identifier alone names a mailbox per user rather than a mailbox.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
@@ -244,7 +244,7 @@ relocated into a folder nothing mirrors.
 
 ### Contact collection
 
-`…:ContactCollection` is per account and off unless an owner switches it on, because what it produces is derived
+`…:ContactCollection` is per account and off unless a user switches it on, because what it produces is derived
 personal data about people who never dealt with MailFathom: an instance nobody asked never accumulates a contact book,
 and a deployment reading a work mailbox and a personal one decides separately for each. Switched on, the account records
 the author of mail arriving in its ordinary folders and the primary recipients of mail in the folder mapped as `Sent`,
@@ -253,7 +253,7 @@ as those messages are synchronized.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:ContactCollection:Enabled` | bool | `false` | Whether this account records the people it corresponds with as its mail is synchronized | reload; the next folder run collects under it |
-| `…:ContactCollection:MinimumMessagesFromSender` | int | `2` | 1 – 100; how many messages an address must have written to this account before the person behind it is recorded. One records every admitted sender on first sight. It bounds only that direction — an address the owner wrote to is recorded at once | reload; the next folder run |
+| `…:ContactCollection:MinimumMessagesFromSender` | int | `2` | 1 – 100; how many messages an address must have written to this account before the person behind it is recorded. One records every admitted sender on first sight. It bounds only that direction — an address the user wrote to is recorded at once | reload; the next folder run |
 | `…:ContactCollection:MaxContactsPerRun` | int | `50` | 0 – 1000; how many contacts one folder run may record, bounded per folder exactly as `MaxContentBytesPerRun` is, so an account synchronizing several folders may reach it once for each. Zero records nobody while leaving collection on | reload; the run after the one in flight |
 | `…:ContactCollection:Exclusions` | list | empty | The addresses and domains this account never records a contact from; each entry below | reload; the next folder run |
 | `…:ContactCollection:Exclusions:<n>:Domain` | string | unset | A domain this account collects nobody at. Exactly one of `Domain` and `AddressPattern` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
@@ -261,12 +261,12 @@ as those messages are synchronized.
 | `…:ContactCollection:Exclusions:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on a pattern entry, which writes its own | reload |
 
 The two numbers bound who is written down and how fast. `MinimumMessagesFromSender` is the evidence an address that
-wrote to the owner needs — two by default, because one message from a stranger is not correspondence — and it says
-nothing about an address the owner wrote to, which is recorded on first sight. `MaxContactsPerRun` paces the first
+wrote to the user needs — two by default, because one message from a stranger is not correspondence — and it says
+nothing about an address the user wrote to, which is recorded on first sight. `MaxContactsPerRun` paces the first
 synchronization of a mailbox holding years of mail; a run that reaches it leaves the rest for the next run rather than
 losing them.
 
-`Exclusions` is the owner's own list. The structural half needs no entry and cannot be switched off: a message a mailing
+`Exclusions` is the user's own list. The structural half needs no entry and cannot be switched off: a message a mailing
 list or an automatic responder stamped as its own, a role mailbox, a `no-reply` name, a list-administration address, and
 every mailbox a configured account's own user name names. An entry naming both a domain and a pattern, or neither, or
 asking to include subdomains on a pattern, or writing a pattern that selects on nothing but the at-sign every address
@@ -280,7 +280,7 @@ the start of an account this feature never touches. That is the deliberate half 
 is the bound switching collection on tomorrow adopts, and startup is the last moment anybody is looking at it.
 
 [Contacts § Collecting contacts from arriving mail](../features/contacts.md#collecting-contacts-from-arriving-mail)
-states which header each folder contributes, what is never collected, and how an owner takes back everything a
+states which header each folder contributes, what is never collected, and how a user takes back everything a
 deployment collected.
 
 ### OAuth — `…:OAuth`
@@ -337,7 +337,7 @@ what it does not.
 
 **`Enabled` is off on every account of every deployment, and turning it on is the act that makes sending possible.** An
 installation upgrading into a release that can send therefore does not thereby become able to: the release meets a
-configuration that never asked for the capability. It is per account rather than per deployment because an owner may
+configuration that never asked for the capability. It is per account rather than per deployment because a user may
 want one identity able to write and another purely archival, and it is separate from `Host` because the two are
 different decisions — an endpoint provisioned before anybody decided to use it is an ordinary shape, while an account
 permitted to send with nowhere to submit is a permission that could never be acted on, which startup refuses naming the
@@ -345,7 +345,7 @@ account. What an enabled account may then write, and how much of it, is
 [`MailDelivery`](#maildelivery) below; whether this installation may send at all is
 [`Deployment:ReadOnly`](configuration-runtime.md#deployment).
 
-`FileSentCopy` is on because a submission server files nothing: without it the owner's own mail client shows a Sent
+`FileSentCopy` is on because a submission server files nothing: without it the user's own mail client shows a Sent
 folder that is empty however much this account sends. Turn it off for a provider that files the copy itself, which is
 the one case leaving it on produces two copies of every message.
 [The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states why
@@ -518,7 +518,7 @@ retained personal data for a bound whose whole purpose is to stop a loop within 
 | `MailDelivery:UnvouchedRecipients` | enum | `Admit` | `Admit` or `Refuse` | restart |
 
 `Refuse` narrows an authored send to people this deployment already holds a record of: an address in the contact book
-of the owner the send is authored for, or one an account of this installation sends as. An address that is none of those and that the **caller itself named**
+of the user the send is authored for, or one an account of this installation sends as. An address that is none of those and that the **caller itself named**
 refuses the whole message, under `53007`, which names neither the address nor how many were refused.
 
 Only what the caller named is judged. A recipient this deployment derived — whoever a reply answers, whoever a

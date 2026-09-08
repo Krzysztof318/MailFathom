@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <summary>One secret MailFathom stores sealed behind a database reference.</summary>
 /// <remarks>
 /// The row carries no concurrency token because replacing material is a last-writer rotation over the stable
-/// owner-and-name identity. Concurrent first writes converge through that identity's unique constraint and a
+/// user-and-name identity. Concurrent first writes converge through that identity's unique constraint and a
 /// fresh-session retry rather than by rejecting a later version.
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "EF Core materializes this entity through the DbSet and model metadata.")]
@@ -33,8 +33,8 @@ internal sealed class StoredSecretEntity
     /// <summary>The stable identifier carried by a <c>database:</c> reference.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>The owner whose erasure cascades to this material.</summary>
-    public Guid OwnerId { get; set; }
+    /// <summary>The user whose erasure cascades to this material.</summary>
+    public Guid UserId { get; set; }
 
     /// <summary>The safe name used as the rotation identity and authenticated into the ciphertext.</summary>
     public required string Name { get; set; }
@@ -45,14 +45,14 @@ internal sealed class StoredSecretEntity
     /// <summary>The key-ring identifier needed to open this sealed value and inventory key retirement.</summary>
     public required string DataEncryptionKeyId { get; set; }
 
-    /// <summary>When this owner-and-name identity was first stored.</summary>
+    /// <summary>When this user-and-name identity was first stored.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>When its material was last replaced or re-sealed.</summary>
     public DateTimeOffset UpdatedAt { get; set; }
 
-    /// <summary>The owner row that gives this material its lifetime.</summary>
-    public OwnerAccountEntity Owner { get; set; } = null!;
+    /// <summary>The user row that gives this material its lifetime.</summary>
+    public UserAccountEntity User { get; set; } = null!;
 
     /// <summary>The smallest valid sealed value: the fixed envelope and at least one material byte.</summary>
     internal static int MinimumSealedMaterialByteCount => AesGcmEnvelopeHeaderByteCount + 1;

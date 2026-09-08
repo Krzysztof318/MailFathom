@@ -63,7 +63,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "ix_stored_emails_awaiting_attachment_text",
                 table: "stored_emails",
-                columns: new[] { "OwnerId", "MailboxAccountId", "Id" },
+                columns: new[] { "UserId", "MailboxAccountId", "Id" },
                 filter: "\"AttachmentTextDerivedAt\" IS NULL AND \"AttachmentCount\" > 0");
 
             migrationBuilder.CreateIndex(

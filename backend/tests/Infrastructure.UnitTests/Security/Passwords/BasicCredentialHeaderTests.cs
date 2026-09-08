@@ -15,7 +15,7 @@ public sealed class BasicCredentialHeaderTests
     public void TryRead_ACredentialWrittenAsRfc7617Describes_ReadsBothHalves()
     {
         // Act
-        var read = BasicCredentialHeader.TryRead(Header("owner", "correcthorsebattery"), out var credential);
+        var read = BasicCredentialHeader.TryRead(Header("user", "correcthorsebattery"), out var credential);
 
         // Assert
         Assert.True(read);
@@ -23,7 +23,7 @@ public sealed class BasicCredentialHeaderTests
 
         using (credential)
         {
-            Assert.Equal("owner", credential.UserId);
+            Assert.Equal("user", credential.UserId);
             Assert.True(credential.Password.SequenceEqual("correcthorsebattery"));
         }
     }
@@ -37,7 +37,7 @@ public sealed class BasicCredentialHeaderTests
     public void TryRead_TheSchemeInAnyCase_ReadsTheCredential(string scheme)
     {
         // Arrange
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("owner:correcthorsebattery"));
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("user:correcthorsebattery"));
 
         // Act
         var read = BasicCredentialHeader.TryRead($"{scheme} {encoded}", out var credential);
@@ -53,7 +53,7 @@ public sealed class BasicCredentialHeaderTests
     public void TryRead_APasswordCarryingColons_SplitsAtTheFirstOneSoTheUserIdIsUnchanged()
     {
         // Act
-        var read = BasicCredentialHeader.TryRead(Header("owner", "a:b:c"), out var credential);
+        var read = BasicCredentialHeader.TryRead(Header("user", "a:b:c"), out var credential);
 
         // Assert
         Assert.True(read);
@@ -61,7 +61,7 @@ public sealed class BasicCredentialHeaderTests
 
         using (credential)
         {
-            Assert.Equal("owner", credential.UserId);
+            Assert.Equal("user", credential.UserId);
             Assert.True(credential.Password.SequenceEqual("a:b:c"));
         }
     }
@@ -74,7 +74,7 @@ public sealed class BasicCredentialHeaderTests
         const string Password = "zażółć-gęślą-jaźń";
 
         // Act
-        var read = BasicCredentialHeader.TryRead(Header("owner", Password), out var credential);
+        var read = BasicCredentialHeader.TryRead(Header("user", Password), out var credential);
 
         // Assert
         Assert.True(read);
@@ -91,7 +91,7 @@ public sealed class BasicCredentialHeaderTests
     public void TryRead_ACredentialWithAnEmptyPassword_IsReadSoItIsRefusedByComparisonRatherThanBySyntax()
     {
         // Act
-        var read = BasicCredentialHeader.TryRead(Header("owner", string.Empty), out var credential);
+        var read = BasicCredentialHeader.TryRead(Header("user", string.Empty), out var credential);
 
         // Assert
         Assert.True(read);
@@ -99,7 +99,7 @@ public sealed class BasicCredentialHeaderTests
 
         using (credential)
         {
-            Assert.Equal("owner", credential.UserId);
+            Assert.Equal("user", credential.UserId);
             Assert.True(credential.Password.IsEmpty);
         }
     }
@@ -132,7 +132,7 @@ public sealed class BasicCredentialHeaderTests
     public void TryRead_ADecodableValueCarryingNoColon_IsRefused()
     {
         // Arrange
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("ownerwithoutaseparator"));
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("userwithoutaseparator"));
 
         // Act
         var read = BasicCredentialHeader.TryRead($"Basic {encoded}", out _);
@@ -175,7 +175,7 @@ public sealed class BasicCredentialHeaderTests
     {
         // Arrange
         var password = new string('p', 1_400);
-        var headerValue = Header("owner", password);
+        var headerValue = Header("user", password);
 
         // Act
         var read = BasicCredentialHeader.TryRead(headerValue, out var credential);
@@ -196,7 +196,7 @@ public sealed class BasicCredentialHeaderTests
     public void Dispose_AReadCredential_ClearsThePasswordItWasHolding()
     {
         // Arrange
-        BasicCredentialHeader.TryRead(Header("owner", "correcthorsebattery"), out var credential);
+        BasicCredentialHeader.TryRead(Header("user", "correcthorsebattery"), out var credential);
 
         // Act
         credential!.Dispose();
@@ -210,13 +210,13 @@ public sealed class BasicCredentialHeaderTests
     public void ToString_AReadCredential_ReportsNeitherHalf()
     {
         // Arrange
-        BasicCredentialHeader.TryRead(Header("owner", "correcthorsebattery"), out var credential);
+        BasicCredentialHeader.TryRead(Header("user", "correcthorsebattery"), out var credential);
 
         // Act
         var rendered = credential!.ToString();
 
         // Assert
-        Assert.DoesNotContain("owner", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("user", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("correcthorsebattery", rendered, StringComparison.Ordinal);
         credential.Dispose();
     }

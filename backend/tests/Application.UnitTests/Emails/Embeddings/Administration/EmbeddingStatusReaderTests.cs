@@ -110,7 +110,7 @@ public sealed class EmbeddingStatusReaderTests
         var world = CreateWorld(maxInputCharactersPerPeriod: 100_000);
         world.ProviderHealth.Read(AiProviderRole.Embedding).Returns(
             new AiProviderHealth(AiProviderRole.Embedding, AiProviderHealthState.Misconfigured, Now));
-        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), SyntheticMailOwner.Deployment, 40_000);
+        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), SyntheticMailUser.Deployment, 40_000);
 
         // Act
         var status = await world.Reader.ReadAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken);

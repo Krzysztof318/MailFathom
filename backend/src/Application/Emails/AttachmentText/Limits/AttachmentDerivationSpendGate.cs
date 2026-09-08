@@ -15,9 +15,9 @@ namespace MailFathom.Application.Emails.AttachmentText.Limits;
 /// writer another.
 /// </para>
 /// <para>
-/// Two readings exist because two callers ask different questions. A pass reading somebody's mail asks where that owner
+/// Two readings exist because two callers ask different questions. A pass reading somebody's mail asks where that user
 /// stands against both ceilings; an administrative surface acts for nobody's mail and asks where the deployment stands,
-/// which is the only question a caller with no owner can be answered.
+/// which is the only question a caller with no user can be answered.
 /// </para>
 /// </remarks>
 public sealed class AttachmentDerivationSpendGate
@@ -45,35 +45,35 @@ public sealed class AttachmentDerivationSpendGate
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reads where one owner stands on one step in the current period, which is what a pass consults before it reads.</summary>
+    /// <summary>Reads where one user stands on one step in the current period, which is what a pass consults before it reads.</summary>
     /// <param name="derivationStep">The step about to be taken.</param>
-    /// <param name="owner">The owner whose mail is about to be read.</param>
+    /// <param name="user">The user whose mail is about to be read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The period, what the owner and the deployment have consumed, and what each still admits.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <returns>The period, what the user and the deployment have consumed, and what each still admits.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     public async Task<AttachmentDerivationAdmission> ReadCurrentPeriodForAsync(
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
-            throw new ArgumentException("Attachment derivation is charged to a named owner.", nameof(owner));
+            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
         }
 
         var periodStart = this.CurrentPeriodStart();
-        var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, owner, cancellationToken);
+        var consumed = await this.ledger.ReadConsumedAsync(periodStart, derivationStep, user, cancellationToken);
 
         return new AttachmentDerivationAdmission(
-            this.PeriodOf(derivationStep, periodStart, consumed.OwnerConsumedUnitCount, this.budget.CeilingFor(derivationStep, forOwner: true)),
-            this.PeriodOf(derivationStep, periodStart, consumed.DeploymentConsumedUnitCount, this.budget.CeilingFor(derivationStep, forOwner: false)));
+            this.PeriodOf(derivationStep, periodStart, consumed.UserConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: true)),
+            this.PeriodOf(derivationStep, periodStart, consumed.DeploymentConsumedUnitCount, this.budget.CeilingFor(derivationStep, forUser: false)));
     }
 
-    /// <summary>Reads where the deployment stands on one step, whatever any one owner has consumed of it.</summary>
+    /// <summary>Reads where the deployment stands on one step, whatever any one user has consumed of it.</summary>
     /// <param name="derivationStep">The step being reported on.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The period, its consumption across every owner, and what it still admits.</returns>
+    /// <returns>The period, its consumption across every user, and what it still admits.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// This is the reading an activation weighs its estimate against, so it answers for a deployment with no ceiling
@@ -86,18 +86,18 @@ public sealed class AttachmentDerivationSpendGate
         var periodStart = this.CurrentPeriodStart();
         var consumed = await this.ledger.ReadDeploymentConsumedAsync(periodStart, derivationStep, cancellationToken);
 
-        return this.PeriodOf(derivationStep, periodStart, consumed, this.budget.CeilingFor(derivationStep, forOwner: false));
+        return this.PeriodOf(derivationStep, periodStart, consumed, this.budget.CeilingFor(derivationStep, forUser: false));
     }
 
-    /// <summary>Charges what reading one message consumed to the period, step, and owner it happened for.</summary>
+    /// <summary>Charges what reading one message consumed to the period, step, and user it happened for.</summary>
     /// <param name="session">The session committing the readings that work produced.</param>
     /// <param name="derivationStep">The step the units belong to.</param>
-    /// <param name="owner">The owner whose mail was read.</param>
+    /// <param name="user">The user whose mail was read.</param>
     /// <param name="unitCount">What the work consumed, in that step's own unit.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the charge has been issued inside the caller's transaction.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
     /// <remarks>
     /// A deployment with no ceiling is charged exactly as one with a ceiling is. The count is what an operator watches
@@ -107,20 +107,20 @@ public sealed class AttachmentDerivationSpendGate
     public Task RecordSpendAsync(
         IPersistenceSession session,
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         long unitCount,
         CancellationToken cancellationToken)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
-            throw new ArgumentException("Attachment derivation is charged to a named owner.", nameof(owner));
+            throw new ArgumentException("Attachment derivation is charged to a named user.", nameof(user));
         }
 
         return this.ledger.RecordSpendAsync(
             session,
             this.CurrentPeriodStart(),
             derivationStep,
-            owner,
+            user,
             unitCount,
             cancellationToken);
     }

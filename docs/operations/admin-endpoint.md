@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/OwnerSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Owner*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Configuration/UserSettings/Administration/StoredSecretAdministration.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/User*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/AdminTransportSecurityExtensions.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -55,7 +55,7 @@ policy, and a policy consults only its own schemes.
 `ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them — and every one of them is this
 endpoint's own. The one method the other two surfaces accept and this one refuses is
 [a password](mcp-endpoint.md#passwords): startup names the section rather than starting, because this surface answers
-for the deployment rather than for a person and a credential naming one owner would have nothing here to act for. A misspelled key fails startup rather than binding a default. Each method is documented once, under
+for the deployment rather than for a person and a credential naming one user would have nothing here to act for. A misspelled key fails startup rather than binding a default. Each method is documented once, under
 [the MCP endpoint](mcp-endpoint.md#authentication): what a key is, what a
 [key pair](mcp-endpoint.md#key-pairs) is and what a client signs to present one, and what a token must prove. The
 difference here is the audience an assertion names — `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` — which is
@@ -201,13 +201,13 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/content/release` | `mailfathom.admin.erase` | Frees one bounded batch of those copies, leaving the object the only place that mail is held. Refused with `409` while any payload is still waiting to be carried. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
-| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
+| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's user asserted. |
 | `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address, in whichever casing the book recorded it. |
 | `GET /api/admin/contacts/{id}` | `mailfathom.admin.audit.read` | Reads one contact by the identity the book gave it. |
 | `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact to the whole record the body states. |
-| `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Takes on a contact the deployment collected, so it becomes one the owner asserted. |
+| `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Takes on a contact the deployment collected, so it becomes one the user asserted. |
 | `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
-| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases every contact this deployment collected from arriving mail, leaving every one its owner asserted. **This cannot be undone either.** |
+| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases every contact this deployment collected from arriving mail, leaving every one its user asserted. **This cannot be undone either.** |
 | `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the book holds about one person, as of the instant it was taken. |
 | `GET /api/admin/configuration` | `mailfathom.admin.read` | Reports the settings at or beneath a path as this deployment reads them, each with the layer that decided it, and the persisted version they were composed over. Secret-bearing values read back as the redaction marker. This is what [`mfctl config get` and `mfctl config show`](#reading-and-changing-the-deployments-own-configuration) ask. |
 | `POST /api/admin/configuration` | `mailfathom.admin.configuration.write` | Applies keyed changes to the persisted configuration document, together or not at all, over the version the body states. |
@@ -215,28 +215,28 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
-| `GET /api/admin/owners` | `mailfathom.admin.read` | Reads [the owners this deployment holds records for](#owners-and-their-records), each with the label it tells them apart by, whether their mail accounts come from their own record or still from a configuration source, whether a configuration source declares them at all, and whether the running process serves them. It is what an owner or credential command reads before it acts, so that a deployment serving one person needs no `--owner`. |
-| `POST /api/admin/owners` | `mailfathom.admin.configuration.write` | Records an owner this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second owner while an owner-facing endpoint admits a caller who names nobody, a label another owner already carries, and a roster already at its bound. |
-| `PUT /api/admin/owners/{ownerId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the owner is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another owner carries, naming what to change, and answers `404` for an owner this deployment holds no record for, as every other owner-scoped route does. |
-| `DELETE /api/admin/owners/{ownerId}` | `mailfathom.admin.erase` | Erases the owner and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** An owner this deployment does not hold is reported as nothing erased rather than as a refusal. An owner a configuration source declares is refused instead, naming the declaration to remove first: the next start would write them back and download their mailboxes again. |
-| `GET /api/admin/owners/{ownerId}/record` | `mailfathom.admin.read` | Hands over one owner's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that owner's mail accounts from. |
-| `POST /api/admin/owners/{ownerId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. |
-| `POST /api/admin/owners/{ownerId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
-| `POST /api/admin/owners/{ownerId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
-| `GET /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that owner would copy out of this deployment's files — the configuration path behind their mail accounts, each account it would move, and each classification and scanning setting it would commit with them — and writes nothing. |
-| `POST /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.configuration.write` | Copies those accounts and that posture into the owner's own record and marks the row as theirs. **This is the one route that moves one person's mailboxes out of a deployment's files and into its database.** |
-| `POST /api/admin/owners/{ownerId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that owner rotates the existing row and returns the same reference. It refuses when the owner does not exist or the deployment configures no data-encryption key ring. |
-| `GET /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.read` | Reads one owner's [credentials](#owner-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
-| `POST /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the owner already holds the hundred credentials one owner may. |
-| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
-| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping everything else about it either way. |
-| `DELETE /api/admin/owners/{ownerId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the value it was resolved by. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
+| `GET /api/admin/users` | `mailfathom.admin.read` | Reads [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by, whether their mail accounts come from their own record or still from a configuration source, whether a configuration source declares them at all, and whether the running process serves them. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
+| `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and a roster already at its bound. |
+| `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
+| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. A user a configuration source declares is refused instead, naming the declaration to remove first: the next start would write them back and download their mailboxes again. |
+| `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
+| `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. |
+| `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
+| `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
+| `GET /api/admin/users/{userId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that user would copy out of this deployment's files — the configuration path behind their mail accounts, each account it would move, and each classification and scanning setting it would commit with them — and writes nothing. |
+| `POST /api/admin/users/{userId}/record/adoption` | `mailfathom.admin.configuration.write` | Copies those accounts and that posture into the user's own record and marks the row as theirs. **This is the one route that moves one person's mailboxes out of a deployment's files and into its database.** |
+| `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
+| `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
+| `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the user already holds the hundred credentials one user may. |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
+| `PUT /api/admin/users/{userId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping everything else about it either way. |
+| `DELETE /api/admin/users/{userId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the value it was resolved by. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
 
 **Four of those routes carry a credential in the body**, which is what makes the clear-text warning below matter more
-here than it does for a session probe: the stored-secret route, the refresh-token route, and the two owner-credential
+here than it does for a session probe: the stored-secret route, the refresh-token route, and the two user-credential
 routes that provision a password or replace one.
 
-`POST /api/admin/mailbox/refresh-token` carries a long-lived credential for a named mailbox owner. It refuses, with
+`POST /api/admin/mailbox/refresh-token` carries a long-lived credential for a named mailbox user. It refuses, with
 `400` and a sentence naming what was wrong, an account this deployment does not configure and a body missing either
 field; a second grant for the same account replaces the first rather than adding to it. It reads at most 16 KB, which is far more than any authorization
 server's refresh token and far less than the server's own default. It answers with no body at all, so nothing it stores
@@ -498,10 +498,10 @@ refusal names the key: `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` for t
 `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` for the calls, each with zero declaring no ceiling at all. A
 deployment that reads no attachment reports nothing outstanding and is never refused by this.
 
-The ceiling weighed here is the deployment's alone, and `Embeddings:MaxInputCharactersPerPeriodPerOwner` is deliberately
-absent from this reading. An activation reindexes every owner's mail under one profile — the profile is what a stored
-vector means, so it is deployment-wide — and there is no owner for this estimate to be weighed against. What the
-per-owner ceiling then does to the reindex is what it does to any other work: the walk steps past an owner who has spent
+The ceiling weighed here is the deployment's alone, and `Embeddings:MaxInputCharactersPerPeriodPerUser` is deliberately
+absent from this reading. An activation reindexes every user's mail under one profile — the profile is what a stored
+vector means, so it is deployment-wide — and there is no user for this estimate to be weighed against. What the
+per-user ceiling then does to the reindex is what it does to any other work: the walk steps past a user who has spent
 their share and keeps embedding everybody else's, until the period rolls over.
 
 **`mfctl embedding cancel-reindex` stops a run you have changed your mind about.** The generation being built is
@@ -611,14 +611,14 @@ to name and the rule's own words are what an operator has to correct.
 
 ### Classifying the mail you already have, and reading what was concluded
 
-Three commands, and none of *them* writes a setting: they apply the account owner's classification settings to the mail
+Three commands, and none of *them* writes a setting: they apply the account user's classification settings to the mail
 this deployment already holds for them, and read what was decided. Whether mail is classified at all, what a scanner is
-judged by, and what happens to junk are that owner's to decide, and each is read from whichever source their record's
+judged by, and what happens to junk are that user's to decide, and each is read from whichever source their record's
 marker names — the deployment's [`SpamClassification`](configuration-ai.md#spamclassification) section while a
 configuration source still reaches them, and their own document once it has been written. The first is changeable
 without a restart through [reading and changing the
 configuration](#reading-and-changing-the-deployments-own-configuration) and the second through
-[the owner record routes](#owners-and-their-records); neither is reached through these three. [Spam
+[the user record routes](#users-and-their-records); neither is reached through these three. [Spam
 classification](../features/spam-classification.md) is what the feature does.
 
 **`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
@@ -634,7 +634,7 @@ Progress:  0 scored, 0 already decided, 0 unreadable
 The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
 ```
 
-`--folder` narrows the walk and is repeatable; it narrows *within* that owner's own scope, and a folder outside it is
+`--folder` narrows the walk and is repeatable; it narrows *within* that user's own scope, and a folder outside it is
 refused, because a run over a folder nobody classifies would read the whole of it and record nothing. `--rescore` scores mail again even where its verdict was already reached under the settings now in force,
 which is the one form of the run that costs a scanner call per message however recently it was decided.
 
@@ -732,7 +732,7 @@ keeps the failure that ended it, and goes on holding the identity that stops the
 
 Five routes, and they are two readings and two decisions. Nothing else makes a delivery problem visible from outside the
 database: a message that will not leave is claimed by nobody, delays nothing, and produces no reply anybody sees, so
-the first an owner would otherwise hear of it is a recipient asking why they never got an answer.
+the first a user would otherwise hear of it is a recipient asking why they never got an answer.
 
 `GET /api/admin/outbox/summary` is the cheapest of the five and the one safe to leave on a screen: one count per stage,
 naming no message. The listing beside it is deployment-wide unless a filter narrows it, and serves one bounded,
@@ -773,7 +773,7 @@ A stage is the whole of what a send's position means, and each of the five calls
 | `Refused` | The message will not be offered again, and the failure that ended it is on the record. | Read what refused it. Offering it again is possible and needs the refusal restated. |
 | `Cancelled` | The send was withdrawn before delivery, and nothing was transmitted on its behalf. | Nothing. |
 
-**The listing names no recipient and no subject.** A page of an outbox is otherwise a page of who this owner writes to
+**The listing names no recipient and no subject.** A page of an outbox is otherwise a page of who this user writes to
 and when, a page at a time, and a terminal is exactly where such a page ends up in a screenshot. Who one message was
 for is read with `GET /api/admin/outbox/{id}`, which answers about a send somebody already has the identifier of and
 reports each address with what the server said about it — and which is published under
@@ -1029,8 +1029,8 @@ each one cannot be undone from.
 what you recorded about them. The book's own rules — what identifies a person, when two addresses are the same address,
 who may change what — are that page's; this is the command group over them.
 
-A book belongs to one owner, and this surface acts for none: it is the deployment's administrator rather than somebody
-whose mail is being served, so every command here reaches the book of the owner this deployment serves — which is
+A book belongs to one user, and this surface acts for none: it is the deployment's administrator rather than somebody
+whose mail is being served, so every command here reaches the book of the user this deployment serves — which is
 exactly one while mail accounts are declared in configuration.
 
 ```console
@@ -1063,7 +1063,7 @@ Amended:    2026-08-16 09:00:00Z
 operators editing one contact at once are therefore last-writer-wins; an edit racing an erasure is not, and is answered
 as a contact the book does not hold rather than putting the person back.
 
-**A contact the deployment collected is not amended in place.** Collection writes into its own origin and an owner does
+**A contact the deployment collected is not amended in place.** Collection writes into its own origin and a user does
 not edit those records directly — `contact promote` is the act of taking one on, after which every other command here
 works on it. Amending one without promoting it is refused, and the refusal says so. An agent over the MCP endpoint
 reaches the same act as `promote_contact`, under the writing grant it already holds.
@@ -1164,99 +1164,99 @@ configuration section reports the marker, with the path and the source still nam
 because what an operator asks this surface is where a setting is decided. An environment variable that does name a
 MailFathom setting, which is every override written for this deployment on purpose, is reported in full.
 
-### Owners and their records
+### Users and their records
 
-An owner is a person this deployment reads mail for, and a record is what it reads for them: the mailboxes, the
+A user is a person this deployment reads mail for, and a record is what it reads for them: the mailboxes, the
 credentials each one is reached with, and the settings that are theirs rather than the deployment's. A first deployment
 declares that in its own configuration files and never comes here at all — one person, one section, nothing to
 administer. These routes are what a deployment reaches for when that stops being true: a second person to serve, or a
 first person whose mailboxes should be changed without editing a file.
 
 **Every route here is administrative, and the listing exists here and nowhere else.** [The client
-surface](client-endpoint.md#the-record-routes) publishes the signed-in owner's own record and nothing beside it, so
+surface](client-endpoint.md#the-record-routes) publishes the signed-in user's own record and nothing beside it, so
 nobody this deployment serves can be served a catalogue of who else it serves. What that costs an administrator is
-naming the owner in every route; what it buys is that an identifier copied out of the wrong listing answers that no
-such owner exists rather than editing somebody else's mailboxes.
+naming the user in every route; what it buys is that an identifier copied out of the wrong listing answers that no
+such user exists rather than editing somebody else's mailboxes.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl owner list` | Reads who this deployment holds, where each one's mail accounts come from, and whether the running process serves them |
-| `mfctl owner add --display-name <name>` | Records an owner this deployment did not hold, and reports the identifier they were minted under |
-| `mfctl owner show` | Reads one owner's record as this deployment holds it, secrets redacted |
-| `mfctl owner rename --display-name <name>` | Replaces the label that owner is told apart by |
-| `mfctl owner account add --from-file <path>` | Declares one more mailbox in that record |
-| `mfctl owner account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
-| `mfctl owner adopt` | Moves that owner's mail accounts out of this deployment's files and into their own record |
-| `mfctl owner remove` | Erases the owner and every message this deployment holds for them, which cannot be undone |
+| `mfctl user list` | Reads who this deployment holds, where each one's mail accounts come from, and whether the running process serves them |
+| `mfctl user add --display-name <name>` | Records a user this deployment did not hold, and reports the identifier they were minted under |
+| `mfctl user show` | Reads one user's record as this deployment holds it, secrets redacted |
+| `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
+| `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
+| `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
+| `mfctl user adopt` | Moves that user's mail accounts out of this deployment's files and into their own record |
+| `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
 
-Every command but `list` and `add` takes `--owner`, and none of them needs it on a deployment holding one owner,
-exactly as the credential commands below: the command reads the roster, acts on the single owner there is, and refuses
+Every command but `list` and `add` takes `--user`, and none of them needs it on a deployment holding one user,
+exactly as the credential commands below: the command reads the roster, acts on the single user there is, and refuses
 rather than guessing where there are several — naming the identifiers to choose from, so the refusal is where an
 operator reads the one to pass.
 
-**An owner is minted with an identifier that says nothing about them.** It is a version 4 UUID, drawn at random rather
+**A user is minted with an identifier that says nothing about them.** It is a version 4 UUID, drawn at random rather
 than derived from a name, an address, or the moment it was recorded, so an identifier appearing in a URL, a log line, or
 a support conversation discloses neither who the person is nor when this deployment began serving them. The display name
 is what an administrator reads them by; it has to be unique across the deployment, so that two people are never told
 apart by an identifier alone.
 
-**The label may change and the identifier may not.** `mfctl owner rename` replaces one, and nothing is keyed by it — no mail
+**The label may change and the identifier may not.** `mfctl user rename` replaces one, and nothing is keyed by it — no mail
 account, stored message, or job hangs on a label — so the rename moves nothing and asks nothing before it commits.
-An owner a configuration file declares is relabelled by that file at every start, so a rename written here for one of
+A user a configuration file declares is relabelled by that file at every start, so a rename written here for one of
 them lasts until the next restart, and the command says so rather than reporting a change the deployment undoes:
 
 ```console
-$ mfctl owner rename --display-name Alexandra
-Owner 3f1d... is now labelled Alexandra.
-Notice: A configuration source declares this owner, and a start reads their label from it, so this one lasts until the
+$ mfctl user rename --display-name Alexandra
+User 3f1d... is now labelled Alexandra.
+Notice: A configuration source declares this user, and a start reads their label from it, so this one lasts until the
 deployment is restarted. Change the label in the declaration to keep it.
 ```
 
-That is why the command reads the roster before it writes, whether or not `--owner` was passed — the roster is where a
+That is why the command reads the roster before it writes, whether or not `--user` was passed — the roster is where a
 declaration is reported, and [permissions](permissions.md#which-administrative-route-each-name-covers) lists it among
 the commands that therefore need `mailfathom.admin.read` beside their own name. The identifier is the opposite case, and
 [configuration sources](configuration-sources.md#the-identifier-is-yours-to-generate) holds what changing one would cost.
 
-**An owner a configuration source declares cannot be erased.** `mfctl owner remove` refuses one, naming the declaration
-to remove first, because the next start reconciles the file against the roster and writes back every declared owner it
+**A user a configuration source declares cannot be erased.** `mfctl user remove` refuses one, naming the declaration
+to remove first, because the next start reconciles the file against the roster and writes back every declared user it
 no longer holds — under the identifier the declaration carries and with the mail accounts it supplies. The erasure would
 run, the mail would go, and the person would be recreated with their mailboxes downloaded again, which is a deletion
 request answered worse than one refused. Remove them from the file — or from `MailSynchronization:Accounts`, where a
-deployment that declares no owners supplies its sole owner's mailboxes — and ask again.
+deployment that declares no users supplies its sole user's mailboxes — and ask again.
 
-**A second owner is refused while an owner-facing endpoint authenticates nobody.** A deployment serving one person may
+**A second user is refused while a user-facing endpoint authenticates nobody.** A deployment serving one person may
 leave the MCP endpoint open, because there is only one answer to whose mail a caller is asking about. Recording a second
 person makes that question unanswerable, so the refusal names the endpoints to correct — require a credential on each of
 them, or switch them off — rather than letting the deployment reach a state in which one caller's request would be
 answered out of another person's mailbox. Requiring one is the whole of the correction: every credential these two
-surfaces admit is a record naming the owner it belongs to, whichever method presents it. The administrative endpoint is
+surfaces admit is a record naming the user it belongs to, whichever method presents it. The administrative endpoint is
 deliberately not part of that check: it is the surface an operator is holding while they correct the others, and its
-credentials never name an owner in the first place.
+credentials never name a user in the first place.
 
 That leaves the reads with nobody to act for on such a deployment. The contact book is read for one person, and an
-administrator's credential names no owner, which leaves the deployment to supply one — which it can do only where it
-holds a single owner. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
-been answered, rather than reporting the deployment as broken. Every route that names the owner in its own path is
+administrator's credential names no user, which leaves the deployment to supply one — which it can do only where it
+holds a single user. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
+been answered, rather than reporting the deployment as broken. Every route that names the user in its own path is
 unaffected, which is every route in the table above, and so is every mailbox read: which accounts a caller owns is
-resolved from the owner each served account carries rather than from a sole one.
+resolved from the user each served account carries rather than from a sole one.
 
 The attachment download the client endpoint serves is in the first group rather than the second. Its capability is a
-signed ticket rather than a credential, so nothing in the URL names an owner and the deployment supplies one; on a
-deployment serving several it therefore answers `409` instead of the file. Recording the owner in the ticket is what
+signed ticket rather than a credential, so nothing in the URL names a user and the deployment supplies one; on a
+deployment serving several it therefore answers `409` instead of the file. Recording the user in the ticket is what
 ends that, and it changes the capability's own format.
 
-**Adoption is what moves an owner off this deployment's files, and nothing else does.** Until then that owner's mail
+**Adoption is what moves a user off this deployment's files, and nothing else does.** Until then that user's mail
 accounts are read from a configuration source on every start, and a write to their record is refused rather than
 committed — because committing it would leave two answers to which mailboxes this deployment reads, and the file would
 win at the next restart. The refusal names the command to run:
 
 ```console
-$ mfctl owner account add --from-file work-mailbox.json
-This owner's mail accounts are supplied by a configuration source, so their record is empty and a change written into
-it would leave them served from less than the file supplies. Run 'mfctl owner adopt' to move them into their own record
+$ mfctl user account add --from-file work-mailbox.json
+This user's mail accounts are supplied by a configuration source, so their record is empty and a change written into
+it would leave them served from less than the file supplies. Run 'mfctl user adopt' to move them into their own record
 first; every change afterwards is an ordinary one.
 
-$ mfctl owner adopt
+$ mfctl user adopt
 Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
   work (Work mailbox)
   family (Family mailbox)
@@ -1265,25 +1265,25 @@ It would also commit this deployment's spam classification posture into their re
 their junk from then on:
   SpamClassification:Actions:MoveToJunkFolder = true
   SpamClassification:Enabled = true
-Move these 2 mail accounts into this owner's record, so the configuration stops deciding them? [y/N]
+Move these 2 mail accounts into this user's record, so the configuration stops deciding them? [y/N]
 ```
 
 The preview is read from the deployment and the adoption is a separate request, so what an operator agrees to is what
 the deployment reports rather than what the command guessed; `--yes` is how a scripted adoption states the agreement
-instead. An owner recorded through `mfctl owner add` was never read from a file and needs no adoption, and the preview
+instead. A user recorded through `mfctl user add` was never read from a file and needs no adoption, and the preview
 says so.
 
 **The mailboxes are not the whole of what moves.** An adoption carries the classification posture the deployment's
-`SpamClassification` section decides for that owner into their record beside their accounts, because leaving it behind
+`SpamClassification` section decides for that user into their record beside their accounts, because leaving it behind
 would switch somebody's spam protection off on the strength of an administrative act about where their settings live.
-Only the keys an owner's record may hold travel — the engine settings stay the deployment's — and the preview names
-each one with the value it would take, since two of them file mail and mark it read on that owner's own mail server.
+Only the keys a user's record may hold travel — the engine settings stay the deployment's — and the preview names
+each one with the value it would take, since two of them file mail and mark it read on that user's own mail server.
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to the owner whose record it is, put through the same mail-synchronization validators a start
-applies, and judged for [what it asks about scanning that owner's
-mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) — and a candidate failing any of
+account in it belongs to the user whose record it is, put through the same mail-synchronization validators a start
+applies, and judged for [what it asks about scanning that user's
+mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) — and a candidate failing any of
 those is refused with what to correct rather than committed and discovered at the next restart. A scanning refusal
 names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.
@@ -1295,18 +1295,18 @@ somebody's password. Material supplied through these routes is sealed under the 
 [data-encryption key](secret-provisioning.md) like every other MailFathom secret, and what the record keeps is the
 reference to it.
 
-**A committed owner record is published to the running process.** Recording, adopting, changing, or erasing an owner
+**A committed user record is published to the running process.** Recording, adopting, changing, or erasing a user
 replaces the runtime account snapshot after the database commit. The coordinator stops scheduling the superseded
 account set and starts the new one without a restart. A synchronization run already in flight keeps the snapshot it
 began with and drains before its supervisor ends, so one run never reads two document versions.
 
-### Owner credentials
+### User credentials
 
-Every credential an owner's client presents belongs to a person rather than to a deployment, and these are the routes
+Every credential a user's client presents belongs to a person rather than to a deployment, and these are the routes
 that administer one. A mail-serving endpoint states which methods it accepts and nothing about who holds one — see
 [the MCP endpoint](mcp-endpoint.md#authentication) — so provisioning is what decides who reaches whose mail. There is no
-self-service and no default: whoever administers the deployment provisions the credential and tells the owner what it
-is, which is what keeps an owner from minting a way into anybody's mail, their own included.
+self-service and no default: whoever administers the deployment provisions the credential and tells the user what it
+is, which is what keeps a user from minting a way into anybody's mail, their own included.
 
 **Four methods, one record shape.** Each credential names its method, is resolved by one indexed value, holds the
 permissions it was provisioned with, and can be disabled, rotated, or removed the same way:
@@ -1324,13 +1324,13 @@ Reading and writing are separately granted. A listing says which credentials exi
 given one that can mint a way into a mailbox.
 
 ```console
-$ mfctl credential create --method password --username owner
-Password for 'owner':
-Provisioned password credential 0198f0c4-... for owner 3f1d....
-The owner signs in as 'owner' with the password you typed, which nothing here or in the deployment can report back.
+$ mfctl credential create --method password --username user
+Password for 'user':
+Provisioned password credential 0198f0c4-... for user 3f1d....
+The user signs in as 'user' with the password you typed, which nothing here or in the deployment can report back.
 
 $ mfctl credential create --method api-key --permission mailfathom.mail.read
-Provisioned api-key credential 41d7e2b0-... for owner 3f1d....
+Provisioned api-key credential 41d7e2b0-... for user 3f1d....
 The client presents this key: mfk_...
 It is stored only as a digest, so nothing here or in the deployment can report it again. Copy it now.
 ```
@@ -1344,7 +1344,7 @@ the value.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl credential list` | Reads which credentials an owner holds, by which method, what each grants, whether each still authenticates, and how old its material is |
+| `mfctl credential list` | Reads which credentials a user holds, by which method, what each grants, whether each still authenticates, and how old its material is |
 | `mfctl credential create --method <method> …` | Provisions one, asking for the password or minting the key |
 | `mfctl credential rotate --method <method> --id <credential>` | Replaces what the client presents, which stops the previous material working at that instant |
 | `mfctl credential disable --id <credential>` | Stops it authenticating, keeping everything else about it |
@@ -1360,13 +1360,13 @@ Each method takes what only it needs — `--username` for a password, `--public-
 publishes, and `--no-permissions` provisions one that authenticates and reaches no tool.
 [What a credential may do](permissions.md) is the model behind those names.
 
-Every command takes `--owner` and none of them needs it on a deployment holding one owner: the command reads the roster,
-acts on the single owner there is, and refuses rather than guessing where there are several — naming the identifiers to
+Every command takes `--user` and none of them needs it on a deployment holding one user: the command reads the roster,
+acts on the single user there is, and refuses rather than guessing where there are several — naming the identifiers to
 choose from, so the refusal is where an operator reads the one to pass.
 
 **Rotation replaces material and is refused where there is none to replace.** A `password`, an `api-key`, and a
 `public-key` each have material this deployment holds; an `oauth-subject` mapping has none — what it states is which
-token resolves which owner — so rotating one is refused with what to do instead, which is to provision the mapping the
+token resolves which user — so rotating one is refused with what to do instead, which is to provision the mapping the
 person should act under and delete the old one.
 
 **Disabling and deleting are different acts.** A disabled credential keeps the value it is resolved by claimed, so
@@ -1388,8 +1388,8 @@ username, a fingerprint, and an issuer-and-subject pair are all values somebody 
 each is listed; an API key's digest is a verifier for the key itself, so it is withheld and the listing says so rather
 than leaving the column empty.
 
-Every change to who can reach an owner's mail is written to the audit record: the act, the credential's identifier, its
-method, the owner, the administrator who made it, and when. The value it is resolved by is not among them, and neither is
+Every change to who can reach a user's mail is written to the audit record: the act, the credential's identifier, its
+method, the user, the administrator who made it, and when. The value it is resolved by is not among them, and neither is
 anything derived from its material — an audit record names a credential without naming a way to sign in.
 
 ## Rate limiting
@@ -1906,7 +1906,7 @@ Not signed in. Run 'mfctl login --endpoint https://host:port' first.
 | Windows | `%APPDATA%\MailFathom\credentials.json` |
 
 One entry per profile, keyed by the name rather than by the address, so a deployment that moves port or gains a domain
-keeps its profile instead of becoming a second entry. On Linux the file and its directory are created owner-only, and
+keeps its profile instead of becoming a second entry. On Linux the file and its directory are created user-only, and
 created that way rather than tightened afterwards — a file created readable and corrected later is readable for the
 moment in between.
 
@@ -2071,7 +2071,7 @@ rejected: this file sits beside `credentials.json`, which records every profile'
 none of them would be protecting an address the same directory already holds, at the cost of the field you read the log
 for. Treat the file as you treat that directory, which is to say read it before you paste it anywhere.
 
-It is created readable by its owner alone, on the same terms and for the same reason the credential store is, and it is
+It is created readable by its user alone, on the same terms and for the same reason the credential store is, and it is
 bounded at one mebibyte: past that the current file becomes `mfctl.log.1`, replacing whatever was there, and a new one
 starts — so the log occupies at most two mebibytes however long you administer a deployment for. Every field of variable
 length is bounded as well — `failure`, `fault`, and the `deployment` name you chose — so one record stays one line.

@@ -19,8 +19,8 @@ public sealed class StoredSecretBindingTests
 {
     private const string ActiveKeyId = "2026-08";
 
-    private static readonly MailOwnerId Owner = MailOwnerId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
-    private static readonly MailOwnerId OtherOwner = MailOwnerId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
+    private static readonly MailUserId User = MailUserId.Create(new Guid("7a7ff3f5-29d8-4f4a-a101-e8e59f0fe37d"));
+    private static readonly MailUserId OtherUser = MailUserId.Create(new Guid("1ef57a8c-8af9-4efe-b8e8-f863149eaf45"));
     private static readonly DatabaseSecretReference Reference =
         DatabaseSecretReference.Create(new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
     private static readonly SecretName Name = SecretNamed("primary-password");
@@ -31,7 +31,7 @@ public sealed class StoredSecretBindingTests
     {
         // Arrange
         var encryptor = CreateEncryptor();
-        var binding = StoredSecretBinding.Create(Owner, Reference, Name);
+        var binding = StoredSecretBinding.Create(User, Reference, Name);
         var sealedValue = await encryptor.SealAsync(
             binding,
             Plaintext,
@@ -46,18 +46,18 @@ public sealed class StoredSecretBindingTests
     }
 
     [Fact]
-    public async Task OpenAsync_AStoredSecretMovedToAnotherOwner_DoesNotOpen()
+    public async Task OpenAsync_AStoredSecretMovedToAnotherUser_DoesNotOpen()
     {
         // Arrange
         var encryptor = CreateEncryptor();
         var sealedValue = await encryptor.SealAsync(
-            StoredSecretBinding.Create(Owner, Reference, Name),
+            StoredSecretBinding.Create(User, Reference, Name),
             Plaintext,
             TestContext.Current.CancellationToken);
 
         // Act
         var opening = async () => await encryptor.OpenAsync(
-            StoredSecretBinding.Create(OtherOwner, Reference, Name),
+            StoredSecretBinding.Create(OtherUser, Reference, Name),
             sealedValue,
             TestContext.Current.CancellationToken);
 
@@ -70,7 +70,7 @@ public sealed class StoredSecretBindingTests
     {
         // Arrange
         var encryptor = CreateEncryptor();
-        var binding = StoredSecretBinding.Create(Owner, Reference, Name);
+        var binding = StoredSecretBinding.Create(User, Reference, Name);
         var sealedValue = await encryptor.SealAsync(
             binding,
             Plaintext,

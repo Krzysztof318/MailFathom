@@ -340,7 +340,7 @@ describe('App', () => {
         expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', 'work');
     });
 
-    it('offers every mailbox the owner holds as a scope, beside all of them at once', async () => {
+    it('offers every mailbox the user holds as a scope, beside all of them at once', async () => {
         const twoMailboxes = directory(true, [workAccount, { ...workAccount, id: 'archive', displayName: 'Archive' }]);
 
         renderApp(servedFrom, heldCredential, deploymentAnswering(twoMailboxes));

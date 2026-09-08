@@ -247,8 +247,8 @@ internal static class DocumentFixtures
     /// <returns>The document's octets.</returns>
     /// <remarks>
     /// Assembled by hand because nothing in this repository writes an encrypted PDF and no fixture file is committed.
-    /// The owner and user entries are arbitrary: a reader computes what they would have been for the empty password,
-    /// finds neither, and reports a document it cannot decrypt — which is exactly the case a mailbox owner meets when
+    /// The user and user entries are arbitrary: a reader computes what they would have been for the empty password,
+    /// finds neither, and reports a document it cannot decrypt — which is exactly the case a mailbox user meets when
     /// somebody sends them a password-protected contract.
     /// </remarks>
     public static byte[] EncryptedPdf()

@@ -27,8 +27,8 @@ internal sealed class EmailThreadIdentifierEntity
     /// <summary>Gets or sets the account the identifier was seen in.</summary>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the identifier was seen in.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the identifier was seen in.</summary>
+    public required Guid UserId { get; set; }
 
     /// <summary>Gets or sets the digest of the message identifier this row binds.</summary>
     /// <remarks>

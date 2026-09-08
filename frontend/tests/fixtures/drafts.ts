@@ -2,9 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// What the owner is writing, and what becomes of one of them when it is sent.
+// What the user is writing, and what becomes of one of them when it is sent.
 //
-// A draft here is the one in the owner's own drafts folder, so there is nothing held only in the client for a fixture
+// A draft here is the one in the user's own drafts folder, so there is nothing held only in the client for a fixture
 // to stand in for: what a save answers with is the record itself, and that is what these values are.
 
 /** The identity the draft below is addressed by, everywhere the corpus names one draft. */

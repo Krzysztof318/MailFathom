@@ -221,7 +221,7 @@ public sealed class SensitiveContentOptionsBindingTests
     /// <summary>
     /// The composition root reads the section a second time, before a container exists, to decide which detectors are
     /// registered at all. An analyzer address that reached the options graph and not this read would validate at
-    /// startup and then leave an owner switching that scanner on with nothing behind it.
+    /// startup and then leave a user switching that scanner on with nothing behind it.
     /// </summary>
     [Fact]
     public void Get_AConfiguredAnalyzer_ReachesTheDecisionCompositionRegistersOn()

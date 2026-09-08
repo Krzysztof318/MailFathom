@@ -634,7 +634,7 @@ public sealed class HostCompositionTests
         // Act
         startupGates.MarkCompleted(HostStartupGate.SecretConfiguration);
         startupGates.MarkCompleted(HostStartupGate.DatabaseSchema);
-        startupGates.MarkCompleted(HostStartupGate.ServedMailOwners);
+        startupGates.MarkCompleted(HostStartupGate.ServedMailUsers);
 
         // Assert
         Assert.True(startupGates.Completed);
@@ -690,7 +690,7 @@ public sealed class HostCompositionTests
         var screen = provider.GetRequiredService<SensitiveContentEgressScreen>();
 
         // Assert
-        Assert.Equal(expected, screen.IsActiveFor(SyntheticMailOwner.Deployment));
+        Assert.Equal(expected, screen.IsActiveFor(SyntheticMailUser.Deployment));
     }
 
     /// <summary>

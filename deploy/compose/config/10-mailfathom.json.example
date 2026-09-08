@@ -66,7 +66,7 @@
   // 8080 with the endpoint below, which is the port compose.yaml publishes, so no port is stated here.
   //
   // The `password` entry is what a person signs in with. It carries no credential and cannot: a username and password
-  // are a record beside the owner rather than something read out of a file, so they are provisioned over the
+  // are a record beside the user rather than something read out of a file, so they are provisioned over the
   // administrative endpoint — `mfctl credential create --method password --username <name>`, or the route that command
   // calls. The entry says the surface accepts the method; which people can use it is what has been provisioned.
   //

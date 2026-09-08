@@ -26,14 +26,14 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </para>
 /// <para>
 /// <b>Replacing a draft is an append followed by a removal, in that order, and the order is the safety.</b> IMAP has no
-/// command that changes a stored message. Removing first and then failing to append leaves the owner with no draft at
+/// command that changes a stored message. Removing first and then failing to append leaves the user with no draft at
 /// all — the version they were working on, gone — while appending first and then failing to remove leaves them with two,
 /// which is untidy and loses nothing. The revision is durable before either command goes out, so a process that dies
 /// between them is recognized by <see cref="MailDraftStage" /> and the resumed attempt finishes the pair.
 /// </para>
 /// <para>
 /// <b>The only occurrence this can ever name is one an append of its own reported.</b> There is no path here from a
-/// caller-supplied UID, a folder search, or a message identity to a removal, so a draft the owner wrote in their own
+/// caller-supplied UID, a folder search, or a message identity to a removal, so a draft the user wrote in their own
 /// mail client is unreachable by construction rather than by a check. Where the tracked occurrence stops being provably
 /// that copy — the role now resolves elsewhere, the folder was recreated, the server named no placement, an append was
 /// never answered — the copy is left exactly where it is and the divergence is written onto the draft.
@@ -95,7 +95,7 @@ public sealed class MailDraftFiler
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="draft" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A whole replacement is one call: the current revision is appended, and the copy it replaced is removed once the
-    /// server has confirmed the new one is there. That is what leaves an owner who edited a draft looking at one draft
+    /// server has confirmed the new one is there. That is what leaves a user who edited a draft looking at one draft
     /// rather than at two for as long as it takes a pass to come round.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft whose copy could not be settled is a draft that still exists and is still editable; raising would end the pass that was settling the drafts beside it, and every failure is classified into a recorded code and returned as an outcome instead.")]
@@ -214,7 +214,7 @@ public sealed class MailDraftFiler
     /// <summary>Takes every standing copy of a given-up draft out of the folder, then removes the record.</summary>
     /// <remarks>
     /// The record goes last and goes whatever the copies did. A draft whose copy could not be reached would otherwise
-    /// be undeletable, so the copy is marked as one nothing will touch again, the divergence is recorded, and the owner
+    /// be undeletable, so the copy is marked as one nothing will touch again, the divergence is recorded, and the user
     /// is left with one message in a folder they can delete with the gesture they would have used anyway.
     /// </remarks>
     private async Task<MailDraftFilingResult> DiscardAsync(

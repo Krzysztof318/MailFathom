@@ -129,7 +129,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         // never reaches that setting. A relocation into a mirrored folder moves the queue timestamp and nothing else,
         // because the row is on its way into that folder; a delete, and a relocation that carried the message out of the
         // mirrored mailbox altogether, additionally apply the disposition their own record carries, which is the one the
-        // owner authored the change under rather than whatever the account is configured with by now.
+        // user authored the change under rather than whatever the account is configured with by now.
         var erasedByAuthoredDelete = new List<StoredEmailEntity>();
 
         foreach (var attributed in outcome.RemovedByOwnMutation)
@@ -166,12 +166,12 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         if (erasedByAuthoredDelete.Count > 0)
         {
-            // What these messages hold leaves storage with them, so their owner's figure gives it back inside the same
+            // What these messages hold leaves storage with them, so their user's figure gives it back inside the same
             // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
             // session commits rather than before the line below it: the removal below only stages a delete the change
             // tracker applies at that commit. A later change making the removal set-based would execute immediately and
             // turn that ordering into a real one.
-            await OwnerStoredContentLedger.RemoveAsync(
+            await UserStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. erasedByAuthoredDelete.Select(email => email.Id)],
                 cancellationToken);
@@ -195,10 +195,10 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
         {
             // The cascade takes the raw MIME with the row, and nothing below the content store observes that cascade,
-            // so the owner's stored-content figure has to give those bytes back explicitly or it would go on bounding
-            // an owner against payloads that are gone. It reads the lengths itself, which is why it belongs before this
+            // so the user's stored-content figure has to give those bytes back explicitly or it would go on bounding
+            // a user against payloads that are gone. It reads the lengths itself, which is why it belongs before this
             // session commits rather than at any particular point among the staged removals below.
-            await OwnerStoredContentLedger.RemoveAsync(
+            await UserStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. disappeared.Select(email => email.Id)],
                 cancellationToken);
@@ -235,7 +235,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
@@ -243,7 +243,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         return readContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.OwnerId == owner
+            .Where(email => email.UserId == user
                 && email.MailFolder.MailboxAccountId == accountValue
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation

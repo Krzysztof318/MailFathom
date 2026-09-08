@@ -17,7 +17,7 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// </para>
 /// <para>
 /// It is written as JSON on standard output, indented. That is one document a person reads and a tool parses, and it is
-/// what redirects into a file an owner can send. Everything else this command prints goes to standard error, so what is
+/// what redirects into a file a user can send. Everything else this command prints goes to standard error, so what is
 /// captured is the export and nothing beside it.
 /// </para>
 /// </remarks>

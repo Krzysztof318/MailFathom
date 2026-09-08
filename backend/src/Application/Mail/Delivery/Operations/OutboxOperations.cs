@@ -24,7 +24,7 @@ namespace MailFathom.Application.Mail.Delivery.Operations;
 /// </para>
 /// <para>
 /// The two readings differ in what they may say about people, and deliberately so. A page names no recipient, because a
-/// listing of an outbox is a listing of who this owner writes to; one send read by its own identifier names its
+/// listing of an outbox is a listing of who this user writes to; one send read by its own identifier names its
 /// recipients and what each of them was told, because that is the question that was asked and it cannot be answered
 /// without them. Neither reads the message: no subject, no body, and no raw MIME reaches this surface at all.
 /// </para>
@@ -55,7 +55,7 @@ public sealed class OutboxOperations
     }
 
     /// <summary>Reports how much stands at each stage of an outbox.</summary>
-    /// <param name="account">The account to report on, named by its owner and its identifier, or <see langword="null" /> for every account this deployment serves.</param>
+    /// <param name="account">The account to report on, named by its user and its identifier, or <see langword="null" /> for every account this deployment serves.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The summary, with one count per declared stage.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>

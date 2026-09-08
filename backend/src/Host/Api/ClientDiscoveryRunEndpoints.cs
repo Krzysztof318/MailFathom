@@ -22,7 +22,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Asks one question of the owner's mail and streams the run answering it.</summary>
+/// <summary>Asks one question of the user's mail and streams the run answering it.</summary>
 /// <remarks>
 /// <para>
 /// Three routes rather than one, because a run outlives the request that starts it. The first asks the question and
@@ -109,7 +109,7 @@ internal static class ClientDiscoveryRunEndpoints
 
     /// <summary>Starts a run over the question, or reports what was wrong with it.</summary>
     /// <param name="request">The question and the mail it may be answered from.</param>
-    /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting owner.</param>
+    /// <param name="scopeResolver">Resolves which accounts and folders the answer may be drawn from, and names the acting user.</param>
     /// <param name="principals">Reports the principal the transport admitted, which the run executes under.</param>
     /// <param name="registry">Holds the run while it executes and while a client can still come back for it.</param>
     /// <param name="launcher">Puts the run on a scope of its own and starts it.</param>
@@ -151,7 +151,7 @@ internal static class ClientDiscoveryRunEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
         catch (MailboxQueryFilterInvalidException refusal)
         {
@@ -166,7 +166,7 @@ internal static class ClientDiscoveryRunEndpoints
             return Refuse("The account, the folder, the conversation, or a message names a value this deployment does not issue.");
         }
 
-        if (!registry.TryOpen(scopeResolver.Owner, out var journal))
+        if (!registry.TryOpen(scopeResolver.User, out var journal))
         {
             return TypedResults.Problem(
                 $"This deployment runs at most {DiscoveryRunBounds.MaximumConcurrentRuns} questions at once. Wait for one to finish.",
@@ -183,9 +183,9 @@ internal static class ClientDiscoveryRunEndpoints
     /// <summary>Streams one run from wherever the caller left off.</summary>
     /// <param name="runId">The run the caller is reading.</param>
     /// <param name="context">The request, which is read for the place a reconnecting client states it left off at.</param>
-    /// <param name="scopeResolver">Names the acting owner, which is who may read the run.</param>
+    /// <param name="scopeResolver">Names the acting user, which is who may read the run.</param>
     /// <param name="registry">Holds the runs this process is executing or has not yet forgotten.</param>
-    /// <returns>The events as a Server-Sent Events stream, <c>404</c> where this process holds no such run for this owner, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns>The events as a Server-Sent Events stream, <c>404</c> where this process holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
     /// <remarks>
     /// A run belonging to somebody else is answered as no such run rather than as a refusal, so an identifier says
     /// nothing about whether it exists. The stream ends when the run does; a client that disconnects ends its own read
@@ -202,7 +202,7 @@ internal static class ClientDiscoveryRunEndpoints
         ArgumentNullException.ThrowIfNull(registry);
 
         if (runId == Guid.Empty
-            || !registry.TryFind(DiscoveryRunId.Create(runId), scopeResolver.Owner, out var journal))
+            || !registry.TryFind(DiscoveryRunId.Create(runId), scopeResolver.User, out var journal))
         {
             return TypedResults.NotFound();
         }
@@ -213,9 +213,9 @@ internal static class ClientDiscoveryRunEndpoints
 
     /// <summary>Stops one run, so it makes no further provider call and abandons the retrieval it is waiting on.</summary>
     /// <param name="runId">The run the caller is stopping.</param>
-    /// <param name="scopeResolver">Names the acting owner, which is who may stop the run.</param>
+    /// <param name="scopeResolver">Names the acting user, which is who may stop the run.</param>
     /// <param name="registry">Holds the runs this process is executing or has not yet forgotten.</param>
-    /// <returns><c>204</c> where the run was this owner's and is now stopping, <c>404</c> where this process holds no such run for this owner, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
+    /// <returns><c>204</c> where the run was this user's and is now stopping, <c>404</c> where this process holds no such run for this user, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.ask</c>.</returns>
     /// <remarks>
     /// <para>
     /// <strong>Stopping stops the spending rather than the watching.</strong> Closing the reading connection ends one
@@ -242,7 +242,7 @@ internal static class ClientDiscoveryRunEndpoints
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(registry);
 
-        return runId != Guid.Empty && registry.TryStop(DiscoveryRunId.Create(runId), scopeResolver.Owner)
+        return runId != Guid.Empty && registry.TryStop(DiscoveryRunId.Create(runId), scopeResolver.User)
             ? TypedResults.NoContent()
             : TypedResults.NotFound();
     }
@@ -325,12 +325,12 @@ internal static class ClientDiscoveryRunEndpoints
 
 /// <summary>The question one run is asked, and the mail it may be answered from.</summary>
 /// <param name="Question">What the caller wants to know.</param>
-/// <param name="Accounts">The accounts to read, by identifier or display name, and empty for every account the owner owns.</param>
+/// <param name="Accounts">The accounts to read, by identifier or display name, and empty for every account the user owns.</param>
 /// <param name="Folders">The folders to read, by alias or as <c>role:Inbox</c>, and empty for every folder.</param>
 /// <param name="Thread">The conversation the question was asked about, or <see langword="null" /> where it was asked about none.</param>
 /// <param name="Emails">The individual messages the question was asked about, and empty where it was asked about none.</param>
 /// <remarks>
-/// It names no owner. The acting owner comes off the credential, which is what makes a question about somebody else's
+/// It names no user. The acting user comes off the credential, which is what makes a question about somebody else's
 /// mail something a caller cannot express here rather than something the surface has to refuse.
 /// </remarks>
 internal sealed record ClientDiscoveryRunRequest(

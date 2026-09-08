@@ -20,7 +20,7 @@ internal enum MailServerConnectionPurpose
     PushNotification = 1,
 }
 
-/// <summary>Bounds open or establishing IMAP connections by server host across every account and owner.</summary>
+/// <summary>Bounds open or establishing IMAP connections by server host across every account and user.</summary>
 public sealed class MailServerConnectionBudget : IDisposable
 {
     /// <summary>The host ceiling used when the composition root supplies none.</summary>
@@ -47,7 +47,7 @@ public sealed class MailServerConnectionBudget : IDisposable
             "mailfathom.mail.server.connections.limit",
             this.ObserveLimits,
             unit: "{connection}",
-            description: "Open or establishing IMAP connections each server host admits across every owner.");
+            description: "Open or establishing IMAP connections each server host admits across every user.");
         Telemetry.Meter.CreateObservableGauge(
             "mailfathom.mail.server.connections.active",
             this.ObserveActiveConnections,

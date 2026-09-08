@@ -34,10 +34,10 @@ internal sealed class EmailThreadIdentifierConfiguration : IEntityTypeConfigurat
         entity.Property(identifier => identifier.IdentifierHash)
             .HasMaxLength(EmailThreadIdentifierEntity.IdentifierHashLength);
 
-        // The owner leads the key, so the binding is one message identifier of one account of one owner. Without it
-        // two owners whose mailboxes carry the same identifier would compete for a single row and one arrival would
+        // The user leads the key, so the binding is one message identifier of one account of one user. Without it
+        // two users whose mailboxes carry the same identifier would compete for a single row and one arrival would
         // be threaded into the other's conversation.
-        entity.HasKey(identifier => new { identifier.OwnerId, identifier.MailboxAccountId, identifier.IdentifierHash })
+        entity.HasKey(identifier => new { identifier.UserId, identifier.MailboxAccountId, identifier.IdentifierHash })
             .HasName(PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName);
 
         entity.HasIndex(identifier => identifier.EmailThreadId)

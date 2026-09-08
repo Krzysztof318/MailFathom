@@ -9,8 +9,8 @@ namespace MailFathom.Host.UnitTests.Observability.ClientTelemetry;
 
 /// <summary>Covers the bound on how often one signed-in person's client may export.</summary>
 /// <remarks>
-/// The replenishment is not driven here. What this endpoint's bound has to be is per owner rather than per surface, and
-/// that is what a test can settle without a clock: one owner spending its burst says nothing about the next owner's.
+/// The replenishment is not driven here. What this endpoint's bound has to be is per user rather than per surface, and
+/// that is what a test can settle without a clock: one user spending its burst says nothing about the next user's.
 /// </remarks>
 public sealed class ClientTelemetryQuotaTests
 {
@@ -24,7 +24,7 @@ public sealed class ClientTelemetryQuotaTests
         // Act
         var admitted = Enumerable
             .Range(0, ClientTelemetryQuota.BurstCapacity)
-            .Select(_ => quota.TryAdmit("owner-a"))
+            .Select(_ => quota.TryAdmit("user-a"))
             .ToArray();
 
         // Assert
@@ -40,11 +40,11 @@ public sealed class ClientTelemetryQuotaTests
 
         foreach (var _ in Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity))
         {
-            quota.TryAdmit("owner-a");
+            quota.TryAdmit("user-a");
         }
 
         // Act
-        var admitted = quota.TryAdmit("owner-a");
+        var admitted = quota.TryAdmit("user-a");
 
         // Assert
         Assert.False(admitted);
@@ -52,18 +52,18 @@ public sealed class ClientTelemetryQuotaTests
 
     /// <summary>The reason this is not the surface's own bucket: one person's client must not spend another's capacity.</summary>
     [Fact]
-    public void TryAdmit_ASecondOwner_HasCapacityOfItsOwn()
+    public void TryAdmit_ASecondUser_HasCapacityOfItsOwn()
     {
         // Arrange
         using var quota = new ClientTelemetryQuota();
 
         foreach (var _ in Enumerable.Range(0, ClientTelemetryQuota.BurstCapacity))
         {
-            quota.TryAdmit("owner-a");
+            quota.TryAdmit("user-a");
         }
 
         // Act
-        var admitted = quota.TryAdmit("owner-b");
+        var admitted = quota.TryAdmit("user-b");
 
         // Assert
         Assert.True(admitted);

@@ -198,9 +198,9 @@ public sealed class CredentialSchemeSelectorTests
 
     /// <summary>A password names its own scheme in the header, which is the one credential kind that says what it is before anything is decoded.</summary>
     [Theory]
-    [InlineData("Basic b3duZXI6Y29ycmVjdGhvcnNl")]
-    [InlineData("basic b3duZXI6Y29ycmVjdGhvcnNl")]
-    [InlineData("  Basic b3duZXI6Y29ycmVjdGhvcnNl")]
+    [InlineData("Basic dXNlcjpjb3JyZWN0aG9yc2U=")]
+    [InlineData("basic dXNlcjpjb3JyZWN0aG9yc2U=")]
+    [InlineData("  Basic dXNlcjpjb3JyZWN0aG9yc2U=")]
     [InlineData("Basic")]
     [InlineData("Basic not-base64")]
     public void SchemeFor_ACredentialNamingTheBasicScheme_ReachesThePasswordVerification(string headerValue)
@@ -215,7 +215,7 @@ public sealed class CredentialSchemeSelectorTests
     /// <summary>The scheme name is matched rather than searched for, so a token whose value happens to start with those letters is still a token.</summary>
     [Theory]
     [InlineData("Bearer BasicLookingToken")]
-    [InlineData("BasicAuth b3duZXI6cA==")]
+    [InlineData("BasicAuth dXNlcjpw")]
     public void SchemeFor_ACredentialMerelySpelledLikeOne_DoesNotReachThePasswordVerification(string headerValue)
     {
         // Arrange
@@ -233,7 +233,7 @@ public sealed class CredentialSchemeSelectorTests
         var selector = AcceptingBoth();
 
         // Act, Assert
-        Assert.Equal(ApiKeyScheme, selector.SchemeFor("Basic b3duZXI6Y29ycmVjdGhvcnNl"));
+        Assert.Equal(ApiKeyScheme, selector.SchemeFor("Basic dXNlcjpjb3JyZWN0aG9yc2U="));
     }
 
     /// <summary>Selection is deterministic, so the same request never reaches two different handlers across two attempts.</summary>

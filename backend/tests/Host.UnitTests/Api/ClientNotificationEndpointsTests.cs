@@ -24,7 +24,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientNotificationEndpointsTests
 {
-    private static readonly MailOwnerId Owner = SyntheticMailOwner.Deployment;
+    private static readonly MailUserId User = SyntheticMailUser.Deployment;
 
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 8, 30, 0, TimeSpan.Zero);
 
@@ -37,9 +37,9 @@ public sealed class ClientNotificationEndpointsTests
         var cursor = NotificationCursor.After(
             OccurredAt,
             NotificationId.Create(NotificationIdentifier),
-            NotificationCursor.FingerprintOf(Owner));
+            NotificationCursor.FingerprintOf(User));
         var notifications = Substitute.For<INotificationStore>();
-        notifications.ReadPageAsync(Owner, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
+        notifications.ReadPageAsync(User, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ => [MailNotification()]);
 
         // Act
@@ -90,7 +90,7 @@ public sealed class ClientNotificationEndpointsTests
     {
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
-        notifications.CountUnreadAsync(Owner, Arg.Any<CancellationToken>()).Returns(4);
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(4);
 
         // Act
         var result = await ClientNotificationEndpoints.ReadUnreadCountAsync(
@@ -100,7 +100,7 @@ public sealed class ClientNotificationEndpointsTests
         // Assert
         Assert.Equal(4, result.Value!.UnreadCount);
         await notifications.DidNotReceive().ReadPageAsync(
-            Arg.Any<MailOwnerId>(),
+            Arg.Any<MailUserId>(),
             Arg.Any<NotificationCursor?>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
@@ -113,12 +113,12 @@ public sealed class ClientNotificationEndpointsTests
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
         notifications.SetReadAsync(
-                Owner,
+                User,
                 NotificationId.Create(NotificationIdentifier),
                 true,
                 Arg.Any<CancellationToken>())
             .Returns(NotificationReadOutcome.Applied);
-        notifications.CountUnreadAsync(Owner, Arg.Any<CancellationToken>()).Returns(2);
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(2);
 
         // Act
         var result = await ClientNotificationEndpoints.SetReadStateAsync(
@@ -142,7 +142,7 @@ public sealed class ClientNotificationEndpointsTests
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
         notifications.SetReadAsync(
-                Arg.Any<MailOwnerId>(),
+                Arg.Any<MailUserId>(),
                 Arg.Any<NotificationId>(),
                 Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
@@ -176,7 +176,7 @@ public sealed class ClientNotificationEndpointsTests
         // Assert
         Assert.IsType<NotFound>(result.Result);
         await notifications.DidNotReceive().SetReadAsync(
-            Arg.Any<MailOwnerId>(),
+            Arg.Any<MailUserId>(),
             Arg.Any<NotificationId>(),
             Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
@@ -189,7 +189,7 @@ public sealed class ClientNotificationEndpointsTests
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
         notifications.SetReadAsync(
-                Arg.Any<MailOwnerId>(),
+                Arg.Any<MailUserId>(),
                 Arg.Any<NotificationId>(),
                 false,
                 Arg.Any<CancellationToken>())
@@ -213,7 +213,7 @@ public sealed class ClientNotificationEndpointsTests
     {
         // Arrange
         var notifications = Substitute.For<INotificationStore>();
-        notifications.MarkAllReadAsync(Owner, Arg.Any<CancellationToken>()).Returns(3);
+        notifications.MarkAllReadAsync(User, Arg.Any<CancellationToken>()).Returns(3);
 
         // Act
         var result = await ClientNotificationEndpoints.MarkAllReadAsync(
@@ -239,12 +239,12 @@ public sealed class ClientNotificationEndpointsTests
     private static JsonSerializerOptions WebFormat { get; } = new(JsonSerializerDefaults.Web);
 
     private static OwnNotifications SignedIn(INotificationStore store) => new(
-        AccessAuthorizations.ForOwnerGranted(Owner, MailFathomPermission.MailRead),
+        AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
         store);
 
     private static Notification MailNotification() => Notification.Compose(
         NotificationId.Create(NotificationIdentifier),
-        Owner,
+        User,
         NotificationKind.Mail,
         title: "New mail arrived",
         body: "Two messages arrived in your inbox.",

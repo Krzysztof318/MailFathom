@@ -95,7 +95,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
@@ -151,7 +151,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, RemovedPath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, RemovedPath);
         await RecordIntentAsync(services, request, cancellationToken);
 
         // Act
@@ -185,7 +185,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
     /// <remarks>
     /// GreenMail advertises <c>UIDPLUS</c>, so the copy ran the <c>COPYUID</c> path — which is the one worth proving
     /// here, because it is the path a deployment gets and the one on which a repeat would be indistinguishable from a
-    /// message the owner copied deliberately. The grace period is set to nothing rather than waited out: what the wait
+    /// message the user copied deliberately. The grace period is set to nothing rather than waited out: what the wait
     /// is for is a later synchronization run settling the placement, and no such run can settle a copy at all.
     /// </remarks>
     [Fact]
@@ -206,7 +206,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, CopyPath);
+        var request = MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, CopyPath);
 
         await StopAfterTheCopyCommandAsync(services, request, occurrence, cancellationToken);
 

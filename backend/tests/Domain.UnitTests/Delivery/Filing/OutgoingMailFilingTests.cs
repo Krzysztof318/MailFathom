@@ -56,7 +56,7 @@ public sealed class OutgoingMailFilingTests
         Assert.Equal(isSeen, flags.IsSeen);
     }
 
-    /// <summary>Only the mirror of a waiting message goes away; a draft and a sent copy are what the owner keeps.</summary>
+    /// <summary>Only the mirror of a waiting message goes away; a draft and a sent copy are what the user keeps.</summary>
     [Fact]
     public void IsWithdrawnWhenTheMessageLeaves_IsTrueOfTheOutboxMirrorAlone()
     {

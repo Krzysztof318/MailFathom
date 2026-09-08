@@ -39,7 +39,7 @@ internal sealed record ClientDraftWriteRequest(
     Guid? AnsweredEmailId,
     string? Answers);
 
-/// <summary>The drafts one owner is writing, as the client endpoint serves them.</summary>
+/// <summary>The drafts one user is writing, as the client endpoint serves them.</summary>
 /// <param name="Drafts">The drafts, newest edit first.</param>
 /// <param name="MaximumCount">How many the reading answers with at most, so a screen can say when it is showing all of them.</param>
 /// <remarks>
@@ -48,7 +48,7 @@ internal sealed record ClientDraftWriteRequest(
 /// </remarks>
 internal sealed record ClientDraftListResponse(IReadOnlyList<ClientDraftResponse> Drafts, int MaximumCount)
 {
-    /// <summary>Describes one owner's drafts for the wire.</summary>
+    /// <summary>Describes one user's drafts for the wire.</summary>
     /// <param name="drafts">What the reading answered with.</param>
     /// <returns>The response body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="drafts" /> is <see langword="null" />.</exception>
@@ -214,7 +214,7 @@ internal sealed record ClientDraftReadingResponse(
 /// <param name="FailureCode">The code the attempt failed with, or <see langword="null" /> where it did not fail.</param>
 /// <remarks>
 /// The draft is given up here whatever the mailbox answered: a server that refuses to give a copy up leaves the message
-/// as the owner's own to delete, and the outcome is what says so rather than a failure the client has to retry.
+/// as the user's own to delete, and the outcome is what says so rather than a failure the client has to retry.
 /// </remarks>
 internal sealed record ClientDraftDiscardResponse(
     Guid DraftId,

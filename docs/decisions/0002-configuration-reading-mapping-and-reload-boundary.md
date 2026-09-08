@@ -103,7 +103,7 @@ The reasoning is what the two stores are respectively good at, and neither answe
 
 One precedent already reads this way and is the worked example rather than an exception to it. A mailbox refresh token — the first credential the service itself writes — is persisted in a sealed database column under the key ring rather than written back into the secret reference it arrived through, which is the decision [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) records. The shape it shows is the one this rule produces generally: the authored text an operator provisioned stays theirs, and what the program owns lives somewhere the program may write.
 
-Runtime rule authoring is where that shape is asked for next, and this record settles only its own half of it. Issue 771 proposes rules authored while the deployment runs, in a table beside the configured ones and explicitly without rewriting the configuration section they sit next to; issue 761 is its gate and is the owner's decision, over [ADR 0010](0010-rule-authoring-in-configuration-and-ncalc-conditions.md)'s storage half rather than over this one. Whatever it decides, it decides in the database: this section is why the alternative — a program editing the rules file — is not among its options.
+Runtime rule authoring is where that shape is asked for next, and this record settles only its own half of it. Issue 771 proposes rules authored while the deployment runs, in a table beside the configured ones and explicitly without rewriting the configuration section they sit next to; issue 761 is its gate and is the user's decision, over [ADR 0010](0010-rule-authoring-in-configuration-and-ncalc-conditions.md)'s storage half rather than over this one. Whatever it decides, it decides in the database: this section is why the alternative — a program editing the rules file — is not among its options.
 
 Reversing this is a new ADR superseding this one, not a feature added under it.
 
@@ -119,7 +119,7 @@ This ADR also does not permit adding new third-party packages. Any future provid
 
 ### Amendment 1: referenced secrets are reloadable for new operations
 
-*Approved by the owner on 2026-07-27, for the certificate-material and secret-rotation work of specification 02b.*
+*Approved by the user on 2026-07-27, for the certificate-material and secret-rotation work of specification 02b.*
 
 The original reload policy classified credentials and certificate trust anchors as restart-required without qualification. That guidance was written before a secret-reference indirection existed. With one, reload no longer means mutating a bound secret value in place; it means re-resolving a reference whose validity is proven before the snapshot carrying it is published. The two are different operations with different risks, and the original text could only describe the first.
 
@@ -135,7 +135,7 @@ A secret that is *not* reached through a reference — a password written into a
 
 ### Amendment 2: a PostgreSQL source is read between the deployment's files and the operator's overrides
 
-*Approved by the owner on 2026-08-25, in issue 1119, for the persisted-configuration work of the 0.8.0 milestone.*
+*Approved by the user on 2026-08-25, in issue 1119, for the persisted-configuration work of the 0.8.0 milestone.*
 
 The section above closes the write path and says where mutable state lives: in PostgreSQL. What it did not say is how a value that lives there reaches a setting, and the first design built against it — the trusted-sender list, where configuration supplies one half, PostgreSQL supplies another, and a dedicated reader unions them — answered that by growing a second configuration system beside this one. Repeating that per editable setting is what this amendment refuses.
 
@@ -152,7 +152,7 @@ The terms it holds on:
 - **Startup fails before any endpoint opens when the layer cannot be read, parsed, or bound**, rather than starting on the sources beneath it. A reload that fails keeps the last valid snapshot and reports the version it rejected; it never falls back to those sources, which never carried the persisted values.
 - **The row is one document snapshot.** No configuration property costs a query, and a reload replaces the snapshot rather than merging into it.
 
-What stays refused is what the section above refused: a configuration writer port over the operator's files, an approval workflow over configuration, a configuration history built over it, a multi-tenant configuration lifecycle, and an owner-scoped configuration layer. The last of those was proposed as issue 1118 and closed as not planned, for a reason this amendment depends on: a layer whose absent key means *inherit from below* cannot carry what belongs to one person, because the inheritance is silent and no reader can tell a value somebody chose from a value nobody did. An owner's settings are typed content of the owner document, which this layer stores nothing of.
+What stays refused is what the section above refused: a configuration writer port over the operator's files, an approval workflow over configuration, a configuration history built over it, a multi-tenant configuration lifecycle, and a user-scoped configuration layer. The last of those was proposed as issue 1118 and closed as not planned, for a reason this amendment depends on: a layer whose absent key means *inherit from below* cannot carry what belongs to one person, because the inheritance is silent and no reader can tell a value somebody chose from a value nobody did. A user's settings are typed content of the user document, which this layer stores nothing of.
 
 ## Validation
 

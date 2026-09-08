@@ -200,7 +200,7 @@ public sealed class TransportRequestTimeoutStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var mcpEndpointSettings = EnabledMcpEndpoint(new TransportRequestTimeoutOptions());
-        mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
 
         var adminEndpointSettings = EnabledAdminEndpoint(new TransportRequestTimeoutOptions());
         adminEndpointSettings.Authentication.Add(ConfiguredAuthentication.ApiKey("operator-laptop"));

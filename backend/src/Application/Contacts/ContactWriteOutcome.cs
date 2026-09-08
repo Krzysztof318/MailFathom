@@ -8,7 +8,7 @@ namespace MailFathom.Application.Contacts;
 /// <remarks>
 /// Each value but the first is a refusal a caller acts on and continues from, which is why the book answers with a
 /// result rather than raising: an address already held by somebody else, a contact that is not there, and a write a
-/// record's origin does not admit are all things a surface reports to its owner, not failures to unwind through.
+/// record's origin does not admit are all things a surface reports to its user, not failures to unwind through.
 /// </remarks>
 public enum ContactWriteOutcome
 {

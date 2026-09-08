@@ -10,8 +10,8 @@ namespace MailFathom.Domain.Notifications;
 /// <remarks>
 /// <para>
 /// It belongs to the deployment rather than to a device, because the read state has to be the same in both heads and on
-/// a second machine, and because most of what produces one is visible only to the service. It is per owner, on the
-/// <c>(owner, identifier)</c> axis every account reference already uses.
+/// a second machine, and because most of what produces one is visible only to the service. It is per user, on the
+/// <c>(user, identifier)</c> axis every account reference already uses.
 /// </para>
 /// <para>
 /// It is a pointer plus the least it takes to draw a row, and never a second copy of the mailbox. The title and the
@@ -39,7 +39,7 @@ public sealed record Notification
 
     private Notification(
         NotificationId id,
-        MailOwnerId owner,
+        MailUserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -50,7 +50,7 @@ public sealed record Notification
         bool isRead)
     {
         this.Id = id;
-        this.Owner = owner;
+        this.User = user;
         this.Kind = kind;
         this.Title = title;
         this.Body = body;
@@ -64,8 +64,8 @@ public sealed record Notification
     /// <summary>Gets what addresses this notification.</summary>
     public NotificationId Id { get; }
 
-    /// <summary>Gets the owner it happened to.</summary>
-    public MailOwnerId Owner { get; }
+    /// <summary>Gets the user it happened to.</summary>
+    public MailUserId User { get; }
 
     /// <summary>Gets what part of MailFathom it is about.</summary>
     public NotificationKind Kind { get; }
@@ -97,7 +97,7 @@ public sealed record Notification
 
     /// <summary>Composes a notification that has not been read.</summary>
     /// <param name="id">What addresses the notification.</param>
-    /// <param name="owner">The owner it happened to.</param>
+    /// <param name="user">The user it happened to.</param>
     /// <param name="kind">What part of MailFathom it is about.</param>
     /// <param name="title">The headline the row is drawn with.</param>
     /// <param name="body">The second line the row is drawn with.</param>
@@ -107,15 +107,15 @@ public sealed record Notification
     /// <param name="occurredAt">When the thing it describes happened.</param>
     /// <returns>An unread notification.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> or <paramref name="body" /> is blank, when <paramref name="source" /> is present and blank, when <paramref name="owner" /> names nobody, or when <paramref name="id" /> or <paramref name="deduplicationKey" /> is the struct default.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> or <paramref name="body" /> is blank, when <paramref name="source" /> is present and blank, when <paramref name="user" /> names nobody, or when <paramref name="id" /> or <paramref name="deduplicationKey" /> is the struct default.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="kind" /> is not a declared kind, or when a text exceeds the bound stated for it.</exception>
     /// <remarks>
-    /// The owner has to be a named one, because a row written under the unspecified identity would belong to nobody:
+    /// The user has to be a named one, because a row written under the unspecified identity would belong to nobody:
     /// unreachable by any read and uncollected by any erasure.
     /// </remarks>
     public static Notification Compose(
         NotificationId id,
-        MailOwnerId owner,
+        MailUserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -124,11 +124,11 @@ public sealed record Notification
         NotificationDeduplicationKey deduplicationKey,
         DateTimeOffset occurredAt)
     {
-        Validate(owner, kind, id, deduplicationKey, target);
+        Validate(user, kind, id, deduplicationKey, target);
 
         return new Notification(
             id,
-            owner,
+            user,
             kind,
             Bounded(title, MaximumTitleLength, nameof(title)),
             Bounded(body, MaximumBodyLength, nameof(body)),
@@ -141,7 +141,7 @@ public sealed record Notification
 
     /// <summary>Restores a notification this deployment already kept, with the read state it was stored under.</summary>
     /// <param name="id">What addresses the notification.</param>
-    /// <param name="owner">The owner it happened to.</param>
+    /// <param name="user">The user it happened to.</param>
     /// <param name="kind">What part of MailFathom it is about.</param>
     /// <param name="title">The headline the row is drawn with.</param>
     /// <param name="body">The second line the row is drawn with.</param>
@@ -152,7 +152,7 @@ public sealed record Notification
     /// <param name="isRead">Whether the person has read it.</param>
     /// <returns>The notification as it stands.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> or <paramref name="body" /> is blank, when <paramref name="source" /> is present and blank, when <paramref name="owner" /> names nobody, or when <paramref name="id" /> or <paramref name="deduplicationKey" /> is the struct default.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> or <paramref name="body" /> is blank, when <paramref name="source" /> is present and blank, when <paramref name="user" /> names nobody, or when <paramref name="id" /> or <paramref name="deduplicationKey" /> is the struct default.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="kind" /> is not a declared kind, or when a text exceeds the bound stated for it.</exception>
     /// <remarks>
     /// It validates exactly what <see cref="Compose" /> validates rather than trusting the store, because a row read
@@ -162,7 +162,7 @@ public sealed record Notification
     /// </remarks>
     public static Notification Restore(
         NotificationId id,
-        MailOwnerId owner,
+        MailUserId user,
         NotificationKind kind,
         string title,
         string body,
@@ -172,11 +172,11 @@ public sealed record Notification
         DateTimeOffset occurredAt,
         bool isRead)
     {
-        Validate(owner, kind, id, deduplicationKey, target);
+        Validate(user, kind, id, deduplicationKey, target);
 
         return new Notification(
             id,
-            owner,
+            user,
             kind,
             Bounded(title, MaximumTitleLength, nameof(title)),
             Bounded(body, MaximumBodyLength, nameof(body)),
@@ -189,7 +189,7 @@ public sealed record Notification
 
     /// <summary>Refuses the identities and the kind that no notification can be built from, whether composed or restored.</summary>
     private static void Validate(
-        MailOwnerId owner,
+        MailUserId user,
         NotificationKind kind,
         NotificationId id,
         NotificationDeduplicationKey deduplicationKey,
@@ -197,11 +197,11 @@ public sealed record Notification
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
             throw new ArgumentException(
-                "A notification happens to a named owner, so it is never raised under the unspecified one.",
-                nameof(owner));
+                "A notification happens to a named user, so it is never raised under the unspecified one.",
+                nameof(user));
         }
 
         if (!Enum.IsDefined(kind))

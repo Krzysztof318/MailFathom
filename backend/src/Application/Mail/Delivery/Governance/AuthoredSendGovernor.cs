@@ -110,7 +110,7 @@ public sealed class AuthoredSendGovernor(
     /// <returns>A task that completes once the send is recorded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="permit" /> or <paramref name="record" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// It follows the write because a record is what the audit is about: an owner reading it back asks what was sent
+    /// It follows the write because a record is what the audit is about: a user reading it back asks what was sent
     /// and under whose grant, which is answerable only once the send has an identity. The caller was charged where it
     /// was admitted, so nothing here decides whether the period has room.
     /// </remarks>

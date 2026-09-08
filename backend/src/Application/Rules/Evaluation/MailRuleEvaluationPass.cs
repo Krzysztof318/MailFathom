@@ -33,7 +33,7 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// recording an evaluation is what takes an email out of it, which is what makes a rule apply to mail arriving from now
 /// on; it runs the rules declaring the <see cref="MailRuleTrigger.Arrival" /> trigger and passes over the rest. The
 /// whole-mailbox walk is the only way mail already evaluated is evaluated again — reprocessing under a newer rule set is
-/// something an owner asks for or a rule's own schedule brings round, never something an edit sets off. Which rules it
+/// something a user asks for or a rule's own schedule brings round, never something an edit sets off. Which rules it
 /// runs is read from what started it: a run somebody asked for runs every rule of the set, because asking for a run is
 /// the request itself rather than an occasion a rule opts into, and a run a schedule started runs the rules that
 /// declared the <see cref="MailRuleTrigger.Schedule" /> trigger.
@@ -131,7 +131,7 @@ public sealed class MailRuleEvaluationPass
     }
 
     /// <summary>Takes one bounded pass over the account's arrivals, and over its requested run where it has one.</summary>
-    /// <param name="account">The account whose mail is evaluated, named by its owner and its identifier together.</param>
+    /// <param name="account">The account whose mail is evaluated, named by its user and its identifier together.</param>
     /// <param name="cancellationToken">Cancels the pass between emails and between batches; committed batches stay durable.</param>
     /// <returns>What each walk did, under the revision the pass read when it began.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">
@@ -386,7 +386,7 @@ public sealed class MailRuleEvaluationPass
                 : await this.actionRecorder.RecordAsync(
                     session,
                     evaluated.Candidate.StoredEmailId,
-                    account.Owner,
+                    account.User,
                     evaluated.Candidate.Occurrence,
                     plan,
                     revision,

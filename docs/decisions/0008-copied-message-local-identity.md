@@ -15,12 +15,12 @@ informed:
 
 [ADR 0007](0007-remote-mailbox-mutation-boundary-and-write-session.md) permits MailFathom to copy a message into a second folder, and deliberately left what that means locally to the action rather than to the session that can issue the command. A relocation ends with one live occurrence, so *which local email is this* has one honest answer. A copy ends with two, in two folders, both real and both synchronized — and a stored email row **is** an occurrence, keyed by account, folder, `UIDVALIDITY`, and `UID` under a unique index, with no email identity above it that two occurrences could share.
 
-Issue 476 asks the question the action cannot be written without: when MailFathom copies a message into a second folder, is the result one local email with two remote occurrences, or two local emails that happen to share their content? Provenance is not what is undecided. The durable record from issue 448 already tells a copy MailFathom performed from one the owner made by hand, and issue 449 already joins a discovered occurrence to the record that placed it. What is undecided is what a row means once two of them describe the same words.
+Issue 476 asks the question the action cannot be written without: when MailFathom copies a message into a second folder, is the result one local email with two remote occurrences, or two local emails that happen to share their content? Provenance is not what is undecided. The durable record from issue 448 already tells a copy MailFathom performed from one the user made by hand, and issue 449 already joins a discovered occurrence to the record that placed it. What is undecided is what a row means once two of them describe the same words.
 
 ## Decision Drivers
 
 - **The protocol offers no identity above the occurrence.** `UID COPY` puts a new message in the destination folder with its own UID, its own flags, and, on some providers, rewritten headers. One mail living in two folders is a claim MailFathom would be making, not one the server makes.
-- **Whatever is decided has to hold for the copies MailFathom did not make.** A mailbox owner copying a message in their own client is the ordinary case and leaves no record behind. A model that is true only of MailFathom's own copies answers *is this the same mail* sometimes, which is a worse contract than answering it never.
+- **Whatever is decided has to hold for the copies MailFathom did not make.** A mailbox user copying a message in their own client is the ordinary case and leaves no record behind. A model that is true only of MailFathom's own copies answers *is this the same mail* sometimes, which is a worse contract than answering it never.
 - **Guessing that identity is already refused.** Joining a discovery by `Message-ID` or by a content digest is wrong in both directions — a message legitimately appears twice under one `Message-ID`, and a provider may rewrite headers on copy — which is why a placement the server did not name stays visibly unjoined instead of being matched to something that looks right.
 - **Derived data is not free, and part of it is paid for.** A stored email carries raw MIME, extracted text, a search document, passages, and one vector per passage per active profile. A second row derives every one of them again, and the vectors cost money per unit of mail.
 - **A link nothing reads is personal data kept for no purpose.** Both rows describe a person's correspondence, so a stored relation between them needs a purpose before it needs a column.
@@ -34,7 +34,7 @@ Issue 476 asks the question the action cannot be written without: when MailFatho
 
 ## Decision Outcome
 
-Chosen option: **two independent local emails**, because it is the only one of the three that describes the owner's copies and MailFathom's own identically, and because the two that model a shared identity buy that identity only for the copies MailFathom itself performed.
+Chosen option: **two independent local emails**, because it is the only one of the three that describes the user's copies and MailFathom's own identically, and because the two that model a shared identity buy that identity only for the copies MailFathom itself performed.
 
 ### A copy is discovered, never carried
 
@@ -44,7 +44,7 @@ What the record settles for a copy is one thing: whose act the arrival was, so t
 
 ### The truthful-looking model is only truthful about MailFathom's own copies
 
-Option 2 reads as the honest one — one message, one search hit, one set of derived data — and it can deliver exactly that for a copy joined to a record, which means a copy MailFathom performed against a server that answered with `COPYUID`. For the copy the owner made by hand in their own client, the discovered message is joined to nothing, so under option 2 it becomes a second local email precisely as it does here, unless MailFathom guesses the identity from a header or a digest, which the driver above refuses and the synchronization behavior already refuses in the one place it would matter.
+Option 2 reads as the honest one — one message, one search hit, one set of derived data — and it can deliver exactly that for a copy joined to a record, which means a copy MailFathom performed against a server that answered with `COPYUID`. For the copy the user made by hand in their own client, the discovered message is joined to nothing, so under option 2 it becomes a second local email precisely as it does here, unless MailFathom guesses the identity from a header or a digest, which the driver above refuses and the synchronization behavior already refuses in the one place it would matter.
 
 So option 2 pays for an email identity above the occurrence, a migration, and a revisit of every read, projection, and deletion path keyed on one row per email, and still answers *is this the same mail* only about its own work. That is the objection the issue raises against option 3, at a considerably larger price. Option 3 is the same partial answer without the price, and is refused for the simpler reason: nothing would read the relation, and a relation nothing reads is a column of personal data kept for a purpose that has not arrived.
 
@@ -64,13 +64,13 @@ One consequence of that is worth stating plainly. The suppression depends on the
 ### Consequences
 
 - Good, because a stored row keeps exactly one meaning — one occurrence the server holds — and no read has to ask which of several rows is the canonical one.
-- Good, because a copy the owner made by hand and a copy MailFathom performed are the same thing locally, so no behavior depends on who filed the message.
+- Good, because a copy the user made by hand and a copy MailFathom performed are the same thing locally, so no behavior depends on who filed the message.
 - Good, because no query, projection, index, or deletion path changes and no migration is needed: the schema already says what a copy is, and the code already stores one that way.
 - Good, because erasure stays structural. Two rows are two cascades, and neither has to be reasoned about in terms of the other.
 - Neutral, because provenance is untouched: the record still tells the two apart, which is what rule evaluation needs and all it needs.
 - Bad, because a copied message is two search results, and a caller that searches across folders sees the same words twice.
 - Bad, because everything derived is derived twice, including the vectors somebody pays for.
-- Bad, because *show me this message wherever it is* has no answer, and giving it one later means an email identity above the occurrence, a migration, and revisiting every read that assumes one row per email. What such a decision would be built from is already stored — `internet_message_id` on each row, and the copy's own durable record — for the copies MailFathom performed; for the owner's own copies it would still need an identity nobody can derive without guessing.
+- Bad, because *show me this message wherever it is* has no answer, and giving it one later means an email identity above the occurrence, a migration, and revisiting every read that assumes one row per email. What such a decision would be built from is already stored — `internet_message_id` on each row, and the copy's own durable record — for the copies MailFathom performed; for the user's own copies it would still need an identity nobody can derive without guessing.
 
 ## Validation
 
@@ -93,7 +93,7 @@ One consequence of that is worth stating plainly. The suppression depends on the
 
 - Good, because it is the model that would make a copy behave like the same mail in two places: one search hit, one set of derived data, one thing to erase.
 - Neutral, because the schema change is additive and permitted below `1.0.0`; what makes it expensive is the reads, not the migration.
-- Bad, because it delivers that only for copies joined to a record, and the owner's own copies stay two emails unless identity is guessed from a header or a digest — which is refused for being wrong in both directions.
+- Bad, because it delivers that only for copies joined to a record, and the user's own copies stay two emails unless identity is guessed from a header or a digest — which is refused for being wrong in both directions.
 - Bad, because every query, projection, index, retention path, and deletion path is written against one row per email, and each would have to be revisited to decide which of them means occurrence and which means message.
 - Bad, because it invents an identity the protocol does not supply, so a disagreement between MailFathom's model and the server's is possible in a way it is not today.
 

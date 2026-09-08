@@ -44,16 +44,16 @@ internal static class OtlpExportPayload
     /// <summary>The field number the scopes within an envelope and the records within a scope both sit at.</summary>
     private const int SecondField = 2;
 
-    /// <summary>Rewrites one export request so it names the owner this deployment authenticated, and counts what it carries.</summary>
+    /// <summary>Rewrites one export request so it names the user this deployment authenticated, and counts what it carries.</summary>
     /// <param name="request">The export request exactly as the client sent it.</param>
     /// <param name="signal">Which signal the request carries, which is what decides what one record is.</param>
     /// <param name="attributeKey">The resource attribute naming whose telemetry this is.</param>
-    /// <param name="attributeValue">What this deployment resolved that owner to.</param>
+    /// <param name="attributeValue">What this deployment resolved that user to.</param>
     /// <param name="maxRecords">The most records one batch may carry before it is refused whole.</param>
     /// <returns>The rewritten request and what it carries, or the refusal that stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="signal" />, <paramref name="attributeKey" /> or <paramref name="attributeValue" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The owner attribute is written onto every resource in the batch rather than onto the first, because a batch may
+    /// The user attribute is written onto every resource in the batch rather than onto the first, because a batch may
     /// carry several and a resource left unwritten would be the one path by which a client's own claim survived at the
     /// level attribution is read from. It reaches the resource and nothing below it: an attribute a client writes on a
     /// scope, a span, a log record, or a metric data point is copied through like every other field it sends, since
@@ -70,8 +70,8 @@ internal static class OtlpExportPayload
         ArgumentNullException.ThrowIfNull(attributeKey);
         ArgumentNullException.ThrowIfNull(attributeValue);
 
-        var owner = OwnerAttribute(attributeKey, attributeValue);
-        var output = new ArrayBufferWriter<byte>(request.Length + owner.Length + 16);
+        var user = UserAttribute(attributeKey, attributeValue);
+        var output = new ArrayBufferWriter<byte>(request.Length + user.Length + 16);
         var records = 0;
         var at = 0;
 
@@ -89,7 +89,7 @@ internal static class OtlpExportPayload
                 continue;
             }
 
-            var envelope = RewriteEnvelope(request.Slice(start, length), signal, owner, maxRecords, ref records);
+            var envelope = RewriteEnvelope(request.Slice(start, length), signal, user, maxRecords, ref records);
 
             if (envelope.Refusal != OtlpPayloadRefusal.None)
             {
@@ -111,11 +111,11 @@ internal static class OtlpExportPayload
     private static OtlpExportRewrite RewriteEnvelope(
         ReadOnlySpan<byte> envelope,
         ClientTelemetrySignal signal,
-        ReadOnlySpan<byte> owner,
+        ReadOnlySpan<byte> user,
         int maxRecords,
         ref int records)
     {
-        var output = new ArrayBufferWriter<byte>(envelope.Length + owner.Length + 8);
+        var output = new ArrayBufferWriter<byte>(envelope.Length + user.Length + 8);
         var carriedResource = false;
         var at = 0;
 
@@ -138,7 +138,7 @@ internal static class OtlpExportPayload
                 case FirstField:
                     carriedResource = true;
 
-                    if (!TryWriteResource(output, envelope.Slice(start, length), owner))
+                    if (!TryWriteResource(output, envelope.Slice(start, length), user))
                     {
                         return OtlpExportRewrite.Malformed;
                     }
@@ -164,15 +164,15 @@ internal static class OtlpExportPayload
 
         if (!carriedResource)
         {
-            var resource = new ArrayBufferWriter<byte>(owner.Length + 8);
-            WriteLengthDelimited(resource, FirstField, owner);
+            var resource = new ArrayBufferWriter<byte>(user.Length + 8);
+            WriteLengthDelimited(resource, FirstField, user);
             WriteLengthDelimited(output, FirstField, resource.WrittenSpan);
         }
 
         return new OtlpExportRewrite(output.WrittenSpan.ToArray(), records, OtlpPayloadRefusal.None);
     }
 
-    /// <summary>Writes the resource with the owner attribute replacing whatever the client claimed under that name.</summary>
+    /// <summary>Writes the resource with the user attribute replacing whatever the client claimed under that name.</summary>
     /// <returns><see langword="true" /> when the resource parsed, otherwise <see langword="false" />.</returns>
     /// <remarks>
     /// Replaced rather than merged: an entry the client sent under this key is dropped as it is read, and this
@@ -182,10 +182,10 @@ internal static class OtlpExportPayload
     private static bool TryWriteResource(
         ArrayBufferWriter<byte> output,
         ReadOnlySpan<byte> resource,
-        ReadOnlySpan<byte> owner)
+        ReadOnlySpan<byte> user)
     {
-        var attributes = new ArrayBufferWriter<byte>(resource.Length + owner.Length);
-        var claimedKey = OwnerAttributeKey(owner);
+        var attributes = new ArrayBufferWriter<byte>(resource.Length + user.Length);
+        var claimedKey = UserAttributeKey(user);
         var at = 0;
 
         while (at < resource.Length)
@@ -197,7 +197,7 @@ internal static class OtlpExportPayload
 
             if (field == FirstField
                 && wireType == LengthDelimitedWireType
-                && NamesTheOwner(resource.Slice(start, length), claimedKey))
+                && NamesTheUser(resource.Slice(start, length), claimedKey))
             {
                 continue;
             }
@@ -205,7 +205,7 @@ internal static class OtlpExportPayload
             CopyField(attributes, resource, field, wireType, start, length);
         }
 
-        WriteLengthDelimited(attributes, FirstField, owner);
+        WriteLengthDelimited(attributes, FirstField, user);
         WriteLengthDelimited(output, FirstField, attributes.WrittenSpan);
 
         return true;
@@ -314,7 +314,7 @@ internal static class OtlpExportPayload
     private static bool CarriesDataPoints(int field) => field is 5 or 7 or 9 or 10 or 11;
 
     /// <summary>Reports whether one key-value entry is written under the key this deployment owns.</summary>
-    private static bool NamesTheOwner(ReadOnlySpan<byte> entry, ReadOnlySpan<byte> key)
+    private static bool NamesTheUser(ReadOnlySpan<byte> entry, ReadOnlySpan<byte> key)
     {
         var at = 0;
 
@@ -358,7 +358,7 @@ internal static class OtlpExportPayload
     }
 
     /// <summary>Encodes the one key-value entry this deployment writes onto every resource it forwards.</summary>
-    private static byte[] OwnerAttribute(string key, string value)
+    private static byte[] UserAttribute(string key, string value)
     {
         var anyValue = new ArrayBufferWriter<byte>(Encoding.UTF8.GetByteCount(value) + 8);
         WriteLengthDelimited(anyValue, FirstField, Encoding.UTF8.GetBytes(value));
@@ -371,12 +371,12 @@ internal static class OtlpExportPayload
     }
 
     /// <summary>Reads back the key out of the encoded attribute, so the name exists once rather than twice.</summary>
-    private static ReadOnlySpan<byte> OwnerAttributeKey(ReadOnlySpan<byte> owner)
+    private static ReadOnlySpan<byte> UserAttributeKey(ReadOnlySpan<byte> user)
     {
         var at = 0;
 
-        return TryReadField(owner, ref at, out _, out _, out var start, out var length)
-            ? owner.Slice(start, length)
+        return TryReadField(user, ref at, out _, out _, out var start, out var length)
+            ? user.Slice(start, length)
             : [];
     }
 

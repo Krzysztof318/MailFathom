@@ -35,7 +35,7 @@ internal sealed class SpamActionOccurrenceReader(MailFathomDbContext dbContext) 
             .Where(email => email.Id == storedEmailId)
             .Select(email => new
             {
-                email.OwnerId,
+                email.UserId,
                 email.MailboxAccountId,
                 email.MailFolder.Alias,
                 email.MailFolder.ResolutionGeneration,
@@ -54,7 +54,7 @@ internal sealed class SpamActionOccurrenceReader(MailFathomDbContext dbContext) 
 
         return new SpamActionOccurrence(
             emailId,
-            MailOwnerId.Create(row.OwnerId),
+            MailUserId.Create(row.UserId),
             EmailOccurrenceId.Create(
                 MailAccountId.Create(row.MailboxAccountId),
                 new MailFolderResolutionId(

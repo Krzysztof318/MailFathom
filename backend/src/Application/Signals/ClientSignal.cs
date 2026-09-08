@@ -10,7 +10,7 @@ using MailFathom.Domain.Notifications;
 
 namespace MailFathom.Application.Signals;
 
-/// <summary>One statement that something changed for one owner, carrying no mail.</summary>
+/// <summary>One statement that something changed for one user, carrying no mail.</summary>
 /// <remarks>
 /// <para>
 /// A signal is an instruction to look again rather than a payload to keep. It names what changed and for whom, and the
@@ -44,7 +44,7 @@ public sealed class ClientSignal
 
     private ClientSignal(
         ClientSignalKind kind,
-        MailOwnerId owner,
+        MailUserId user,
         MailAccountId? account,
         MailFolderAlias? folder,
         int count,
@@ -54,7 +54,7 @@ public sealed class ClientSignal
         string? secondLine)
     {
         this.Kind = kind;
-        this.Owner = owner;
+        this.User = user;
         this.Account = account;
         this.Folder = folder;
         this.Count = count;
@@ -67,8 +67,8 @@ public sealed class ClientSignal
     /// <summary>Gets which of the five kinds this is.</summary>
     public ClientSignalKind Kind { get; }
 
-    /// <summary>Gets the owner whose connections this reaches, and no other's.</summary>
-    public MailOwnerId Owner { get; }
+    /// <summary>Gets the user whose connections this reaches, and no other's.</summary>
+    public MailUserId User { get; }
 
     /// <summary>Gets the account the change is in, where the kind names one.</summary>
     public MailAccountId? Account { get; }
@@ -92,7 +92,7 @@ public sealed class ClientSignal
     public string? SecondLine { get; }
 
     /// <summary>Gets the scope two signals must share before one folds into the other.</summary>
-    internal ClientSignalScope Scope => new(this.Owner, this.Kind, this.Account, this.Folder);
+    internal ClientSignalScope Scope => new(this.User, this.Kind, this.Account, this.Folder);
 
     /// <summary>States that a synchronization run committed mail into one folder.</summary>
     /// <param name="account">The account the run was over.</param>
@@ -106,7 +106,7 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             ClientSignalKind.MailArrived,
-            account.Owner,
+            account.User,
             account.Id,
             folder,
             newEmailCount,
@@ -131,7 +131,7 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             ClientSignalKind.MailChanged,
-            account.Owner,
+            account.User,
             account.Id,
             folder,
             count: 0,
@@ -147,7 +147,7 @@ public sealed class ClientSignal
     public static ClientSignal FoldersChanged(MailAccountIdentity account) =>
         new(
             ClientSignalKind.FoldersChanged,
-            account.Owner,
+            account.User,
             account.Id,
             folder: null,
             count: 0,
@@ -157,7 +157,7 @@ public sealed class ClientSignal
             secondLine: null);
 
     /// <summary>States that a notification record was written for one person.</summary>
-    /// <param name="notification">The row that was written, whose owner and already-derived text this carries.</param>
+    /// <param name="notification">The row that was written, whose user and already-derived text this carries.</param>
     /// <param name="unreadCount">How many of that person's notifications now stand unread.</param>
     /// <returns>The signal.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="notification" /> is <see langword="null" />.</exception>
@@ -170,7 +170,7 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             ClientSignalKind.NotificationRaised,
-            notification.Owner,
+            notification.User,
             account: null,
             folder: null,
             unreadCount,
@@ -192,7 +192,7 @@ public sealed class ClientSignal
     public static ClientSignal AccountState(MailAccountIdentity account) =>
         new(
             ClientSignalKind.AccountState,
-            account.Owner,
+            account.User,
             account.Id,
             folder: null,
             count: 0,
@@ -225,7 +225,7 @@ public sealed class ClientSignal
 
         return new ClientSignal(
             this.Kind,
-            this.Owner,
+            this.User,
             this.Account,
             this.Folder,
             this.Kind == ClientSignalKind.MailArrived ? this.Count + later.Count : later.Count,
@@ -237,13 +237,13 @@ public sealed class ClientSignal
 }
 
 /// <summary>What two signals must share before one folds into the other: whose it is, what kind it is, and where it happened.</summary>
-/// <param name="Owner">Whose mail the statement is about.</param>
+/// <param name="User">Whose mail the statement is about.</param>
 /// <param name="Kind">Which of the five kinds it is.</param>
 /// <param name="Account">The account it names, where the kind names one.</param>
 /// <param name="Folder">The folder it names, where the kind names one.</param>
 /// <remarks>Declared once and read from both sides of the fold — the buffer keys on it and <see cref="ClientSignal.FoldedWith" /> refuses a pair that does not share it — so the two can never come to disagree about what one scope is. The place is part of it deliberately: folding two folders' arrivals into one would leave a client told that mail arrived without being told where to look.</remarks>
 internal readonly record struct ClientSignalScope(
-    MailOwnerId Owner,
+    MailUserId User,
     ClientSignalKind Kind,
     MailAccountId? Account,
     MailFolderAlias? Folder);

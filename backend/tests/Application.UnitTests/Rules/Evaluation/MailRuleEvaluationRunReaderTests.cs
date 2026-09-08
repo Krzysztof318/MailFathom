@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Rules.Evaluation;
 public sealed class MailRuleEvaluationRunReaderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailRuleEvaluationRunStore runs = Substitute.For<IMailRuleEvaluationRunStore>();
 

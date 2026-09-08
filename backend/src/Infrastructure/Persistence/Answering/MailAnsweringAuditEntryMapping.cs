@@ -28,7 +28,7 @@ internal static class MailAnsweringAuditEntryMapping
             Id = entry.Id.Value,
             RunId = entry.RunId.Value,
             MailboxAccountId = entry.AccountId.Value,
-            OwnerId = entry.Owner.Value,
+            UserId = entry.User.Value,
             ChatEndpointAlias = entry.ChatEndpointAlias,
             InstructionsVersion = entry.InstructionsVersion,
             StartedAt = entry.StartedAt,
@@ -83,7 +83,7 @@ internal static class MailAnsweringAuditEntryMapping
             Id = MailAnsweringAuditEntryId.Create(entity.Id),
             RunId = MailAnsweringRunId.Create(entity.RunId),
             Account = MailAccountIdentity.Create(
-                MailOwnerId.Create(entity.OwnerId),
+                MailUserId.Create(entity.UserId),
                 MailAccountId.Create(entity.MailboxAccountId)),
             Emails =
             [

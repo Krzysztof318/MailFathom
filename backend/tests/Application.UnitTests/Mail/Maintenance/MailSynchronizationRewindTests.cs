@@ -27,7 +27,7 @@ namespace MailFathom.Application.UnitTests.Mail.Maintenance;
 public sealed class MailSynchronizationRewindTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 

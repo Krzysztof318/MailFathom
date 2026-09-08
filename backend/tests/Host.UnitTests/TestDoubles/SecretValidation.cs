@@ -12,7 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
-/// <summary>Composes the secret validator the two places that judge an owner's mail accounts both need.</summary>
+/// <summary>Composes the secret validator the two places that judge a user's mail accounts both need.</summary>
 /// <remarks>
 /// The validator is a concrete type with eight collaborators, and both the startup gate and the record administration
 /// take it, so a copy per suite would be the same eight lines written twice and free to drift. Nothing here reaches a

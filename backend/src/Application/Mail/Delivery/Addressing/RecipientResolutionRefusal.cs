@@ -12,7 +12,7 @@ namespace MailFathom.Application.Mail.Delivery.Addressing;
 /// <remarks>
 /// The pair is the whole of what a refusal may carry. A resolution knows a name, an address the author chose, and — for
 /// an ambiguous name — several people's records, and every one of those is personal data of somebody who is not this
-/// mailbox's owner. So the count is reported and nothing that was counted is, and an address is never echoed back: a
+/// mailbox's user. So the count is reported and nothing that was counted is, and an address is never echoed back: a
 /// caller that supplied one already holds it, and a caller that supplied none must not learn one from a refusal.
 /// </remarks>
 public sealed record RecipientResolutionRefusal(

@@ -65,12 +65,12 @@ public sealed class TransportGrantStartupReportTests
     /// where to read it instead of stating a grant the entry does not carry.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnOwnerFacingEntry_NamesTheMethodAndWhereItsGrantIsRecorded()
+    public async Task StartAsync_AUserFacingEntry_NamesTheMethodAndWhereItsGrantIsRecorded()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var report = ReportFor(
-            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            McpEndpointWith(Accepting(UserCredentialMethod.ApiKey)),
             new AdminEndpointOptions(),
             logs);
 
@@ -90,7 +90,7 @@ public sealed class TransportGrantStartupReportTests
     /// recorded permissions are a ceiling. Reading the two lines the same way would over-read every token's grant.
     /// </summary>
     [Fact]
-    public async Task StartAsync_AnOwnerFacingEntryNarrowedByTokenScopes_SaysTheRecordedGrantIsACeiling()
+    public async Task StartAsync_AUserFacingEntryNarrowedByTokenScopes_SaysTheRecordedGrantIsACeiling()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -248,7 +248,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = Accepting(OwnerCredentialMethod.ApiKey);
+        var entry = Accepting(UserCredentialMethod.ApiKey);
         entry.RecordConfigurationKey("2");
 
         var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
@@ -269,7 +269,7 @@ public sealed class TransportGrantStartupReportTests
         using var logs = new RecordingLoggerProvider();
 
         var report = ReportFor(
-            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            McpEndpointWith(Accepting(UserCredentialMethod.ApiKey)),
             new AdminEndpointOptions(),
             logs);
 
@@ -339,10 +339,10 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var clientEndpoint = new ClientEndpointOptions { Enabled = true };
-        clientEndpoint.Authentication.Add(Accepting(OwnerCredentialMethod.Password));
+        clientEndpoint.Authentication.Add(Accepting(UserCredentialMethod.Password));
 
         var report = ReportFor(
-            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            McpEndpointWith(Accepting(UserCredentialMethod.ApiKey)),
             AdminEndpointWith(AnEntryThatStatedNoGrant()),
             logs,
             clientEndpoint);
@@ -374,7 +374,7 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var report = ReportFor(
-            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            McpEndpointWith(Accepting(UserCredentialMethod.ApiKey)),
             AdminEndpointWith(AnEntryThatStatedNoGrant()),
             logs);
 
@@ -417,7 +417,7 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var report = ReportFor(
-            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            McpEndpointWith(Accepting(UserCredentialMethod.ApiKey)),
             new AdminEndpointOptions(),
             logs);
 
@@ -459,10 +459,10 @@ public sealed class TransportGrantStartupReportTests
         return entry;
     }
 
-    private static OwnerFacingAuthenticationOptions Accepting(OwnerCredentialMethod method) =>
+    private static UserFacingAuthenticationOptions Accepting(UserCredentialMethod method) =>
         ConfiguredAuthentication.Accepting(method);
 
-    private static McpEndpointOptions McpEndpointWith(OwnerFacingAuthenticationOptions entry)
+    private static McpEndpointOptions McpEndpointWith(UserFacingAuthenticationOptions entry)
     {
         var endpointSettings = new McpEndpointOptions { Enabled = true };
         endpointSettings.Authentication.Add(entry);

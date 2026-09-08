@@ -150,7 +150,7 @@ internal sealed class DiscoveryCompositionAgent : IDiscoveryResultComposer
     /// <summary>Withholds from the provider whatever this deployment withholds, source by source.</summary>
     /// <remarks>
     /// The extracts leave this deployment and the plan does not, so only this copy is guarded: what the plan quotes is
-    /// the owner's own mail going back to the owner, and redacting it there would hide from somebody what they already
+    /// the user's own mail going back to the user, and redacting it there would hide from somebody what they already
     /// have. A guard that is inactive returns the same text, so a deployment scanning nothing pays nothing here.
     /// </remarks>
     private async Task<IReadOnlyList<DiscoveryTurnSource>> GuardAsync(

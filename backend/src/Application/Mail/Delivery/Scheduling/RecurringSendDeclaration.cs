@@ -17,16 +17,16 @@ namespace MailFathom.Application.Mail.Delivery.Scheduling;
 /// </para>
 /// <para>
 /// The recipients are the reason this type exists rather than the declaration itself being read. They are addresses of
-/// people other than the mailbox's owner, and loading five hundred declarations' worth of them on every pass would keep
+/// people other than the mailbox's user, and loading five hundred declarations' worth of them on every pass would keep
 /// personal data moving through a decision that never looks at it. The occasion reads them when it composes, by
 /// identifier, which is where they are actually needed.
 /// </para>
 /// </remarks>
 /// <param name="Id">The declaration the occasion belongs to.</param>
-/// <param name="Account">The account every occurrence is submitted through and sent as, named by its owner and its identifier.</param>
+/// <param name="Account">The account every occurrence is submitted through and sent as, named by its user and its identifier.</param>
 /// <param name="Schedule">The repetition as it was declared, in the syntax the dispatch mechanism parses.</param>
 public sealed record RecurringSendDeclaration(RecurringSendId Id, MailAccountIdentity Account, string Schedule)
 {
-    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one user names.</summary>
     public MailAccountId AccountId => this.Account.Id;
 }

@@ -36,7 +36,7 @@ holds the whole of it, and none of it applies with classification off.
 ## The backlog between synchronization and the provider
 
 A message is offered for embedding by the last local step of its account's synchronization run — the step that cuts its
-passages, after classification and after the owner's rules have had their turn — and never inside the transaction that
+passages, after classification and after the user's rules have had their turn — and never inside the transaction that
 stored the message. [The arrival pipeline](../architecture/arrival-pipeline.md) draws that order in full. Two things
 follow from it, and both are the reason for it:
 
@@ -99,13 +99,13 @@ selects on; the messages behind it stay in the backlog until its bound turns one
 covers those too. The pause is logged as a warning naming how long it will last and which key raises the ceiling, and
 it is counted like any other outcome.
 
-**A per-owner ceiling does not pause the worker**, and that difference is the whole reason the two are separate
-ceilings. Where the turn reports that the message's *owner* has spent their share while the deployment still has room,
-the worker takes the next message rather than waiting: the backlog holds every owner's mail, so pausing would stop
+**A per-user ceiling does not pause the worker**, and that difference is the whole reason the two are separate
+ceilings. Where the turn reports that the message's *user* has spent their share while the deployment still has room,
+the worker takes the next message rather than waiting: the backlog holds every user's mail, so pausing would stop
 everybody for one person's spending. That message keeps its outstanding passages exactly as above, and the refusal is
-logged as its own warning — naming that it was an owner's share rather than the deployment's, and which key raises it —
+logged as its own warning — naming that it was a user's share rather than the deployment's, and which key raises it —
 so an operator can tell one person at their share from the deployment at its ceiling. It is written **once per budget
-period** rather than once per message: an owner with mail waiting meets their share on every one of those messages and
+period** rather than once per message: a user with mail waiting meets their share on every one of those messages and
 the line would say the same thing each time, so the first is logged and the rest are the counter's to report. The
 counter records both ceilings as `spend_ceiling_reached`, because what the outcome names is what happened to the message
 and that is the same in either case.

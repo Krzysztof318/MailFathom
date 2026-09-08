@@ -24,26 +24,26 @@ using Microsoft.Net.Http.Headers;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves the messages the signed-in owner is writing: composing one, attaching to one, and sending it.</summary>
+/// <summary>Serves the messages the signed-in user is writing: composing one, attaching to one, and sending it.</summary>
 /// <remarks>
 /// <para>
-/// A draft here is the one kind there is: every save files it in the owner's own drafts folder, so what these routes
+/// A draft here is the one kind there is: every save files it in the user's own drafts folder, so what these routes
 /// write is what their mail client shows them and what their phone syncs. There is no local-only draft to reach
-/// instead, deliberately — a message held where its owner never looks is a second place to look for the same thing.
+/// instead, deliberately — a message held where its user never looks is a second place to look for the same thing.
 /// What it costs is an <c>APPEND</c> and a removal per revision, IMAP having no command that changes a stored message,
 /// which is why a revision is a request the client makes when somebody asks to save rather than one it makes as they
 /// type.
 /// </para>
 /// <para>
-/// <b>Every route is scoped to the caller's own owner</b>, and a draft another owner holds answers exactly as one
+/// <b>Every route is scoped to the caller's own user</b>, and a draft another user holds answers exactly as one
 /// nobody holds. A save names the account it belongs to and that name is resolved against the accounts the caller's
-/// owner owns; every other act names a draft, and <see cref="OwnerMailDrafts" /> and <see cref="MailDraftDirectory" />
-/// are where an identifier becomes a draft this owner holds before anything acts on it.
+/// user owns; every other act names a draft, and <see cref="UserMailDrafts" /> and <see cref="MailDraftDirectory" />
+/// are where an identifier becomes a draft this user holds before anything acts on it.
 /// </para>
 /// <para>
 /// The grants are two rather than one, because writing a draft and sending it are different powers. Writing, listing,
 /// opening, revising, giving up, and attaching are <c>mailfathom.mail.drafts.write</c>, whose effect reaches the
-/// owner's own mailbox and nobody else's; sending is <c>mailfathom.mail.send</c>, which puts a message in somebody
+/// user's own mailbox and nobody else's; sending is <c>mailfathom.mail.send</c>, which puts a message in somebody
 /// else's mailbox and is the one act here that cannot be taken back. They are the same two names the drafting tools
 /// are published under, because a draft written here and one written by an agent are the same row and the same copy.
 /// </para>
@@ -56,7 +56,7 @@ namespace MailFathom.Host.Api;
 /// </remarks>
 internal static class ClientDraftEndpoints
 {
-    /// <summary>The route the owner's drafts are listed at and a new one is written at, relative to the client prefix.</summary>
+    /// <summary>The route the user's drafts are listed at and a new one is written at, relative to the client prefix.</summary>
     internal const string DraftsRoute = "/drafts";
 
     /// <summary>The route one draft is opened, revised, and given up at.</summary>
@@ -141,8 +141,8 @@ internal static class ClientDraftEndpoints
             .RequirePermission(MailFathomPermission.MailDraftsWrite);
     }
 
-    /// <summary>Serves the drafts the acting owner is writing, newest edit first.</summary>
-    /// <param name="account">The account to narrow to, by its identifier or its display name, or <see langword="null" /> for every account the owner owns.</param>
+    /// <summary>Serves the drafts the acting user is writing, newest edit first.</summary>
+    /// <param name="account">The account to narrow to, by its identifier or its display name, or <see langword="null" /> for every account the user owns.</param>
     /// <param name="directory">Reads the drafts, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the drafts, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.drafts.write</c>.</returns>
@@ -165,17 +165,17 @@ internal static class ClientDraftEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
     }
 
-    /// <summary>Opens one of the acting owner's drafts, with the words its stored message carries.</summary>
+    /// <summary>Opens one of the acting user's drafts, with the words its stored message carries.</summary>
     /// <param name="draftId">The draft to open.</param>
     /// <param name="directory">Reads the draft and its message, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the reads when the client disconnects.</param>
-    /// <returns><c>200</c> with the draft and its text, or <c>404</c> where this owner holds no such draft.</returns>
+    /// <returns><c>200</c> with the draft and its text, or <c>404</c> where this user holds no such draft.</returns>
     /// <remarks>
-    /// A draft another owner holds, one nobody holds, and one whose stored message has gone answer identically, so
+    /// A draft another user holds, one nobody holds, and one whose stored message has gone answer identically, so
     /// nothing here tells a caller that somebody else's draft exists.
     /// </remarks>
     internal static async Task<Results<Ok<ClientDraftReadingResponse>, NotFound>> ReadDraftAsync(
@@ -195,7 +195,7 @@ internal static class ClientDraftEndpoints
             : TypedResults.NotFound();
     }
 
-    /// <summary>Writes one new draft for the acting owner, which reaches no mailbox unless the request asks it to.</summary>
+    /// <summary>Writes one new draft for the acting user, which reaches no mailbox unless the request asks it to.</summary>
     /// <param name="request">What the author wrote.</param>
     /// <param name="drafting">Writes a draft of a message of its own.</param>
     /// <param name="answering">Writes a draft of a reply, a reply to all, or a forward.</param>
@@ -208,17 +208,17 @@ internal static class ClientDraftEndpoints
         CancellationToken cancellationToken) =>
         SaveAsync(request, revises: null, drafting, answering, cancellationToken);
 
-    /// <summary>Replaces one of the acting owner's drafts with what the author has written since.</summary>
+    /// <summary>Replaces one of the acting user's drafts with what the author has written since.</summary>
     /// <param name="draftId">The draft being replaced.</param>
     /// <param name="request">What the author wrote.</param>
     /// <param name="drafting">Writes a draft of a message of its own.</param>
     /// <param name="answering">Writes a draft of a reply, a reply to all, or a forward.</param>
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
-    /// <returns><c>200</c> with the draft, <c>404</c> where this owner holds no such draft, <c>400</c> naming what the author has to change, <c>409</c> where a rule of this deployment refused what was written, or <c>503</c> where screening could not run.</returns>
+    /// <returns><c>200</c> with the draft, <c>404</c> where this user holds no such draft, <c>400</c> naming what the author has to change, <c>409</c> where a rule of this deployment refused what was written, or <c>503</c> where screening could not run.</returns>
     /// <remarks>
     /// The revision keeps whichever shape the draft already is: an answer re-derives its account, its subject, and its
     /// threading identifiers from the message it answers rather than from the revision it replaces, which is what keeps
-    /// an edited reply a reply. Whether a copy belongs in the owner's folder is not read here — that was settled when
+    /// an edited reply a reply. Whether a copy belongs in the user's folder is not read here — that was settled when
     /// the draft was written, and asking it again per edit would let a message be filed by an edit about a subject.
     /// </remarks>
     internal static Task<Results<Ok<ClientDraftResponse>, ProblemHttpResult>> ReviseDraftAsync(
@@ -231,11 +231,11 @@ internal static class ClientDraftEndpoints
             ? SaveAsync(request, identifier, drafting, answering, cancellationToken)
             : Task.FromResult<Results<Ok<ClientDraftResponse>, ProblemHttpResult>>(NoDraftNamed());
 
-    /// <summary>Gives up one of the acting owner's drafts, and takes its copies back out of their folder.</summary>
+    /// <summary>Gives up one of the acting user's drafts, and takes its copies back out of their folder.</summary>
     /// <param name="draftId">The draft to give up.</param>
-    /// <param name="drafts">Performs the act, for the owner the credential names.</param>
+    /// <param name="drafts">Performs the act, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
-    /// <returns><c>200</c> with what became of the copies, <c>404</c> where this owner holds no such draft, or <c>409</c> where the draft has already been sent.</returns>
+    /// <returns><c>200</c> with what became of the copies, <c>404</c> where this user holds no such draft, or <c>409</c> where the draft has already been sent.</returns>
     /// <remarks>
     /// A draft already promoted to a send is refused rather than given up, because its message is a queued send this
     /// would leave running: cancelling the send in the outbox is what stops it, and until it is delivered or cancelled
@@ -243,7 +243,7 @@ internal static class ClientDraftEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<ClientDraftDiscardResponse>, ProblemHttpResult>> DiscardDraftAsync(
         [FromRoute] Guid draftId,
-        [FromServices] OwnerMailDrafts drafts,
+        [FromServices] UserMailDrafts drafts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(drafts);
@@ -264,11 +264,11 @@ internal static class ClientDraftEndpoints
         }
     }
 
-    /// <summary>Queues one of the acting owner's drafts for delivery, which is the one act here that reaches anybody else.</summary>
+    /// <summary>Queues one of the acting user's drafts for delivery, which is the one act here that reaches anybody else.</summary>
     /// <param name="draftId">The draft to send.</param>
-    /// <param name="drafts">Performs the act, for the owner the credential names.</param>
+    /// <param name="drafts">Performs the act, for the user the credential names.</param>
     /// <param name="cancellationToken">Cancels the reads and the write.</param>
-    /// <returns><c>200</c> with the queued send, <c>404</c> where this owner holds no such draft, <c>409</c> where a rule of this deployment refused the message, or <c>503</c> where screening could not run.</returns>
+    /// <returns><c>200</c> with the queued send, <c>404</c> where this user holds no such draft, <c>409</c> where a rule of this deployment refused the message, or <c>503</c> where screening could not run.</returns>
     /// <remarks>
     /// Nothing has been transmitted when this answers: the message is queued and the outbox routes are where a client
     /// watches what becomes of it. A refusal names which rule refused — screening, the recipient policy, or a spending
@@ -276,7 +276,7 @@ internal static class ClientDraftEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<ClientDraftSendResponse>, ProblemHttpResult>> SendDraftAsync(
         [FromRoute] Guid draftId,
-        [FromServices] OwnerMailDrafts drafts,
+        [FromServices] UserMailDrafts drafts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(drafts);
@@ -300,7 +300,7 @@ internal static class ClientDraftEndpoints
         catch (OutgoingMailRefusedException refusal)
         {
             // A conflict rather than a bad request: nothing about the request is wrong and no rewriting of it by the
-            // client would help — what refused is a rule of this deployment about the message the owner already wrote.
+            // client would help — what refused is a rule of this deployment about the message the user already wrote.
             return Coded(refusal, StatusCodes.Status409Conflict);
         }
         catch (SensitiveContentScannerUnavailableException refusal)
@@ -311,13 +311,13 @@ internal static class ClientDraftEndpoints
         }
     }
 
-    /// <summary>Stages one file against a draft the acting owner is writing.</summary>
+    /// <summary>Stages one file against a draft the acting user is writing.</summary>
     /// <param name="draftId">The draft the file is attached to.</param>
     /// <param name="fileName">What the file is called, which is the author's own text and is never read as a path.</param>
     /// <param name="attachments">Takes the file in, for a caller the write's own grant admits.</param>
     /// <param name="context">The request being answered, whose body carries the octets.</param>
     /// <param name="cancellationToken">Cancels the read of the body and the write.</param>
-    /// <returns><c>200</c> with the staged file, <c>404</c> where this owner holds no such draft still being written, or <c>400</c> naming the bound the file exceeded.</returns>
+    /// <returns><c>200</c> with the staged file, <c>404</c> where this user holds no such draft still being written, or <c>400</c> naming the bound the file exceeded.</returns>
     /// <remarks>
     /// <para>
     /// The octets are the request body and nothing else, so what a client uploads is what is staged: no form to parse,
@@ -372,12 +372,12 @@ internal static class ClientDraftEndpoints
         }
     }
 
-    /// <summary>Takes one staged file back off a draft the acting owner is writing.</summary>
+    /// <summary>Takes one staged file back off a draft the acting user is writing.</summary>
     /// <param name="draftId">The draft the file was attached to.</param>
     /// <param name="attachmentId">The file to take off.</param>
     /// <param name="attachments">Performs the removal, for a caller the write's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read and the write.</param>
-    /// <returns><c>204</c> whether or not the draft carried such a file, or <c>404</c> where this owner holds no such draft still being written.</returns>
+    /// <returns><c>204</c> whether or not the draft carried such a file, or <c>404</c> where this user holds no such draft still being written.</returns>
     /// <remarks>
     /// Taking a file off twice is one removal and the second answers as the first did, because the outcome a caller
     /// asked for holds either way. The stored message still carries the file until the next revision is composed, for
@@ -461,7 +461,7 @@ internal static class ClientDraftEndpoints
         }
         catch (MailAccountNotAccessibleException)
         {
-            return Refuse("The account is not one this owner owns.");
+            return Refuse("The account is not one this user owns.");
         }
         catch (SensitiveContentScannerUnavailableException refusal)
         {
@@ -559,7 +559,7 @@ internal static class ClientDraftEndpoints
     /// <summary>Names the act writing this draft down, which is provenance rather than an identity to compare.</summary>
     /// <remarks>
     /// A draft carries no idempotency key and takes none from a caller, for the reason the tool surface's drafting
-    /// takes none: asking twice for a draft is two drafts, and the second costs an owner a deletion rather than a
+    /// takes none: asking twice for a draft is two drafts, and the second costs a user a deletion rather than a
     /// recipient a second message. So the identity is minted per call and says what it truly is — one act.
     /// </remarks>
     private static OutgoingEmailRequester Author() =>
@@ -603,7 +603,7 @@ internal static class ClientDraftEndpoints
 
     /// <summary>Answers a refusal a draft act raised, at the status the refusal's own code decides.</summary>
     /// <remarks>
-    /// A draft this owner does not hold is the absence of the thing addressed, so it is <c>404</c>; screening refusing
+    /// A draft this user does not hold is the absence of the thing addressed, so it is <c>404</c>; screening refusing
     /// a message is a rule of this deployment about what the author already wrote, so it is <c>409</c>; and everything
     /// else is something the author can change, so it is <c>400</c>. The code travels beside every one of them, so a
     /// client matches the failure rather than parsing the sentence.

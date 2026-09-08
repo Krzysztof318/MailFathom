@@ -13,7 +13,7 @@ namespace MailFathom.Application.Emails.Chunking;
 /// <remarks>
 /// <para>
 /// This is the fourth stage of the arrival pipeline, and it is a stage of its own precisely because of what runs in
-/// front of it. Classification decides whether a message is derived from at all, the owner's rules may move it into a
+/// front of it. Classification decides whether a message is derived from at all, the user's rules may move it into a
 /// folder mapped differently from the one it arrived in, and both of those happen after the transaction that stored the
 /// message committed. Cutting inside that transaction would therefore write passages from a message's placement before
 /// the two stages allowed to change it had run — and passages are not undone by the message moving afterwards.

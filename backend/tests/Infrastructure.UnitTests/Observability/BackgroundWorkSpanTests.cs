@@ -458,8 +458,8 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         EmbeddedEmailCount: 2,
         embeddedChunkCount,
         CallBudgetExhaustedEmailCount: 0,
-        OwnerSpendCeilingEmailCount: 0,
-        OwnerSpendPeriodEndsAt: null,
+        UserSpendCeilingEmailCount: 0,
+        UserSpendPeriodEndsAt: null,
         OutstandingEmailCountAtSweepStart: 9,
         Failure: null,
         SpendPeriodEndsAt: null);

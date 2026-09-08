@@ -16,7 +16,7 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// </para>
 /// <para>
 /// Declared rather than stored, whichever source declared it. A deployment's configuration is one source of schedules
-/// and the declarations an owner made are another, so what exists is whatever the sources answer with on the pass that
+/// and the declarations a user made are another, so what exists is whatever the sources answer with on the pass that
 /// asks. The only durable state a schedule itself has is the occasion it last dispatched — which is state rather than
 /// settings, and lives where every other piece of state does.
 /// </para>
@@ -24,7 +24,7 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// <param name="Id">The identity the schedule's durable state is keyed by.</param>
 /// <param name="Payload">The references the repeated work is described by, which also names its job type.</param>
 /// <param name="Recurrence">The occasions the work is dispatched on.</param>
-/// <param name="Account">The account the work belongs to, named by its owner and its identifier, or <see langword="null" /> when it belongs to none.</param>
+/// <param name="Account">The account the work belongs to, named by its user and its identifier, or <see langword="null" /> when it belongs to none.</param>
 public sealed record ScheduledJob(
     JobScheduleId Id,
     IJobPayload Payload,

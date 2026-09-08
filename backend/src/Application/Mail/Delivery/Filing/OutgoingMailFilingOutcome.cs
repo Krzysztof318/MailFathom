@@ -30,7 +30,7 @@ public enum OutgoingMailFilingOutcome
 
     /// <summary>The append went out and the server's answer never came back, so nobody can say whether the copy is there.</summary>
     /// <remarks>
-    /// The one outcome that is never attempted again. A second append is a second message in the owner's folder, and
+    /// The one outcome that is never attempted again. A second append is a second message in the user's folder, and
     /// nothing the folder shows afterwards tells the two apart.
     /// </remarks>
     OutcomeUnknown = 4,

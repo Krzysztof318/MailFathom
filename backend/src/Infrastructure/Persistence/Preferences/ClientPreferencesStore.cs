@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Preferences;
 
-/// <summary>Keeps one person's client preferences in PostgreSQL, one owner's row at a time.</summary>
+/// <summary>Keeps one person's client preferences in PostgreSQL, one user's row at a time.</summary>
 /// <remarks>
 /// <para>
 /// The read is a primary-key lookup that projects the document alone, and the write is one statement. Both name the
-/// owner as a parameter and neither can be aimed at another row, so an identifier learned elsewhere reaches nobody
+/// user as a parameter and neither can be aimed at another row, so an identifier learned elsewhere reaches nobody
 /// else's preferences.
 /// </para>
 /// <para>
@@ -23,12 +23,12 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 /// overwrites the winner instead of failing, which is the contract this store publishes.
 /// </para>
 /// <para>
-/// It inserts from the owner row rather than blindly, so an owner this deployment no longer holds affects no row and
+/// It inserts from the user row rather than blindly, so a user this deployment no longer holds affects no row and
 /// is reported as such — a foreign-key violation would say the same thing as an exception naming a constraint, and the
 /// caller here is a person whose answer is that there is nothing of theirs here.
 /// </para>
 /// <para>
-/// The read carries no octet ceiling, unlike the owner record's, and the difference is the documents rather than the
+/// The read carries no octet ceiling, unlike the user record's, and the difference is the documents rather than the
 /// care taken over them. That one holds every mail account a person declares and can legitimately grow, so a bound is
 /// what separates a large record from a row something went wrong with; this one is three scalars written by
 /// <see cref="ClientPreferencesUpsertStatement" /> and by nothing else, so there is no size a correct row could reach
@@ -43,15 +43,15 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 internal sealed class ClientPreferencesStore(MailFathomDbContext context, TimeProvider clock) : IClientPreferencesStore
 {
     /// <inheritdoc />
-    public async Task<ClientPreferences?> ReadAsync(MailOwnerId owner, CancellationToken cancellationToken)
+    public async Task<ClientPreferences?> ReadAsync(MailUserId user, CancellationToken cancellationToken)
     {
-        RequireNamed(owner);
+        RequireNamed(user);
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         var document = await context.ClientPreferences
             .AsNoTracking()
-            .Where(preferences => preferences.OwnerId == ownerValue)
+            .Where(preferences => preferences.UserId == userValue)
             .Select(preferences => preferences.Document)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -60,30 +60,30 @@ internal sealed class ClientPreferencesStore(MailFathomDbContext context, TimePr
 
     /// <inheritdoc />
     public async Task<bool> SaveAsync(
-        MailOwnerId owner,
+        MailUserId user,
         ClientPreferences preferences,
         CancellationToken cancellationToken)
     {
-        RequireNamed(owner);
+        RequireNamed(user);
         ArgumentNullException.ThrowIfNull(preferences);
 
         var written = clock.GetUtcNow();
 
         var rows = await context.Database.ExecuteSqlRawAsync(
             ClientPreferencesUpsertStatement.Compose(context.Model),
-            [owner.Value, ClientPreferencesDocument.Render(preferences), written],
+            [user.Value, ClientPreferencesDocument.Render(preferences), written],
             cancellationToken);
 
         return rows > 0;
     }
 
-    private static void RequireNamed(MailOwnerId owner)
+    private static void RequireNamed(MailUserId user)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
             throw new ArgumentException(
-                "Client preferences are read and written for a named owner, and the value names nobody.",
-                nameof(owner));
+                "Client preferences are read and written for a named user, and the value names nobody.",
+                nameof(user));
         }
     }
 }

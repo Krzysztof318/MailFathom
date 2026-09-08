@@ -179,7 +179,7 @@ public sealed class MailAnsweringRunTelemetryTests : IDisposable
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7(StartedAt)),
-            MailboxScope.Create(SyntheticMailOwner.Deployment, [Account], []),
+            MailboxScope.Create(SyntheticMailUser.Deployment, [Account], []),
             StartedAt);
 
         observation.RecordComposition("answering", "0a1b2c3d4e5f");

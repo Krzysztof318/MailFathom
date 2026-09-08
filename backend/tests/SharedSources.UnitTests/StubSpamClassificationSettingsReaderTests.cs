@@ -25,7 +25,7 @@ public sealed class StubSpamClassificationSettingsReaderTests
 
         // Act
         var answered = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"))
-            .SettingsFor(MailOwnerId.Create(Guid.NewGuid()));
+            .SettingsFor(MailUserId.Create(Guid.NewGuid()));
 
         // Assert
         Assert.Same(settings, answered);
@@ -74,8 +74,8 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var reader = StubSpamClassificationSettingsReader.Disabled;
 
         // Assert
-        Assert.False(reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())).IsEnabled);
-        Assert.Empty(reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())).ScannedFolderAliases);
+        Assert.False(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).IsEnabled);
+        Assert.Empty(reader.SettingsFor(MailUserId.Create(Guid.NewGuid())).ScannedFolderAliases);
         Assert.Empty(reader.ScopeInForce.ClassifyingAccounts);
     }
 }

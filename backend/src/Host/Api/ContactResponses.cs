@@ -11,7 +11,7 @@ namespace MailFathom.Host.Api;
 /// <param name="DisplayName">The name to record for the person.</param>
 /// <param name="Addresses">Every address the person uses; two spellings of one address count once.</param>
 /// <param name="PreferredAddress">The address to use by default, which must be one of <paramref name="Addresses" />.</param>
-/// <param name="Note">What the owner wrote about the person, or nothing to hold no note.</param>
+/// <param name="Note">What the user wrote about the person, or nothing to hold no note.</param>
 /// <remarks>
 /// One request shape for both operations, because an amendment states the whole record rather than the difference from
 /// the one held: what a caller sends to create a contact and what it sends to correct one are the same four things, and
@@ -26,10 +26,10 @@ internal sealed record ContactRecordRequest(
 
 /// <summary>One person as the book holds them.</summary>
 /// <param name="Id">The identity the book gave them, which no amendment and no promotion changes.</param>
-/// <param name="DisplayName">The name the owner recorded, in the casing they wrote it.</param>
+/// <param name="DisplayName">The name the user recorded, in the casing they wrote it.</param>
 /// <param name="Addresses">Every address they use, the preferred one first and the rest in comparison order.</param>
 /// <param name="PreferredAddress">The address to use when something addresses them without naming which of theirs.</param>
-/// <param name="Note">What the owner wrote about them, or nothing where they wrote nothing.</param>
+/// <param name="Note">What the user wrote about them, or nothing where they wrote nothing.</param>
 /// <param name="Origin">How the contact came to be in the book, which decides who may amend it.</param>
 /// <param name="RecordedAt">When the contact entered the book.</param>
 /// <param name="AmendedAt">When it was last amended, which equals <paramref name="RecordedAt" /> until one happens.</param>
@@ -93,7 +93,7 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 /// <remarks>
 /// <para>
 /// A refusal is answered with <c>200</c> and a named outcome rather than a status code, because each one is something
-/// the caller reports to its owner and continues from rather than a request that was malformed. Only the holder's
+/// the caller reports to its user and continues from rather than a request that was malformed. Only the holder's
 /// identity is named: answering with somebody else's record would hand a third party out as a side effect of a refused
 /// write.
 /// </para>
@@ -147,7 +147,7 @@ internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Con
 /// <param name="WasHeld">Whether the book held that contact when the erasure ran.</param>
 /// <param name="AddressesErased">How many addresses went with them.</param>
 /// <remarks>
-/// The counts are what an owner is entitled to rather than a courtesy, and they are the whole of what an erasure says
+/// The counts are what a user is entitled to rather than a courtesy, and they are the whole of what an erasure says
 /// about a person: that they are gone, and how much went. No name, address, or note is in this answer, deliberately —
 /// a report of an erasure that echoed the record would be a copy of what was just removed.
 /// </remarks>
@@ -159,7 +159,7 @@ internal sealed record ContactErasureResponse(Guid Contact, bool WasHeld, int Ad
 /// <remarks>
 /// Two counts and nobody's identity, for the reason the single erasure above carries none: what a disposal reports is
 /// how much of a record about other people this deployment had built and no longer has. A book that had collected
-/// nobody answers with two zeroes rather than with a failure, because the state the owner asked for is the state the
+/// nobody answers with two zeroes rather than with a failure, because the state the user asked for is the state the
 /// book is in.
 /// </remarks>
 internal sealed record CollectedContactErasureResponse(int ContactsErased, int AddressesErased);

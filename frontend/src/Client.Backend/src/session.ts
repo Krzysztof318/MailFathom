@@ -11,7 +11,7 @@ export const clientRoutePrefix = '/api/client';
  * Where a MailFathom deployment is, as the address every route on it is appended to.
  *
  * It is a scheme, a host, and a port where the deployment uses one, with no trailing separator. Nothing in this
- * package composes one from a literal: a deployment is somewhere only its owner knows, so an address arrives from
+ * package composes one from a literal: a deployment is somewhere only its user knows, so an address arrives from
  * `resolveDeploymentEntry`, which is also where the rule refusing a clear-text one lives.
  */
 export interface DeploymentAddress {

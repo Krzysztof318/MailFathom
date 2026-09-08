@@ -109,7 +109,7 @@ internal sealed class SensitiveContentOptions : IValidatableObject
 
     /// <summary>Gets whether this deployment stood the analyzer the personal-data scanner reaches up.</summary>
     /// <remarks>
-    /// Configuring an address is what makes that scanner available — to the deployment itself, and to an owner who
+    /// Configuring an address is what makes that scanner available — to the deployment itself, and to a user who
     /// switches it on for their own mail — and it is deliberately a different question from whether <see cref="Pii" />
     /// is on. The address is parsed rather than merely present, because the composition root builds the analyzer client
     /// from it and an address no request could be composed from provides nothing.
@@ -118,10 +118,10 @@ internal sealed class SensitiveContentOptions : IValidatableObject
         Uri.TryCreate(this.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var analyzer)
         && (analyzer.Scheme == Uri.UriSchemeHttp || analyzer.Scheme == Uri.UriSchemeHttps);
 
-    /// <summary>Gets every scanner this deployment stands behind, whether or not it scans its owners' mail with one.</summary>
+    /// <summary>Gets every scanner this deployment stands behind, whether or not it scans its users' mail with one.</summary>
     /// <remarks>
-    /// This is what the composition root registers detectors on, because which of them run over one owner's mail is
-    /// that owner's posture and no roster exists while services are being registered. The secrets scanner is always
+    /// This is what the composition root registers detectors on, because which of them run over one user's mail is
+    /// that user's posture and no roster exists while services are being registered. The secrets scanner is always
     /// among them: it runs inside this process and needs nothing deployed beside it. Registering a detector constructs
     /// none, so a deployment nobody asked for scanning on still compiles no expression and opens no client.
     /// </remarks>
@@ -209,7 +209,7 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// <remarks>
     /// Judged whenever this deployment stands the analyzer up, which an address alone is enough to do: the composition
     /// root builds the client and the analyzer profile from these keys as soon as <see cref="ProvidesPersonalDataScanner" />
-    /// holds, whether the deployment scans its own mail with the scanner or only offers it to an owner who switches it
+    /// holds, whether the deployment scans its own mail with the scanner or only offers it to a user who switches it
     /// on. Leaving them unjudged in that state would let a start that reads as protection in force fail every operation
     /// the scanner guards, with nothing naming the key that did it.
     /// <para>

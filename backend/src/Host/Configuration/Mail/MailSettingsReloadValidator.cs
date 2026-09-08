@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 
 namespace MailFathom.Host.Configuration.Mail;
 
@@ -11,12 +11,12 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <remarks>
 /// <para>
 /// The secrets and the trust anchors are the half a reload has always been judged by. What this adds is the half a
-/// start judges through <see cref="DeclaredOwners" /> and a reload could not: the deployment's own
-/// <c>MailSynchronization:Accounts</c> names no owner, so it belongs to whichever sole owner a deployment holds, and a
-/// deployment serving owners from their own declarations has none. Without this an operator could add an account to
+/// start judges through <see cref="DeclaredUsers" /> and a reload could not: the deployment's own
+/// <c>MailSynchronization:Accounts</c> names no user, so it belongs to whichever sole user a deployment holds, and a
+/// deployment serving users from their own declarations has none. Without this an operator could add an account to
 /// that section on a running deployment and have it adopted — and the lookup that resolves a configured account reads
-/// that section first, so an owner's mailbox would be run with the transport security, synchronization window, and
-/// deletion disposition of a declaration naming nobody while the catalogue went on publishing it under that owner.
+/// that section first, so a user's mailbox would be run with the transport security, synchronization window, and
+/// deletion disposition of a declaration naming nobody while the catalogue went on publishing it under that user.
 /// </para>
 /// <para>
 /// A candidate that fails leaves the previous declaration serving, which is what keeps the correction reachable: the
@@ -26,7 +26,7 @@ namespace MailFathom.Host.Configuration.Mail;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this validator.")]
 internal sealed class MailSettingsReloadValidator(
     SecretConfigurationValidator secretValidator,
-    ServedMailOwners servedOwners)
+    ServedMailUsers servedUsers)
 {
     /// <summary>Finds everything an operator must fix before a reloaded mail declaration can be published.</summary>
     /// <param name="candidate">The reloaded declaration.</param>
@@ -42,14 +42,14 @@ internal sealed class MailSettingsReloadValidator(
         var errors = new List<string>(
             await secretValidator.FindMailConfigurationErrorsAsync(candidate, cancellationToken));
 
-        if (candidate.Accounts.Count > 0 && servedOwners.ServesAnyOwnerFromTheirOwnAccounts())
+        if (candidate.Accounts.Count > 0 && servedUsers.ServesAnyUserFromTheirOwnAccounts())
         {
             errors.Add(
                 $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)} declares "
-                + $"{candidate.Accounts.Count} mail accounts while this deployment serves owners from their own "
-                + $"accounts. That section names no owner, so its accounts belong to whichever sole owner a deployment "
-                + $"holds and there is none here: move each of them under the owner who owns it, as an entry of that "
-                + $"owner's {DeclaredOwnerOptions.SectionName} entry's {nameof(DeclaredOwnerOptions.MailAccounts)}.");
+                + $"{candidate.Accounts.Count} mail accounts while this deployment serves users from their own "
+                + $"accounts. That section names no user, so its accounts belong to whichever sole user a deployment "
+                + $"holds and there is none here: move each of them under the user who owns it, as an entry of that "
+                + $"user's {DeclaredUserOptions.SectionName} entry's {nameof(DeclaredUserOptions.MailAccounts)}.");
         }
 
         return errors;

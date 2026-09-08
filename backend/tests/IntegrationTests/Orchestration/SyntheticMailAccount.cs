@@ -122,7 +122,7 @@ internal sealed class SyntheticMailAccount(
         "mutation-record-inbox",
         "mutation-withdrawal",
         "occurrence-identity",
-        "owner-stored-content",
+        "user-stored-content",
         DraftCopyFolderAlias,
         OutgoingCopyFolderAlias,
         "persistence-session",
@@ -165,15 +165,15 @@ internal sealed class SyntheticMailAccount(
     public static MailAccountId AccountId { get; } =
         MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
 
-    /// <summary>Gets the owner this deployment's one account belongs to, as the orchestrated database provisioned it.</summary>
+    /// <summary>Gets the user this deployment's one account belongs to, as the orchestrated database provisioned it.</summary>
     /// <remarks>
-    /// Read rather than stated, because the migration that provisions the owner record generates its identifier: a
+    /// Read rather than stated, because the migration that provisions the user record generates its identifier: a
     /// value written here would name a row no database holds, and every write keyed onto it would be refused.
     /// </remarks>
-    public static MailOwnerId Owner => OrchestratedDeploymentOwner.Shared.Owner;
+    public static MailUserId User => OrchestratedDeploymentUser.Shared.User;
 
-    /// <summary>Gets the account every test writes under, named by its owner and its identifier together.</summary>
-    public static MailAccountIdentity Account => MailAccountIdentity.Create(Owner, AccountId);
+    /// <summary>Gets the account every test writes under, named by its user and its identifier together.</summary>
+    public static MailAccountIdentity Account => MailAccountIdentity.Create(User, AccountId);
 
     /// <summary>The alias the one class that files a copy of its own outgoing mail maps the sent role onto.</summary>
     internal const string OutgoingCopyFolderAlias = "outgoing-copy";
@@ -232,7 +232,7 @@ internal sealed class SyntheticMailAccount(
     public IReadOnlyList<ServedMailAccount> ServedAccounts =>
     [
         new(
-            Owner,
+            User,
             AccountId,
             MailAccountDisplayName.Create(OrchestrationContract.ServedMailAccountDisplayName),
             MailSynchronizationMode.Polling),

@@ -11,7 +11,7 @@ using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Folders;
 
-/// <summary>Reads the owner's mailboxes and their folders as the one tree a mail screen is drawn from.</summary>
+/// <summary>Reads the user's mailboxes and their folders as the one tree a mail screen is drawn from.</summary>
 /// <remarks>
 /// <para>
 /// It answers in one read what a screen would otherwise assemble from three: which mailboxes there are, which folders
@@ -67,15 +67,15 @@ public sealed class MailFolderDirectoryReader
         this.folderMappings = folderMappings;
     }
 
-    /// <summary>Reads the owner's mailboxes and every folder a screen may draw beneath them.</summary>
+    /// <summary>Reads the user's mailboxes and every folder a screen may draw beneath them.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>One entry per account the caller's owner owns, each with its folders, and whether the deployment refreshes them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for an owner.</exception>
+    /// <returns>One entry per account the caller's user owns, each with its folders, and whether the deployment refreshes them.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for a user.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// The grant and the owner bound are the composed reading's, taken before anything here runs, so an owner who owns
+    /// The grant and the user bound are the composed reading's, taken before anything here runs, so a user who owns
     /// no account reads an empty tree and a caller without the permission is refused — the same two answers the mailbox
-    /// list gives, because naming an owner's folders is the same disclosure as naming their mailboxes.
+    /// list gives, because naming a user's folders is the same disclosure as naming their mailboxes.
     /// </remarks>
     public async Task<MailFolderDirectory> ReadAsync(CancellationToken cancellationToken)
     {

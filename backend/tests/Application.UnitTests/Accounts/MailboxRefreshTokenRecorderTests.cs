@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.Accounts;
 /// <summary>Covers what the deployment decides before a mailbox grant an operator sent is allowed into the store.</summary>
 /// <remarks>
 /// The check in front of the write is the whole of this use case, and it is a security rule rather than a convenience:
-/// a grant accepted for an account no configuration names is a long-lived credential for a real mailbox owner that
+/// a grant accepted for an account no configuration names is a long-lived credential for a real mailbox user that
 /// nothing reads and nobody knows is stored. Both substitutes stand at architectural boundaries, and what is asserted
 /// on the store is the interaction — that the write happened once with the account and the token given, or that it did
 /// not happen at all.
@@ -23,7 +23,7 @@ namespace MailFathom.Application.UnitTests.Accounts;
 public sealed class MailboxRefreshTokenRecorderTests
 {
     private static readonly MailAccountIdentity Workspace =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("workspace"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("workspace"));
 
     private readonly IMailboxRefreshTokenStore store = Substitute.For<IMailboxRefreshTokenStore>();
 

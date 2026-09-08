@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace MailFathom.Host.Signals;
 
-/// <summary>Delivers a signal to whichever of an owner's clients are running.</summary>
+/// <summary>Delivers a signal to whichever of a user's clients are running.</summary>
 /// <remarks>
 /// <para>
 /// The one channel registered today. It reaches a client that has a connection open — the web head, the desktop head,
@@ -27,7 +27,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
     private readonly ILogger<SignalRClientSignalChannel> logger;
 
     /// <summary>Initializes the channel over the hub it publishes through.</summary>
-    /// <param name="hub">Addresses one owner's connections by their group.</param>
+    /// <param name="hub">Addresses one user's connections by their group.</param>
     /// <param name="logger">Records a signal that could not be delivered, in kinds and counts rather than in anything about mail.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public SignalRClientSignalChannel(IHubContext<ClientSignalHub> hub, ILogger<SignalRClientSignalChannel> logger)
@@ -54,7 +54,7 @@ internal sealed partial class SignalRClientSignalChannel : IClientSignalChannel
         try
         {
             await this.hub.Clients
-                .Group(ClientSignalHub.GroupOf(signal.Owner))
+                .Group(ClientSignalHub.GroupOf(signal.User))
                 .SendAsync(ClientSignalHub.SignalMethod, ClientSignalPayload.For(signal), cancellationToken);
         }
         catch (Exception exception)

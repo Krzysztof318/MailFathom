@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves the signed-in owner's mailboxes and their folders as the one tree a mail screen is drawn from.</summary>
+/// <summary>Serves the signed-in user's mailboxes and their folders as the one tree a mail screen is drawn from.</summary>
 /// <remarks>
 /// <para>
 /// It is the route a client reads before it can show anybody anything: a folder tree is the scope every other read
@@ -32,14 +32,14 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Nothing of the mailbox reaches it beyond the folders themselves: no message, no subject, no correspondent, and no
-/// mail server, port, user name, or credential. The remote folder names it does carry are this owner's own, on a
-/// surface only this owner reaches — which is why the administrative status surface, read across every owner by
+/// mail server, port, user name, or credential. The remote folder names it does carry are this user's own, on a
+/// surface only this user reaches — which is why the administrative status surface, read across every user by
 /// somebody administering the deployment, publishes aliases and no paths at all.
 /// </para>
 /// </remarks>
 internal static class ClientMailFoldersEndpoint
 {
-    /// <summary>The route reporting the owner's folders, relative to the client prefix.</summary>
+    /// <summary>The route reporting the user's folders, relative to the client prefix.</summary>
     internal const string MailFoldersRoute = "/folders";
 
     /// <summary>Maps the route into the client group, so it inherits the group's requirement, its policy, and its limits.</summary>
@@ -53,10 +53,10 @@ internal static class ClientMailFoldersEndpoint
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
-    /// <summary>Reports the acting owner's mailboxes, their folders, and how current each of them is.</summary>
-    /// <param name="reader">Reads the owner's accounts and the folders a screen may draw beneath them.</param>
+    /// <summary>Reports the acting user's mailboxes, their folders, and how current each of them is.</summary>
+    /// <param name="reader">Reads the user's accounts and the folders a screen may draw beneath them.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the owner's tree, empty where they own no account, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
+    /// <returns><c>200</c> with the user's tree, empty where they own no account, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
     /// <remarks>It speaks to no mail server, so a client request cannot wait on IMAP and cannot set the remote <c>\Seen</c> flag.</remarks>
     internal static async Task<Ok<ClientMailFoldersResponse>> ReadFoldersAsync(
         [FromServices] MailFolderDirectoryReader reader,
@@ -70,9 +70,9 @@ internal static class ClientMailFoldersEndpoint
     }
 }
 
-/// <summary>What the client endpoint reports about the owner's mailboxes and their folders.</summary>
+/// <summary>What the client endpoint reports about the user's mailboxes and their folders.</summary>
 /// <param name="SynchronizationEnabled">Whether this deployment refreshes the local copy of these accounts at all.</param>
-/// <param name="Accounts">One entry per account the acting owner owns, ordered by identifier, empty where they own none.</param>
+/// <param name="Accounts">One entry per account the acting user owns, ordered by identifier, empty where they own none.</param>
 /// <remarks>
 /// The switch is reported beside the accounts because no per-folder value carries it: a folder that last moved a week
 /// ago means one thing where the deployment is still trying and another where it has stopped, and a client that could
@@ -82,7 +82,7 @@ internal sealed record ClientMailFoldersResponse(
     bool SynchronizationEnabled,
     IReadOnlyList<ClientMailFolderAccountResponse> Accounts)
 {
-    /// <summary>Describes the owner's tree on the wire.</summary>
+    /// <summary>Describes the user's tree on the wire.</summary>
     /// <param name="directory">What the use case answered.</param>
     /// <returns>The response body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="directory" /> is <see langword="null" />.</exception>
@@ -96,7 +96,7 @@ internal sealed record ClientMailFoldersResponse(
     }
 }
 
-/// <summary>One of the owner's accounts and the folders beneath it.</summary>
+/// <summary>One of the user's accounts and the folders beneath it.</summary>
 /// <param name="Account">The account, exactly as the accounts route publishes it.</param>
 /// <param name="Folders">The account's folders, ordered by alias, empty where synchronization has reached none.</param>
 /// <remarks>

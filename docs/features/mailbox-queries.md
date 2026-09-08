@@ -35,7 +35,7 @@ divergence neither copy would look wrong for on its own.
 
 | Field | Meaning | Absent means |
 |---|---|---|
-| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account the caller's owner owns |
+| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account the caller's user owns |
 | `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder those accounts map and let tools read |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -64,7 +64,7 @@ would leave a caller reading an empty page as an empty folder.
 
 A listing that names no folder reads every folder the account maps and lets tools read, so a message that exists in two
 of them — because it was copied, by
-the mailbox owner or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
+the mailbox user or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
 occurrence and no identity spans two;
 [what a message MailFathom copied becomes locally](imap-synchronization.md#what-a-message-mailfathom-copied-becomes-locally)
 states what that costs and why.
@@ -107,7 +107,7 @@ and its result would read as an answer about the mailbox.
 - **What a question was asked about** narrows a scope further, and only a Discover run supplies it: one conversation,
   or up to 64 individually selected messages, counted the way the two lists above are. It narrows and never widens —
   the accounts, the folders a mapping admits, and the junk decision all still apply, so a conversation reaching into a
-  folder this caller may not read returns nothing from that folder, and an identifier naming another owner's mail
+  folder this caller may not read returns nothing from that folder, and an identifier naming another user's mail
   matches nothing rather than being refused. It is applied by the query itself rather than to the query's result, which
   is what makes a question about four messages read four messages. Both narrowings take part in a cursor's fingerprint,
   because both remove rows from the middle of an ordering that a walk resumed without them would return.
@@ -131,21 +131,21 @@ a fragment, so naming one account can never select another whose name contains i
 The two are resolved into one identity before a query runs, which is what keeps the rest of this page true: the scope a
 cursor is fingerprinted from holds identifiers, so naming the same account both ways is one account, and a cursor issued
 for one spelling stays valid for the other. Configuration is what makes this unambiguous — a display name another of the
-same owner's accounts already carries as an identifier or as a display name fails startup — so resolution never has to
+same user's accounts already carries as an identifier or as a display name fails startup — so resolution never has to
 choose between two matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
 
-Both spellings belong to the account's owner and are unique within it rather than across the deployment, which is as far
-as that unambiguity has to reach: resolution runs against the accounts the caller's owner owns, so two owners each
+Both spellings belong to the account's user and are unique within it rather than across the deployment, which is as far
+as that unambiguity has to reach: resolution runs against the accounts the caller's user owns, so two users each
 calling an account `work` is no ambiguity at all and neither of them can name the other's. A client storing either name
-is storing this owner's name for the mailbox, and one that compared it with a name read for somebody else — another
-owner, or a second deployment — would be comparing two values that were never in one naming space.
+is storing this user's name for the mailbox, and one that compared it with a name read for somebody else — another
+user, or a second deployment — would be comparing two values that were never in one naming space.
 
 ### Which accounts an unscoped request reads
 
-Naming no account means every account the caller's owner owns, and the request is narrowed to that set before anything
+Naming no account means every account the caller's user owns, and the request is narrowed to that set before anything
 is read rather than left without an account predicate. The two are not the same: removing an account from configuration
 leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
-serves — and the rows of every other owner are in the same table. Switching `MailSynchronization:Enabled` off is a
+serves — and the rows of every other user are in the same table. Switching `MailSynchronization:Enabled` off is a
 different matter and hides nothing — it stops runs from fetching mail, and the copy already stored stays readable.
 Switching a single folder's `Synchronize` off is a third thing again: that folder's stored mail is kept and withheld
 from every reader rather than erased, which

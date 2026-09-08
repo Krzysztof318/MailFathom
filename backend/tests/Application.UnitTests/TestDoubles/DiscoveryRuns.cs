@@ -44,7 +44,7 @@ internal static class DiscoveryRuns
     /// <param name="embeddingProfileActive">Whether a profile exists for a question to be placed beside mail with.</param>
     /// <param name="chatState">What the chat provider's health last read as.</param>
     /// <param name="authorization">Who reached the use case, defaulting to a caller granted the asking permission.</param>
-    /// <param name="egressGuard">What this owner's posture withholds, defaulting to a deployment that scans nobody.</param>
+    /// <param name="egressGuard">What this user's posture withholds, defaulting to a deployment that scans nobody.</param>
     /// <param name="composer">What the run composes its answer through, defaulting to one returning the contract's own example.</param>
     /// <param name="folders">How current each folder the run read was, defaulting to a scope reporting none.</param>
     /// <param name="ledger">What this run has spent, defaulting to an untouched ledger under the deployment's default ceilings.</param>

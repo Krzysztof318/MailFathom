@@ -98,7 +98,7 @@ public sealed class EmailAttachmentTextDeriver
     }
 
     /// <summary>Reads the attachments of one message.</summary>
-    /// <param name="email">The message whose attachments are read, and the owner whose posture redacts them.</param>
+    /// <param name="email">The message whose attachments are read, and the user whose posture redacts them.</param>
     /// <param name="runBudget">What the account run has left to read, which this decrements as it reads.</param>
     /// <param name="cancellationToken">Cancels the read between attachments and inside one.</param>
     /// <returns>What each attachment yielded, in walk order, beside what the reading spent and whether the run budget stopped it.</returns>
@@ -148,7 +148,7 @@ public sealed class EmailAttachmentTextDeriver
         // Read before the scan rather than at the write, exactly as the body's own redaction takes it: a posture
         // republished while this message is being read then leaves its rows stamped with the older configuration,
         // which reads as stale and is re-derived — the safe direction.
-        var redactedUnder = this.guard.StampFor(email.Owner);
+        var redactedUnder = this.guard.StampFor(email.User);
 
         var content = await this.contentStore.FindStoredContentAsync(email.Id, cancellationToken);
 
@@ -160,7 +160,7 @@ public sealed class EmailAttachmentTextDeriver
         // The store hands a payload over unchecked, so whoever reads it checks it — and this reader has more reason to
         // than the three that serve one message: what it does with the octets is settle the message for good. A
         // truncated copy that still parses as MIME would otherwise be extracted, described, embedded, indexed, and
-        // stamped, while the download route refuses the same bytes to the owner.
+        // stamped, while the download route refuses the same bytes to the user.
         if (content.FindIntegrityDefect() is { } integrityDefect)
         {
             return await this.RequestRepairAsync(email.Id, integrityDefect, redactedUnder, cancellationToken);
@@ -252,7 +252,7 @@ public sealed class EmailAttachmentTextDeriver
 
                 reservedOctets += description.DecodedSizeOctets;
 
-                var read = await this.ReadAsync(position, attachment, email.Owner, cancellationToken);
+                var read = await this.ReadAsync(position, attachment, email.User, cancellationToken);
 
                 derived.Add(read.Text);
                 extractedOctets += read.ExtractedOctetCount;
@@ -329,7 +329,7 @@ public sealed class EmailAttachmentTextDeriver
     private async Task<(DerivedAttachmentText Text, long ExtractedOctetCount, bool ReachedProvider)> ReadAsync(
         int position,
         IOpenedEmailAttachment attachment,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         var description = attachment.Description;
@@ -343,7 +343,7 @@ public sealed class EmailAttachmentTextDeriver
         {
             var text = await this.RedactAsync(
                 DerivedAttachmentText.FromExtraction(position, mediaType, fileName, extracted),
-                owner,
+                user,
                 cancellationToken);
 
             return (text, extractedOctets, ReachedProvider: false);
@@ -354,7 +354,7 @@ public sealed class EmailAttachmentTextDeriver
         return (
             await this.RedactAsync(
                 DerivedAttachmentText.FromDescription(position, mediaType, fileName, described),
-                owner,
+                user,
                 cancellationToken),
             extractedOctets,
             described.ReachedProvider);
@@ -396,10 +396,10 @@ public sealed class EmailAttachmentTextDeriver
         return await this.describer.DescribeAsync(mediaType, buffer.ToReadableStream(), cancellationToken);
     }
 
-    /// <summary>Replaces what the owner's switched-on scanner finds before the words leave this method.</summary>
+    /// <summary>Replaces what the user's switched-on scanner finds before the words leave this method.</summary>
     private async Task<DerivedAttachmentText> RedactAsync(
         DerivedAttachmentText derived,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         if (derived.Text is not { } text)
@@ -407,6 +407,6 @@ public sealed class EmailAttachmentTextDeriver
             return derived;
         }
 
-        return derived.WithRedactedText(await this.guard.GuardTextAsync(owner, text, cancellationToken));
+        return derived.WithRedactedText(await this.guard.GuardTextAsync(user, text, cancellationToken));
     }
 }

@@ -9,9 +9,9 @@ using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Outbox;
-using MailFathom.Cli.Commands.Owners;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
+using MailFathom.Cli.Commands.Users;
 using MailFathom.Versioning;
 
 namespace MailFathom.Cli.Commands;
@@ -172,28 +172,28 @@ internal static class CliRootCommand
             AdoptSettingsCommand.Create(context),
         };
 
-        // The mailboxes one owner's record declares, which is what this deployment reads for them once their record is
-        // their own. It is a group beneath "owner" rather than beside it because every one of these acts is a change to
-        // one owner's record, and the record is what "owner" administers.
-        Command ownerAccountCommand = new("account", "Declare and withdraw the mailboxes one owner's record carries.")
+        // The mailboxes one user's record declares, which is what this deployment reads for them once their record is
+        // their own. It is a group beneath "user" rather than beside it because every one of these acts is a change to
+        // one user's record, and the record is what "user" administers.
+        Command userAccountCommand = new("account", "Declare and withdraw the mailboxes one user's record carries.")
         {
-            AddOwnerMailAccountCommand.Create(context),
-            RemoveOwnerMailAccountCommand.Create(context),
+            AddUserMailAccountCommand.Create(context),
+            RemoveUserMailAccountCommand.Create(context),
         };
 
         // Who this deployment serves, and what it reads for each of them. "adopt" is apart from the rest for the reason
         // "config adopt" is: it moves a decision out of the deployment's files and into its database, which nothing else
         // in MailFathom does and which no upgrade or import will do behind an operator's back. "remove" is apart for the
         // opposite reason — it is the one command here that destroys mail, and nothing undoes it.
-        Command ownerCommand = new("owner", "Record the people this deployment serves, and maintain what it reads for each.")
+        Command userCommand = new("user", "Record the people this deployment serves, and maintain what it reads for each.")
         {
-            AddOwnerCommand.Create(context),
-            ListOwnersCommand.Create(context),
-            ShowOwnerRecordCommand.Create(context),
-            RenameOwnerCommand.Create(context),
-            AdoptOwnerCommand.Create(context),
-            RemoveOwnerCommand.Create(context),
-            ownerAccountCommand,
+            AddUserCommand.Create(context),
+            ListUsersCommand.Create(context),
+            ShowUserRecordCommand.Create(context),
+            RenameUserCommand.Create(context),
+            AdoptUserCommand.Create(context),
+            RemoveUserCommand.Create(context),
+            userAccountCommand,
         };
 
         // The one group whose credentials belong to a person rather than to this deployment, which is why every command
@@ -201,14 +201,14 @@ internal static class CliRootCommand
         // methods, because what an administrator does with them is identical whatever is presented. "disable" and
         // "delete" are the two halves of revoking, kept apart because one is reversible and the other frees the value
         // the credential was resolved by.
-        Command credentialCommand = new("credential", "Administer the credentials an owner's clients present.")
+        Command credentialCommand = new("credential", "Administer the credentials a user's clients present.")
         {
-            CreateOwnerCredentialCommand.Create(context),
-            ListOwnerCredentialsCommand.Create(context),
-            RotateOwnerCredentialCommand.Create(context),
-            EnableOwnerCredentialCommand.Create(context),
-            DisableOwnerCredentialCommand.Create(context),
-            DeleteOwnerCredentialCommand.Create(context),
+            CreateUserCredentialCommand.Create(context),
+            ListUserCredentialsCommand.Create(context),
+            RotateUserCredentialCommand.Create(context),
+            EnableUserCredentialCommand.Create(context),
+            DisableUserCredentialCommand.Create(context),
+            DeleteUserCredentialCommand.Create(context),
         };
 
         // The only option the root owns. It governs what the runner does once a command has finished rather than
@@ -231,7 +231,7 @@ internal static class CliRootCommand
             contentCommand,
             contactCommand,
             configCommand,
-            ownerCommand,
+            userCommand,
             credentialCommand,
         };
     }

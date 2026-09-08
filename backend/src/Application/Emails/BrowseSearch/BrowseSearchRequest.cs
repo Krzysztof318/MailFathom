@@ -12,7 +12,7 @@ namespace MailFathom.Application.Emails.BrowseSearch;
 /// <remarks>
 /// <para>
 /// This is the unvalidated contract, exactly as <see cref="SearchEmails.SearchEmailsRequest" /> is for the tool search:
-/// nothing here has been bounded, normalized, or checked against the accounts the caller's owner owns, and
+/// nothing here has been bounded, normalized, or checked against the accounts the caller's user owns, and
 /// <see cref="MailSearchBrowser" /> is what does that.
 /// </para>
 /// <para>
@@ -32,7 +32,7 @@ public sealed record BrowseSearchRequest
     /// <remarks>Required: a search with no text is a list, which the timeline read model answers in a stable order and with a cursor in both directions.</remarks>
     public string? QueryText { get; init; }
 
-    /// <summary>Gets the accounts to search, or empty for every account the caller's owner owns.</summary>
+    /// <summary>Gets the accounts to search, or empty for every account the caller's user owns.</summary>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
     /// <summary>Gets the folders to search, or empty for every folder of those accounts.</summary>

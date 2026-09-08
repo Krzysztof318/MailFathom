@@ -23,7 +23,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// for.
 /// </para>
 /// <para>
-/// The third is whether the owner can see what they sent in their own mail client, which the filing counter answers by
+/// The third is whether the user can see what they sent in their own mail client, which the filing counter answers by
 /// account, by the place a copy was meant for, and by outcome. It is a counter of its own rather than a dimension of
 /// the attempts, because the two say different things about the same message: a copy that could not be filed never
 /// means the message failed to reach anybody, and summing them would produce a failure rate nobody could act on.

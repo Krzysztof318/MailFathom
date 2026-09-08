@@ -25,7 +25,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Convergence;
 public sealed class MailboxMutationConvergerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -377,19 +377,19 @@ public sealed class MailboxMutationConvergerTests
         ImapUid.Create(uid));
 
     private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
-        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 
     private static MailboxMutationRequest CopyRequest() => MailboxMutationRequest.Copy(
-        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("keep-a-copy", "4"),
         ArchivePath);
 
     private static MailboxMutationRequest DeleteRequest(uint uid) => MailboxMutationRequest.Delete(
-        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailUser.Deployment,
         Occurrence(uid),
         MailboxMutationRequester.Rule("drop-notifications", "5"),
         AuthoredDeleteEmailDisposition.RetainLocalCopy);

@@ -46,7 +46,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Submission;
 public sealed class AuthoredMailSubmissionTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Recorded = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -210,11 +210,11 @@ public sealed class AuthoredMailSubmissionTests
     }
 
     /// <summary>
-    /// An account belonging to another owner is refused exactly as one nobody serves, so mail cannot leave as somebody
+    /// An account belonging to another user is refused exactly as one nobody serves, so mail cannot leave as somebody
     /// whose mailbox this caller may not even read.
     /// </summary>
     [Fact]
-    public async Task SubmitAsync_AnAccountTheCallersOwnerDoesNotOwn_RefusesAndWritesNothing()
+    public async Task SubmitAsync_AnAccountTheCallersUserDoesNotOwn_RefusesAndWritesNothing()
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
@@ -222,8 +222,8 @@ public sealed class AuthoredMailSubmissionTests
             store,
             out var composer,
             out var signal,
-            authorization: AccessAuthorizations.ForOwnerGranted(
-                SyntheticMailOwner.Another,
+            authorization: AccessAuthorizations.ForUserGranted(
+                SyntheticMailUser.Another,
                 MailFathomPermission.MailSend));
 
         // Act
@@ -233,7 +233,7 @@ public sealed class AuthoredMailSubmissionTests
         // Assert
         Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, refusal.ErrorCode);
 
-        // The refusal repeats what the caller named and says nothing else, which is what keeps an account another owner
+        // The refusal repeats what the caller named and says nothing else, which is what keeps an account another user
         // owns from being told apart from one this deployment never served.
         Assert.Equal(MailAccountSelector.For(Account.Id), refusal.RequestedAccount);
         Assert.Empty(store.OpenRequests);

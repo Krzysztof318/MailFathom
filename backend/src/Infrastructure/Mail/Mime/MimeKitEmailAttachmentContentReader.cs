@@ -90,7 +90,7 @@ internal sealed class MimeKitEmailAttachmentContentReader : IEmailAttachmentCont
 
     /// <summary>Parses the message once and hands the whole walk to the caller, or disposes everything it built.</summary>
     /// <remarks>
-    /// The same ownership transfer <see cref="OpenParsedAsync" /> performs, one level up: the walk becomes the owner on
+    /// The same ownership transfer <see cref="OpenParsedAsync" /> performs, one level up: the walk becomes the user on
     /// the single path that succeeds, and every other path releases both here.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The walk is the returned value and owns the parse; its caller disposes it, which is what the port's IAsyncDisposable contract states.")]

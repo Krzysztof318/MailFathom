@@ -21,10 +21,10 @@ namespace MailFathom.Application.UnitTests.Spam.Runs;
 public sealed class SpamClassificationPassTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-2"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-2"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -353,7 +353,7 @@ public sealed class SpamClassificationPassTests
         var classificationSettings = settings ?? SettingsCovering(Inbox);
 
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(classificationSettings);
+        settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(classificationSettings);
 
         var sessionFactory = this.harness.CommittingSessions();
         var commitPolicy = this.harness.CommitPolicyOver(sessionFactory);

@@ -258,7 +258,7 @@ public sealed class OrchestratedEmailAttachmentTextTests(MailFathomOrchestration
         var storedResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
                 session,
-                SyntheticMailAccount.Owner,
+                SyntheticMailAccount.User,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, "attachment-readings"),
                 SyntheticEmail.ExtractionOf(
                     occurrenceId,

@@ -15,7 +15,7 @@ informed:
 
 The Uno Platform client was withdrawn by [#1392](https://github.com/Krzysztof318/MailFathom/issues/1392), which left `frontend/src/` and `frontend/tests/` holding a placeholder README each and took ADRs `0018`, `0019`, and `0020` with it, all three having decided something about the application that no longer exists. The client is being rebuilt, and the stack it is rebuilt on is the one thing about that rebuild this repository has never recorded.
 
-[#783](https://github.com/Krzysztof318/MailFathom/issues/783) asked the question in 2026 and named React with Tailwind CSS as the owner's leaning, to be confirmed or replaced rather than adopted by default. [#1382](https://github.com/Krzysztof318/MailFathom/issues/1382) then measured that leaning: a disposable proof of concept on a branch, built against a Claude Design mockup with mock data, deliberately outside every gate this repository runs. The decision has since been taken. What is missing is the record.
+[#783](https://github.com/Krzysztof318/MailFathom/issues/783) asked the question in 2026 and named React with Tailwind CSS as the user's leaning, to be confirmed or replaced rather than adopted by default. [#1382](https://github.com/Krzysztof318/MailFathom/issues/1382) then measured that leaning: a disposable proof of concept on a branch, built against a Claude Design mockup with mock data, deliberately outside every gate this repository runs. The decision has since been taken. What is missing is the record.
 
 This is that record. It is not a re-opening of the choice, and it lands no toolchain, manifest, or source — the skeleton is separate work that builds against what is decided here.
 
@@ -99,7 +99,7 @@ These are open questions rather than accepted risks. Each is answered by work, a
 
 ## Validation
 
-- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the owner authoring the change that carries it.
+- `docs/decisions/` is a protected path in `.github/workflows/protected-paths.yml`, so this record's own creation is gated on the user authoring the change that carries it.
 - The `describes:` marker above names `frontend/**`, which is what tells a later pull request under the client tree that it is being read against this decision. `scripts/review-obligations.sh` and `Fathom review` both resolve it.
 - The `Frontend` job of `CI` asserts nothing today and gains its build, test, and formatting steps with the skeleton. The frozen-mode install is one of them, so a lock file out of step with the manifest fails the pull request rather than being repaired silently on a runner.
 - `$check-docs-licenses` is what holds the register to the two closures above, per artifact, under ADR 0016's rules.

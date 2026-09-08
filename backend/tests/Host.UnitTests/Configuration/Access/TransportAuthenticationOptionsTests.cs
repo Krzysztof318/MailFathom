@@ -773,7 +773,7 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
     }
 
-    /// <summary>The administrative surface answers for the deployment, so a credential naming one owner has nothing there to act for.</summary>
+    /// <summary>The administrative surface answers for the deployment, so a credential naming one user has nothing there to act for.</summary>
     [Fact]
     public void FindConfigurationErrors_ABasicBlockOnTheAdministrativeSurface_IsRefusedNamingTheMethodsThatBelongThere()
     {

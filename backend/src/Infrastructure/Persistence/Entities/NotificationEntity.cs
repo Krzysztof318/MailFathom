@@ -9,7 +9,7 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 
 /// <summary>One thing that happened to a person while nobody was looking at the screen.</summary>
 /// <remarks>
-/// The owner is a value, as it is on every other table, and the message is an association — which is the one place
+/// The user is a value, as it is on every other table, and the message is an association — which is the one place
 /// this row deliberately differs from the audit trails beside it. A trail records an act and has to outlive what it
 /// acted on; a notification describes something a person can still open, so a row pointing at mail that has been
 /// deleted is a row that leads nowhere and is erased with it.
@@ -19,8 +19,8 @@ internal sealed class NotificationEntity
 {
     public Guid Id { get; set; }
 
-    /// <summary>Gets or sets the owner it happened to, as a value rather than as an association.</summary>
-    public Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user it happened to, as a value rather than as an association.</summary>
+    public Guid UserId { get; set; }
 
     public NotificationKind Kind { get; set; }
 
@@ -46,7 +46,7 @@ internal sealed class NotificationEntity
 
     /// <summary>Gets or sets the condition this notification was raised for.</summary>
     /// <remarks>
-    /// Unique among one owner's unread rows, which is what makes a repeated raise idempotent: a condition already
+    /// Unique among one user's unread rows, which is what makes a repeated raise idempotent: a condition already
     /// standing unread is refused by the index rather than checked for before the insert, and only the index closes the
     /// window between the check and the write.
     /// </remarks>

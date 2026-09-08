@@ -20,13 +20,13 @@ public sealed class ClientSignalHubTests
 {
     private static readonly DateTimeOffset Instant = new(2026, 9, 4, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>A connection presenting a live ticket joins the group its owner's signals are published to.</summary>
+    /// <summary>A connection presenting a live ticket joins the group its user's signals are published to.</summary>
     [Fact]
-    public async Task OnConnectedAsync_WithALiveTicket_JoinsTheOwnersGroup()
+    public async Task OnConnectedAsync_WithALiveTicket_JoinsTheUsersGroup()
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
         var groups = Substitute.For<IGroupManager>();
         var context = ConnectionPresenting(minted!.Value);
 
@@ -42,7 +42,7 @@ public sealed class ClientSignalHubTests
         // Assert
         await groups.Received(1).AddToGroupAsync(
             "connection",
-            ClientSignalHub.GroupOf(SyntheticMailOwner.Deployment),
+            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
             Arg.Any<CancellationToken>());
         context.DidNotReceive().Abort();
     }
@@ -82,7 +82,7 @@ public sealed class ClientSignalHubTests
     {
         // Arrange
         var tickets = new ClientSignalTickets(new FakeTimeProvider(Instant));
-        var minted = tickets.Mint(SyntheticMailOwner.Deployment);
+        var minted = tickets.Mint(SyntheticMailUser.Deployment);
         var groups = Substitute.For<IGroupManager>();
         var replayed = ConnectionPresenting(minted!.Value);
 
@@ -110,19 +110,19 @@ public sealed class ClientSignalHubTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>Two owners are two groups, so nothing published to one can be addressed to the other.</summary>
+    /// <summary>Two users are two groups, so nothing published to one can be addressed to the other.</summary>
     [Fact]
-    public void GroupOf_TwoOwners_NamesADistinctGroupForEachOfThem() =>
+    public void GroupOf_TwoUsers_NamesADistinctGroupForEachOfThem() =>
         Assert.NotEqual(
-            ClientSignalHub.GroupOf(SyntheticMailOwner.Deployment),
-            ClientSignalHub.GroupOf(SyntheticMailOwner.Another));
+            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
+            ClientSignalHub.GroupOf(SyntheticMailUser.Another));
 
-    /// <summary>A group name is composed from the owner's own identifier, which no caller writes.</summary>
+    /// <summary>A group name is composed from the user's own identifier, which no caller writes.</summary>
     [Fact]
-    public void GroupOf_AnOwner_ComposesTheNameFromTheOwnersIdentifier() =>
+    public void GroupOf_AUser_ComposesTheNameFromTheUsersIdentifier() =>
         Assert.Contains(
-            SyntheticMailOwner.Deployment.Value.ToString(),
-            ClientSignalHub.GroupOf(SyntheticMailOwner.Deployment),
+            SyntheticMailUser.Deployment.Value.ToString(),
+            ClientSignalHub.GroupOf(SyntheticMailUser.Deployment),
             StringComparison.Ordinal);
 
     private static HubCallerContext ConnectionPresenting(string ticket)

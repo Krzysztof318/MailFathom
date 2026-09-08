@@ -210,12 +210,12 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
     }
 
     /// <summary>
-    /// The scanner is switched on per owner, so an analyzer nobody's mail is scanned by guards nothing and its silence
+    /// The scanner is switched on per user, so an analyzer nobody's mail is scanned by guards nothing and its silence
     /// refuses nothing. Reporting unready over it would take an instance out of traffic for a dependency no request on
     /// it uses, which is the state a deployment reaches by standing the analyzer up before anybody has opted in.
     /// </summary>
     [Fact]
-    public async Task CheckHealthAsync_NoOwnerScannedForPersonalData_IsHealthyWithoutAskingTheAnalyzer()
+    public async Task CheckHealthAsync_NoUserScannedForPersonalData_IsHealthyWithoutAskingTheAnalyzer()
     {
         // Arrange
         var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
@@ -234,12 +234,12 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
     }
 
     /// <summary>
-    /// The other way an outage ends is the last owner scanned for personal data stopping, which flips the probe back to
+    /// The other way an outage ends is the last user scanned for personal data stopping, which flips the probe back to
     /// ready without the analyzer having answered. An operator watching the Error record would otherwise have nothing
     /// saying the instance is back in traffic, and would go on reading a log that ends at the refusal.
     /// </summary>
     [Fact]
-    public async Task CheckHealthAsync_TheLastOwnerScannedStoppingDuringAnOutage_LogsTheInstanceIsReadyAgain()
+    public async Task CheckHealthAsync_TheLastUserScannedStoppingDuringAnOutage_LogsTheInstanceIsReadyAgain()
     {
         // Arrange
         using var loggerFactory = new RecordingLoggerFactory();
@@ -248,7 +248,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
 
         var postures = Substitute.For<ISensitiveContentPostures>();
         var scanned = true;
-        postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
+        postures.RunsForAnyUser(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
 
         var check = new PersonalDataAnalyzerHealthCheck(
             probe,
@@ -318,11 +318,11 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         return new PersonalDataAnalyzerHealthCheck(probe, ScanningForPersonalData(), logger);
     }
 
-    /// <summary>The postures of a deployment where at least one owner's mail is scanned for personal data.</summary>
+    /// <summary>The postures of a deployment where at least one user's mail is scanned for personal data.</summary>
     private static ISensitiveContentPostures ScanningForPersonalData()
     {
         var postures = Substitute.For<ISensitiveContentPostures>();
-        postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii).Returns(true);
+        postures.RunsForAnyUser(SensitiveContentScannerKind.Pii).Returns(true);
 
         return postures;
     }

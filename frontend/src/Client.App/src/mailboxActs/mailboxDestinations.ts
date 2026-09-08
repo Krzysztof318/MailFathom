@@ -88,7 +88,7 @@ export function destinationsFor(
  *
  * @param act What is being asked for.
  * @param messages The messages it would be about.
- * @param directory The owner's folders, or `null` where they have not been read.
+ * @param directory The user's folders, or `null` where they have not been read.
  * @param offered Whether the credential may write the flags an act needs and move mail.
  */
 export function refusalFor(

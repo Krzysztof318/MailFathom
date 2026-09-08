@@ -91,8 +91,8 @@ What bounds it instead:
   file a scanner names — or one nothing could read at all — answers `409` with error code `59004` rather than the
   octets. That is the one refusal of this route *about the mail* that is not the shared `404`, because the holder is
   already admitted to that attachment and learns only that this deployment screens what it serves. The route answers one
-  other `409`, which is about the deployment rather than the message: one serving several owners resolves none for a
-  capability that names no owner, and answers with its own code;
+  other `409`, which is about the deployment rather than the message: one serving several users resolves none for a
+  capability that names no user, and answers with its own code;
   [sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
   holds the rule. It is paid inside the permit and the request ceiling above, under
   [attachment text extraction](../features/attachment-text-extraction.md)'s own bounds, so a hostile document lengthens
@@ -136,8 +136,8 @@ carries and how it is verified.
 ## Authentication
 
 **`Authentication` is a list of the methods this endpoint accepts.** It is not a list of credentials: what a client
-presents resolves a record beside the owner whose mail it reaches, and those records are provisioned over the
-[administrative endpoint](admin-endpoint.md#owner-credentials) rather than written here. So an entry states one word —
+presents resolves a record beside the user whose mail it reaches, and those records are provisioned over the
+[administrative endpoint](admin-endpoint.md#user-credentials) rather than written here. So an entry states one word —
 which method is accepted — and carries whatever that method needs from a deployment and nothing about who holds one:
 
 ```json
@@ -202,7 +202,7 @@ it left alone would come up admitting nobody it used to admit and reporting noth
 | `OAuth.AuthorizationServers[].AuthorizedSubjects` | `mfctl credential create --method oauth-subject --issuer <issuer> --subject <subject>`, once per person |
 
 Nothing is synthesized from what you had. A key MailFathom never issued cannot be turned into a record of a key it did,
-and a subject that was admitted for whoever the deployment served names no owner to resolve — so the credentials are
+and a subject that was admitted for whoever the deployment served names no user to resolve — so the credentials are
 provisioned again, deliberately, and every client is moved onto what the provisioning reported.
 
 ### API keys
@@ -219,7 +219,7 @@ session — and the check runs before any protocol handling. The readiness respo
 [health endpoints](health-endpoints.md), which are served on a listener of their own and deliberately carry no
 credential at all.
 
-Accepting the method is one line; the keys are provisioned per owner:
+Accepting the method is one line; the keys are provisioned per user:
 
 ```json
 {
@@ -231,8 +231,8 @@ Accepting the method is one line; the keys are provisioned per owner:
 ```
 
 ```console
-$ mfctl credential create --method api-key --owner 6f1c… --permission mailfathom.mail.read
-Provisioned api-key credential 9b3e… for owner 6f1c….
+$ mfctl credential create --method api-key --user 6f1c… --permission mailfathom.mail.read
+Provisioned api-key credential 9b3e… for user 6f1c….
 The client presents this key: mfk_…
 It is stored only as a digest, so nothing here or in the deployment can report it again. Copy it now.
 ```
@@ -274,7 +274,7 @@ A key pair answers the case the other two do not. An API key is a bearer credent
 OAuth answers for a person who signed in, which a scheduled job does not have. Here **the client holds the private key and
 the deployment holds only the public half**, so nothing reusable ever crosses the network.
 
-Accepting the method is one line, and each client's public key is registered against the owner whose mail its assertions
+Accepting the method is one line, and each client's public key is registered against the user whose mail its assertions
 reach:
 
 ```json
@@ -294,11 +294,11 @@ $ chmod 600 reporting-job.key
 $ openssl pkey -in reporting-job.key -pubout -out reporting-job.pub
 ```
 
-Register `reporting-job.pub` against the owner and keep the fingerprint the deployment reports back:
+Register `reporting-job.pub` against the user and keep the fingerprint the deployment reports back:
 
 ```console
-$ mfctl credential create --method public-key --owner 6f1c… --public-key-file reporting-job.pub
-Provisioned public-key credential 41d7… for owner 6f1c….
+$ mfctl credential create --method public-key --user 6f1c… --public-key-file reporting-job.pub
+Provisioned public-key credential 41d7… for user 6f1c….
 The client's assertions must name this key in their 'kid' header: 47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU
 ```
 
@@ -432,10 +432,10 @@ configuration that starts cleanly and then refuses every token that server issue
 **Whose tokens are served is a credential record per person, and this section states none of it.** An authorization
 server authenticates whoever its tenant holds, so a valid token says only that its bearer is somebody that server knows.
 What decides whether it is served here — and whose mail it then reaches — is a mapping from the validated subject onto
-one owner, written once per person:
+one user, written once per person:
 
 ```console
-$ mfctl credential create --method oauth-subject --owner 6f1c… \
+$ mfctl credential create --method oauth-subject --user 6f1c… \
     --issuer https://sso.example.test/realms/mailfathom \
     --subject 9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04
 ```
@@ -444,7 +444,7 @@ Write the `sub` the server issues, which its administration console shows as the
 `auth0|…` in Auth0, the object identifier in Entra ID. An email address is not it, because a subject is what the server
 promises not to reuse and an address is reassigned to whoever holds the mailbox next. The record is keyed on the issuer
 and the subject together, so a subject one server issued resolves nobody through another server that happens to name
-someone the same way. A token whose subject this deployment maps to no owner is refused exactly as an unrecognized
+someone the same way. A token whose subject this deployment maps to no user is refused exactly as an unrecognized
 credential is — the same empty `401`, along the same path — because a client learning that its token was valid but
 unmapped would be learning which subjects this deployment serves.
 
@@ -472,12 +472,12 @@ Every token is checked, before any MCP protocol handling and before any tool run
 - an `iss` equal to the configured issuer, **exactly**;
 - an `aud` equal to `Resource`. A valid signature from a trusted issuer is not by itself a reason to serve a mailbox;
 - `exp` and `nbf`, with 60 seconds of clock skew tolerated;
-- a `sub` that, with `iss`, resolves an enabled credential record naming one owner;
+- a `sub` that, with `iss`, resolves an enabled credential record naming one user;
 - every scope in `RequiredScopes`. `AdvertisedScopes` is checked on nothing — it is published for clients and takes no
   part in any of this.
 
 A subject and a scope are both required and neither stands in for the other: a scope says what a token was issued for, and
-a subject says whose it is. A token whose subject resolves an owner but which is missing a scope is answered `403` naming the scopes;
+a subject says whose it is. A token whose subject resolves a user but which is missing a scope is answered `403` naming the scopes;
 a valid token from anybody else receives a plain `403` that names nothing, because asking its authorization server for more
 scopes would change nothing.
 
@@ -618,7 +618,7 @@ deployment decides about it — how often one may be tried:
 ```
 
 The credentials themselves are provisioned over the administrative endpoint, with
-[`mfctl credential`](admin-endpoint.md#owner-credentials). Nothing provisions one on its own and there is no default, so
+[`mfctl credential`](admin-endpoint.md#user-credentials). Nothing provisions one on its own and there is no default, so
 an endpoint accepting this method with no provisioned credential authenticates nobody.
 
 A client presents one exactly as [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) describes:
@@ -626,12 +626,12 @@ A client presents one exactly as [RFC 7617](https://www.rfc-editor.org/rfc/rfc76
 ```http
 POST /mcp HTTP/1.1
 Host: mail.example.test
-Authorization: Basic b3duZXI6Y29ycmVjdGhvcnNlYmF0dGVyeXN0YXBsZQ==
+Authorization: Basic dXNlcjpjb3JyZWN0aG9yc2U=YmF0dGVyeXN0YXBsZQ==
 ```
 
 The two halves are a username and a password joined by a colon and encoded as base64 — which is an encoding rather than
-a protection, and is the whole reason for the transport rule below. A username is folded to lower case, so `Owner` and
-`owner` are one credential, and it names exactly one owner across the deployment.
+a protection, and is the whole reason for the transport rule below. A username is folded to lower case, so `User` and
+`user` are one credential, and it names exactly one user across the deployment.
 
 **A password crossing a clear-text hop is reported at every startup and never refused.** It is the credential most
 worth protecting on this surface — typed by a person, likely typed somewhere else too, and readable for as long as it
@@ -639,7 +639,7 @@ stands once anything on the path has read it once — which is why the warning n
 being folded into the encryption warning beside it:
 
 ```text
-ClientEndpoint accepts an owner's username and password and answers its routes on port 8080, which nothing encrypts,
+ClientEndpoint accepts a user's username and password and answers its routes on port 8080, which nothing encrypts,
 so every password signed in with crosses that hop readable by anything on the network path — and a password is the one
 credential here that a person typed and may have typed elsewhere. This is the expected posture on a loopback bind and
 behind a TLS-terminating reverse proxy; anywhere else, set ClientEndpoint:Transport to 'HttpsOnly' and configure
@@ -698,10 +698,10 @@ above, which names the hop and the port every time the process starts.
 **per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
 trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
 re-presents the credential on every request and this deployment keeps no session, so an allowance a working password
-spent would bound an owner's request rate rather than anybody's guessing — at the default, the eleventh call of a
+spent would bound a user's request rate rather than anybody's guessing — at the default, the eleventh call of a
 working session would be refused with the answer a wrong password gets. What a wrong password spends is returned a
 minute later, so a caller that has spent its allowance waits that minute out rather than being locked out; the point is
-to make guessing expensive rather than to give anybody a way to lock an owner out. It is separate from
+to make guessing expensive rather than to give anybody a way to lock a user out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
 is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
 guessing rate rather than a bound.
@@ -710,7 +710,7 @@ guessing rate rather than a bound.
 It applies twice: 32 for one axis — one source, or one username — and 128 for the whole surface whatever a caller
 names. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
 and both are deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
-serving both purposes would refuse an owner's eleventh simultaneous call at the default, however right their password
+serving both purposes would refuse a user's eleventh simultaneous call at the default, however right their password
 was.
 
 The surface figure is the one that stops a client opening five hundred connections from making this process perform
@@ -723,14 +723,14 @@ arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the f
 `X-Forwarded-For`, so a request arriving from an address
 [`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names carries that proxy's address and nobody else's — a
 per-source allowance over it would be one allowance for the whole world, and a single guesser filling it would close
-password sign-in for every owner at once. The source axis is therefore skipped for such a peer rather than applied to
+password sign-in for every user at once. The source axis is therefore skipped for such a peer rather than applied to
 an address that distinguishes nobody, and the per-username allowance is what holds. The peer is read in its IPv4 form
 where it has one, exactly as the forwarded-headers policy reads the same list, so a dual-stack listener reporting an
 IPv4 proxy as `::ffff:10.0.0.5` still recognizes the `10.0.0.5` the operator wrote. Every other peer is the client that
 reached this process, whether or not anything is named in front, and both axes apply to it.
 
 **The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the
-deployment rather than for a person, so a credential naming an owner has nothing there to act for —
+deployment rather than for a person, so a credential naming a user has nothing there to act for —
 [the administrative endpoint](admin-endpoint.md) states what it accepts instead.
 
 ### Requiring no credential
@@ -754,7 +754,7 @@ Whenever an enabled endpoint requires no credential, startup logs one warning:
 warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
       The MCP endpoint is enabled on /mcp with no authentication method configured, so anything that can reach this
       address can read the synchronized mailboxes. Add an entry to McpEndpoint:Authentication naming a 'Method' of
-      'password', 'api-key', 'public-key', or 'oauth-subject', and provision a credential for each owner with
+      'password', 'api-key', 'public-key', or 'oauth-subject', and provision a credential for each user with
       'mfctl credential create', unless the address is reachable only from this machine or from a network you control.
       Neither an origin policy nor a client certificate substitutes for this: the first restricts which page a browser
       will let call, the second names the application calling, and neither identifies the person whose mail is served.
@@ -786,21 +786,21 @@ The operational consequences are the ones that always applied to an unauthentica
 - **What can be read here can also be marked, and the contact book can be erased.** An endpoint with no
   `Authentication` entry grants every permission this surface publishes, so anyone who can reach the port holds the
   reading half — where the exposure is disclosure of a mailbox, which is enough on its own — and every writing half
-  with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the owner's mail on the real mail server
+  with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the user's mail on the real mail server
   through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
-  deletes, or moves mail, but a message somebody else marked read is a message the owner never saw arrive.
+  deletes, or moves mail, but a message somebody else marked read is a message the user never saw arrive.
   `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the deployment's records about
   identified third parties. `mailfathom.mail.send` is the third writing half and the one whose effect cannot be
-  recalled: through `send_email` it lets anyone who can reach the port send mail from the owner's own address to
+  recalled: through `send_email` it lets anyone who can reach the port send mail from the user's own address to
   anybody, and through `reply_to_email` and `forward_email` — which such an endpoint also grants the reading half those
-  two need — it lets them answer the owner's correspondents and pass the owner's mail and its attachments on to
+  two need — it lets them answer the user's correspondents and pass the user's mail and its attachments on to
   strangers. It carries `get_outgoing_email` and `cancel_outgoing_email` with it, so the same reach reads back what the
   sends it made were answered with and stops one before it leaves; those two are confined to what the calling principal
   queued, which on an endpoint that admits everybody as one identity confines nothing. It carries `send_draft` too, so
-  a message the owner wrote and did not send is one call from having been sent. Nothing takes any of it back.
+  a message the user wrote and did not send is one call from having been sent. Nothing takes any of it back.
   `mailfathom.mail.drafts.write` is the mildest of the four writing halves and still not nothing: through `save_draft`,
-  `update_draft`, and `delete_draft` it lets anyone who can reach the port put a message into the owner's own Drafts
-  folder, rewrite one, and delete one — and a message somebody else drafted is one the owner may read as their own.
+  `update_draft`, and `delete_draft` it lets anyone who can reach the port put a message into the user's own Drafts
+  folder, rewrite one, and delete one — and a message somebody else drafted is one the user may read as their own.
   Accept a method and provision narrowed credentials, or keep the port unreachable.
 
 ### What a credential may do
@@ -809,8 +809,8 @@ The operational consequences are the ones that always applied to an unauthentica
 holds the credential and what they were provisioned to do. It is written where the credential is:
 
 ```console
-$ mfctl credential create --method api-key --owner 6f1c… --permission mailfathom.mail.read
-$ mfctl credential list --owner 6f1c…
+$ mfctl credential create --method api-key --user 6f1c… --permission mailfathom.mail.read
+$ mfctl credential list --user 6f1c…
 ```
 
 This surface's half of the published set is nine names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
@@ -850,7 +850,7 @@ where the grants are instead:
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 accepts api-key, and what each credential of that method
-      grants is recorded beside the owner it resolves rather than here. Read it with 'mfctl credential list'. A caller
+      grants is recorded beside the user it resolves rather than here. Read it with 'mfctl credential list'. A caller
       here is served only the tools its grant permits, and a call naming any other is answered as a tool that does not
       exist.
 ```
@@ -881,11 +881,11 @@ asking for what it was never granted.
 [Telemetry](telemetry.md#what-an-authorization-refusal-records) describes both in full.
 
 **Which mailboxes a caller reaches follows from the credential that admitted them.** Every tool call resolves the
-accounts that credential's owner controls and refuses anything outside them, whichever method got the caller in, and no
+accounts that credential's user controls and refuses anything outside them, whichever method got the caller in, and no
 setting in this section narrows that — which is exactly why a token has to resolve a mapped subject, since admitting a
 colleague of the same tenant on the strength of a valid signature would admit them to somebody else's mail.
 
-A key identifies a *client of one owner*, a public key identifies a *client that can prove it holds the other half*, a
+A key identifies a *client of one user*, a public key identifies a *client that can prove it holds the other half*, a
 token identifies a *person*, and the difference matters operationally. A bearer credential has the properties every
 bearer credential has: anything that reads it can use it, and it stands until somebody disables or replaces the record.
 A key pair removes the sharing: nothing reusable ever crosses the network or sits on the host, the credential presented
@@ -895,7 +895,7 @@ All four are revoked the same way — `mfctl credential disable` or `mfctl crede
 suspected leak a single command rather than a configuration change and a restart.
 
 A required scope is asked of a token and of nothing else. A key and a public key are credentials this deployment
-issued or registered for one owner, so provisioning them *is* the authorization; a token is issued by a server that
+issued or registered for one user, so provisioning them *is* the authorization; a token is issued by a server that
 decides for itself who receives one, which is what makes the mapping and the scope check worth having there.
 
 Of a validated token, MailFathom keeps three things and discards the rest: the issuer, the subject, and the scopes. A name,
@@ -1651,7 +1651,7 @@ of the deployment holds a certificate.
 **Compose the profile with OAuth rather than relying on it alone.** A certificate says which application is connecting and
 never whose mailbox is being read, so the connector's own OAuth 2.1 flow answers the second question — write an entry
 accepting `oauth-subject` beside this profile, configure the authorization server as [OAuth](#oauth) describes, and map
-the person's subject onto the owner with `mfctl credential create`. The two run independently: the certificate is judged before any credential is
+the person's subject onto the user with `mfctl credential create`. The two run independently: the certificate is judged before any credential is
 read, and a request satisfying one and not the other is refused. What remains outside MailFathom is the connector-side
 arrangement — registering the client with your authorization server and having it issue `Resource` as the audience — which
 is the client's half of the flow and the same for every MCP client.
@@ -1765,7 +1765,7 @@ Both are MailFathom's own configured identities — never the credential, and ne
 The partitions a deployment keeps therefore number no more than its key list plus its profile list.
 
 **The credential wins wherever both exist, and the two are never combined.** A credential names one client of one
-owner, which is exactly what a deployment provisioned its clients into; a profile names a client *application*, and
+user, which is exactly what a deployment provisioned its clients into; a profile names a client *application*, and
 several credentials may sit behind one profile. Taking the profile instead would let one credential starve another that
 happens to share its certificate, and combining the two into a pair would hand the same credential a fresh bucket for
 every profile it could present under — capacity bought by holding one more certificate.
@@ -1969,7 +1969,7 @@ A contact tool missing from the listing is the grant rather than a fault — [Wh
 do](#what-a-credential-may-do) is what decides it, and `mfctl credential list` says what the credential holds.
 
 `set_mail_flags` is beside them under the same condition, and it is the one tool in the listing that reports
-`readOnlyHint` false with `openWorldHint` true: it changes the owner's mailbox rather than MailFathom's copy of it, so
+`readOnlyHint` false with `openWorldHint` true: it changes the user's mailbox rather than MailFathom's copy of it, so
 its effect leaves this process. It is `idempotentHint` true because each value it writes is stated rather than
 adjusted, so a second identical call asks for what the first one asked for, and `destructiveHint` true because that
 annotation asks whether a tool performs only additive updates: a keyword replacement states the whole set and so takes

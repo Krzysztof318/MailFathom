@@ -10,14 +10,14 @@ namespace MailFathom.Application.Emails.AttachmentText;
 
 /// <summary>One stored message whose attachments nothing has read yet, as the selection returns it.</summary>
 /// <remarks>
-/// The owner travels with the message because redaction is the owner's rather than the deployment's. The count the
+/// The user travels with the message because redaction is the user's rather than the deployment's. The count the
 /// classification recorded does not: the walk over the stored message publishes its own, and the two disagree whenever
 /// the row was written by an older reading, so the reading asks the walk rather than the row.
 /// </remarks>
 /// <param name="Id">The message whose attachments are read.</param>
-/// <param name="Owner">Whose mail it is, which decides what a redaction looks for.</param>
+/// <param name="User">Whose mail it is, which decides what a redaction looks for.</param>
 /// <param name="Admission">Which of the classification gate's answers let this message through.</param>
 public sealed record EmailAwaitingAttachmentText(
     StoredEmailId Id,
-    MailOwnerId Owner,
+    MailUserId User,
     DerivedWorkAdmission Admission);

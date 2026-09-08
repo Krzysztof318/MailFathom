@@ -78,7 +78,7 @@ internal sealed class ClientTelemetryForwarder
 
     /// <summary>Forwards one batch and reports what the caller should be answered.</summary>
     /// <param name="signal">The signal the batch belongs to.</param>
-    /// <param name="batch">The batch, already rewritten to name the owner it belongs to.</param>
+    /// <param name="batch">The batch, already rewritten to name the user it belongs to.</param>
     /// <param name="cancellationToken">Cancels the forward when the client disconnects.</param>
     /// <returns>What to answer the client, and the condition to report where the batch did not arrive.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="signal" /> or <paramref name="batch" /> is <see langword="null" />.</exception>

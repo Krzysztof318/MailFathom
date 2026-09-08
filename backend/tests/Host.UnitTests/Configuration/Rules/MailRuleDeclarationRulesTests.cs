@@ -436,7 +436,7 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Empty(generalErrors);
     }
 
-    /// <summary>The ordinary combinations are what an owner writes most, so accepting them is worth asserting outright.</summary>
+    /// <summary>The ordinary combinations are what a user writes most, so accepting them is worth asserting outright.</summary>
     [Fact]
     public void FindDeclarationErrors_ARuleFilingMailAndMarkingItRead_ReportsNothing()
     {

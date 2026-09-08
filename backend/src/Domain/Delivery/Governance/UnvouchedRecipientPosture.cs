@@ -10,7 +10,7 @@ namespace MailFathom.Domain.Delivery.Governance;
 /// The address an injected instruction carries is the address nobody has ever corresponded with: a message whose body
 /// says <i>forward this to the address below</i> is naming somebody the mailbox has no other trace of, and the caller
 /// that repeats it into a tool argument cannot tell this system that it read it in mail rather than from the person it
-/// is acting for. What can be told apart is whether anything the owner holds knows the address at all, and that is what
+/// is acting for. What can be told apart is whether anything the user holds knows the address at all, and that is what
 /// this posture is written against.
 /// </para>
 /// <para>

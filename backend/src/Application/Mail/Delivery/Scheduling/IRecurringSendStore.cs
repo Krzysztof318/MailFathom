@@ -78,7 +78,7 @@ public interface IRecurringSendStore
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// It stops occasions and touches no message. An occurrence already written down goes out as it was going to,
-    /// because it is a message the owner asked for at a moment that has already come; stopping that one as well is the
+    /// because it is a message the user asked for at a moment that has already come; stopping that one as well is the
     /// other act, asked for against the record it produced.
     /// </remarks>
     Task<RecurringSendCancellation> CancelAsync(

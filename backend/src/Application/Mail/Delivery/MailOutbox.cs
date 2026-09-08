@@ -139,7 +139,7 @@ public sealed class MailOutbox(
         // screen was switched on, or after its category list widened, is a request this deployment may no longer act
         // on, and answering it from the record written under the older posture would make an idempotency key a way to
         // carry a message past a policy.
-        if (await screening.FindRefusalAsync(request.Account.Owner, rawMime, cancellationToken) is { } screened)
+        if (await screening.FindRefusalAsync(request.Account.User, rawMime, cancellationToken) is { } screened)
         {
             throw OutgoingMailRefusedException.ContentRefused(screened);
         }
@@ -262,7 +262,7 @@ public sealed class MailOutbox(
     /// </para>
     /// <para>
     /// An occurrence of a recurring send is admitted exactly as a rule's message is, and for the same reason: nobody is
-    /// present when it is composed. What the owner authorized was the declaration, at a boundary that asked them for
+    /// present when it is composed. What the user authorized was the declaration, at a boundary that asked them for
     /// the grant then, and the occasion that follows is this process acting on what they wrote down.
     /// </para>
     /// <para>

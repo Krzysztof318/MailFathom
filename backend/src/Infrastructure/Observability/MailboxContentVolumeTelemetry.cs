@@ -41,13 +41,13 @@ public sealed partial class MailboxContentVolumeTelemetry
     /// <summary>Names the deployment-wide storage ceiling in the limit dimension.</summary>
     private const string StorageCeilingLimitName = "storage_ceiling";
 
-    /// <summary>Names the per-owner storage ceiling in the limit dimension.</summary>
+    /// <summary>Names the per-user storage ceiling in the limit dimension.</summary>
     /// <remarks>
     /// A value of its own rather than the same one, because the two describe different states of a deployment: one says
     /// the instance is full and the other that one person is at their share while everybody else's mail keeps arriving
     /// whole. An alert written against either would be wrong if they shared a name.
     /// </remarks>
-    private const string OwnerStorageCeilingLimitName = "owner_storage_ceiling";
+    private const string UserStorageCeilingLimitName = "user_storage_ceiling";
 
     private readonly Counter<long> fetchedBytes;
     private readonly Counter<long> storedBytes;
@@ -124,13 +124,13 @@ public sealed partial class MailboxContentVolumeTelemetry
                 volume.StoredContentBytes);
         }
 
-        if (volume.DeferredForOwnerStorageEmailCount > 0)
+        if (volume.DeferredForUserStorageEmailCount > 0)
         {
-            this.limitsReached.Add(1, [.. tags, new KeyValuePair<string, object?>(LimitTagName, OwnerStorageCeilingLimitName)]);
-            this.LogOwnerStorageCeilingReached(
+            this.limitsReached.Add(1, [.. tags, new KeyValuePair<string, object?>(LimitTagName, UserStorageCeilingLimitName)]);
+            this.LogUserStorageCeilingReached(
                 accountId.Value,
                 folderAlias,
-                volume.DeferredForOwnerStorageEmailCount);
+                volume.DeferredForUserStorageEmailCount);
         }
 
         if (volume.RefilledEmailCount > 0)
@@ -155,8 +155,8 @@ public sealed partial class MailboxContentVolumeTelemetry
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The owner of {AccountId} holds what MailSynchronization:MaxStoredContentBytesPerOwner allows one owner, so {DeferredEmailCount} messages of {AccountId}/{FolderAlias} were recorded without their content and are fetched once that owner has room. Every other owner's mail is stored as usual.")]
-    private partial void LogOwnerStorageCeilingReached(
+        Message = "The user of {AccountId} holds what MailSynchronization:MaxStoredContentBytesPerUser allows one user, so {DeferredEmailCount} messages of {AccountId}/{FolderAlias} were recorded without their content and are fetched once that user has room. Every other user's mail is stored as usual.")]
+    private partial void LogUserStorageCeilingReached(
         string accountId,
         string folderAlias,
         int deferredEmailCount);

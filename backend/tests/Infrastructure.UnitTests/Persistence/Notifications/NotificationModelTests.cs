@@ -57,19 +57,19 @@ public sealed class NotificationModelTests
 
     /// <summary>
     /// This table names no mail account, so the erasure walk that enumerates the tables that do would never reach it.
-    /// The cascade from the owner row is what discharges an erasure request over it instead.
+    /// The cascade from the user row is what discharges an erasure request over it instead.
     /// </summary>
     [Fact]
-    public void Model_TheOwnerANotificationHappenedTo_TakesTheirNotificationsWithThem()
+    public void Model_TheUserANotificationHappenedTo_TakesTheirNotificationsWithThem()
     {
         // Arrange
         using var context = CreateContext();
 
         // Act
-        var foreignKey = ForeignKeyOn(context, nameof(NotificationEntity.OwnerId));
+        var foreignKey = ForeignKeyOn(context, nameof(NotificationEntity.UserId));
 
         // Assert
-        Assert.Equal(nameof(OwnerAccountEntity), foreignKey.PrincipalEntityType.ClrType.Name);
+        Assert.Equal(nameof(UserAccountEntity), foreignKey.PrincipalEntityType.ClrType.Name);
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
@@ -92,14 +92,14 @@ public sealed class NotificationModelTests
         // Assert
         Assert.True(index.IsUnique);
         Assert.Equal(
-            [nameof(NotificationEntity.OwnerId), nameof(NotificationEntity.DeduplicationKey)],
+            [nameof(NotificationEntity.UserId), nameof(NotificationEntity.DeduplicationKey)],
             index.Properties.Select(property => property.Name));
         Assert.Equal($"NOT \"{nameof(NotificationEntity.IsRead)}\"", index.GetFilter());
     }
 
     /// <summary>The centre's page and its retention sweep are one order, so they are one index.</summary>
     [Fact]
-    public void Model_TheTimelineIndex_LeadsWithTheOwnerAndThenTheInstant()
+    public void Model_TheTimelineIndex_LeadsWithTheUserAndThenTheInstant()
     {
         // Arrange
         using var context = CreateContext();
@@ -113,7 +113,7 @@ public sealed class NotificationModelTests
         // Assert
         Assert.Equal(
             [
-                nameof(NotificationEntity.OwnerId),
+                nameof(NotificationEntity.UserId),
                 nameof(NotificationEntity.OccurredAt),
                 nameof(NotificationEntity.Id),
             ],

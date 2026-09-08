@@ -19,8 +19,8 @@ namespace MailFathom.TestSupport;
 /// the guard is the same deployment answering the other question, which is whether an act may happen at all.
 /// </para>
 /// <para>
-/// Every owner reads the same posture, because what these suites are about is what a boundary does with a finding
-/// rather than whose mail was scanned. A suite about the difference between two owners states two postures itself,
+/// Every user reads the same posture, because what these suites are about is what a boundary does with a finding
+/// rather than whose mail was scanned. A suite about the difference between two users states two postures itself,
 /// through <see cref="FixedSensitiveContentPostures" />.
 /// </para>
 /// <para>
@@ -50,7 +50,7 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
         this.concurrency = new SensitiveContentScanConcurrency(bounds.MaximumConcurrentScans);
         this.Scanner = scanner;
         this.Telemetry = new RecordingSensitiveContentEgressTelemetry();
-        this.Postures = FixedSensitiveContentPostures.ForEveryOwner(
+        this.Postures = FixedSensitiveContentPostures.ForEveryUser(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], timeProvider, this.concurrency),
@@ -60,10 +60,10 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
         this.Screen = new SensitiveContentEgressScreen(this.Postures, this.Telemetry, timeProvider);
     }
 
-    /// <summary>Gets the owner whose mail this deployment is exercised over.</summary>
-    public static MailOwnerId Owner => SyntheticMailOwner.Deployment;
+    /// <summary>Gets the user whose mail this deployment is exercised over.</summary>
+    public static MailUserId User => SyntheticMailUser.Deployment;
 
-    /// <summary>Gets what every owner's mail is scanned under, for a consumer that resolves the owner itself.</summary>
+    /// <summary>Gets what every user's mail is scanned under, for a consumer that resolves the user itself.</summary>
     public FixedSensitiveContentPostures Postures { get; }
 
     /// <summary>Gets the guard a consumer is handed.</summary>
@@ -126,13 +126,13 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
             timeProvider);
     }
 
-    /// <summary>States that what follows is that owner's mail, as a use case does before it reads any.</summary>
+    /// <summary>States that what follows is that user's mail, as a use case does before it reads any.</summary>
     /// <returns>The scope, which the test disposes.</returns>
     /// <remarks>
     /// Needed by a test that exercises the guard directly rather than through a use case. Everything reached inside a
-    /// use case is already acting for the owner it resolved, so a suite going through one never opens this.
+    /// use case is already acting for the user it resolved, so a suite going through one never opens this.
     /// </remarks>
-    public IDisposable ActingForOwner() => this.Guard.ActingFor(Owner);
+    public IDisposable ActingForUser() => this.Guard.ActingFor(User);
 
     /// <inheritdoc />
     public void Dispose() => this.concurrency.Dispose();

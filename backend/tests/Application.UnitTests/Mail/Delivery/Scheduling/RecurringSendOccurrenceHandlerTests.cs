@@ -35,7 +35,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Scheduling;
 public sealed class RecurringSendOccurrenceHandlerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>Ten in the morning on a Wednesday, which is after that day's nine o'clock occasion and before the next.</summary>
     private static readonly DateTimeOffset Dispatched = new(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);

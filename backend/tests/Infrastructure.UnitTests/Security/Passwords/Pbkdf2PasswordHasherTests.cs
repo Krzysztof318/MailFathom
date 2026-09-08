@@ -46,7 +46,7 @@ public sealed class Pbkdf2PasswordHasherTests
         Assert.Equal(PasswordVerification.Failed, verification);
     }
 
-    /// <summary>A fresh salt per call is what stops a database dump answering which owners chose the same password.</summary>
+    /// <summary>A fresh salt per call is what stops a database dump answering which users chose the same password.</summary>
     [Fact]
     public void Hash_OnePasswordTwice_ProducesTwoRecordsAndBothVerify()
     {

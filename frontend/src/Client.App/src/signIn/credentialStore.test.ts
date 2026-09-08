@@ -7,7 +7,7 @@ import { credentialStore } from './credentialStore';
 
 const deployment = { baseAddress: 'https://mail.example.invalid' };
 const elsewhere = { baseAddress: 'https://elsewhere.example.invalid' };
-const authorization = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
+const authorization = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
 
 /** One command the shell was asked, so a test reads what crossed into it rather than what a store meant to send. */
 interface Asked {

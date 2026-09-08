@@ -22,7 +22,7 @@ namespace MailFathom.Cli.Output;
 /// </remarks>
 internal sealed class TrimmedLineWriter : TextWriter
 {
-    [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The destination is the running process's standard output or standard error, or a buffer a test owns, and this writer is a decorator over it rather than its owner. Disposing it here would close the stream the rest of the command still reports on, which is the same reason StreamWriter offers a leaveOpen mode.")]
+    [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The destination is the running process's standard output or standard error, or a buffer a test owns, and this writer is a decorator over it rather than its user. Disposing it here would close the stream the rest of the command still reports on, which is the same reason StreamWriter offers a leaveOpen mode.")]
     private readonly TextWriter destination;
     private readonly StringBuilder line = new();
 

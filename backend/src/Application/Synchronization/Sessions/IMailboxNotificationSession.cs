@@ -14,7 +14,7 @@ namespace MailFathom.Application.Synchronization.Sessions;
 /// </para>
 /// <para>
 /// The session is long-lived by nature, which is what makes it the one place a rotated credential could otherwise stay
-/// in use. Its owner recycles it when the settings it was opened under are superseded, so the connection is the
+/// in use. Its user recycles it when the settings it was opened under are superseded, so the connection is the
 /// operation boundary here that a per-run connect is everywhere else.
 /// </para>
 /// <para>

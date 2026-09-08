@@ -11,7 +11,7 @@ namespace MailFathom.Cli.Administration.Contacts;
 /// <param name="WasHeld">Whether the book held that contact when the erasure ran.</param>
 /// <param name="AddressesErased">How many addresses went with them.</param>
 /// <remarks>
-/// The counts are what the command reports rather than a bare success, because an owner who has just erased somebody is
+/// The counts are what the command reports rather than a bare success, because a user who has just erased somebody is
 /// entitled to be told what went. Nothing about the person is in this answer: an erasure that echoed the record would be
 /// a copy of what was just removed, printed to a terminal and left in a shell's scrollback.
 /// </remarks>

@@ -57,7 +57,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var destinationValue = destinationPath.Value;
         var uidValidityValue = uidValidity.Value;
@@ -70,7 +70,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.OwnerId == ownerValue
+            .Where(mutation => mutation.UserId == userValue
                 && mutation.MailboxAccountId == accountValue
                 && placingMutations.Contains(mutation.Mutation)
                 && mutation.Stage == MailboxMutationStage.Completed
@@ -101,7 +101,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
@@ -125,7 +125,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         // server reported.
         var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
-            .Where(mutation => mutation.OwnerId == ownerValue
+            .Where(mutation => mutation.UserId == userValue
                 && mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
@@ -189,7 +189,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
@@ -200,7 +200,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.OwnerId == ownerValue
+            .Where(mutation => mutation.UserId == userValue
                 && mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
@@ -267,7 +267,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
             + "carry more stores past this window's age bound than the {Ceiling} an attribution reads for one value of "
             + "one occurrence, so any of those beyond the newest went unread — and a store issued after that "
             + "occurrence's own last reading which went unread with them would leave its value attributed to the "
-            + "mailbox owner.")]
+            + "mailbox user.")]
     private static partial void LogFlagChangeCeilingReached(
         ILogger logger,
         int ceiling,

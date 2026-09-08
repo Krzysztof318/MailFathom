@@ -19,7 +19,7 @@ public sealed class CorpusArchiveTests
 {
     private static readonly DateTimeOffset SentAt = new(2026, 8, 8, 11, 30, 0, TimeSpan.Zero);
 
-    private static readonly MailboxAddress Mailbox = new("Owner", "owner@example.test");
+    private static readonly MailboxAddress Mailbox = new("User", "user@example.test");
 
     [Fact]
     public void Write_AnExchange_WritesOneMessagePerTurnAndTheInvocationBesideThem()
@@ -28,7 +28,7 @@ public sealed class CorpusArchiveTests
         using var destination = new MemoryStream();
 
         // Act
-        CorpusArchive.Write(destination, "owner@example.test --seed 42", [Conversation(2), Conversation(3, thread: 1)], Mailbox);
+        CorpusArchive.Write(destination, "user@example.test --seed 42", [Conversation(2), Conversation(3, thread: 1)], Mailbox);
 
         // Assert
         destination.Position = 0;
@@ -37,7 +37,7 @@ public sealed class CorpusArchiveTests
         Assert.Equal(
             ["0001.eml", "0002.eml", "0003.eml", "0004.eml", "0005.eml", CorpusArchive.ManifestEntryName],
             archive.Entries.Select(entry => entry.FullName).Order(StringComparer.Ordinal));
-        Assert.Contains("owner@example.test --seed 42", ReadEntry(archive, CorpusArchive.ManifestEntryName), StringComparison.Ordinal);
+        Assert.Contains("user@example.test --seed 42", ReadEntry(archive, CorpusArchive.ManifestEntryName), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class CorpusArchiveTests
         using var destination = new MemoryStream();
 
         // Act
-        CorpusArchive.Write(destination, "owner@example.test", [Conversation(2)], Mailbox);
+        CorpusArchive.Write(destination, "user@example.test", [Conversation(2)], Mailbox);
 
         // Assert
         // The exchange opens with the correspondent writing to the mailbox and the mailbox answering them, so a corpus
@@ -59,8 +59,8 @@ public sealed class CorpusArchiveTests
         using var reply = turns[1].Compose();
 
         Assert.Equal("correspondent@quietfjord.test", Assert.Single(opening.From.Mailboxes).Address);
-        Assert.Equal("owner@example.test", Assert.Single(opening.To.Mailboxes).Address);
-        Assert.Equal("owner@example.test", Assert.Single(reply.From.Mailboxes).Address);
+        Assert.Equal("user@example.test", Assert.Single(opening.To.Mailboxes).Address);
+        Assert.Equal("user@example.test", Assert.Single(reply.From.Mailboxes).Address);
         Assert.Equal("correspondent@quietfjord.test", Assert.Single(reply.To.Mailboxes).Address);
     }
 
@@ -71,7 +71,7 @@ public sealed class CorpusArchiveTests
         using var destination = new MemoryStream();
 
         // Act
-        CorpusArchive.Write(destination, "owner@example.test", [Conversation(2)], Mailbox);
+        CorpusArchive.Write(destination, "user@example.test", [Conversation(2)], Mailbox);
 
         // Assert
         // A corpus is replayed under an account that did not exist when it was written, so the headers a submission
@@ -91,13 +91,13 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var destination = new MemoryStream();
 
-        CorpusArchive.Write(destination, "owner@example.test --seed 42", [Conversation(2), Conversation(3, thread: 1)], Mailbox);
+        CorpusArchive.Write(destination, "user@example.test --seed 42", [Conversation(2), Conversation(3, thread: 1)], Mailbox);
 
         // Act
         var corpus = Read(destination);
 
         // Assert
-        Assert.Equal("owner@example.test --seed 42", corpus.Invocation);
+        Assert.Equal("user@example.test --seed 42", corpus.Invocation);
         Assert.Equal([2, 3], corpus.Exchanges.Select(exchange => exchange.Count));
         Assert.Equal("0.0@quietfjord.test", corpus.Exchanges[0][0].MessageId);
         Assert.Equal("1.2@quietfjord.test", corpus.Exchanges[1][2].MessageId);
@@ -109,7 +109,7 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var destination = new MemoryStream();
 
-        CorpusArchive.Write(destination, "owner@example.test", [Conversation(2)], Mailbox);
+        CorpusArchive.Write(destination, "user@example.test", [Conversation(2)], Mailbox);
 
         var turn = Read(destination).Exchanges[0][0];
 
@@ -130,8 +130,8 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var source = HandWrittenCorpus.Build(
             """{ "invocation": "written by hand", "exchanges": [["a.eml", "b.eml"]] }""",
-            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "owner@example.test")),
-            ("b.eml", HandWrittenCorpus.Message("two@invented.test", "Re: Ferry timetable", "owner@example.test", "ada@invented.test")));
+            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "user@example.test")),
+            ("b.eml", HandWrittenCorpus.Message("two@invented.test", "Re: Ferry timetable", "user@example.test", "ada@invented.test")));
 
         // Act
         var corpus = CorpusArchive.Read(source);
@@ -154,7 +154,7 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var source = HandWrittenCorpus.Build(
             manifest: null,
-            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "owner@example.test")));
+            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "user@example.test")));
 
         // Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => CorpusArchive.Read(source));
@@ -169,7 +169,7 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var source = HandWrittenCorpus.Build(
             """{ "invocation": "written by hand", "exchanges": [["a.eml", "missing.eml"]] }""",
-            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "owner@example.test")));
+            ("a.eml", HandWrittenCorpus.Message("one@invented.test", "Ferry timetable", "ada@invented.test", "user@example.test")));
 
         // Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => CorpusArchive.Read(source));
@@ -184,7 +184,7 @@ public sealed class CorpusArchiveTests
         // Arrange
         using var source = HandWrittenCorpus.Build(
             """{ "invocation": "written by hand", "exchanges": [["a.eml"]] }""",
-            ("a.eml", "Message-Id: <one@invented.test>\r\nSubject: Ferry timetable\r\nTo: owner@example.test\r\n\r\nNothing.\r\n"));
+            ("a.eml", "Message-Id: <one@invented.test>\r\nSubject: Ferry timetable\r\nTo: user@example.test\r\n\r\nNothing.\r\n"));
 
         // Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => CorpusArchive.Read(source));
@@ -262,7 +262,7 @@ public sealed class CorpusArchiveTests
 
         // Act
         var failure = Assert.Throws<SyntheticMailFailure>(
-            () => CorpusArchive.Write(destination, "owner@example.test", [], Mailbox));
+            () => CorpusArchive.Write(destination, "user@example.test", [], Mailbox));
 
         // Assert
         Assert.Contains("no exchanges to export", failure.Message, StringComparison.Ordinal);
@@ -281,7 +281,7 @@ public sealed class CorpusArchiveTests
 
         // Act
         var failure = Assert.Throws<SyntheticMailFailure>(
-            () => CorpusArchive.Write(destination, "owner@example.test", [dated], Mailbox));
+            () => CorpusArchive.Write(destination, "user@example.test", [dated], Mailbox));
 
         // Assert
         // A zip timestamp is a DOS date and reaches from 1980 to 2107, while '--until' and '--days' together draw a
@@ -314,10 +314,10 @@ public sealed class CorpusArchiveTests
         using var destination = new MemoryStream();
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(null!, "owner@example.test", [Conversation(2)], Mailbox));
+        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(null!, "user@example.test", [Conversation(2)], Mailbox));
         Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(destination, null!, [Conversation(2)], Mailbox));
-        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(destination, "owner@example.test", null!, Mailbox));
-        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(destination, "owner@example.test", [Conversation(2)], null!));
+        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(destination, "user@example.test", null!, Mailbox));
+        Assert.Throws<ArgumentNullException>(() => CorpusArchive.Write(destination, "user@example.test", [Conversation(2)], null!));
         Assert.Throws<ArgumentNullException>(() => CorpusArchive.Read(null!));
     }
 
@@ -340,7 +340,7 @@ public sealed class CorpusArchiveTests
     private static SyntheticConversation Conversation(int turns, int thread = 0)
     {
         var correspondent = new SyntheticParticipant("Correspondent", "correspondent@quietfjord.test");
-        var mailbox = new SyntheticParticipant("Owner", "owner@example.test");
+        var mailbox = new SyntheticParticipant("User", "user@example.test");
 
         return new SyntheticConversation(
             correspondent,

@@ -22,9 +22,9 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// <b>Identity is settled here rather than taken from the payload.</b> A client says what it likes about the browser,
-/// the release, and the screen, and none of that is this deployment's business; whose telemetry it is, is. The owner
+/// the release, and the screen, and none of that is this deployment's business; whose telemetry it is, is. The user
 /// comes off the credential that authenticated, and it is written over whatever arrived under that name rather than
-/// merged with it — there is no argument and no resource attribute in which a client could name an owner of its own
+/// merged with it — there is no argument and no resource attribute in which a client could name a user of its own
 /// and be believed.
 /// </para>
 /// <para>
@@ -46,7 +46,7 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Everything an unauthenticated shape could push through is bounded before anything leaves: the body, the number of
-/// records in one batch, and how often one owner may export. Each refusal is answered with the status the OTLP
+/// records in one batch, and how often one user may export. Each refusal is answered with the status the OTLP
 /// specification names and a status document rather than a truncation, so the client can tell a batch that will never
 /// be accepted from one worth holding.
 /// </para>
@@ -63,7 +63,7 @@ internal static class ClientTelemetryEndpoint
 
     /// <summary>The resource attribute naming whose telemetry a forwarded batch is.</summary>
     /// <remarks>The same key the guarded-egress span carries the same identifier under, because one dimension keeps one key wherever it is published.</remarks>
-    internal const string OwnerTagName = "mailfathom.owner";
+    internal const string UserTagName = "mailfathom.user";
 
     /// <summary>The largest export body this endpoint reads.</summary>
     /// <remarks>
@@ -134,14 +134,14 @@ internal static class ClientTelemetryEndpoint
     /// <param name="signal">The signal the route serves.</param>
     /// <param name="context">The request being answered, whose body carries the batch.</param>
     /// <param name="authorization">Answers whose telemetry this is, and refuses a caller acting for nobody.</param>
-    /// <param name="quota">Bounds how often one owner may export.</param>
+    /// <param name="quota">Bounds how often one user may export.</param>
     /// <param name="forwarder">Sends the batch to the deployment's own collector.</param>
     /// <param name="telemetry">Reports what was accepted, refused, forwarded, and not forwarded.</param>
     /// <param name="cancellationToken">Cancels the forward when the client disconnects.</param>
     /// <returns>The destination's own answer, or the refusal that stopped the batch, as the specification's own protocol buffers documents.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
-    /// The order is deliberate. The credential is resolved to an owner first, because an export nobody can be
+    /// The order is deliberate. The credential is resolved to a user first, because an export nobody can be
     /// attributed to must not be read at all; the media type is read next, which costs one header and settles whether
     /// this is an export request at all; the quota is spent after that, so a client past its rate costs this process
     /// one refusal rather than a parse; and only then is the batch read, bounded, and rewritten.
@@ -162,7 +162,7 @@ internal static class ClientTelemetryEndpoint
         ArgumentNullException.ThrowIfNull(forwarder);
         ArgumentNullException.ThrowIfNull(telemetry);
 
-        var owner = authorization.RequireOwner();
+        var user = authorization.RequireUser();
 
         if (!SpeaksProtobuf(context.Request.ContentType))
         {
@@ -175,7 +175,7 @@ internal static class ClientTelemetryEndpoint
                 $"This endpoint accepts '{ClientTelemetryForwarder.ProtobufMediaType}' alone.");
         }
 
-        if (!quota.TryAdmit(owner.ToString()))
+        if (!quota.TryAdmit(user.ToString()))
         {
             return Refused(
                 telemetry,
@@ -201,8 +201,8 @@ internal static class ClientTelemetryEndpoint
         var rewritten = OtlpExportPayload.Rewrite(
             batch,
             signal,
-            OwnerTagName,
-            owner.ToString(),
+            UserTagName,
+            user.ToString(),
             MaxRecordsPerBatch);
 
         if (rewritten.Refusal != OtlpPayloadRefusal.None)

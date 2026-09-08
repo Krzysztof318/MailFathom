@@ -112,7 +112,7 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var scope = new StoredMailScope(
-            MailAccountIdentity.Create(SyntheticMailAccount.Owner, MailAccountId.Create("rewind-unknown-account")),
+            MailAccountIdentity.Create(SyntheticMailAccount.User, MailAccountId.Create("rewind-unknown-account")),
             null);
 
         // Act

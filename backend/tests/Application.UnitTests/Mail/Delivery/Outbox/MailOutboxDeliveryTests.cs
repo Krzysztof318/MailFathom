@@ -28,7 +28,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 public sealed class MailOutboxDeliveryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset ClaimedAt = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ReadOnlyMemory<byte> RawMime =

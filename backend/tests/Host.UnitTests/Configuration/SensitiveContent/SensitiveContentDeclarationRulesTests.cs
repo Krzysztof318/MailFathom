@@ -267,7 +267,7 @@ public sealed class SensitiveContentDeclarationRulesTests
     }
 
     /// <summary>
-    /// An owner's own record may switch a provided scanner on for their own mail, so what an operator wrote under a
+    /// A user's own record may switch a provided scanner on for their own mail, so what an operator wrote under a
     /// switch that is off is not a comment. Left unjudged it would pass every start and then throw out of the posture
     /// composition the moment somebody opted in, which stops scanning for the whole deployment rather than for them.
     /// </summary>

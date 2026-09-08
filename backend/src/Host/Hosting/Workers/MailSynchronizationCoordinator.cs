@@ -168,7 +168,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         }
 
         // Read through the application port in a scope of its own rather than off the configuration snapshot, because
-        // the served set is now configuration plus the owner a startup gate established and only the composed port
+        // the served set is now configuration plus the user a startup gate established and only the composed port
         // holds both. The scope lives for the read: a supervisor gets a scope of its own per work unit.
         using var accountScope = this.scopeFactory.CreateScope();
         accountScope.ServiceProvider

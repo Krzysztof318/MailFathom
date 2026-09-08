@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Spam.History;
 public sealed class SpamClassificationHistoryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private readonly ISpamClassificationHistoryReader classifications =
         Substitute.For<ISpamClassificationHistoryReader>();

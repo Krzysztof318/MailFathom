@@ -19,7 +19,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Operations;
 public sealed class OutboxQueryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     [Fact]
     public void Create_ARequestNamingNothing_IsServedTheDefaultPageOverEveryAccountAndStage()

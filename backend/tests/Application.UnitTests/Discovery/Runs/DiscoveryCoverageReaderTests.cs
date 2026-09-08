@@ -207,7 +207,7 @@ public sealed class DiscoveryCoverageReaderTests
 
     private static MailboxScope Scope(params MailAccountId[] accountIds) =>
         MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             accountIds.Length is 0 ? [Work, Archive] : accountIds,
             []);
 }

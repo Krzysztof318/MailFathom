@@ -10,18 +10,18 @@ namespace MailFathom.Application.Spam;
 /// <summary>Which of the deployment's mailboxes classification runs for, and over which of their folders.</summary>
 /// <remarks>
 /// <para>
-/// The whole deployment's answer, composed from every owner's own posture and read once. Classification is each owner's
+/// The whole deployment's answer, composed from every user's own posture and read once. Classification is each user's
 /// decision about their own mail, so a walk over stored mail cannot ask one question of the deployment — it has to know
-/// which accounts belong to an owner who classifies and which folders of those accounts are in that owner's scope.
+/// which accounts belong to a user who classifies and which folders of those accounts are in that user's scope.
 /// </para>
 /// <para>
-/// Both are named by account rather than by owner because an account belongs to exactly one owner and the tables a walk
+/// Both are named by account rather than by user because an account belongs to exactly one user and the tables a walk
 /// narrows already carry the account, which keeps the decision one more term of an existing predicate rather than a
-/// join onto the owner.
+/// join onto the user.
 /// </para>
 /// <para>
-/// The wait is here rather than being one owner's, because how long the index may be held back by a scanner that has
-/// stopped answering is a cost the process bears: an owner who could raise it would be raising it for work that is not
+/// The wait is here rather than being one user's, because how long the index may be held back by a scanner that has
+/// stopped answering is a cost the process bears: a user who could raise it would be raising it for work that is not
 /// theirs.
 /// </para>
 /// </remarks>
@@ -46,21 +46,21 @@ public sealed record SpamClassificationScope
         this.MaximumClassificationWait = maximumClassificationWait;
     }
 
-    /// <summary>Gets the scope of a deployment no owner of which classifies anything.</summary>
+    /// <summary>Gets the scope of a deployment no user of which classifies anything.</summary>
     public static SpamClassificationScope None { get; } = new([], [], DefaultMaximumClassificationWait);
 
-    /// <summary>Gets the accounts whose owner has classification switched on, in a normalized order.</summary>
+    /// <summary>Gets the accounts whose user has classification switched on, in a normalized order.</summary>
     /// <remarks>
     /// Empty for a deployment nobody classifies for, which is what makes every path that obeys the gate behave exactly
-    /// as it did before the gate existed. An account absent from it is one no verdict is expected for, whether its owner
+    /// as it did before the gate existed. An account absent from it is one no verdict is expected for, whether its user
     /// switched classification off or never switched it on.
     /// </remarks>
     public IReadOnlyList<MailAccountId> ClassifyingAccounts { get; }
 
     /// <summary>Gets the folders classification runs over, each named within the account that holds it.</summary>
     /// <remarks>
-    /// Named as a pair rather than as an alias, because two owners may map the same alias while only one of them
-    /// classifies: narrowing by the alias alone would hold the other owner's mail back for a verdict nothing is going to
+    /// Named as a pair rather than as an alias, because two users may map the same alias while only one of them
+    /// classifies: narrowing by the alias alone would hold the other user's mail back for a verdict nothing is going to
     /// reach about it. Every entry belongs to an account of <see cref="ClassifyingAccounts" />.
     /// </remarks>
     public IReadOnlyList<MailFolderIdentity> ClassifiedFolders { get; }
@@ -75,8 +75,8 @@ public sealed record SpamClassificationScope
     /// </remarks>
     public TimeSpan MaximumClassificationWait { get; }
 
-    /// <summary>Composes the deployment's scope from the owners that classify and the folders they classify over.</summary>
-    /// <param name="classifyingAccounts">The accounts of every owner whose classification is switched on.</param>
+    /// <summary>Composes the deployment's scope from the users that classify and the folders they classify over.</summary>
+    /// <param name="classifyingAccounts">The accounts of every user whose classification is switched on.</param>
     /// <param name="classifiedFolders">The folders those accounts are classified over.</param>
     /// <param name="maximumClassificationWait">The deployment's wait, or <see langword="null" /> for the default.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>

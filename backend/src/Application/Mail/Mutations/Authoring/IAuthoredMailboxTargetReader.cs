@@ -43,7 +43,7 @@ public interface IAuthoredMailboxTargetReader
 }
 
 /// <summary>Where one stored email is, as a mutation has to name it.</summary>
-/// <param name="Owner">The owner whose account the email belongs to, which every record the change writes carries.</param>
+/// <param name="User">The user whose account the email belongs to, which every record the change writes carries.</param>
 /// <param name="Occurrence">The account, folder binding, UIDVALIDITY, and UID an IMAP command is issued against.</param>
 /// <param name="Folder">The binding the occurrence belongs to, including the remote path a write session selects.</param>
 /// <remarks>
@@ -52,6 +52,6 @@ public interface IAuthoredMailboxTargetReader
 /// Nothing derived from the message is carried, so deciding whether a change may be made never reads mail.
 /// </remarks>
 public sealed record AuthoredMailboxTarget(
-    MailOwnerId Owner,
+    MailUserId User,
     EmailOccurrenceId Occurrence,
     MailFolderResolution Folder);

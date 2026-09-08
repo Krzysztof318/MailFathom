@@ -157,9 +157,9 @@ systemd-ask-password -n \
 The mailbox password arrives through `systemd-ask-password -n` so that it is neither a shell-history entry nor a file
 you have to remember to delete. `-n` is what keeps a trailing newline out of the material.
 
-No credential is provisioned here for the MCP endpoint. What a client presents there resolves a record beside the owner
+No credential is provisioned here for the MCP endpoint. What a client presents there resolves a record beside the user
 whose mail it reaches, so the key is minted by the running deployment with
-[`mfctl credential create`](admin-endpoint.md#owner-credentials) rather than encrypted into this store — nothing on this
+[`mfctl credential create`](admin-endpoint.md#user-credentials) rather than encrypted into this store — nothing on this
 host holds it, and the configuration names only which methods the endpoint accepts.
 
 **Each unit reaches only the credentials it lists**, which is what the two `LoadCredentialEncrypted=` lines in
@@ -245,7 +245,7 @@ podman exec --interactive mailfathom-postgres sh -c \
 
 **As `mailfathom`, never as `postgres`.** Read the SQL before applying it and take a backup first;
 [applying the database schema](database-schema.md) states the privileges it needs, the locks it takes, why the role
-that runs it becomes the owner of everything it creates, and what each startup failure means.
+that runs it becomes the user of everything it creates, and what each startup failure means.
 
 ## Checking it
 

@@ -26,7 +26,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 public sealed class MailDraftFilerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -71,7 +71,7 @@ public sealed class MailDraftFilerTests
         Assert.Empty(harness.Withdrawn);
     }
 
-    /// <summary>An edit appends the new version and takes the old one out, which leaves the owner one draft.</summary>
+    /// <summary>An edit appends the new version and takes the old one out, which leaves the user one draft.</summary>
     [Fact]
     public async Task SettleAsync_RevisedDraft_AppendsTheNewVersionThenWithdrawsTheOld()
     {

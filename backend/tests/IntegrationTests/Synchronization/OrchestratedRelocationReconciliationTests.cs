@@ -32,7 +32,7 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// </para>
 /// <para>
 /// Both also assert what each half was withheld from, and the third test is the control that makes those assertions
-/// mean anything: the mailbox owner performs the same move by hand, over a connection MailFathom never sees, and the
+/// mean anything: the mailbox user performs the same move by hand, over a connection MailFathom never sees, and the
 /// same two events are raised rather than withheld. An absence proves nothing unless the same observation would report
 /// it present, and the two tests differ in exactly one thing — whether a record was written before the command.
 /// </para>
@@ -170,12 +170,12 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
         Assert.Equal(outcome.RecordId, suppressed.MutationRecordId);
     }
 
-    /// <summary>The mailbox owner moving mail by hand produces the same two events, and both stay changes to react to.</summary>
+    /// <summary>The mailbox user moving mail by hand produces the same two events, and both stay changes to react to.</summary>
     /// <remarks>
     /// <para>
     /// This is the control for the two tests above. The server reports the identical arrival and the identical
     /// disappearance whichever side issued the command, so an assertion that MailFathom's own were withheld says nothing
-    /// until the same runs raise the owner's. It also proves the suppression is scoped to the occurrence a record names
+    /// until the same runs raise the user's. It also proves the suppression is scoped to the occurrence a record names
     /// rather than to the folders a rule happens to write to.
     /// </para>
     /// <para>
@@ -240,7 +240,7 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, SyntheticMailAccount.Owner, occurrence, Requester, TargetPath);
+        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, SyntheticMailAccount.User, occurrence, Requester, TargetPath);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

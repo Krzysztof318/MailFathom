@@ -14,7 +14,7 @@ namespace MailFathom.Application.UnitTests.Retrieval.AskMail.Audit;
 public sealed class MailAnsweringAuditQueryTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Noon = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
@@ -98,7 +98,7 @@ public sealed class MailAnsweringAuditQueryTests
         // Act
         var work = MailAnsweringAuditQuery.Create(Account, null, null, null, null).Query!;
         var personal = MailAnsweringAuditQuery
-            .Create(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")), null, null, null, null)
+            .Create(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")), null, null, null, null)
             .Query!;
 
         // Assert

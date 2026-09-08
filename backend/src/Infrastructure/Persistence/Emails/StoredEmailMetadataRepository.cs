@@ -31,7 +31,7 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -41,7 +41,7 @@ internal sealed class StoredEmailMetadataRepository(
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var occurrenceId = metadata.OccurrenceId;
-        var account = MailAccountIdentity.Create(owner, occurrenceId.AccountId);
+        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
         var entity = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         if (entity is null)
@@ -60,7 +60,7 @@ internal sealed class StoredEmailMetadataRepository(
                 // Both copied off the binding row this occurrence is being attached to, which is the row folder
                 // resolution wrote from the account. Nothing re-reads the account: the folder already says whose
                 // mailbox this is, and taking the pair from one place is what keeps them from ever disagreeing.
-                OwnerId = folder.OwnerId,
+                UserId = folder.UserId,
                 MailFolder = folder,
                 UidValidity = occurrenceId.UidValidity.Value,
                 Uid = occurrenceId.Uid.Value,
@@ -97,7 +97,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 metadata.Subject,
                 timeProvider.GetUtcNow(),
-                derivationGuard.StampFor(MailOwnerId.Create(entity.OwnerId)),
+                derivationGuard.StampFor(MailUserId.Create(entity.UserId)),
                 cancellationToken);
         }
 
@@ -108,7 +108,7 @@ internal sealed class StoredEmailMetadataRepository(
         await threadAssembly.AssembleAsync(
             session,
             MailAccountIdentity.Create(
-                MailOwnerId.Create(entity.OwnerId),
+                MailUserId.Create(entity.UserId),
                 MailAccountId.Create(entity.MailboxAccountId)),
             ThreadedEmails.Of(entity),
             entity.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
@@ -120,7 +120,7 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
@@ -128,7 +128,7 @@ internal sealed class StoredEmailMetadataRepository(
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var account = MailAccountIdentity.Create(owner, occurrenceId.AccountId);
+        var account = MailAccountIdentity.Create(user, occurrenceId.AccountId);
         var occupant = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         // A row already sitting on the occurrence is either this same email, which a previous attempt of this commit
@@ -188,7 +188,7 @@ internal sealed class StoredEmailMetadataRepository(
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var accountValue = account.Id.Value;
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         var generation = occurrenceId.FolderResolutionId.Generation.Value;
@@ -196,7 +196,7 @@ internal sealed class StoredEmailMetadataRepository(
         return TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.StoredEmails,
             dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
-            candidate => candidate.OwnerId == owner
+            candidate => candidate.UserId == user
                 && candidate.MailFolder.MailboxAccountId == accountValue
                 && candidate.MailFolder.Alias == alias
                 && candidate.MailFolder.ResolutionGeneration == generation

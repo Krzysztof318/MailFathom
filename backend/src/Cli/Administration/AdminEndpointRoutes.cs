@@ -161,7 +161,7 @@ internal static class AdminEndpointRoutes
     /// <remarks>
     /// A literal segment where the single-contact path takes an identifier, which a deployment's routing prefers over a
     /// parameter, so the two cannot be confused. It names the origin rather than an action because what is being
-    /// disposed of is the half of the book the owner did not write.
+    /// disposed of is the half of the book the user did not write.
     /// </remarks>
     internal const string CollectedContactsPath = $"{ContactsPath}/collected";
 
@@ -175,7 +175,7 @@ internal static class AdminEndpointRoutes
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
     internal static string ContactPath(Guid contactId) => $"{ContactsPath}/{contactId:D}";
 
-    /// <summary>Where a collected contact is promoted to one the owner has taken responsibility for.</summary>
+    /// <summary>Where a collected contact is promoted to one the user has taken responsibility for.</summary>
     /// <param name="contactId">The contact the path names.</param>
     /// <returns>The path.</returns>
     /// <remarks>
@@ -208,73 +208,73 @@ internal static class AdminEndpointRoutes
     /// <summary>Where an adoption of the deployment's file-decided settings is previewed, and where it is performed.</summary>
     internal const string ConfigurationAdoptionPath = $"{ConfigurationPath}/adoption";
 
-    /// <summary>Where the owners a deployment holds records for are listed, and where one is recorded.</summary>
+    /// <summary>Where the users a deployment holds records for are listed, and where one is recorded.</summary>
     /// <remarks>
-    /// The listing every owner-scoped path below is composed from: an administrator selects an owner before doing
+    /// The listing every user-scoped path below is composed from: an administrator selects a user before doing
     /// anything else, and a generated identifier is the only handle either side has for one. A deployment serving one
-    /// person answers with one entry, which is what lets a command act without asking which owner was meant.
+    /// person answers with one entry, which is what lets a command act without asking which user was meant.
     /// </remarks>
-    internal const string OwnersPath = $"{Prefix}/owners";
+    internal const string UsersPath = $"{Prefix}/users";
 
-    /// <summary>Where one owner and everything the deployment recorded for them are erased.</summary>
-    /// <param name="ownerId">The owner the path names.</param>
+    /// <summary>Where one user and everything the deployment recorded for them are erased.</summary>
+    /// <param name="userId">The user the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
-    internal static string OwnerPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}";
+    internal static string UserPath(Guid userId) => $"{UsersPath}/{userId:D}";
 
-    /// <summary>Where the label one owner is told apart by is replaced.</summary>
-    /// <param name="ownerId">The owner the path names.</param>
+    /// <summary>Where the label one user is told apart by is replaced.</summary>
+    /// <param name="userId">The user the path names.</param>
     /// <returns>The path.</returns>
-    internal static string OwnerDisplayNamePath(Guid ownerId) => $"{OwnerPath(ownerId)}/display-name";
+    internal static string UserDisplayNamePath(Guid userId) => $"{UserPath(userId)}/display-name";
 
-    /// <summary>Where one owner's record is read whole, and where an edited one is saved back.</summary>
-    /// <param name="ownerId">The owner the path names.</param>
+    /// <summary>Where one user's record is read whole, and where an edited one is saved back.</summary>
+    /// <param name="userId">The user the path names.</param>
     /// <returns>The path.</returns>
-    internal static string OwnerRecordPath(Guid ownerId) => $"{OwnerPath(ownerId)}/record";
+    internal static string UserRecordPath(Guid userId) => $"{UserPath(userId)}/record";
 
-    /// <summary>Where one mail account is declared into an owner's record.</summary>
-    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <summary>Where one mail account is declared into a user's record.</summary>
+    /// <param name="userId">The user the mailbox belongs to.</param>
     /// <returns>The path.</returns>
-    internal static string OwnerMailAccountsPath(Guid ownerId) => $"{OwnerRecordPath(ownerId)}/mail-accounts";
+    internal static string UserMailAccountsPath(Guid userId) => $"{UserRecordPath(userId)}/mail-accounts";
 
-    /// <summary>Where one mail account is withdrawn from an owner's record.</summary>
-    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <summary>Where one mail account is withdrawn from a user's record.</summary>
+    /// <param name="userId">The user the mailbox belongs to.</param>
     /// <returns>The path.</returns>
-    /// <remarks>A path of its own carrying the identifier in the body, because an account is named by something its owner chose: a dot or a space in one would decide whether the route matched at all.</remarks>
-    internal static string OwnerMailAccountRemovalPath(Guid ownerId) =>
-        $"{OwnerMailAccountsPath(ownerId)}/removal";
+    /// <remarks>A path of its own carrying the identifier in the body, because an account is named by something its user chose: a dot or a space in one would decide whether the route matched at all.</remarks>
+    internal static string UserMailAccountRemovalPath(Guid userId) =>
+        $"{UserMailAccountsPath(userId)}/removal";
 
-    /// <summary>Where one owner's adoption is previewed, and where it is performed.</summary>
-    /// <param name="ownerId">The owner the path names.</param>
+    /// <summary>Where one user's adoption is previewed, and where it is performed.</summary>
+    /// <param name="userId">The user the path names.</param>
     /// <returns>The path.</returns>
-    internal static string OwnerAdoptionPath(Guid ownerId) => $"{OwnerRecordPath(ownerId)}/adoption";
+    internal static string UserAdoptionPath(Guid userId) => $"{UserRecordPath(userId)}/adoption";
 
-    /// <summary>Where one owner's credentials are listed and provisioned, whichever method each is presented by.</summary>
-    /// <param name="ownerId">The owner the path names.</param>
+    /// <summary>Where one user's credentials are listed and provisioned, whichever method each is presented by.</summary>
+    /// <param name="userId">The user the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
-    internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnerPath(ownerId)}/credentials";
+    internal static string UserCredentialsPath(Guid userId) => $"{UserPath(userId)}/credentials";
 
     /// <summary>Where one credential is removed.</summary>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential the path names.</param>
     /// <returns>The path.</returns>
-    /// <remarks>The owner is in the path as well as the credential, because that is what the deployment's own contract asks for: an identifier copied out of the wrong listing is refused rather than acted on.</remarks>
-    internal static string OwnerCredentialPath(Guid ownerId, Guid credentialId) =>
-        $"{OwnerCredentialsPath(ownerId)}/{credentialId:D}";
+    /// <remarks>The user is in the path as well as the credential, because that is what the deployment's own contract asks for: an identifier copied out of the wrong listing is refused rather than acted on.</remarks>
+    internal static string UserCredentialPath(Guid userId, Guid credentialId) =>
+        $"{UserCredentialsPath(userId)}/{credentialId:D}";
 
     /// <summary>Where what one credential is presented as is replaced.</summary>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential the path names.</param>
     /// <returns>The path.</returns>
     /// <remarks>A path of its own rather than a field on the credential, because replacing what a credential is presented as and suspending it are opposite decisions and a body carrying which was meant would make a mistyped value the difference between them.</remarks>
-    internal static string OwnerCredentialMaterialPath(Guid ownerId, Guid credentialId) =>
-        $"{OwnerCredentialPath(ownerId, credentialId)}/material";
+    internal static string UserCredentialMaterialPath(Guid userId, Guid credentialId) =>
+        $"{UserCredentialPath(userId, credentialId)}/material";
 
     /// <summary>Where one credential is turned on or off.</summary>
-    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="userId">The user the credential belongs to.</param>
     /// <param name="credentialId">The credential the path names.</param>
     /// <returns>The path.</returns>
-    internal static string OwnerCredentialEnablementPath(Guid ownerId, Guid credentialId) =>
-        $"{OwnerCredentialPath(ownerId, credentialId)}/enablement";
+    internal static string UserCredentialEnablementPath(Guid userId, Guid credentialId) =>
+        $"{UserCredentialPath(userId, credentialId)}/enablement";
 
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>

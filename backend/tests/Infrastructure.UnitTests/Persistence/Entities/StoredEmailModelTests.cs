@@ -19,8 +19,8 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// </summary>
 public sealed class StoredEmailModelTests
 {
-    /// <summary>The account timeline leads with the owner, because an account reference is the pair and an index cannot span a join.</summary>
-    private static readonly string[] AccountTimelineColumns = ["OwnerId", "MailboxAccountId", "ReceivedAt", "Id"];
+    /// <summary>The account timeline leads with the user, because an account reference is the pair and an index cannot span a join.</summary>
+    private static readonly string[] AccountTimelineColumns = ["UserId", "MailboxAccountId", "ReceivedAt", "Id"];
 
     private static readonly string[] FolderTimelineColumns = ["MailFolderId", "ReceivedAt", "Id"];
 

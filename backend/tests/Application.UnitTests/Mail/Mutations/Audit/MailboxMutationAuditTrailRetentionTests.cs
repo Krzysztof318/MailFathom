@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 public sealed class MailboxMutationAuditTrailRetentionTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset RunInstant = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 

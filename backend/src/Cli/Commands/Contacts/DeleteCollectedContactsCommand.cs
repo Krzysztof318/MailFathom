@@ -11,8 +11,8 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// <summary>Erases every contact the deployment collected from arriving mail, leaving the ones you wrote down.</summary>
 /// <remarks>
 /// <para>
-/// The way out for an owner who changed their mind about collection. Everything collection produced is a contact of its
-/// own origin, so taking that origin out takes the whole of what an instance inferred and nothing of what its owner
+/// The way out for a user who changed their mind about collection. Everything collection produced is a contact of its
+/// own origin, so taking that origin out takes the whole of what an instance inferred and nothing of what its user
 /// entered.
 /// </para>
 /// <para>

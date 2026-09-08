@@ -35,7 +35,7 @@ Recorded on issue [#1124](https://github.com/Krzysztof318/MailFathom/issues/1124
 
 The eight axes are independent, and an option on one does not constrain an option on another.
 
-1. **What selects the backend:** one setting per deployment; one setting per mail account or owner.
+1. **What selects the backend:** one setting per deployment; one setting per mail account or user.
 2. **What replaces the shared transaction:** write the object first and reclaim an orphan; write the row first and repair a missing object.
 3. **How an object is named:** content-addressed by the recorded SHA-256; addressed by the identity of the row that owns it; minted by the write that produces it.
 4. **Whether the port stays byte-based:** keep `ReadOnlyMemory<byte>`; change the port to streaming put and open-read.
@@ -48,7 +48,7 @@ The eight axes are independent, and an option on one does not constrain an optio
 
 ### 1. One backend per deployment, selected for new writes only
 
-The backend is one `ContentStorage` setting for the whole deployment, defaulting to the database, as [#1125](https://github.com/Krzysztof318/MailFathom/issues/1125) already assumes. It is not selectable per mail account or per owner.
+The backend is one `ContentStorage` setting for the whole deployment, defaulting to the database, as [#1125](https://github.com/Krzysztof318/MailFathom/issues/1125) already assumes. It is not selectable per mail account or per user.
 
 [ADR 0014](0014-single-tenant-multi-user-ownership-on-the-mail-account.md) hangs ownership on the mail account and answers a second tenancy with a second instance; a per-account backend would open a second axis of storage tenancy that decision closed. The process-wide bounds say the same thing more concretely: `StoredContentCeiling` bounds *the whole deployment's* stored content and `RawMimeMemoryBudget` bounds the sum across concurrent work units, and neither number names one thing any more once two accounts store into two different places. `#1125`'s health check reports one bucket, and `#1127`'s reclamation sweeps one key space.
 
@@ -135,7 +135,7 @@ What a read does when the object is absent but the `bytea` payload is not: **it 
 
 ### 7. Erasure deletes the object after the transaction commits, and the sweeper is the guarantee
 
-Both mechanisms exist and they answer different failures. A deliberate deletion path — retention, an owner erasure, an authored delete, a tombstoned occurrence — deletes the object **after** the transaction that removed the row has committed. A failure to delete it is recorded rather than swallowed, and the object is then an orphan that #1127's bounded, resumable reclamation removes.
+Both mechanisms exist and they answer different failures. A deliberate deletion path — retention, a user erasure, an authored delete, a tombstoned occurrence — deletes the object **after** the transaction that removed the row has committed. A failure to delete it is recorded rather than swallowed, and the object is then an orphan that #1127's bounded, resumable reclamation removes.
 
 Deleting inside the transaction is impossible under ADR 0001 and would be wrong anyway: deleting before the commit destroys mail whose deletion then rolls back, which is irreversible loss on a transient failure. A sweeper alone is a weaker promise than [#131](https://github.com/Krzysztof318/MailFathom/issues/131) and [#170](https://github.com/Krzysztof318/MailFathom/issues/170) make and than an operator answering a data subject can repeat.
 

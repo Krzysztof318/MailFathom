@@ -21,7 +21,7 @@ public sealed class InMemoryAttachmentDerivationCoverageReaderTests
     private static readonly DateTimeOffset Now = new(2026, 9, 7, 10, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     [Fact]
     public async Task ReadCoverageAsync_ACoverageATestPlacedOnIt_AnswersWithExactlyThat()

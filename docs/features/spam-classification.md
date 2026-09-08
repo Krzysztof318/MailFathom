@@ -123,7 +123,7 @@ the redactions — the markers become the text, the rules that read addresses an
 that comes back describes a message nobody was sent. That is why the daemon belongs inside the deployment's own trust
 boundary. Nothing refuses an address elsewhere, because a deployment may legitimately run one daemon for several
 services on its own network and no rule about addresses tells the two apart; what an address outside that boundary
-gives up is the owner's mail, in full, to somebody else.
+gives up is the user's mail, in full, to somebody else.
 
 Three bounds are the adapter's own, because each is a property of the daemon rather than of classification, and each is
 configurable with the default stated in the
@@ -152,7 +152,7 @@ release.
 rule corpus on start and daily afterwards, which needs egress; the Compose deployment gives it that egress and the
 Quadlet deployment does not, each saying so in the file. A frozen corpus scores today's mail worse than a fresh one, and
 that is the trade an operator makes rather than one made for them. Separately, the daemon's blocklist rules would send
-the sending addresses and the URI host names out of the owner's mail to third-party lists — **that is off in every
+the sending addresses and the URI host names out of the user's mail to third-party lists — **that is off in every
 deployment asset here**, because sending what is being scanned to somebody else is what scanning inside the trust
 boundary exists to avoid. Off, the daemon runs local rules only, and a deployment that wants those checks turns them on
 knowing what leaves.
@@ -161,33 +161,33 @@ The image is pinned to an exact digest in all four places that name it, and movi
 which is what the recorded corpus revision exists to make visible. `THIRD_PARTY_LICENSES.md` records the image, its
 licences, that whole messages are sent to it, and that it bundles no plugin reporting anything outside the deployment.
 
-## Each owner decides this for their own mail
+## Each user decides this for their own mail
 
 Junk is a judgement about somebody's own mailbox, and both of the actions below write to that person's mail server. So
-**the posture is the owner's**: whether their mail is classified at all, whether the scanner is consulted for it, which
-of their folders are classified, the score a verdict is reached at, and what becomes of the result. An owner may switch
+**the posture is the user's**: whether their mail is classified at all, whether the scanner is consulted for it, which
+of their folders are classified, the score a verdict is reached at, and what becomes of the result. A user may switch
 classification off entirely for themselves, and no deployment setting requires it of them. That follows from junk
-affecting only that owner's own mailbox: there is nobody else's interest for a deployment-wide floor to protect.
+affecting only that user's own mailbox: there is nobody else's interest for a deployment-wide floor to protect.
 
 **What stays the deployment's is what costs it a resource**: where the scanner daemon is, what one scan may spend, how
 many scans run at once, how long a message may wait for a verdict before the index moves on without it, and how wide one
-pass of a classification run is. So are the bounds a threshold may be set within — an owner writing a value outside them
+pass of a classification run is. So are the bounds a threshold may be set within — a user writing a value outside them
 is refused at the write, and the refusal names the range.
 
-Which source an owner's posture is read from is the same per-owner marker that decides where their mail accounts come
-from, described in [the owners a deployment serves](../operations/configuration-sources.md#the-owners-a-deployment-serves).
-An owner still read from a configuration source takes the deployment's `SpamClassification` section; an owner whose
+Which source a user's posture is read from is the same per-user marker that decides where their mail accounts come
+from, described in [the users a deployment serves](../operations/configuration-sources.md#the-users-a-deployment-serves).
+A user still read from a configuration source takes the deployment's `SpamClassification` section; a user whose
 document has been written takes the block that document carries. **The two are never unioned**: switching classification
 off in a record actually switches it off rather than falling back to whatever the file still says. Adoption carries the
-section's posture into the record with the mailboxes, so the handover moves an owner's settings rather than resetting
+section's posture into the record with the mailboxes, so the handover moves a user's settings rather than resetting
 them.
 
-A folder resolves within that owner's own mail accounts and nowhere else — both the folders their mail is classified
+A folder resolves within that user's own mail accounts and nowhere else — both the folders their mail is classified
 over and the folder their junk is filed into. A name only somebody else's account carries is answered exactly as one
 this deployment does not serve.
 
-A single-owner deployment is unchanged by all of this. It serves one owner read from configuration, so the section it
-already has is that owner's posture and behaves exactly as it did.
+A single-user deployment is unchanged by all of this. It serves one user read from configuration, so the section it
+already has is that user's posture and behaves exactly as it did.
 
 ## What an operator can let a verdict do
 
@@ -203,7 +203,7 @@ positive means dragging the message back in any one of them — there is no Mail
 next section says what happens when they do.
 
 **Mark it read.** The remote `\Seen` flag is set. This is the one authored act that sets it: synchronization and content
-retrieval still never do, so reading mail on the owner's behalf goes on leaving the flag alone. A message the server
+retrieval still never do, so reading mail on the user's behalf goes on leaving the flag alone. A message the server
 already reports read is not written to at all.
 
 With both on, **the flag is set before the move**. On a server without RFC 6851 `MOVE` a relocation gives the message a
@@ -232,7 +232,7 @@ section, decided once for every author rather than by this feature.
 An account that maps no destination at all fails startup naming that account, rather than leaving its spam unfiled with
 nothing said about why.
 
-### A message the owner moved back is never filed again
+### A message the user moved back is never filed again
 
 Two rules keep filing from becoming an argument with the person whose mailbox it is.
 
@@ -286,7 +286,7 @@ MailFathom derives from a message — it is never cut into [passages](message-ch
 never reaches an embedding provider, and it is never offered to the [rule set](mail-rules.md).
 
 Two costs are what that is for. Embedding unsolicited mail pays a provider, per message, to make it retrievable; and a
-rule set is the owner's automation, so mail somebody else chose to send is mail somebody else would otherwise be firing
+rule set is the user's automation, so mail somebody else chose to send is mail somebody else would otherwise be firing
 it with. Both are spent before anybody reads a verdict, which is why the ordering matters rather than only the answer:
 **classification is scheduled ahead of chunking, embedding, and rule evaluation**, and a message classification has not
 decided about yet waits rather than being derived from ahead of the answer.
@@ -294,9 +294,9 @@ decided about yet waits rather than being derived from ahead of the answer.
 With classification off, nothing is gated. Chunking, embedding, and rule evaluation reach exactly the mail they reached
 before any of this existed, and no folder is looked at to decide it.
 
-**Off is per owner here as everywhere else.** A walk over stored mail spans owners, and the gate narrows it by the
-accounts of the owners who classify — so an owner who switched classification off has all of their mail admitted at
-once, their junk folder included, while another owner's mail in the same walk goes on waiting on its verdict. Their junk
+**Off is per user here as everywhere else.** A walk over stored mail spans users, and the gate narrows it by the
+accounts of the users who classify — so a user who switched classification off has all of their mail admitted at
+once, their junk folder included, while another user's mail in the same walk goes on waiting on its verdict. Their junk
 folder goes with them because withholding it is an ordering behind a verdict rather than a rule of its own: nothing is
 ever going to score that mail, so holding it back would hold it back forever.
 
@@ -334,7 +334,7 @@ therefore eligible on the same terms as one nothing has looked at yet. Nothing r
 Nothing marks a message as withheld. What is read is where the message is now and what its classification currently
 says, so the answer changes the moment either does and no record has to be found and cleared.
 
-That is what makes correcting a false positive work without a MailFathom-specific undo. Mail the owner drags out of junk
+That is what makes correcting a false positive work without a MailFathom-specific undo. Mail the user drags out of junk
 in any client arrives in the destination as a new occurrence — a new UID in a different folder — with no classification
 of its own, so it is admitted like any newly stored message and cut, embedded, and offered to the rules from then on. A
 move MailFathom itself made keeps the row and its verdict, which is right, because such a move files a message *into*
@@ -415,7 +415,7 @@ per job type saturates at exactly the bound enqueuing is refused at, which
 decided by where it came from rather than by what it holds. A message MailFathom
 [filed](mail-delivery.md#the-copy-in-the-accounts-own-folders) into the account's own sent or outbox folder was composed
 here and sent from here, so a verdict about whether somebody sent it unsolicited says nothing — and one calling it spam
-would withhold everything derived from a message the owner wrote and, where the operator switched filing on, move their
+would withhold everything derived from a message the user wrote and, where the operator switched filing on, move their
 own send into their junk folder.
 
 **Two messages are deliberately not asked for.** One whose folder the configured scope does not cover, and one stored
@@ -510,8 +510,8 @@ unchanged rather than wrapped in a predicate that admits everything.
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
-[AI configuration](../operations/configuration-ai.md#spamclassification). It is what reaches an owner still read from a
-configuration source; an owner whose document has been written states the same posture in their own record, under the
+[AI configuration](../operations/configuration-ai.md#spamclassification). It is what reaches a user still read from a
+configuration source; a user whose document has been written states the same posture in their own record, under the
 `SpamClassification` property the same page describes. What either of them decides:
 
 - whether classification runs at all;
@@ -520,15 +520,15 @@ configuration source; an owner whose document has been written states the same p
 - the threshold a scanner's score is judged against, defaulting to the scanner's own.
 
 What neither of them decides is how wide one pass of a classification run is: how many messages a batch commits, and how
-many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every owner,
+many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every user,
 because they bound what one pass of the process spends rather than what happens to anybody's mail, and neither is a
 schedule — how often a pass happens is the account's own synchronization interval. So is how long a message may wait on
 a verdict before derived work runs for it unclassified.
 
 Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
-scanner is switched on, and it is the deployment's for every owner. `SpamClassification:Actions` holds the two switches,
-the folder junk is filed into, and the score the owner is willing to act at; it is read per verdict, so switching filing
-on reaches the next one without a restart. An owner's own record carries `Actions` and the posture above it, and none of
+scanner is switched on, and it is the deployment's for every user. `SpamClassification:Actions` holds the two switches,
+the folder junk is filed into, and the score the user is willing to act at; it is read per verdict, so switching filing
+on reaches the next one without a restart. A user's own record carries `Actions` and the posture above it, and none of
 the engine settings — a record reaching for one is refused by the strict binding that reads it.
 
 An operator who switched the scanner on and left classification off is told at startup rather than given the quiet

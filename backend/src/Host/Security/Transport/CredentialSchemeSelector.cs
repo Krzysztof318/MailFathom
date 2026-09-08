@@ -54,7 +54,7 @@ internal sealed class CredentialSchemeSelector
     /// <param name="oauthSchemesByIssuer">The scheme validating each configured authorization server's tokens, keyed by that server's issuer.</param>
     /// <param name="apiKeySchemeName">The scheme comparing API keys, or <see langword="null" /> when API keys are not accepted.</param>
     /// <param name="clientAssertionSchemeName">The scheme verifying client assertions, or <see langword="null" /> when assertions are not accepted.</param>
-    /// <param name="basicSchemeName">The scheme judging an owner's username and password, or <see langword="null" /> when passwords are not accepted.</param>
+    /// <param name="basicSchemeName">The scheme judging a user's username and password, or <see langword="null" /> when passwords are not accepted.</param>
     /// <param name="unmatchedSchemeName">The scheme a request reaches when no credential it presented selects one.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthSchemesByIssuer" /> or <paramref name="unmatchedSchemeName" /> is <see langword="null" />.</exception>
     internal CredentialSchemeSelector(

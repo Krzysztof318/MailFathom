@@ -20,33 +20,33 @@ Both scanners are off by default, and an absent section is that default rather t
 this process. `Pii` reaches an analyzer deployed beside it, configured in the block below, and switching it on with
 nowhere to ask **fails startup** rather than running unprotected.
 
-**This section is the floor rather than the whole answer.** Each owner's record carries a scanning block of its own, and
-the posture their mail is read under is the stricter of the two: an owner may switch on a scanner this section left off
+**This section is the floor rather than the whole answer.** Each user's record carries a scanning block of its own, and
+the posture their mail is read under is the stricter of the two: a user may switch on a scanner this section left off
 and add a scanner to what stops their outgoing mail, and may do neither in the other direction. The keys below the two
 switches — the analyzer's address, the ceiling, the timeout, the concurrency, and the rebuild — stay wholly the
-deployment's, and the concurrency is one budget every owner shares. [Each owner's own
-posture](../features/sensitive-content-scanning.md#each-owners-own-posture) is the rule, and
-[`Accounts:<n>:SensitiveContent`](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) is where
+deployment's, and the concurrency is one budget every user shares. [Each user's own
+posture](../features/sensitive-content-scanning.md#each-users-own-posture) is the rule, and
+[`Accounts:<n>:SensitiveContent`](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is where
 it is written.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup. It is the floor for every owner: one may switch it on for their own mail and none may switch it off | restart |
+| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup. It is the floor for every user: one may switch it on for their own mail and none may switch it off | restart |
 | `SensitiveContent:Secrets:Categories:<n>` | string | unset | Must name a category the scanner detects; the list replaces the scanner's defaults, and an absent list yields them | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Category` | string | — | Must name a category the scanner detects; naming one never switches it on | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Rule` | string | — | Must name a rule that category holds | restart |
-| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner. An owner may switch it on for their own mail only where the analyzer address below names one | restart |
+| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner. A user may switch it on for their own mail only where the analyzer address below names one | restart |
 | `SensitiveContent:Pii:Categories:<n>` | string | unset | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
-| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address. It is also what makes the personal-data scanner available to an owner: a record switching that scanner on where this names no address is refused at the write, naming this key | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address. It is also what makes the personal-data scanner available to a user: a record switching that scanner on where this names no address is refused at the write, naming this key | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Languages:<n>` | string | unset | Two lowercase letters each, naming a language the analyzer loads a model for and registers recognizers in; an absent list yields `en`. At most eight, since one scan asks once per language inside a single `ScanTimeout`. The order is not read — the set is deduplicated and ordered before use — and the set is part of the derivation stamp | restart |
 | `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:15` | One second to two minutes, per call to one scanner — which for the personal-data scanner covers every configured language together rather than each. A scan that misses it is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run carrying it, so a budget below what the analyzer spends on a large body leaves a folder repeating the same batch. It also bounds one personal-data readiness scrape whole, so naming more languages costs more analyzer requests and never a longer scrape | restart |
-| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process and across every owner it serves | restart |
-| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on for somebody; re-derives every message whose derived text predates its own owner's current configuration, and discards every reading of an attachment that does so the account run's attachment stage takes it again | restart |
-| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing. An owner may name more than this and never fewer | restart |
+| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process and across every user it serves | restart |
+| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on for somebody; re-derives every message whose derived text predates its own user's current configuration, and discards every reading of an attachment that does so the account run's attachment stage takes it again | restart |
+| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing. A user may name more than this and never fewer | restart |
 
 **Screening outgoing mail refuses acts rather than rewriting messages**, which is why what it screens for is a key of
 its own rather than the scanner switches above. A credential in a message somebody is sending is what it exists for and
@@ -154,9 +154,9 @@ switches on reaches the mailbox reads as well as the classification. [Spam class
 records what a classification holds, which facts the deterministic stage reads, and why a scanner never overturns a
 provider's own verdict.
 
-**The section is read for each owner this deployment still serves from a configuration source.** Junk is a judgement
-about somebody's own mailbox, so the posture below is that owner's rather than the deployment's, and an owner whose
-document has been written states it in [their own record](configuration-sources.md#one-owners-own-classification-posture)
+**The section is read for each user this deployment still serves from a configuration source.** Junk is a judgement
+about somebody's own mailbox, so the posture below is that user's rather than the deployment's, and a user whose
+document has been written states it in [their own record](configuration-sources.md#one-users-own-classification-posture)
 instead — at which point this section stops reaching them. The keys the two split into are named after the table.
 
 Every switch is off by default, and an absent section is that default rather than a startup failure. The deterministic
@@ -182,21 +182,21 @@ described below.
 | `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or a role written as `role:<name>`; every configured account has to map it once filing is on | reload |
 | `SpamClassification:Actions:Threshold` | double | unset | 0.1 – 1000; unset acts on every spam verdict, and a value judges what a scanner scored | reload |
 
-**Eight of those keys are one owner's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
-`ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what an owner decides about their own
+**Eight of those keys are one user's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
+`ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what a user decides about their own
 mail, and are the whole of what their record may carry. `ClassificationWait`, `RunBatchSize`, `MaxRunBatchesPerPass`,
 and the `Scanner` block are the deployment's, because each of them is what the process holds open or spends rather than
-a judgement about anybody's mailbox — an owner record naming one is refused. The bounds a threshold is judged against,
-`0.1` to `1000`, are the deployment's too and apply to an owner's value unchanged.
+a judgement about anybody's mailbox — a user record naming one is refused. The bounds a threshold is judged against,
+`0.1` to `1000`, are the deployment's too and apply to a user's value unchanged.
 
-**An owner's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any scanner
-is registered is read from this section alone, at startup, so an owner switching the key on where the deployment
+**A user's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any scanner
+is registered is read from this section alone, at startup, so a user switching the key on where the deployment
 registered none is neither refused nor a failed start: their mail is classified by the deterministic stage, exactly as
-it would be with the key off. Everything else in the eight means the same for an owner as it does here.
+it would be with the key off. Everything else in the eight means the same for a user as it does here.
 
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
 constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. That is this
-section's key; the paragraph above is what an owner's own copy of it can and cannot do. Everything else in
+section's key; the paragraph above is what a user's own copy of it can and cannot do. Everything else in
 this section is read per classification.
 
 `ClassificationWait` bounds the ordering rather than a scan. Wherever classification is on, a message it covers is not
@@ -219,11 +219,11 @@ what an address outside it gives up, and what the rule-update and DNS postures c
 sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
 [Compose](deployment-compose.md#spam-scanning), and [Quadlet](deployment-quadlet.md#spam-scanning).
 
-The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that owner's
+The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that user's
 own accounts maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being
-restated here. For an owner served from this section those accounts are
-[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for an owner declared
-in the top-level `Accounts` collection or read from their own record they are that owner's own `MailAccounts`. The two shapes of an unset list are deliberately
+restated here. For a user served from this section those accounts are
+[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for a user declared
+in the top-level `Accounts` collection or read from their own record they are that user's own `MailAccounts`. The two shapes of an unset list are deliberately
 distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
 work off without switching the section off.
 
@@ -300,7 +300,7 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 | `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message. Charged twice per message and never more: once against the body, and once against every attachment of that message together, in walk order | restart |
 | `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
-| `Embeddings:MaxInputCharactersPerPeriodPerOwner` | long | `0` | zero or positive; the characters one period may send for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
+| `Embeddings:MaxInputCharactersPerPeriodPerUser` | long | `0` | zero or positive; the characters one period may send for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
 | `Embeddings:SpendPeriod` | TimeSpan | `1.00:00:00` | 1 min – 31 days; the fixed window the ceiling is counted over, anchored at the Unix epoch so every restart places it identically | restart |
 
 Reaching `MaxInputCharactersPerPeriod` pauses embedding until the period rolls over, and resumes without anybody
@@ -309,23 +309,23 @@ within one batch: a batch is admitted whenever anything at all is left and is th
 against what remains would stall a deployment whose ceiling is smaller than one batch for ever.
 
 **The two ceilings answer different questions and a request has to pass both.** `MaxInputCharactersPerPeriod` bounds
-the bill; `MaxInputCharactersPerPeriodPerOwner` bounds any one person's share of it, over the same window and the same
+the bill; `MaxInputCharactersPerPeriodPerUser` bounds any one person's share of it, over the same window and the same
 unit. Reaching the deployment's pauses the worker and ends the backfill sweep, because nothing more can be spent for
-anybody. Reaching one owner's stops that owner's mail alone: the worker carries on with the next message and the
+anybody. Reaching one user's stops that user's mail alone: the worker carries on with the next message and the
 backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over.
 
-Which of the two a refusal met is read from the log line, which names the key to raise — and raising an owner's share
+Which of the two a refusal met is read from the log line, which names the key to raise — and raising a user's share
 answers nothing while the deployment itself has stopped spending, so the distinction is the whole point of reporting it.
 The backfill's counters separate them as well, because the deployment's ceiling ends the sweep and is reported as its
-outcome while an owner's is counted on `mailfathom.embedding.backfill.owner_ceiling`. The counter the worker embedding
+outcome while a user's is counted on `mailfathom.embedding.backfill.user_ceiling`. The counter the worker embedding
 arriving mail keeps does not: both bounds reach it as one `spend_ceiling_reached` outcome, so on that path the log is
 what tells them apart.
 
-Leaving `MaxInputCharactersPerPeriodPerOwner` unset is the default and is right for a deployment serving one owner,
-whose spending the aggregate ceiling already bounds. What it exposes on a deployment serving several is one owner's
+Leaving `MaxInputCharactersPerPeriodPerUser` unset is the default and is right for a deployment serving one user,
+whose spending the aggregate ceiling already bounds. What it exposes on a deployment serving several is one user's
 backfill consuming the whole window before anybody else's arriving mail is embedded — which is a wait rather than a
 loss, and a wait that repeats every period until somebody sets a share. The embedding profile and the backfill's resume
-position stay deployment-wide by decision: two owners' vectors share an index and have to mean the same thing, and one
+position stay deployment-wide by decision: two users' vectors share an index and have to mean the same thing, and one
 walk over the mail visits every message whoever it belongs to.
 
 The default is chosen to bind. Fifty million characters a day is roughly twelve million tokens and embeds something
@@ -372,7 +372,7 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 | `Embeddings:ImageDescription:Enabled` | bool | `false` | with it off nothing is read and nothing is sent; with it on, and a chat endpoint declared, an image attachment's octets leave the deployment | restart |
 | `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent. A value outside the range stops the start, naming this key | restart |
 | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | long | `0` | zero or positive; the description calls one period may make. `0` declares no ceiling at all, which is the default and means an enabled feature can produce a bill nobody agreed to. Counted in calls rather than in characters, because a chat provider prices a picture per request rather than per word | restart |
-| `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerOwner` | long | `0` | zero or positive, and at most `MaxDescriptionsPerPeriod` where that is set; the calls one period may make for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants | restart |
+| `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerUser` | long | `0` | zero or positive, and at most `MaxDescriptionsPerPeriod` where that is set; the calls one period may make for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants | restart |
 | `Embeddings:ImageDescription:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a chat provider whose quota is stated per minute; a caller takes the next free slot and waits for it, and it paces this workload alone rather than sharing the embedding provider's rate | restart |
 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
@@ -426,10 +426,10 @@ much.
 | `Embeddings:AttachmentText:MaxInputOctetsPerEmail` | long | `67108864` | 1 KiB – 8 GiB, and at least `MaxInputOctets`; the octets one message's attachments may be read from together. A ten-line covering note with a two-hundred-page report attached is an expensive message, and no length of its text predicts that | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerAccountRun` | long | `4294967296` | 1 KiB – 1 TiB, and at least `MaxInputOctetsPerEmail`; the octets one account run may read across every message it reaches. A run that spends it stops where it is and leaves the message it was on untouched, so the next run reaches that message first. The budget is per account rather than shared, so a mailbox full of large attachments delays nobody else's run | restart |
 | `Embeddings:AttachmentText:MaxInputOctetsPerPeriod` | long | `0` | zero or positive, and where set at least `MaxInputOctetsPerEmail`; the octets every account run together may hand a document parser inside one period, which excludes an attachment stepped over from its declaration. `0` declares no ceiling at all, which is the default. It is the aggregate the per-run budget above does not give: a run's budget is refilled on every run, so a mailbox is read at whatever rate the runs come | restart |
-| `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerOwner` | long | `0` | zero or positive, at most `MaxInputOctetsPerPeriod` where that is set, and where set at least `MaxInputOctetsPerEmail`; the octets one period may hand a document parser for any **one** owner. `0` declares no per-owner ceiling | restart |
+| `Embeddings:AttachmentText:MaxInputOctetsPerPeriodPerUser` | long | `0` | zero or positive, at most `MaxInputOctetsPerPeriod` where that is set, and where set at least `MaxInputOctetsPerEmail`; the octets one period may hand a document parser for any **one** user. `0` declares no per-user ceiling | restart |
 | `Embeddings:AttachmentText:Formats:<index>` | enum | every format read | `Pdf`, `WordOpenXml`, `SpreadsheetOpenXml`, `PresentationOpenXml`, `OpenDocumentText`, `OpenDocumentSpreadsheet`, `OpenDocumentPresentation`, `PlainText`, `Markdown`, `Csv`; writing nothing reads all ten and naming any narrows to exactly those. Naming `LegacyWord`, `LegacySpreadsheet`, or `LegacyPresentation` is refused at startup, because MailFathom recognizes those three and reads none of them | restart |
 | `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Every parser here seeks, so an attachment is held in memory for the length of one extraction | restart |
-| `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses. It also bounds how many entries a workbook's shared string table may hold, since an entry costs memory whether or not it carries a character — crossing it there is reported as `ContainerBoundExceeded` rather than as `ExtractedTextTooLarge`, because what was passed is a count of entries rather than characters an owner would get back | restart |
+| `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses. It also bounds how many entries a workbook's shared string table may hold, since an entry costs memory whether or not it carries a character — crossing it there is reported as `ContainerBoundExceeded` rather than as `ExtractedTextTooLarge`, because what was passed is a count of entries rather than characters a user would get back | restart |
 | `Embeddings:AttachmentText:MaxDecompressedOctets` | long | `67108864` | 1 KiB – 2 GiB; the total an Office Open XML or OpenDocument archive may inflate to across every part read, counted while it inflates rather than after | restart |
 | `Embeddings:AttachmentText:MaxDecompressionRatio` | int | `200` | 2 – 10000; the greatest ratio of inflated to compressed octets one archive part may reach. It is what catches a small archive, before the total above would have been met | restart |
 | `Embeddings:AttachmentText:MaxContainerParts` | int | `2000` | 1 – 100000; the parts a reader will go on to open. Very many tiny parts cost per part, which neither size ceiling measures. It is also what bounds the pages one OpenDocument content part may declare, that family keeping a whole document in a single part rather than one part per page | restart |
@@ -440,7 +440,7 @@ much.
 `MaxInputOctetsPerEmail` and `MaxInputOctetsPerAccountRun` bound one message and one run; neither bounds a month,
 because a run's budget is full again on the next run. `MaxInputOctetsPerPeriod` counts the octets every account run
 together opened inside `Embeddings:SpendPeriod`, and `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` counts the
-calls a description provider answered inside the same window, each with a per-owner share beside it. Both are `0` by
+calls a description provider answered inside the same window, each with a per-user share beside it. Both are `0` by
 default, which declares no ceiling and still counts — so the figures are on the status surface before an operator has
 to choose a number.
 
@@ -458,7 +458,7 @@ cost is disk, reported as the characters the index grew by rather than bounded b
 meets one ends where it is with that message untouched and unstamped; the surrounding synchronization run succeeds,
 the message stays outstanding, and the next run after the period rolls over reaches it first. It is the same
 degradation an exhausted embedding budget produces, and nothing is dropped: a message with no attachment reading is
-what the next pass selects on. A per-owner ceiling stops that owner's mail alone, exactly as the embedding one does.
+what the next pass selects on. A per-user ceiling stops that user's mail alone, exactly as the embedding one does.
 
 **Activating an embedding profile weighs them too.** On an instance already holding mail,
 `mfctl embedding activate` reports what reading the stored attachments would open and how many descriptions it could
@@ -531,7 +531,7 @@ already stored, and no pass today goes back for the attachments it refused.
 
 **The three legacy binary formats are recognized and not read.** A `.doc`, `.xls`, or `.ppt` attachment is reported as a
 format MailFathom does not extract, which is a different and more useful fact than not recognizing it at all — the
-mailbox owner is told the file was skipped rather than left believing it was searched. Those three are OLE compound
+mailbox user is told the file was skipped rather than left believing it was searched. Those three are OLE compound
 files, and no permissively licensed .NET parser reads all of them; MailFathom's own licence register admits no
 dependency it could not review, so the honest answer is a stated refusal rather than a parser nobody vetted.
 

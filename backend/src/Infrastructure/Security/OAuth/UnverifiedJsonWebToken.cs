@@ -21,9 +21,9 @@ namespace MailFathom.Infrastructure.Security.OAuth;
 /// What each value is allowed to decide is the point, and it is the same shape in all three: the value selects what
 /// will check the signature, and never anything the signature was supposed to establish. <c>iss</c> and <c>typ</c>
 /// select which configured profile validates the token, and that profile checks the signature against its own key set
-/// and compares <c>iss</c> against its own configured issuer. <c>kid</c> selects a stored owner-credential row, whose
+/// and compares <c>iss</c> against its own configured issuer. <c>kid</c> selects a stored user-credential row, whose
 /// registered public key is then what the signature is verified against — so an assertion naming a key registered for
-/// another owner is refused by that key's own signature check rather than admitted as that owner, and one naming a
+/// another user is refused by that key's own signature check rather than admitted as that user, and one naming a
 /// fingerprint nobody registered is refused exactly as one naming nothing. In every case the worst an attacker achieves
 /// by writing whatever they like here is to pick which verifier rejects them.
 /// </para>
@@ -100,8 +100,8 @@ public static class UnverifiedJsonWebToken
     /// <remarks>
     /// What it decides is which stored public key the signature is checked against, and no more. The key it names is
     /// verified against afterwards, so a credential writing whatever it likes here picks which key refuses it — and one
-    /// naming a key this deployment holds for another owner is refused by that key's own signature check rather than
-    /// admitted as that owner.
+    /// naming a key this deployment holds for another user is refused by that key's own signature check rather than
+    /// admitted as that user.
     /// </remarks>
     public static bool TryReadKeyId(string? credential, [NotNullWhen(true)] out string? keyId)
     {

@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Emails.Threads;
 public sealed class EmailThreadAssemblyTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     [Fact]
     public async Task AssembleAsync_ReplyAssembledAfterTheMessageItAnswers_PutsBothInOneConversationAndLinksThem()

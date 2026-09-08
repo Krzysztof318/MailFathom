@@ -92,7 +92,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
@@ -102,7 +102,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
                 .Distinct()
                 .Select(recordId => this.recordsById.GetValueOrDefault(recordId))
                 .OfType<MailboxMutationRecord>()
-                .Where(record => record.Owner == owner)
+                .Where(record => record.User == user)
                 .OrderBy(record => record.RecordedAt)
                 .ThenBy(record => record.Id.Value),
         ];
@@ -113,7 +113,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
@@ -126,7 +126,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         foreach (var recordId in recordIds.Distinct())
         {
-            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.Owner != owner)
+            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.User != user)
             {
                 continue;
             }

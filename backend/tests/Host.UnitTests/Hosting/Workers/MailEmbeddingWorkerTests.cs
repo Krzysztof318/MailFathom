@@ -179,11 +179,11 @@ public sealed class MailEmbeddingWorkerTests
     }
 
     /// <summary>
-    /// One owner at their share stops that owner's mail and nobody else's, so the loop keeps taking messages with the
+    /// One user at their share stops that user's mail and nobody else's, so the loop keeps taking messages with the
     /// clock standing still — and says so once for the period rather than once for every message of theirs waiting.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_OneOwnerHasSpentTheirShare_KeepsTakingMessagesAndReportsItOncePerPeriod()
+    public async Task ExecuteAsync_OneUserHasSpentTheirShare_KeepsTakingMessagesAndReportsItOncePerPeriod()
     {
         // Arrange
         var messages = CreateMessages(3);
@@ -196,7 +196,7 @@ public sealed class MailEmbeddingWorkerTests
             logger,
             EmbeddingSpendBudget.Create(
                 maxInputCharactersPerPeriod: 1_000,
-                maxInputCharactersPerPeriodPerOwner: 10,
+                maxInputCharactersPerPeriodPerUser: 10,
                 TimeSpan.FromDays(1)),
             consumedInputCharacterCount: 10,
             new FakeTimeProvider(),
@@ -334,7 +334,7 @@ public sealed class MailEmbeddingWorkerTests
         var spendLedger = Substitute.For<IEmbeddingSpendLedger>();
         spendLedger.ReadConsumedInputCharactersAsync(
                 Arg.Any<DateTimeOffset>(),
-                Arg.Any<MailOwnerId>(),
+                Arg.Any<MailUserId>(),
                 Arg.Any<CancellationToken>())
             .Returns(new EmbeddingSpendTotals(
                 consumedInputCharacterCount,

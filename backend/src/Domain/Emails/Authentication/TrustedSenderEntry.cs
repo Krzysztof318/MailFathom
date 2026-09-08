@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace MailFathom.Domain.Emails.Authentication;
 
-/// <summary>One author an account's owner said this deployment recognizes.</summary>
+/// <summary>One author an account's user said this deployment recognizes.</summary>
 /// <remarks>
 /// <para>
 /// An entry names either a whole domain or a single address, and the two are different claims. A domain entry says that

@@ -7,8 +7,8 @@ using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Rules;
 using Microsoft.Extensions.Options;
 
@@ -44,17 +44,17 @@ internal static class ComposedSettings
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        // The order is the composition root's rather than this file's: the owners are established before
+        // The order is the composition root's rather than this file's: the users are established before
         // `AddMailRules`, which runs before `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An
         // operator whose candidate carries a mistake in two of them is shown the same one first by a write and by a
         // start, which is what the summary promises and the only thing that makes the promise worth anything.
-        List<SettingsRefusal> refusals = [.. FindOwnerDeclarationRefusals(configuration, timeProvider)];
+        List<SettingsRefusal> refusals = [.. FindUserDeclarationRefusals(configuration, timeProvider)];
 
         // A group that will not bind at all raises rather than returning, and a start meeting an earlier refusal never
         // reaches it — so what is already held is what a start would have reported, and discarding it for the binder's
         // sentence would answer a two-section candidate with the second of its mistakes. Every group but the first is
-        // inside the guard for that reason: the owners are established before any of them, so a candidate carrying an
-        // owner mistake and a section that will not bind is answered with the owner sentence, which is the one a start
+        // inside the guard for that reason: the users are established before any of them, so a candidate carrying a
+        // user mistake and a section that will not bind is answered with the user sentence, which is the one a start
         // would have stopped at.
         try
         {
@@ -70,19 +70,19 @@ internal static class ComposedSettings
         return refusals;
     }
 
-    /// <summary>Finds what the owners this deployment declares would be refused for.</summary>
+    /// <summary>Finds what the users this deployment declares would be refused for.</summary>
     /// <param name="configuration">The configuration to judge.</param>
     /// <param name="timeProvider">Supplies the date the declared synchronization bounds are read against.</param>
-    /// <returns>The refusal, or nothing when every declared owner could be one this deployment serves.</returns>
+    /// <returns>The refusal, or nothing when every declared user could be one this deployment serves.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the collection will not bind at all.</exception>
     /// <remarks>
     /// First among the groups, because who this deployment serves decides what every other section is read for. It is
     /// composed rather than bound for the reason the surfaces are: the collection is an array at the root of the
-    /// configuration, and what it decides — how many owners exist, and whose each declared mailbox is — is settled
+    /// configuration, and what it decides — how many users exist, and whose each declared mailbox is — is settled
     /// while the host is being built rather than by an options snapshot resolved later.
     /// </remarks>
-    public static IReadOnlyList<SettingsRefusal> FindOwnerDeclarationRefusals(
+    public static IReadOnlyList<SettingsRefusal> FindUserDeclarationRefusals(
         IConfiguration configuration,
         TimeProvider timeProvider)
     {
@@ -91,9 +91,9 @@ internal static class ComposedSettings
 
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
 
-        return Refusal<DeclaredOwnerOptions>(
-            DeclaredOwnerOptions.SectionName,
-            DeclaredOwners.FindConfigurationErrors(configuration, today));
+        return Refusal<DeclaredUserOptions>(
+            DeclaredUserOptions.SectionName,
+            DeclaredUsers.FindConfigurationErrors(configuration, today));
     }
 
     /// <summary>Finds what the declared AI endpoints and the ceilings around them would be refused for.</summary>

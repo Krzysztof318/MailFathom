@@ -27,7 +27,7 @@ const email = {
     sentAt: null,
     senderAddress: 'anna@contoso.example',
     senderDisplayName: 'Anna Kowalska',
-    toAddresses: ['owner@example.invalid'],
+    toAddresses: ['user@example.invalid'],
     unread: false,
     flagged: false,
     answered: false,

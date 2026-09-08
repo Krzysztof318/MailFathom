@@ -9,16 +9,16 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Spam;
 
-/// <summary>Reads what each owner asked to happen to their own junk, from whichever source their record is read from.</summary>
+/// <summary>Reads what each user asked to happen to their own junk, from whichever source their record is read from.</summary>
 /// <remarks>
 /// <para>
 /// The same two sources <see cref="ConfiguredSpamClassificationSettingsReader" /> reads and the same marker deciding
-/// between them, because the two halves of one owner's posture are written in one place: an owner whose document has
-/// been written has their switches read from it, and an owner still served from a configuration source has them read
+/// between them, because the two halves of one user's posture are written in one place: a user whose document has
+/// been written has their switches read from it, and a user still served from a configuration source has them read
 /// from the deployment's section.
 /// </para>
 /// <para>
-/// The source is read per request rather than captured, so switching filing on reaches that owner's next verdict and
+/// The source is read per request rather than captured, so switching filing on reaches that user's next verdict and
 /// switching it off stops it, neither needing a restart.
 /// </para>
 /// <para>
@@ -33,16 +33,16 @@ internal sealed class ConfiguredSpamActionSettingsReader(
     : ISpamActionSettingsReader
 {
     /// <inheritdoc />
-    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
-    public SpamActionSettings ActionsFor(MailOwnerId owner)
+    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
+    public SpamActionSettings ActionsFor(MailUserId user)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
-            throw new ArgumentException("A junk posture is read for a named owner.", nameof(owner));
+            throw new ArgumentException("A junk posture is read for a named user.", nameof(user));
         }
 
-        var served = (synchronizationOptions.ServedOwners ?? [])
-            .FirstOrDefault(candidate => candidate.Owner == owner);
+        var served = (synchronizationOptions.ServedUsers ?? [])
+            .FirstOrDefault(candidate => candidate.User == user);
 
         if (served is null)
         {
@@ -56,7 +56,7 @@ internal sealed class ConfiguredSpamActionSettingsReader(
             return deployment.Enabled ? deployment.Actions.ToSettings() : SpamActionSettings.None;
         }
 
-        var record = served.SpamClassification ?? new OwnerSpamClassificationOptions();
+        var record = served.SpamClassification ?? new UserSpamClassificationOptions();
 
         return record.Enabled ? record.Actions.ToSettings() : SpamActionSettings.None;
     }

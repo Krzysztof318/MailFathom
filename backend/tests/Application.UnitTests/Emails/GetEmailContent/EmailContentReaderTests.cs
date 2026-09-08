@@ -766,16 +766,16 @@ public sealed class EmailContentReaderTests
     }
 
     /// <summary>
-    /// Mail in an account another owner owns is refused by the same answer, so holding an identifier is not a way to
+    /// Mail in an account another user owns is refused by the same answer, so holding an identifier is not a way to
     /// read somebody else's correspondence.
     /// </summary>
     [Fact]
-    public async Task ReadContentAsync_EmailOfAnAccountTheCallersOwnerDoesNotOwn_IsReportedAsNotFound()
+    public async Task ReadContentAsync_EmailOfAnAccountTheCallersUserDoesNotOwn_IsReportedAsNotFound()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
-        var authorization = AccessAuthorizations.ForOwnerGranted(
-            SyntheticMailOwner.Another,
+        var authorization = AccessAuthorizations.ForUserGranted(
+            SyntheticMailUser.Another,
             MailFathomPermission.MailRead);
         var reader = ReaderOver(
             summary,
@@ -1584,7 +1584,7 @@ public sealed class EmailContentReaderTests
             ]);
         using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
 
-        var postures = FixedSensitiveContentPostures.ForEveryOwner(
+        var postures = FixedSensitiveContentPostures.ForEveryUser(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
@@ -1611,7 +1611,7 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken);
         var derived = await derivedReader.ReadMetadataAsync(
             RemoteContentOf(),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -2090,7 +2090,7 @@ public sealed class EmailContentReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailUserId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",

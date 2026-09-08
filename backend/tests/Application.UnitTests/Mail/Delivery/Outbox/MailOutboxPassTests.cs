@@ -29,7 +29,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 public sealed class MailOutboxPassTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset RanAt = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ReadOnlyMemory<byte> RawMime =
@@ -325,7 +325,7 @@ public sealed class MailOutboxPassTests
 
     /// <summary>
     /// The drafts are reached before anything is claimed, so a draft whose folder was unreachable when it was written
-    /// is in front of its owner by the time this pass has delivered anything.
+    /// is in front of its user by the time this pass has delivered anything.
     /// </summary>
     [Fact]
     public async Task RunAsync_DraftNothingCouldAppendYet_AppendsItBeforeTheBatchIsClaimed()
@@ -371,7 +371,7 @@ public sealed class MailOutboxPassTests
 
     /// <summary>
     /// A delivered send takes the draft it was promoted from out of the drafts folder, in the pass that filed the sent
-    /// copy — which is what leaves the message in one of the owner's folders rather than in two.
+    /// copy — which is what leaves the message in one of the user's folders rather than in two.
     /// </summary>
     [Fact]
     public async Task RunAsync_PromotedDraftWhoseSendIsDelivered_WithdrawsTheDraftCopy()

@@ -33,8 +33,8 @@ internal sealed class MailRuleEvaluationRunEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the run walked.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the run walked.</summary>
+    public required Guid UserId { get; set; }
 
     public DateTimeOffset RequestedAt { get; set; }
 

@@ -119,9 +119,9 @@ public sealed class ClientMailAccountsEndpointTests
             response.Accounts.Select(account => account.Id));
     }
 
-    /// <summary>An owner with no account reads an empty collection, which is a state a client renders rather than an error.</summary>
+    /// <summary>A user with no account reads an empty collection, which is a state a client renders rather than an error.</summary>
     [Fact]
-    public void For_AnOwnerWithNoAccount_CarriesAnEmptyCollection()
+    public void For_AUserWithNoAccount_CarriesAnEmptyCollection()
     {
         // Arrange
         var directory = new MailAccountFreshnessDirectory(SynchronizationEnabled: true, []);

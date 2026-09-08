@@ -11,7 +11,7 @@ using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Accounts;
 
-/// <summary>Reads which accounts the caller's owner owns and how current the local copy of each one is.</summary>
+/// <summary>Reads which accounts the caller's user owns and how current the local copy of each one is.</summary>
 /// <remarks>
 /// <para>
 /// It is the one use case that publishes the account set rather than using it as a bound. Every other reader asks the
@@ -21,7 +21,7 @@ namespace MailFathom.Application.Accounts;
 /// <para>
 /// Publishing a set is why it reads the caller-scoped catalog rather than the deployment's. Naming the accounts a
 /// deployment serves is publishing that they exist, so answering from the deployment's own catalog would hand every
-/// caller holding <see cref="MailFathomPermission.MailRead" /> the names of accounts belonging to everybody. An owner
+/// caller holding <see cref="MailFathomPermission.MailRead" /> the names of accounts belonging to everybody. A user
 /// who owns none is answered with an empty directory rather than with the deployment's.
 /// </para>
 /// <para>
@@ -43,7 +43,7 @@ public sealed class MailAccountDirectoryReader
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="accountCatalog">Describes the accounts the caller's owner owns.</param>
+    /// <param name="accountCatalog">Describes the accounts the caller's user owns.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
@@ -69,10 +69,10 @@ public sealed class MailAccountDirectoryReader
         this.authorization = authorization;
     }
 
-    /// <summary>Reads the accounts the caller's owner owns and their synchronization freshness.</summary>
+    /// <summary>Reads the accounts the caller's user owns and their synchronization freshness.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The owner's accounts with their folders, and whether the deployment refreshes them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for an owner.</exception>
+    /// <returns>The user's accounts with their folders, and whether the deployment refreshes them.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for a user.</exception>
     /// <remarks>
     /// Nothing here writes, so the operation is safe to repeat, and it sets no remote state because it speaks to no mail
     /// server at all.
@@ -80,7 +80,7 @@ public sealed class MailAccountDirectoryReader
     /// The grant is asked for before anything is read, and it is asked for here rather than only at the transport that
     /// withholds the tool: naming the accounts a caller may reach is publishing that they exist, and an entrypoint added
     /// later would otherwise publish them by reaching this use case without passing a filter. Which accounts those are
-    /// is the catalog's answer rather than this use case's, so the owner bound cannot be forgotten here either.
+    /// is the catalog's answer rather than this use case's, so the user bound cannot be forgotten here either.
     /// </para>
     /// </remarks>
     public async Task<MailAccountDirectory> ReadAsync(CancellationToken cancellationToken)

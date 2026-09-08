@@ -17,14 +17,14 @@ namespace MailFathom.Host.Signals;
 /// </para>
 /// <para>
 /// <b>A connection is authenticated by a ticket and by nothing else.</b> It carries no <c>Authorization</c> header,
-/// because a browser cannot put one on a WebSocket, so <see cref="ClientSignalTickets" /> is what names the owner —
+/// because a browser cannot put one on a WebSocket, so <see cref="ClientSignalTickets" /> is what names the user —
 /// minted over an authenticated route that already required <see cref="MailFathomPermission.MailRead" />, spent here
 /// once, and never seen again. A connection presenting nothing, something malformed, something expired, or something
 /// already spent is aborted without being told which.
 /// </para>
 /// <para>
-/// <b>A connection joins its owner's group and no other.</b> The group is the whole of the addressing: a signal is
-/// published to one owner's group, so a connection can only ever be reached by statements about the mail it was
+/// <b>A connection joins its user's group and no other.</b> The group is the whole of the addressing: a signal is
+/// published to one user's group, so a connection can only ever be reached by statements about the mail it was
 /// already entitled to read. Nothing here reads a group name a caller supplied, because nothing here takes one.
 /// </para>
 /// </remarks>
@@ -41,7 +41,7 @@ internal sealed partial class ClientSignalHub : Hub
     private readonly ILogger<ClientSignalHub> logger;
 
     /// <summary>Initializes the hub over the ticket store a connection is judged by.</summary>
-    /// <param name="tickets">Spends the ticket a connection presented and names the owner it was minted for.</param>
+    /// <param name="tickets">Spends the ticket a connection presented and names the user it was minted for.</param>
     /// <param name="logger">Records a refused connection as a count of refusals rather than as anything a caller wrote.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public ClientSignalHub(ClientSignalTickets tickets, ILogger<ClientSignalHub> logger)
@@ -53,19 +53,19 @@ internal sealed partial class ClientSignalHub : Hub
         this.logger = logger;
     }
 
-    /// <summary>Names the group one owner's connections are addressed as.</summary>
-    /// <param name="owner">Whose connections the group holds.</param>
+    /// <summary>Names the group one user's connections are addressed as.</summary>
+    /// <param name="user">Whose connections the group holds.</param>
     /// <returns>The group name.</returns>
-    /// <remarks>Composed from the owner's identifier alone, which is a value this deployment generated rather than anything a caller can state, so no group name is reachable by writing one.</remarks>
-    internal static string GroupOf(MailOwnerId owner) =>
-        string.Create(CultureInfo.InvariantCulture, $"owner:{owner.Value}");
+    /// <remarks>Composed from the user's identifier alone, which is a value this deployment generated rather than anything a caller can state, so no group name is reachable by writing one.</remarks>
+    internal static string GroupOf(MailUserId user) =>
+        string.Create(CultureInfo.InvariantCulture, $"user:{user.Value}");
 
     /// <inheritdoc />
     public override async Task OnConnectedAsync()
     {
         var presented = this.Context.GetHttpContext()?.Request.Query[TicketParameter].ToString();
 
-        if (this.tickets.Redeem(presented) is not { } owner)
+        if (this.tickets.Redeem(presented) is not { } user)
         {
             this.LogConnectionRefused();
             this.Context.Abort();
@@ -73,7 +73,7 @@ internal sealed partial class ClientSignalHub : Hub
             return;
         }
 
-        await this.Groups.AddToGroupAsync(this.Context.ConnectionId, GroupOf(owner), this.Context.ConnectionAborted);
+        await this.Groups.AddToGroupAsync(this.Context.ConnectionId, GroupOf(user), this.Context.ConnectionAborted);
 
         await base.OnConnectedAsync();
     }

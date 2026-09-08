@@ -14,7 +14,7 @@ already stored, kept on the message, re-derivable, and published on every read t
 not say the message is unwanted, dishonest, or dangerous, and a great deal of ordinary correspondence is drafted with a
 text generator by people who mean every word of it. Nothing here files, flags, hides, or refuses a message and no other
 part of the system consults the value — publishing it is the whole of what this feature does with it, and what to make
-of it is the reader's. The one thing that can act on it is a rule the owner wrote, which reads the band rather than the
+of it is the reader's. The one thing that can act on it is a rule the user wrote, which reads the band rather than the
 number. Whether a message is *wanted* is [spam classification](spam-classification.md)'s
 question and is reached by other means entirely.
 
@@ -159,7 +159,7 @@ so no part of the message reaches a caller through it that the caller could not 
 - It asks no model, consults no service, and compares against no corpus. Every signal is a property of characters in
   text this deployment already stored.
 - It acts on the reading nowhere by itself. Nothing files, flags, hides, or refuses a message because of it, and it
-  takes no part in spam classification, ranking, retrieval, or answering. What can act on it is a rule the owner wrote:
+  takes no part in spam classification, ranking, retrieval, or answering. What can act on it is a rule the user wrote:
   `machineAuthorship` is a [fact a condition can read](mail-rules.md#the-facts-a-condition-can-read), carrying the band
   and not the likelihood, because a number comparable only within one profile is not something to write a threshold
   against.

@@ -12,18 +12,18 @@ using MailFathom.Domain.Delivery.Drafts;
 
 namespace MailFathom.Application.Mail.Delivery.Drafts;
 
-/// <summary>Answers which drafts the owner in hand is writing, and resolves one of them by identity.</summary>
+/// <summary>Answers which drafts the user in hand is writing, and resolves one of them by identity.</summary>
 /// <remarks>
 /// <para>
 /// It exists because a person composing mail needs their drafts back after closing the window, and because the acts
 /// beneath it — revising a draft, giving one up, keeping one on the server, attaching a file to one — name a draft by
 /// an identifier that says nothing about whose it is. <see cref="MailDraftBook" /> admits those acts on the grant
-/// alone, which is what a deployment holding one owner needs and not what an owner-facing surface may rely on, so this
-/// is where an identifier becomes a draft the caller's own owner holds.
+/// alone, which is what a deployment holding one user needs and not what a user-facing surface may rely on, so this
+/// is where an identifier becomes a draft the caller's own user holds.
 /// </para>
 /// <para>
-/// <b>A draft another owner holds answers exactly as one nobody holds.</b> There is no listing that crosses owners, no
-/// refusal that separates the two cases, and no timing that does either, which is the same rule every owner-facing
+/// <b>A draft another user holds answers exactly as one nobody holds.</b> There is no listing that crosses users, no
+/// refusal that separates the two cases, and no timing that does either, which is the same rule every user-facing
 /// read here follows.
 /// </para>
 /// <para>
@@ -38,7 +38,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// would be a walk over their unsent mail rather than a page of it.
 /// </para>
 /// </remarks>
-/// <param name="accountCatalog">Says which accounts the caller's owner owns, and therefore which one a caller may name.</param>
+/// <param name="accountCatalog">Says which accounts the caller's user owns, and therefore which one a caller may name.</param>
 /// <param name="drafts">Holds the durable account of every draft.</param>
 /// <param name="contentStore">Holds the composed MIME each revision is.</param>
 /// <param name="text">Reads back what a composed message says, so an author gets their own words to go on editing.</param>
@@ -52,17 +52,17 @@ public sealed class MailDraftDirectory(
 {
     /// <summary>The greatest number of drafts one reading answers with.</summary>
     /// <remarks>
-    /// An owner standing at it has more drafts open than any composing screen shows, which is a state to report rather
+    /// A user standing at it has more drafts open than any composing screen shows, which is a state to report rather
     /// than to page through: what resolves it is finishing or giving up what is already written.
     /// </remarks>
     public const int MaximumCount = 200;
 
-    /// <summary>Reads the drafts the caller's owner is writing, newest edit first.</summary>
-    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this owner owns.</param>
+    /// <summary>Reads the drafts the caller's user is writing, newest edit first.</summary>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this user owns.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The drafts, at most <see cref="MaximumCount" /> of them, empty where the owner is writing none.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's owner does not own, which includes every account this deployment does not serve.</exception>
+    /// <returns>The drafts, at most <see cref="MaximumCount" /> of them, empty where the user is writing none.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when <paramref name="account" /> names an account the caller's user does not own, which includes every account this deployment does not serve.</exception>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadAsync(
         MailAccountSelector? account,
         CancellationToken cancellationToken)
@@ -74,22 +74,22 @@ public sealed class MailDraftDirectory(
                 ?? throw new MailAccountNotAccessibleException(named)).Id
             : (MailAccountId?)null;
 
-        return await drafts.ReadForOwnerAsync(
-            accountCatalog.Owner,
+        return await drafts.ReadForUserAsync(
+            accountCatalog.User,
             narrowed,
             MaximumCount,
             cancellationToken);
     }
 
-    /// <summary>Reads one draft of the caller's own owner, or answers that they hold none under that identifier.</summary>
+    /// <summary>Reads one draft of the caller's own user, or answers that they hold none under that identifier.</summary>
     /// <param name="draftId">The draft to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The draft, or <see langword="null" /> when this owner holds none under that identifier.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
+    /// <returns>The draft, or <see langword="null" /> when this user holds none under that identifier.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
     /// <remarks>
-    /// Every act an owner-facing surface takes on a draft passes through this first, which is what keeps an identifier
-    /// from reaching a book that acts on whatever it is handed. The owner is compared against the draft's own recorded
-    /// owner rather than against the accounts listing, so an account withdrawn from the record since the draft was
+    /// Every act a user-facing surface takes on a draft passes through this first, which is what keeps an identifier
+    /// from reaching a book that acts on whatever it is handed. The user is compared against the draft's own recorded
+    /// user rather than against the accounts listing, so an account withdrawn from the record since the draft was
     /// written still resolves to the person who wrote it.
     /// </remarks>
     public async Task<MailDraftRecord?> FindAsync(MailDraftId draftId, CancellationToken cancellationToken)
@@ -98,14 +98,14 @@ public sealed class MailDraftDirectory(
 
         var draft = await drafts.FindAsync(draftId, cancellationToken);
 
-        return draft is not null && draft.Account.Owner == accountCatalog.Owner ? draft : null;
+        return draft is not null && draft.Account.User == accountCatalog.User ? draft : null;
     }
 
     /// <summary>Reads one of the caller's own drafts back as the words its author wrote, so editing can go on.</summary>
     /// <param name="draftId">The draft to open.</param>
     /// <param name="cancellationToken">Cancels the reads.</param>
-    /// <returns>The draft and what its stored message says, or <see langword="null" /> when this owner holds no such draft.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no owner.</exception>
+    /// <returns>The draft and what its stored message says, or <see langword="null" /> when this user holds no such draft.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />, or is acting for no user.</exception>
     /// <remarks>
     /// <para>
     /// The one reading here that loads a message, and it is asked for one draft by identity because that is what
@@ -114,7 +114,7 @@ public sealed class MailDraftDirectory(
     /// </para>
     /// <para>
     /// The words come out of the stored message rather than out of a second copy of them, so what an author sees is
-    /// exactly what would be sent. A draft whose message is missing answers as one this owner does not hold: the record
+    /// exactly what would be sent. A draft whose message is missing answers as one this user does not hold: the record
     /// and its message are written in one transaction, so a record without one describes a draft nothing could send.
     /// </para>
     /// </remarks>

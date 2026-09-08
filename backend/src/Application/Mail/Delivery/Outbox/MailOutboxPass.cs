@@ -136,7 +136,7 @@ public sealed class MailOutboxPass
             filingResults.AddRange(await this.FileCopiesOfAsync(result, stoppingToken));
 
             // After the copy of the sent message is filed rather than before it, so the ordinary case puts the message
-            // where the owner reads it before the draft of it goes. It is not conditional on that filing having
+            // where the user reads it before the draft of it goes. It is not conditional on that filing having
             // worked: the message was delivered either way, and a draft left standing for a message already sent is
             // the worse of the two answers, because it is what a later edit or a second promotion would act on. A copy
             // that could not be filed is the filing tier's own outcome and is reported beside this one.

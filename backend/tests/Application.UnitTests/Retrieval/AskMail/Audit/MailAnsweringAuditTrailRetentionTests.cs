@@ -17,7 +17,7 @@ public sealed class MailAnsweringAuditTrailRetentionTests
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailAnsweringAuditSettingsReader settings =
         Substitute.For<IMailAnsweringAuditSettingsReader>();

@@ -18,7 +18,7 @@ namespace MailFathom.Application.Jobs;
 /// </remarks>
 public sealed record JobLeaseOwner
 {
-    /// <summary>The greatest length an owner may have, which bounds the column it is stored in.</summary>
+    /// <summary>The greatest length a user may have, which bounds the column it is stored in.</summary>
     public const int MaximumLength = 128;
 
     private JobLeaseOwner(string value) => this.Value = value;
@@ -26,7 +26,7 @@ public sealed record JobLeaseOwner
     /// <summary>Gets the text a stored lease is compared against.</summary>
     public string Value { get; }
 
-    /// <summary>Creates an owner for one attempt.</summary>
+    /// <summary>Creates a user for one attempt.</summary>
     /// <param name="value">The generated identity of the attempt.</param>
     /// <returns>A validated lease owner.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, carries a control character, or is longer than <see cref="MaximumLength" />.</exception>
@@ -51,7 +51,7 @@ public sealed record JobLeaseOwner
         return new JobLeaseOwner(trimmedValue);
     }
 
-    /// <summary>Creates an owner for a new attempt, unique across every process that shares the database.</summary>
+    /// <summary>Creates a user for a new attempt, unique across every process that shares the database.</summary>
     /// <returns>A lease owner nothing else will produce.</returns>
     /// <remarks>
     /// A random identity rather than a host name and a counter, because two replicas of one deployment are the case the

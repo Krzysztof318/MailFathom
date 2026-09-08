@@ -34,8 +34,8 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationFixture orchestration)
 {
-    /// <summary>Gets the account this suite writes under, whose owner the orchestrated database provisioned.</summary>
-    /// <remarks>Read on each use rather than captured in a field, because the owner is resolved when the harness starts.</remarks>
+    /// <summary>Gets the account this suite writes under, whose user the orchestrated database provisioned.</summary>
+    /// <remarks>Read on each use rather than captured in a field, because the user is resolved when the harness starts.</remarks>
     private static MailAccountIdentity Account => SyntheticMailAccount.Account;
 
     /// <summary>The principal the orchestrated caller's sends are recorded under, which is the identity the harness admits it as.</summary>

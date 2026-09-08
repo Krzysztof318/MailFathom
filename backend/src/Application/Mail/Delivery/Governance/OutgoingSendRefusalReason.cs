@@ -15,7 +15,7 @@ public enum OutgoingSendRefusalReason
     /// <summary>Nobody has turned sending on for this account.</summary>
     /// <remarks>
     /// It is the default of every account of every deployment, so an installation upgrading into a release that can
-    /// send does not thereby become able to. Turning it on is an act an operator performs per account, since an owner
+    /// send does not thereby become able to. Turning it on is an act an operator performs per account, since a user
     /// may want one identity able to write and another purely archival.
     /// </remarks>
     AccountNotEnabled = 0,

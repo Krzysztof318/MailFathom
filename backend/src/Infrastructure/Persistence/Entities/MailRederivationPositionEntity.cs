@@ -31,8 +31,8 @@ internal sealed class MailRederivationPositionEntity
 
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account this walk belongs to.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account this walk belongs to.</summary>
+    public required Guid UserId { get; set; }
 
     public required string FolderAlias { get; set; }
 

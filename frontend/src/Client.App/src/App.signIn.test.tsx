@@ -126,11 +126,11 @@ describe('App sign-in', () => {
         const refusing = deploymentRefusing({ status: 401, body: '', headers: { 'www-authenticate': challenged } });
 
         renderApp(servedFrom, null, refusing);
-        signIn('owner', 'open sesame');
+        signIn('user', 'open sesame');
         await screen.findByRole('alert');
 
         expect(document.body.textContent).not.toContain('open sesame');
-        expect(document.body.textContent).not.toContain('b3duZXI6b3BlbiBzZXNhbWU=');
+        expect(document.body.textContent).not.toContain('dXNlcjpvcGVuIHNlc2FtZQ==');
     });
 
     it('puts somebody in front of the sign-in when the deployment stops accepting what was kept', async () => {

@@ -5,7 +5,7 @@
 MailFathom ranks mail by vector distance exactly: every eligible message's nearest embedded passage is measured against
 the query, and nothing approximates that. [Email search](../features/email-search.md#hybrid-retrieval) states the
 behaviour and why the caller's filters join the ranking rather than trailing it. This page states what that costs on a
-mailbox the size an owner is expected to reach, measured rather than reasoned, and what was decided against the numbers.
+mailbox the size a user is expected to reach, measured rather than reasoned, and what was decided against the numbers.
 
 ## What was measured, and against what
 
@@ -15,8 +15,8 @@ names as the one where an account predicate stops being selective on its own:
 
 | | |
 |---|---|
-| Deployment | 3 owners, 4 accounts, 16 folders, 150 000 messages |
-| The measured owner | 2 accounts, **100 000 messages**, **259 034 vectors** |
+| Deployment | 3 users, 4 accounts, 16 folders, 150 000 messages |
+| The measured user | 2 accounts, **100 000 messages**, **259 034 vectors** |
 | Passages | 389 396 chunks, one vector each, 1536 dimensions, cosine |
 | `email_embeddings` | 35 MB heap, **3081 MB TOAST**, 3137 MB in total |
 | Server | `pgvector/pgvector:0.8.6-pg18`, PostgreSQL 18, pgvector 0.8.6 — the image the Compose deployment and the Helm chart both name |
@@ -36,21 +36,21 @@ A buffer count is a page *pin* rather than a distinct page, which is worth readi
 A 6152-byte vector is four TOAST chunks, each fetched through its own descent of the TOAST index, so one vector costs
 several pins of which nearly all find their page already in the 128 MB pool — the four chunks share one page, and the
 index above them is small enough to stay resident. What crossed that boundary in the full-mailbox search is the `read`
-half of its 2 152 957 pins: **275 986 pages, or 2.2 GB** — the owner's share of the 3081 MB of out-of-line vectors,
+half of its 2 152 957 pins: **275 986 pages, or 2.2 GB** — the user's share of the 3081 MB of out-of-line vectors,
 fetched once. That 2.2 GB is served by the operating system's page cache on this host rather than by the device, which
 is what the concurrency section below turns on.
 
 ## What the exact ranking costs
 
-The query is the one `EmailVectorSearchIndexReader` composes, taken from the provider verbatim, with the owner's
+The query is the one `EmailVectorSearchIndexReader` composes, taken from the provider verbatim, with the user's
 accounts, the folders configuration admits, and the junk folder withheld.
 
 | The caller asked for | Messages ranked | Buffers | Time |
 |---|---|---|---|
-| everything the owner may read | 85 715 | 2 152 957 | 7.9 s |
+| everything the user may read | 85 715 | 2 152 957 | 7.9 s |
 | one folder and a three-month range | 11 856 | 390 689 | 0.96 s |
 | one sender | 200 | 8 332 | 0.04 s |
-| *the same, over every owner's mail* | 128 573 | 3 259 018 | 14.3 s |
+| *the same, over every user's mail* | 128 573 | 3 259 018 | 14.3 s |
 
 Three readings come out of that table.
 
@@ -58,8 +58,8 @@ Three readings come out of that table.
 buffers is not a latency a caller waits on; it is a latency a caller times out on.
 
 **Ownership narrowing helps exactly as much as it removes mail, and no more.** The last row is the first one with the
-owner predicate taken out and nothing else changed. The narrowed query moves 0.661 of the buffers the unnarrowed one
-does, where the owner's share of the eligible vectors is 0.665 — proportional, which is another way of saying the
+user predicate taken out and nothing else changed. The narrowed query moves 0.661 of the buffers the unnarrowed one
+does, where the user's share of the eligible vectors is 0.665 — proportional, which is another way of saying the
 predicate changes the size of the scan and not its shape.
 
 **The caller's own filters are the effective lever.** A folder and a date range — an ordinary way to ask — is five
@@ -139,9 +139,9 @@ after. Over ten query vectors, each asking for a five-hundred-row window:
 | Of one window | median | worst |
 |---|---|---|
 | vectors returned | 40 | 40 |
-| left after the owner predicate | 27 | 24 |
-| left after owner, `INBOX`, and a three-month range | 4 | 0 |
-| left after owner and one sender | **0** | 0 |
+| left after the user predicate | 27 | 24 |
+| left after user, `INBOX`, and a three-month range | 4 | 0 |
+| left after user and one sender | **0** | 0 |
 
 A search that answers fifty results unfiltered and four once the caller says *in my inbox, this summer* is not an
 approximation of the exact ranking; it is a different feature. This is exactly the failure the reader's remarks
@@ -149,7 +149,7 @@ predicted — fewest results returned precisely where the caller narrowed most.
 
 **`hnsw.iterative_scan` removes that failure and hands the planner the choice.** With `relaxed_order` and a
 twenty-thousand-tuple scan bound, pgvector keeps producing candidates until the filter is satisfied, and the plan for a
-weakly filtered join — this owner, not the junk folder — does drive from the index: 200 passages in 249 ms from 10 733
+weakly filtered join — this user, not the junk folder — does drive from the index: 200 passages in 249 ms from 10 733
 buffers, against the 7.9 s the exact ranking spends on the comparable one. That is a real win, and it is the only
 one.
 
@@ -176,10 +176,10 @@ on this corpus the 389 396 inserts move from 68 seconds of database time to two 
 [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 already names as the expensive act of changing model.
 
-## Several owners searching at once
+## Several users searching at once
 
 The reader's query was then run for sixty seconds at one, two, and four concurrent clients, each transaction drawing one
-of sixty query vectors and one of the three owners at random.
+of sixty query vectors and one of the three users at random.
 
 | Clients | Searches completed | Mean latency | Throughput |
 |---|---|---|---|
@@ -187,7 +187,7 @@ of sixty query vectors and one of the three owners at random.
 | 2 | 21 | 5.9 s | 0.33/s |
 | 4 | 56 | 4.5 s | 0.83/s |
 
-The latency is a blend and the deviation is as wide as the mean, because the mix draws the three owners equally often
+The latency is a blend and the deviation is as wide as the mean, because the mix draws the three users equally often
 and only one of them holds 100 000 messages: a run is a mixture of eight-second and two-second searches rather than a
 sample of one number.
 
@@ -251,18 +251,18 @@ superseded one's. Four things follow from taking it out, and the last is not set
   now declines a model the deployment could run in exchange for nothing. Deciding what replaces it amends ADR 0006,
   which this change does not do; [issue #1253](https://github.com/Krzysztof318/MailFathom/issues/1253) carries it.
 
-## Partitioning `email_embeddings` by owner stays deferred
+## Partitioning `email_embeddings` by user stays deferred
 
 [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
-deferred partitioning by owner against a measurement that did not exist, and named what deferring costs: under the
+deferred partitioning by user against a measurement that did not exist, and named what deferring costs: under the
 append-only migration rule, partitioning afterwards is a table rewrite rather than a migration. The measurement is here
 now, and it says the deferral holds.
 
-Partition pruning would remove the rows of owners the query is not for, before they are read. Those rows are the free
+Partition pruning would remove the rows of users the query is not for, before they are read. Those rows are the free
 half: reading all 389 396 rows of the profile without their vectors is 377 buffers. What costs 1 582 146 buffers is
-fetching a vector, and a vector is fetched because its message survived the owner predicate — so a partition boundary
-would not remove a single one of them. The owner predicate already delivers what pruning would: with it applied the
-query moves 0.661 of the buffers, where the owner's share of the eligible vectors is 0.665.
+fetching a vector, and a vector is fetched because its message survived the user predicate — so a partition boundary
+would not remove a single one of them. The user predicate already delivers what pruning would: with it applied the
+query moves 0.661 of the buffers, where the user's share of the eligible vectors is 0.665.
 
 Partitioning therefore stays deferred, now against a number rather than against the absence of one, and the number is
 that it would save single-digit megabytes on a query that moves gigabytes.

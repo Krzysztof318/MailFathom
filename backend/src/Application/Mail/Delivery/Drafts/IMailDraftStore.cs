@@ -36,7 +36,7 @@ public interface IMailDraftStore
 {
     /// <summary>Writes down a new draft, at the revision its first stored message is.</summary>
     /// <param name="session">The session the write joins, which is the one the message is stored in.</param>
-    /// <param name="account">The account the draft belongs to, named by its owner and its identifier.</param>
+    /// <param name="account">The account the draft belongs to, named by its user and its identifier.</param>
     /// <param name="author">The authored act that wrote it.</param>
     /// <param name="recipients">The people it is addressed to, which may be nobody, each with where its address came from.</param>
     /// <param name="subject">The subject line the composed message carries.</param>
@@ -99,21 +99,21 @@ public interface IMailDraftStore
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the drafts one owner is still writing, newest edit first.</summary>
-    /// <param name="owner">The owner whose drafts are read.</param>
-    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this owner owns.</param>
+    /// <summary>Reads the drafts one user is still writing, newest edit first.</summary>
+    /// <param name="user">The user whose drafts are read.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this user owns.</param>
     /// <param name="maxCount">The greatest number of drafts to answer with.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The drafts, ordered by when each last changed, newest first, bounded by <paramref name="maxCount" />.</returns>
     /// <remarks>
-    /// It is the owner's own listing rather than a pass's, so what it answers with is what a person would recognize as
+    /// It is the user's own listing rather than a pass's, so what it answers with is what a person would recognize as
     /// their drafts: one that has been given up is on its way out and one that has been promoted is a queued message,
     /// and neither is something to go on editing. Bounded rather than paged, because the set is what one person has
-    /// open at a time — an owner who reaches the bound has more drafts than a screen shows and is told so by the count
+    /// open at a time — a user who reaches the bound has more drafts than a screen shows and is told so by the count
     /// rather than handed a cursor into their own composition.
     /// </remarks>
-    Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
-        MailOwnerId owner,
+    Task<IReadOnlyList<MailDraftRecord>> ReadForUserAsync(
+        MailUserId user,
         MailAccountId? account,
         int maxCount,
         CancellationToken cancellationToken);
@@ -209,7 +209,7 @@ public interface IMailDraftStore
     /// <param name="session">The session the write joins.</param>
     /// <param name="draftId">The draft the copy belongs to.</param>
     /// <param name="revision">Which revision's copy it is.</param>
-    /// <param name="stage">Whether the copy was taken back out or left as the owner's.</param>
+    /// <param name="stage">Whether the copy was taken back out or left as the user's.</param>
     /// <param name="settledAt">When it stopped standing.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the copy is settled.</returns>
@@ -239,7 +239,7 @@ public interface IMailDraftStore
     /// <exception cref="InvalidOperationException">Thrown when no draft is held under <paramref name="draftId" />.</exception>
     /// <remarks>
     /// The row outlives the decision on purpose. Removing it first would lose the only thing naming the copies, and a
-    /// copy nothing can name is a message left in the owner's drafts folder for good.
+    /// copy nothing can name is a message left in the user's drafts folder for good.
     /// </remarks>
     Task RecordDiscardedAsync(
         IPersistenceSession session,

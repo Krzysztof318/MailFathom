@@ -83,7 +83,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     }
 
     /// <summary>
-    /// The container must be the only owner of the data source. One built inside the startup provider is invisible to
+    /// The container must be the only user of the data source. One built inside the startup provider is invisible to
     /// the container, so a host that resolved no context would shut down leaving its connection pool open.
     /// </summary>
     [Fact]
@@ -413,7 +413,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
     /// <remarks>
     /// Asserted through the reading rather than against the resolved type, because the decorator is now wrapped
     /// whatever the postures say: they change while a scope is open, so a scope that decided at construction would go
-    /// on writing an owner's mail unredacted for the rest of its run after that owner switched a scanner on. What the
+    /// on writing a user's mail unredacted for the rest of its run after that user switched a scanner on. What the
     /// decorator being inert means is therefore a claim about the text and the stamp, which is what this states.
     /// </remarks>
     [Fact]
@@ -442,7 +442,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(extraction.Metadata?.RedactedUnder);
@@ -488,7 +488,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
@@ -530,7 +530,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -569,7 +569,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -609,7 +609,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Unlikely, extraction.Metadata?.MachineAuthorship.Band);
@@ -645,7 +645,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -688,7 +688,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
@@ -726,7 +726,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(ConcealingMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(ConcealingMessage(), SyntheticMailUser.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Likely, extraction.Metadata?.MachineAuthorship.Band);
@@ -739,9 +739,9 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             StringComparison.Ordinal);
     }
 
-    /// <summary>Registers the postures a deployment with one scanner switched on for every owner would compose.</summary>
+    /// <summary>Registers the postures a deployment with one scanner switched on for every user would compose.</summary>
     /// <remarks>
-    /// The host composes these from the owner records and the deployment section; nothing under <c>Infrastructure</c>
+    /// The host composes these from the user records and the deployment section; nothing under <c>Infrastructure</c>
     /// does, so a graph asserted here states them the way a composed one would arrive with them. The permits outlive
     /// the posture, so the class holds them rather than the arrangement that opened them.
     /// </remarks>
@@ -755,7 +755,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
 
         this.openedPermits.Add(permits);
 
-        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ForEveryOwner(
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ForEveryUser(
             SensitiveContentPosture.Scanning(
                 [scanner.Scanner],
                 new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
@@ -785,7 +785,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             ImapUid.Create(12)),
         Encoding.UTF8.GetBytes(
             "From: alice@partner.example\r\n"
-            + "To: owner@work.example\r\n"
+            + "To: user@work.example\r\n"
             + "Subject: Subject\r\n"
             + "Content-Type: text/plain; charset=utf-8\r\n"
             + "\r\n"
@@ -835,7 +835,7 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
             ImapUid.Create(11)),
         Encoding.ASCII.GetBytes(
             "From: alice@partner.example\r\n"
-            + "To: owner@work.example\r\n"
+            + "To: user@work.example\r\n"
             + "Subject: Subject\r\n"
             + "\r\n"
             + "body\r\n"));

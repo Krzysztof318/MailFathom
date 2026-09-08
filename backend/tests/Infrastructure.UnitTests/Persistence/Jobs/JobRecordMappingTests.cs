@@ -29,7 +29,7 @@ public sealed class JobRecordMappingTests
         Assert.Equal(JobIdempotencyKey.Create("account-a/INBOX#1/12345/4711"), job.Key);
         Assert.Equal(MailAccountId.Create("account-a"), job.AccountId);
         Assert.Equal(3, job.AttemptCount);
-        Assert.Equal(JobLeaseOwner.Create("attempt-a"), job.Lease.Owner);
+        Assert.Equal(JobLeaseOwner.Create("attempt-a"), job.Lease.User);
         Assert.Equal(ClaimedAt.AddMinutes(5), job.Lease.ExpiresAt);
     }
 
@@ -118,7 +118,7 @@ public sealed class JobRecordMappingTests
         JobType = JobType.ClassifyEmailSpam.Name,
         IdempotencyKey = "account-a/INBOX#1/12345/4711",
         Payload = """
-                  {"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a",
+                  {"userId":"11111111-1111-1111-1111-111111111111","accountId":"account-a",
                    "folderAlias":"INBOX","folderResolutionGeneration":1,"uidValidity":12345,"uid":4711}
                   """,
         MailboxAccountId = "account-a",

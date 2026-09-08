@@ -61,13 +61,13 @@ internal sealed class StoredEmailEnrichmentStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPassagesPerEmail);
 
-        var ownerId = account.Owner.Value;
+        var userId = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var terms = derivedWorkGate.ReadTerms();
 
         var rows = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
-                ownerId,
+                userId,
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 attachmentTextBounds.IsEnabled,
@@ -153,7 +153,7 @@ internal sealed class StoredEmailEnrichmentStore(
 
     /// <summary>Narrows stored mail to the messages the arrival pipeline still owes a derivation for.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="ownerId">The owner whose account this pass belongs to, which is what the index leads with.</param>
+    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to derived work.</param>
     /// <param name="readsAttachments">Whether this deployment reads attachments, which decides whether to wait for one.</param>
@@ -189,7 +189,7 @@ internal sealed class StoredEmailEnrichmentStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid ownerId,
+        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         bool readsAttachments,
@@ -197,7 +197,7 @@ internal sealed class StoredEmailEnrichmentStore(
         AccountScopedMailFolders.Admitting(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
-                .Where(email => email.OwnerId == ownerId
+                .Where(email => email.UserId == userId
                     && email.MailboxAccountId == mailboxAccountId
                     && email.Chunks.Any()
                     && email.Enrichment == null

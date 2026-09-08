@@ -379,7 +379,7 @@ public sealed class MachineAuthorshipProfileTests
         var text = OrdinaryProse()
             + "\n- **Scope:** the two folders named above\n"
             + "- **Timing:** before the end of the quarter\n"
-            + "- **Owner:** the operations team\n";
+            + "- **User:** the operations team\n";
 
         // Act
         var assessment = MachineAuthorshipProfile.Standard.Assess(text, text);
@@ -503,7 +503,7 @@ public sealed class MachineAuthorshipProfileTests
             + " The report—which nobody read—arrived late—again."
             + "\n- **Scope:** the two folders named above\n"
             + "- **Timing:** before the end of the quarter\n"
-            + "- **Owner:** the operations team\n"
+            + "- **User:** the operations team\n"
             + "Let me know if you have any questions.";
 
         // Act

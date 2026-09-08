@@ -32,9 +32,9 @@ public sealed class MailAccountFreshnessReaderTests
 
     private static readonly ServedMailAccount Private = SyntheticServedAccount.Of("private");
 
-    /// <summary>The accounts are the owner's own, published under the names configuration gave them.</summary>
+    /// <summary>The accounts are the user's own, published under the names configuration gave them.</summary>
     [Fact]
-    public async Task ReadAsync_AnOwnerOwningTwoAccounts_PublishesBothUnderTheirConfiguredNames()
+    public async Task ReadAsync_AUserOwningTwoAccounts_PublishesBothUnderTheirConfiguredNames()
     {
         // Arrange
         var reader = ReaderOver(Freshness(), OwningAccounts(Work, Private));
@@ -47,11 +47,11 @@ public sealed class MailAccountFreshnessReaderTests
     }
 
     /// <summary>
-    /// The scoping is the catalog's, and this is what it looks like from here: an owner owning nothing reads an empty
+    /// The scoping is the catalog's, and this is what it looks like from here: a user owning nothing reads an empty
     /// collection, which is what an account belonging to somebody else looks like too.
     /// </summary>
     [Fact]
-    public async Task ReadAsync_AnOwnerOwningNoAccount_PublishesAnEmptyCollectionRatherThanAnError()
+    public async Task ReadAsync_AUserOwningNoAccount_PublishesAnEmptyCollectionRatherThanAnError()
     {
         // Arrange
         var reader = ReaderOver(Freshness(), OwningAccounts());
@@ -63,9 +63,9 @@ public sealed class MailAccountFreshnessReaderTests
         Assert.Empty(directory.Accounts);
     }
 
-    /// <summary>An owner reads only what the caller-scoped catalog answered, so nothing here reaches the deployment's own set.</summary>
+    /// <summary>A user reads only what the caller-scoped catalog answered, so nothing here reaches the deployment's own set.</summary>
     [Fact]
-    public async Task ReadAsync_AnAccountAnotherOwnerHolds_IsAbsentBecauseTheCatalogNeverNamedIt()
+    public async Task ReadAsync_AnAccountAnotherUserHolds_IsAbsentBecauseTheCatalogNeverNamedIt()
     {
         // Arrange
         var reader = ReaderOver(
@@ -368,8 +368,8 @@ public sealed class MailAccountFreshnessReaderTests
     }
 
     /// <summary>
-    /// Naming the accounts an owner has is publishing that they exist, so a credential without the mailbox grant is
-    /// refused rather than answered with the empty collection an owner owning nothing receives.
+    /// Naming the accounts a user has is publishing that they exist, so a credential without the mailbox grant is
+    /// refused rather than answered with the empty collection a user owning nothing receives.
     /// </summary>
     [Fact]
     public async Task ReadAsync_ACallerWithoutTheMailboxGrant_IsRefusedRatherThanAnsweredWithNothing()
@@ -411,7 +411,7 @@ public sealed class MailAccountFreshnessReaderTests
 
     private static MailSynchronizationRunLedger Ledger() => new(new FakeTimeProvider(Now));
 
-    /// <summary>Answers the accounts the caller's owner owns, and whether the deployment refreshes them.</summary>
+    /// <summary>Answers the accounts the caller's user owns, and whether the deployment refreshes them.</summary>
     private static ICallerMailAccountCatalog OwningAccounts(params ServedMailAccount[] ownedAccounts) =>
         OwningAccounts(synchronizationEnabled: true, ownedAccounts);
 

@@ -19,9 +19,9 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 
-/// <summary>Covers the reading that turns an identifier into a draft the caller's own owner holds.</summary>
+/// <summary>Covers the reading that turns an identifier into a draft the caller's own user holds.</summary>
 /// <remarks>
-/// Every test here is about the owner axis, because that is the whole of what this reading adds to the store beneath
+/// Every test here is about the user axis, because that is the whole of what this reading adds to the store beneath
 /// it: the store answers about any draft it holds, and this answers about the caller's.
 /// </remarks>
 public sealed class MailDraftDirectoryTests
@@ -31,14 +31,14 @@ public sealed class MailDraftDirectoryTests
     private static readonly MailAccountId Work = MailAccountId.Create("work");
     private static readonly MailAccountId Personal = MailAccountId.Create("personal");
 
-    /// <summary>A listing answers with this owner's drafts and with none of anybody else's.</summary>
+    /// <summary>A listing answers with this user's drafts and with none of anybody else's.</summary>
     [Fact]
-    public async Task ReadAsync_DraftsOfSeveralOwners_AnswersOnlyTheOnesTheCallersOwnerHolds()
+    public async Task ReadAsync_DraftsOfSeveralUsers_AnswersOnlyTheOnesTheCallersUserHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var mine = await OpenAsync(drafts, SyntheticMailOwner.Deployment, Work, "mine");
-        await OpenAsync(drafts, SyntheticMailOwner.Another, Work, "somebody else's");
+        var mine = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "mine");
+        await OpenAsync(drafts, SyntheticMailUser.Another, Work, "somebody else's");
 
         var directory = DirectoryOver(drafts);
 
@@ -49,14 +49,14 @@ public sealed class MailDraftDirectoryTests
         Assert.Equal([mine.Id], listed.Select(draft => draft.Id));
     }
 
-    /// <summary>A listing narrowed to an account this owner owns answers with that account's drafts alone.</summary>
+    /// <summary>A listing narrowed to an account this user owns answers with that account's drafts alone.</summary>
     [Fact]
     public async Task ReadAsync_NarrowedToOneAccount_AnswersWithThatAccountsDraftsAlone()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var atWork = await OpenAsync(drafts, SyntheticMailOwner.Deployment, Work, "at work");
-        await OpenAsync(drafts, SyntheticMailOwner.Deployment, Personal, "at home");
+        var atWork = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "at work");
+        await OpenAsync(drafts, SyntheticMailUser.Deployment, Personal, "at home");
 
         var directory = DirectoryOver(drafts);
 
@@ -69,9 +69,9 @@ public sealed class MailDraftDirectoryTests
         Assert.Equal([atWork.Id], listed.Select(draft => draft.Id));
     }
 
-    /// <summary>An account another owner owns is refused exactly as one this deployment does not serve.</summary>
+    /// <summary>An account another user owns is refused exactly as one this deployment does not serve.</summary>
     [Fact]
-    public async Task ReadAsync_AnAccountAnotherOwnerOwns_IsRefusedAsOneThisOwnerDoesNotOwn()
+    public async Task ReadAsync_AnAccountAnotherUserOwns_IsRefusedAsOneThisUserDoesNotOwn()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
@@ -102,13 +102,13 @@ public sealed class MailDraftDirectoryTests
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(refusal);
     }
 
-    /// <summary>A draft another owner holds answers exactly as one nobody holds.</summary>
+    /// <summary>A draft another user holds answers exactly as one nobody holds.</summary>
     [Fact]
-    public async Task FindAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHolds()
+    public async Task FindAsync_ADraftAnotherUserHolds_AnswersAsOneNobodyHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another, Work, "somebody else's");
+        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another, Work, "somebody else's");
 
         var directory = DirectoryOver(drafts);
 
@@ -126,12 +126,12 @@ public sealed class MailDraftDirectoryTests
     /// running a document parser per attachment on a request that discards the result.
     /// </remarks>
     [Fact]
-    public async Task ReadComposedAsync_ADraftThisOwnerHolds_AnswersWithWhatTheStoredMessageSays()
+    public async Task ReadComposedAsync_ADraftThisUserHolds_AnswersWithWhatTheStoredMessageSays()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
         var contents = new InMemoryMailDraftContentStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment, Work, "a draft");
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "a draft");
 
         await contents.SaveMailDraftContentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -151,13 +151,13 @@ public sealed class MailDraftDirectoryTests
         Assert.Equal("Hello.", reading.Text.PlainTextBody);
     }
 
-    /// <summary>A draft whose stored message has gone answers as one this owner does not hold.</summary>
+    /// <summary>A draft whose stored message has gone answers as one this user does not hold.</summary>
     [Fact]
     public async Task ReadComposedAsync_ADraftWhoseStoredMessageIsGone_AnswersAsOneNobodyHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment, Work, "a draft");
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment, Work, "a draft");
 
         var directory = DirectoryOver(drafts);
 
@@ -168,7 +168,7 @@ public sealed class MailDraftDirectoryTests
         Assert.Null(reading);
     }
 
-    /// <summary>Builds the reading over the store a test arranged, for a caller acting for the deployment's owner.</summary>
+    /// <summary>Builds the reading over the store a test arranged, for a caller acting for the deployment's user.</summary>
     private static MailDraftDirectory DirectoryOver(
         InMemoryMailDraftStore drafts,
         IEmailContentStore? contents = null,
@@ -188,15 +188,15 @@ public sealed class MailDraftDirectoryTests
             callerAuthorization);
     }
 
-    /// <summary>Writes one draft down for one owner, which is the arrangement every test here starts from.</summary>
+    /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore drafts,
-        MailOwnerId owner,
+        MailUserId user,
         MailAccountId accountId,
         string subject) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(owner, accountId),
+            MailAccountIdentity.Create(user, accountId),
             OutgoingEmailRequester.Command($"mfctl-{subject}"),
             [],
             subject,

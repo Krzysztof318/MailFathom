@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Signals;
 public sealed class ClientSignalTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -69,7 +69,7 @@ public sealed class ClientSignalTests
         // Arrange
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(Instant)),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             NotificationKind.Mail,
             title: "Mail arrived",
             body: "Four messages arrived in work.",
@@ -82,7 +82,7 @@ public sealed class ClientSignalTests
         var signal = ClientSignal.NotificationRaised(notification, unreadCount: 3);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(NotificationKind.Mail, signal.NotificationKind);
         Assert.Equal("Mail arrived", signal.Headline);
         Assert.Equal("Four messages arrived in work.", signal.SecondLine);

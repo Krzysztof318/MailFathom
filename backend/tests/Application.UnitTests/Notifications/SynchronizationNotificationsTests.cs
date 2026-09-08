@@ -13,14 +13,14 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Notifications;
 
-/// <summary>Covers what a synchronization run tells its owner, and what it deliberately says nothing about.</summary>
+/// <summary>Covers what a synchronization run tells its user, and what it deliberately says nothing about.</summary>
 public sealed class SynchronizationNotificationsTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailAccountIdentity SecondAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
@@ -227,7 +227,7 @@ public sealed class SynchronizationNotificationsTests
         var store = new InMemoryNotificationStore();
         var notifications = CreateNotifications(store);
         var outsized = MailAccountIdentity.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             MailAccountId.Create(new string('w', 400)));
 
         // Act
@@ -260,7 +260,7 @@ public sealed class SynchronizationNotificationsTests
         // Assert
         var signal = Assert.Single(channel.Published);
         Assert.Equal(ClientSignalKind.NotificationRaised, signal.Kind);
-        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(NotificationKind.Mail, signal.NotificationKind);
         Assert.Equal(1, signal.Count);
         Assert.Equal(Assert.Single(store.Recorded).Body, signal.SecondLine);

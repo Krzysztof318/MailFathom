@@ -57,7 +57,7 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// <para>
     /// Every stage counts, including an abandoned one. What the caller is establishing is that MailFathom has already
-    /// acted on this email once, and a change that was attempted and given up on is still a change the owner may have
+    /// acted on this email once, and a change that was attempted and given up on is still a change the user may have
     /// seen and reversed.
     /// </para>
     /// </remarks>
@@ -67,17 +67,17 @@ public interface IMailboxMutationRecordStore
         MailboxMutationOrigin origin,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the records one owner's own change carries, by the identities that change was answered with.</summary>
-    /// <param name="owner">The owner the records must belong to.</param>
+    /// <summary>Reads the records one user's own change carries, by the identities that change was answered with.</summary>
+    /// <param name="user">The user the records must belong to.</param>
     /// <param name="recordIds">The records to read, in any order and with repetitions.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The records this owner holds under those identities, ordered by when each was recorded, and empty where they hold none.</returns>
+    /// <returns>The records this user holds under those identities, ordered by when each was recorded, and empty where they hold none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// The owner is a parameter rather than something the caller checks afterwards, because it is what makes an
+    /// The user is a parameter rather than something the caller checks afterwards, because it is what makes an
     /// identifier somebody else's record unreadable rather than merely unreported: a record that does not belong to the
-    /// asking owner is absent from the answer, so no timing or shape separates one that exists from one that never did.
+    /// asking user is absent from the answer, so no timing or shape separates one that exists from one that never did.
     /// A record identity is generated rather than guessable, and this is what keeps that from being the only thing
     /// standing between two people's mail.
     /// </para>
@@ -87,16 +87,16 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
-    /// <summary>Withdraws the owner's changes among those named, wherever nothing has been asked of the mail server for one yet.</summary>
+    /// <summary>Withdraws the user's changes among those named, wherever nothing has been asked of the mail server for one yet.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="owner">The owner the records must belong to.</param>
+    /// <param name="user">The user the records must belong to.</param>
     /// <param name="recordIds">The records to withdraw.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>Each named record as it now stands, unchanged where the change had already been attempted, and absent where this owner holds no such record.</returns>
+    /// <returns>Each named record as it now stands, unchanged where the change had already been attempted, and absent where this user holds no such record.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
@@ -112,7 +112,7 @@ public interface IMailboxMutationRecordStore
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 

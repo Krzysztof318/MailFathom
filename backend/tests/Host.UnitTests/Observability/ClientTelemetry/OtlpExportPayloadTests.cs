@@ -11,7 +11,7 @@ namespace MailFathom.Host.UnitTests.Observability.ClientTelemetry;
 
 /// <summary>Covers what the proxy does to an export request before it forwards one.</summary>
 /// <remarks>
-/// Two claims carry the privacy half of this feature: the owner this deployment authenticated is on every resource that
+/// Two claims carry the privacy half of this feature: the user this deployment authenticated is on every resource that
 /// leaves, and a client's own claim under that key never is. Both are asserted against the attributes a reader takes
 /// back out of the rewritten octets, because a batch is only attributed if a collector's own parse finds the entry
 /// where a resource attribute belongs. Everything else the client sent is asserted to survive, because a proxy that
@@ -19,29 +19,29 @@ namespace MailFathom.Host.UnitTests.Observability.ClientTelemetry;
 /// </remarks>
 public sealed class OtlpExportPayloadTests
 {
-    private const string OwnerKey = "mailfathom.owner";
-    private const string AuthenticatedOwner = "9f2a1c64-0000-4000-8000-000000000001";
+    private const string UserKey = "mailfathom.user";
+    private const string AuthenticatedUser = "9f2a1c64-0000-4000-8000-000000000001";
 
     /// <summary>The claim the whole attribution rests on: a client cannot export as somebody else.</summary>
     [Fact]
-    public void Rewrite_ABatchClaimingAnOwnerOfItsOwn_ReplacesTheClaimWithTheAuthenticatedOne()
+    public void Rewrite_ABatchClaimingAUserOfItsOwn_ReplacesTheClaimWithTheAuthenticatedOne()
     {
         // Arrange
-        var request = OtlpExportRequests.Batch([new KeyValuePair<string, string>(OwnerKey, "somebody-else")], 1);
+        var request = OtlpExportRequests.Batch([new KeyValuePair<string, string>(UserKey, "somebody-else")], 1);
 
         // Act
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 10);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);
         Assert.Equal(
-            [new KeyValuePair<string, string>(OwnerKey, AuthenticatedOwner)],
-            OtlpExportRequests.ResourceAttributes(rewritten.Body).Where(attribute => attribute.Key == OwnerKey));
+            [new KeyValuePair<string, string>(UserKey, AuthenticatedUser)],
+            OtlpExportRequests.ResourceAttributes(rewritten.Body).Where(attribute => attribute.Key == UserKey));
     }
 
     /// <summary>The control for the replacement: what the client says about itself is not this deployment's to drop.</summary>
@@ -52,7 +52,7 @@ public sealed class OtlpExportPayloadTests
         var request = OtlpExportRequests.Batch(
             [
                 new KeyValuePair<string, string>("service.name", "mailfathom-client"),
-                new KeyValuePair<string, string>(OwnerKey, "somebody-else"),
+                new KeyValuePair<string, string>(UserKey, "somebody-else"),
                 new KeyValuePair<string, string>("browser.brands", "Chromium"),
             ],
             1);
@@ -61,8 +61,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 10);
 
         // Assert
@@ -70,14 +70,14 @@ public sealed class OtlpExportPayloadTests
             [
                 new KeyValuePair<string, string>("service.name", "mailfathom-client"),
                 new KeyValuePair<string, string>("browser.brands", "Chromium"),
-                new KeyValuePair<string, string>(OwnerKey, AuthenticatedOwner),
+                new KeyValuePair<string, string>(UserKey, AuthenticatedUser),
             ],
             OtlpExportRequests.ResourceAttributes(rewritten.Body));
     }
 
     /// <summary>An envelope with no resource is the one path by which unattributed telemetry could have left.</summary>
     [Fact]
-    public void Rewrite_AnEnvelopeCarryingNoResource_AddsOneNamingTheAuthenticatedOwner()
+    public void Rewrite_AnEnvelopeCarryingNoResource_AddsOneNamingTheAuthenticatedUser()
     {
         // Arrange
         var request = OtlpExportRequests.BatchWithoutResource(2);
@@ -86,14 +86,14 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 10);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);
         Assert.Equal(
-            [new KeyValuePair<string, string>(OwnerKey, AuthenticatedOwner)],
+            [new KeyValuePair<string, string>(UserKey, AuthenticatedUser)],
             OtlpExportRequests.ResourceAttributes(rewritten.Body));
     }
 
@@ -111,8 +111,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 100);
 
         // Assert
@@ -136,8 +136,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Metrics,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 1000);
 
         // Assert
@@ -156,8 +156,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Metrics,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 1000);
 
         // Assert
@@ -175,8 +175,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Metrics,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 40);
 
         // Assert
@@ -195,8 +195,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 100);
 
         // Assert
@@ -215,8 +215,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             request,
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 4);
 
         // Assert
@@ -232,8 +232,8 @@ public sealed class OtlpExportPayloadTests
         var rewritten = OtlpExportPayload.Rewrite(
             [],
             ClientTelemetrySignal.Traces,
-            OwnerKey,
-            AuthenticatedOwner,
+            UserKey,
+            AuthenticatedUser,
             maxRecords: 10);
 
         // Assert

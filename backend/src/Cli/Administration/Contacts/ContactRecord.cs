@@ -8,10 +8,10 @@ namespace MailFathom.Cli.Administration.Contacts;
 
 /// <summary>One person as a deployment's contact book holds them.</summary>
 /// <param name="Id">The identity the book gave them, which every other command names them by.</param>
-/// <param name="DisplayName">The name the owner recorded, in the casing they wrote it.</param>
+/// <param name="DisplayName">The name the user recorded, in the casing they wrote it.</param>
 /// <param name="Addresses">Every address they use, the preferred one first.</param>
 /// <param name="PreferredAddress">The address to use when something addresses them without naming which of theirs.</param>
-/// <param name="Note">What the owner wrote about them, or <see langword="null" /> where they wrote nothing.</param>
+/// <param name="Note">What the user wrote about them, or <see langword="null" /> where they wrote nothing.</param>
 /// <param name="Origin">How the contact came to be in the book, which decides who may amend it.</param>
 /// <param name="RecordedAt">When the contact entered the book.</param>
 /// <param name="AmendedAt">When it was last amended.</param>

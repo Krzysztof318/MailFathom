@@ -355,49 +355,49 @@ public sealed class StoredEmailEmbeddingBackfillTests
     private static StoredEmailId NextEmail() => StoredEmailId.Create(Guid.CreateVersion7());
 
     /// <summary>
-    /// One owner reaching their share steps the walk past their mail and leaves every other owner's being embedded,
-    /// which is the whole reason the per-owner ceiling does not end the run the way the deployment's does.
+    /// One user reaching their share steps the walk past their mail and leaves every other user's being embedded,
+    /// which is the whole reason the per-user ceiling does not end the run the way the deployment's does.
     /// </summary>
     /// <remarks>
-    /// The walk visits messages in identifier order and owners interleave in it, so ending the sweep at the first
-    /// owner-bound refusal would leave everybody else unembedded until the period rolled over — the harm bounding
-    /// spend per owner exists to prevent.
+    /// The walk visits messages in identifier order and users interleave in it, so ending the sweep at the first
+    /// user-bound refusal would leave everybody else unembedded until the period rolled over — the harm bounding
+    /// spend per user exists to prevent.
     /// </remarks>
     [Fact]
-    public async Task RunAsync_OneOwnerHasSpentTheirShare_KeepsEmbeddingEveryOtherOwnersMail()
+    public async Task RunAsync_OneUserHasSpentTheirShare_KeepsEmbeddingEveryOtherUsersMail()
     {
         // Arrange
-        const long OwnerCeiling = 1_000;
+        const long UserCeiling = 1_000;
 
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, OwnerCeiling);
+        ledger.Seed(PeriodStart, SyntheticMailUser.Another, UserCeiling);
         var ownership = new StubMailOwnership();
         var world = CreateWorld(
             spendBudget: EmbeddingSpendBudget.Create(
                 maxInputCharactersPerPeriod: 1_000_000,
-                maxInputCharactersPerPeriodPerOwner: OwnerCeiling,
+                maxInputCharactersPerPeriodPerUser: UserCeiling,
                 TimeSpan.FromDays(1)),
             ownership: ownership,
             spendLedger: ledger);
 
-        // The two owners' mail interleaves in the order the walk visits it, which is what makes stepping past one of
+        // The two users' mail interleaves in the order the walk visits it, which is what makes stepping past one of
         // them a different thing from ending the run.
         var messages = AddMessagesAwaitingEmbedding(world, count: 4, passagesEach: 1);
-        ownership.Owns(messages[0], SyntheticMailOwner.Another);
-        ownership.Owns(messages[2], SyntheticMailOwner.Another);
+        ownership.Owns(messages[0], SyntheticMailUser.Another);
+        ownership.Owns(messages[2], SyntheticMailUser.Another);
         var backfill = world.CreateBackfill();
 
         // Act
         var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
-        // The spent owner's two messages are stepped past and the other owner's two are embedded between them, so the
+        // The spent user's two messages are stepped past and the other user's two are embedded between them, so the
         // sweep reaches the end of the mail rather than ending at the first refusal.
         Assert.Equal(StoredEmailEmbeddingBackfillOutcome.SweepCompleted, result.Outcome);
         Assert.Equal(EmbeddingSpendBound.None, result.ReachedSpendBound);
         Assert.Equal(2, result.EmbeddedEmailCount);
         Assert.Equal(2, result.EmbeddedChunkCount);
-        Assert.Equal(2, result.OwnerSpendCeilingEmailCount);
+        Assert.Equal(2, result.UserSpendCeilingEmailCount);
 
         // The stepped-over messages keep their outstanding passages, which is what the next sweep selects on.
         Assert.Equal(

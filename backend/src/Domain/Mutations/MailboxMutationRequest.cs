@@ -34,7 +34,7 @@ public sealed record MailboxMutationRequest
 {
     private MailboxMutationRequest(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutation mutation,
         MailboxMutationRequester requester,
@@ -45,7 +45,7 @@ public sealed record MailboxMutationRequest
         AuthoredDeleteEmailDisposition? localDisposition)
     {
         this.StoredEmailId = storedEmailId;
-        this.Owner = owner;
+        this.User = user;
         this.Occurrence = occurrence;
         this.Mutation = mutation;
         this.Requester = requester;
@@ -59,20 +59,20 @@ public sealed record MailboxMutationRequest
     /// <summary>Gets the local email the change is about.</summary>
     public StoredEmailId StoredEmailId { get; }
 
-    /// <summary>Gets the owner whose account the change is about.</summary>
+    /// <summary>Gets the user whose account the change is about.</summary>
     /// <remarks>
     /// Named beside the occurrence rather than derived from it, because an occurrence names an account by the
     /// identifier an operator wrote and the record this request becomes says whose mailbox was changed. Whoever asked
     /// resolved the account through a catalog or read it off the mail's own row, so the answer travels with the request
     /// instead of being looked up where it is written down.
     /// </remarks>
-    public MailOwnerId Owner { get; }
+    public MailUserId User { get; }
 
     /// <summary>Gets the remote occurrence the change was asked for, which is what the IMAP command targets.</summary>
     public EmailOccurrenceId Occurrence { get; }
 
-    /// <summary>Gets the account the change is about, named by its owner and its identifier.</summary>
-    public MailAccountIdentity Account => MailAccountIdentity.Create(this.Owner, this.Occurrence.AccountId);
+    /// <summary>Gets the account the change is about, named by its user and its identifier.</summary>
+    public MailAccountIdentity Account => MailAccountIdentity.Create(this.User, this.Occurrence.AccountId);
 
     /// <summary>Gets the change that was asked for.</summary>
     public MailboxMutation Mutation { get; }
@@ -117,7 +117,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for one email to be moved out of its folder and into another.</summary>
     /// <param name="storedEmailId">The local email being moved.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="destinationPath">The folder to move it into.</param>
@@ -136,13 +136,13 @@ public sealed record MailboxMutationRequest
     /// </remarks>
     public static MailboxMutationRequest Relocate(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         RemoteFolderPath destinationPath,
         AuthoredDeleteEmailDisposition? localDisposition = null) => Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.Relocate,
             requester,
@@ -154,7 +154,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for one email to be removed from the folder it is in.</summary>
     /// <param name="storedEmailId">The local email being removed.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="localDisposition">What becomes of the local copy once the server no longer holds the message.</param>
@@ -164,16 +164,16 @@ public sealed record MailboxMutationRequest
     /// <remarks>
     /// The disposition is a parameter rather than something read where the delete completes, because completion happens
     /// in a later synchronization run that would read whatever the configuration says by then. Taking it here is what
-    /// makes the answer the one that was true when the owner asked.
+    /// makes the answer the one that was true when the user asked.
     /// </remarks>
     public static MailboxMutationRequest Delete(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         AuthoredDeleteEmailDisposition localDisposition) => Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.Delete,
             requester,
@@ -185,7 +185,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for the remote <c>\Seen</c> flag of one email to be set or cleared.</summary>
     /// <param name="storedEmailId">The local email being flagged.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="isSeen"><see langword="true" /> to mark the email read; <see langword="false" /> to mark it unread.</param>
@@ -193,12 +193,12 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     public static MailboxMutationRequest SetSeen(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         bool isSeen) => Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.SetSeen,
             requester,
@@ -210,7 +210,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for a second live occurrence of one email to be put into another folder.</summary>
     /// <param name="storedEmailId">The local email being copied.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="destinationPath">The folder to copy it into.</param>
@@ -218,12 +218,12 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     public static MailboxMutationRequest Copy(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         RemoteFolderPath destinationPath) => Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.Copy,
             requester,
@@ -235,7 +235,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for the remote <c>\Flagged</c> flag of one email to be set or cleared.</summary>
     /// <param name="storedEmailId">The local email being flagged.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="isFlagged"><see langword="true" /> to flag the email; <see langword="false" /> to clear the flag.</param>
@@ -243,12 +243,12 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     public static MailboxMutationRequest SetFlagged(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         bool isFlagged) => Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.SetFlagged,
             requester,
@@ -260,7 +260,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for keywords to be put on one email, beside whatever it already carries.</summary>
     /// <param name="storedEmailId">The local email being labelled.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="keywords">The keywords to put on it, which must name at least one.</param>
@@ -269,7 +269,7 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentException">Thrown when <paramref name="keywords" /> names none.</exception>
     public static MailboxMutationRequest AddKeywords(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         AuthoredMailKeywords keywords)
@@ -280,7 +280,7 @@ public sealed record MailboxMutationRequest
 
         return Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.AddKeywords,
             requester,
@@ -293,7 +293,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for keywords to be taken off one email, leaving the ones it is not asked about.</summary>
     /// <param name="storedEmailId">The local email being relabelled.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="keywords">The keywords to take off it, which must name at least one.</param>
@@ -302,7 +302,7 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentException">Thrown when <paramref name="keywords" /> names none.</exception>
     public static MailboxMutationRequest RemoveKeywords(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         AuthoredMailKeywords keywords)
@@ -313,7 +313,7 @@ public sealed record MailboxMutationRequest
 
         return Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.RemoveKeywords,
             requester,
@@ -326,7 +326,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Asks for one email's keywords to become exactly the set that was named.</summary>
     /// <param name="storedEmailId">The local email being relabelled.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="keywords">The keywords it should end up carrying, which may name none and then clears them all.</param>
@@ -334,7 +334,7 @@ public sealed record MailboxMutationRequest
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public static MailboxMutationRequest SetKeywords(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
         AuthoredMailKeywords keywords)
@@ -345,7 +345,7 @@ public sealed record MailboxMutationRequest
 
         return Create(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             MailboxMutation.SetKeywords,
             requester,
@@ -358,7 +358,7 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Restores the request a durable record was written for.</summary>
     /// <param name="storedEmailId">The local email the change is about.</param>
-    /// <param name="owner">The owner whose account the change is about.</param>
+    /// <param name="user">The user whose account the change is about.</param>
     /// <param name="occurrence">The occurrence the change was asked for.</param>
     /// <param name="mutation">The change that was asked for.</param>
     /// <param name="requester">The authored act that asked.</param>
@@ -378,7 +378,7 @@ public sealed record MailboxMutationRequest
     /// </remarks>
     public static MailboxMutationRequest Create(
         StoredEmailId storedEmailId,
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrence,
         MailboxMutation mutation,
         MailboxMutationRequester requester,
@@ -400,7 +400,7 @@ public sealed record MailboxMutationRequest
 
         return new MailboxMutationRequest(
             storedEmailId,
-            owner,
+            user,
             occurrence,
             mutation,
             requester,

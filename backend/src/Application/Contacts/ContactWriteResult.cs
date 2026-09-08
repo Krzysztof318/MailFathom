@@ -6,7 +6,7 @@ using MailFathom.Domain.Contacts;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>What one write to the contact book produced, and what the caller has to tell its owner.</summary>
+/// <summary>What one write to the contact book produced, and what the caller has to tell its user.</summary>
 /// <remarks>
 /// Every outcome carries the contact it is about where there is one, so a refusal is not merely a name: a writer refused
 /// by an origin is handed the record whose origin refused it, and can therefore say that promoting it is what unlocks

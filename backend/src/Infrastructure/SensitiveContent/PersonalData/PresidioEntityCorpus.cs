@@ -25,7 +25,7 @@ namespace MailFathom.Infrastructure.SensitiveContent.PersonalData;
 /// <para>
 /// What the table deliberately leaves out is as much a decision as what it holds. Company registration, business, and
 /// organisation numbers name a legal entity rather than a person. Vehicle registrations and licence plates are omitted
-/// because the categories this scanner ships are the ones a mailbox owner is harmed by, and a plate matches ordinary
+/// because the categories this scanner ships are the ones a mailbox user is harmed by, and a plate matches ordinary
 /// prose often enough to empty a chunk store on its own. The analyzer's clinical entities — a disease, a medication, a
 /// procedure — are health narrative rather than health identifiers, and hiding them turns a message about a patient into
 /// a message about nothing; <see cref="PersonalDataCategories.HealthIdentifier" /> covers what names a person inside a

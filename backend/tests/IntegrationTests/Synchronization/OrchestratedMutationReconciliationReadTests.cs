@@ -82,7 +82,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var recordId = await CompletedRelocationAsync(
             services,
-            MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.User, occurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Act
@@ -154,18 +154,18 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var seenRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(seenEmailId, SyntheticMailAccount.Owner, seenOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(seenEmailId, SyntheticMailAccount.User, seenOccurrence, Requester, isSeen: true),
             cancellationToken);
         await OpenAsync(
             services,
-            MailboxMutationRequest.Relocate(relocatedEmailId, SyntheticMailAccount.Owner, relocatedOccurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(relocatedEmailId, SyntheticMailAccount.User, relocatedOccurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Opened and left where the tool leaves it, which is the state every change is in until the account's next run
         // issues it. It is written down last, so it also carries the newest stage change of the three.
         await OpenAsync(
             services,
-            MailboxMutationRequest.SetSeen(writtenDownEmailId, SyntheticMailAccount.Owner, writtenDownOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(writtenDownEmailId, SyntheticMailAccount.User, writtenDownOccurrence, Requester, isSeen: true),
             cancellationToken);
 
         // Act
@@ -195,7 +195,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     /// across the answer, or ranked the rows after they had crossed the boundary, is invisible in any arrangement where
     /// every group holds one row. So one occurrence is given more stores of one value than the budget and a second is
     /// given a single older one. A budget spent window-wide returns the six newest and drops the second occurrence's
-    /// record — which would leave that occurrence's flag credited to the mailbox owner and the rule that wrote it
+    /// record — which would leave that occurrence's flag credited to the mailbox user and the rule that wrote it
     /// re-firing on the mail it had just marked.
     /// </summary>
     [Fact]
@@ -223,7 +223,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         // newest-first truncation across the whole answer drops.
         var quietRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(quietEmailId, SyntheticMailAccount.Owner, quietOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(quietEmailId, SyntheticMailAccount.User, quietOccurrence, Requester, isSeen: true),
             cancellationToken);
         var crowdedRecordIds = new List<MailboxMutationRecordId>();
 
@@ -232,7 +232,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
             crowdedRecordIds.Add(await CompletedSeenStoreAsync(
                 services,
                 MailboxMutationRequest.SetSeen(
-                    crowdedEmailId, SyntheticMailAccount.Owner,
+                    crowdedEmailId, SyntheticMailAccount.User,
                     crowdedOccurrence,
                     MailboxMutationRequester.Command($"triage-{call}"),
                     isSeen: call % 2 == 0),

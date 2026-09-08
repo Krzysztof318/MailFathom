@@ -74,8 +74,8 @@ public sealed class ClientEndpointOptionsTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["ClientEndpoint:Enabled"] = "true",
-            ["ClientEndpoint:Authentication:0:Method"] = OwnerCredentialMethod.ApiKey.Name,
-            ["ClientEndpoint:Authentication:1:Method"] = OwnerCredentialMethod.OAuthSubject.Name,
+            ["ClientEndpoint:Authentication:0:Method"] = UserCredentialMethod.ApiKey.Name,
+            ["ClientEndpoint:Authentication:1:Method"] = UserCredentialMethod.OAuthSubject.Name,
             ["ClientEndpoint:Authentication:1:OAuth:Resource"] = "https://mail.example.test:8080/api/client",
             ["ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name"] = "workforce",
             ["ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
@@ -91,7 +91,7 @@ public sealed class ClientEndpointOptionsTests
     }
 
     /// <summary>
-    /// What a caller admitted here may do is recorded beside the owner their credential resolves, so a grant written in
+    /// What a caller admitted here may do is recorded beside the user their credential resolves, so a grant written in
     /// this section is a setting that no longer decides anything. It is refused naming what to provision instead, which
     /// is the only way an operator upgrading learns their configured authority has to be re-established.
     /// </summary>
@@ -128,7 +128,7 @@ public sealed class ClientEndpointOptionsTests
     {
         // Arrange
         var settings = EnabledEndpoint();
-        settings.Authentication.Add(new OwnerFacingAuthenticationOptions());
+        settings.Authentication.Add(new UserFacingAuthenticationOptions());
 
         // Act, Assert
         Assert.Contains(
@@ -596,9 +596,9 @@ public sealed class ClientEndpointOptionsTests
             Issuer = "https://sso.example.test/realms/mailfathom",
         });
 
-        settings.Authentication.Add(new OwnerFacingAuthenticationOptions
+        settings.Authentication.Add(new UserFacingAuthenticationOptions
         {
-            Method = OwnerCredentialMethod.OAuthSubject.Name,
+            Method = UserCredentialMethod.OAuthSubject.Name,
             OAuth = oauth,
         });
 

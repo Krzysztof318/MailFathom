@@ -17,7 +17,7 @@ namespace MailFathom.Application.Accounts;
 /// </para>
 /// <para>
 /// The token is checked against the served accounts before anything is written. A grant stored for an account no
-/// configuration names is a credential for a named mailbox owner that nothing will ever read and nobody knows is there,
+/// configuration names is a credential for a named mailbox user that nothing will ever read and nobody knows is there,
 /// so it is refused rather than kept — which is also what turns a mistyped account identifier into a failure at the
 /// terminal rather than into an account that silently keeps failing to authenticate.
 /// </para>

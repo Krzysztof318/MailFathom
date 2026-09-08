@@ -198,10 +198,10 @@ describe('ConnectionSummary', () => {
         ).toBeDefined();
     });
 
-    it('tells an owner holding no account that, and what would fill it, rather than showing a failure', () => {
+    it('tells a user holding no account that, and what would fill it, rather than showing a failure', () => {
         renderSummary(showing(directory(true, [])));
 
-        expect(screen.getByText(/No mail account is configured for this owner yet\./)).toBeDefined();
+        expect(screen.getByText(/No mail account is configured for this user yet\./)).toBeDefined();
         expect(
             screen.getByText(/Whoever runs this deployment declares which mailboxes it reads for you/),
         ).toBeDefined();

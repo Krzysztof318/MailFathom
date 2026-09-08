@@ -7,7 +7,7 @@ import { type DeploymentAddress } from './session';
 // Where the client's address is decided, and it is here rather than in the screen that collects one because an address
 // is a security boundary rather than a convenience: every request carries the credential on it, so the rule saying
 // which addresses may carry one belongs beside the wire it travels on. Nothing here holds a default, and nothing here
-// composes an address from a literal — a deployment is somewhere only its owner knows.
+// composes an address from a literal — a deployment is somewhere only its user knows.
 
 /** Why an address a person gave was not taken. */
 export type DeploymentEntryRefusal = 'blank' | 'malformed' | 'clearTextRefused';

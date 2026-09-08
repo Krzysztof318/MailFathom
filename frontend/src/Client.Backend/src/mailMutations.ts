@@ -17,7 +17,7 @@ import { send, type ClientResponse, type MailFathomTransport } from './transport
 // marking read, changing the two flags a mail server keeps, and filing a message in another folder. What they share is
 // how an answer is read, because both routes answer one result per message in the vocabulary the surface publishes.
 //
-// Flags and folders are separate routes because they are separate grants: a wrong flag misdescribes mail the owner can
+// Flags and folders are separate routes because they are separate grants: a wrong flag misdescribes mail the user can
 // still find, and a wrong move puts it somewhere else. A caller holding one grant and not the other therefore meets a
 // refusal on the act it may not perform rather than on every act.
 //

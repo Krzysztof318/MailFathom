@@ -67,11 +67,11 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var accountsInOneOrder = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             [MailAccountId.Create("primary"), MailAccountId.Create("secondary")],
             selectedFolders: null);
         var accountsInTheOther = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             [MailAccountId.Create("secondary"), MailAccountId.Create("primary"), MailAccountId.Create("primary")],
             selectedFolders: null);
 
@@ -89,11 +89,11 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var oneAliasCarryingTheSeparator = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             accountIds: null,
             [Folder("ARCHIVE,SENT"), Folder("TRASH")]);
         var theSameNamesSplitDifferently = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             accountIds: null,
             [Folder("ARCHIVE"), Folder("SENT,TRASH")]);
 
@@ -125,10 +125,10 @@ public sealed class EmailTimelineFilterTests
         var variants = new[]
         {
             FilterWith(scope: MailboxScope.Create(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 [MailAccountId.Create("primary")],
                 selectedFolders: null)),
-            FilterWith(scope: MailboxScope.Create(SyntheticMailOwner.Deployment, null, [Folder("ARCHIVE")])),
+            FilterWith(scope: MailboxScope.Create(SyntheticMailUser.Deployment, null, [Folder("ARCHIVE")])),
             FilterWith(senderAddress: "anna@example.test"),
             FilterWith(recipientAddress: "anna@example.test"),
             FilterWith(subjectFragment: "invoice"),

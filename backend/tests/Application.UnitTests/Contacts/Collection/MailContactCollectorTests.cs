@@ -27,7 +27,7 @@ public sealed class MailContactCollectorTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
-    /// <summary>An instance nobody switched collection on for never accumulates a record of who writes to its owner.</summary>
+    /// <summary>An instance nobody switched collection on for never accumulates a record of who writes to its user.</summary>
     [Fact]
     public async Task CollectFromAsync_CollectionSwitchedOff_WritesNothingAndReadsNothing()
     {
@@ -49,7 +49,7 @@ public sealed class MailContactCollectorTests
         Assert.Empty(telemetry.Outcomes);
     }
 
-    /// <summary>The author of a message in an ordinary folder is somebody writing to the owner, which is the whole feature.</summary>
+    /// <summary>The author of a message in an ordinary folder is somebody writing to the user, which is the whole feature.</summary>
     [Fact]
     public async Task CollectFromAsync_AnAuthorWhoHasWrittenOftenEnough_IsRecordedAsCollected()
     {
@@ -125,9 +125,9 @@ public sealed class MailContactCollectorTests
         Assert.Equal(0, tally.QueryCount);
     }
 
-    /// <summary>Somebody the owner wrote to is a correspondent on the first message, so no count stands in for that.</summary>
+    /// <summary>Somebody the user wrote to is a correspondent on the first message, so no count stands in for that.</summary>
     [Fact]
-    public async Task CollectFromAsync_ARecipientOfAMessageTheOwnerSent_IsRecordedWithoutAThreshold()
+    public async Task CollectFromAsync_ARecipientOfAMessageTheUserSent_IsRecordedWithoutAThreshold()
     {
         // Arrange
         var book = new InMemoryContactBookStore();
@@ -137,7 +137,7 @@ public sealed class MailContactCollectorTests
         // Act
         await collector.CollectFromAsync(
             MessageWith(
-                new EmailParticipant(EmailAddressRole.From, AddressOf("owner@example.test", "The Owner")),
+                new EmailParticipant(EmailAddressRole.From, AddressOf("user@example.test", "The User")),
                 new EmailParticipant(EmailAddressRole.To, AddressOf("anna@example.test", "Anna Kowalska"))),
             RunOver(collector, MailFolderSpecialUse.Sent),
             TestContext.Current.CancellationToken);
@@ -227,7 +227,7 @@ public sealed class MailContactCollectorTests
         Assert.Equal([ContactCollectionOutcome.NotCorrespondence], telemetry.Outcomes);
     }
 
-    /// <summary>The refusal to touch what an owner wrote down is the rule the whole origin distinction exists for.</summary>
+    /// <summary>The refusal to touch what a user wrote down is the rule the whole origin distinction exists for.</summary>
     [Fact]
     public async Task CollectFromAsync_AnAddressAnAssertedContactAlreadyHolds_LeavesThatContactExactlyAsItWas()
     {
@@ -267,11 +267,11 @@ public sealed class MailContactCollectorTests
         Assert.Equal([ContactCollectionOutcome.AlreadyHeld], telemetry.Outcomes);
     }
 
-    /// <summary>The owner's list and the structural rule are both held against the address before anything is read.</summary>
+    /// <summary>The user's list and the structural rule are both held against the address before anything is read.</summary>
     [Theory]
     [InlineData("no-reply@example.test")]
     [InlineData("announce@lists.test")]
-    [InlineData("owner@example.test")]
+    [InlineData("user@example.test")]
     public async Task CollectFromAsync_AnAddressThePolicyRefuses_IsNotRecordedAndCostsNoLookup(string address)
     {
         // Arrange
@@ -284,7 +284,7 @@ public sealed class MailContactCollectorTests
             book,
             SettingsCollecting(minimumMessages: 1, ContactCollectionPolicy.Create(
                 [excluded],
-                [AddressOf("owner@example.test", displayName: null)])),
+                [AddressOf("user@example.test", displayName: null)])),
             tally,
             telemetry);
 
@@ -415,7 +415,7 @@ public sealed class MailContactCollectorTests
             new ContactBook(
                 book,
                 book,
-                ContactBookOwnerships.ForTheServedOwner(),
+                ContactBookOwnerships.ForTheServedUser(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
                 new AccessAuthorization(principals)),
@@ -425,7 +425,7 @@ public sealed class MailContactCollectorTests
     }
 
     private static ContactCollectionRun RunOver(MailContactCollector collector, MailFolderSpecialUse? folderRole) =>
-        collector.OpenRun(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary")), folderRole);
+        collector.OpenRun(MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary")), folderRole);
 
     private static ContactCollectionSettings SettingsCollecting(
         int minimumMessages,

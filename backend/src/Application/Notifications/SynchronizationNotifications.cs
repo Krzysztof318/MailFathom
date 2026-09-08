@@ -9,7 +9,7 @@ using MailFathom.Domain.Notifications;
 
 namespace MailFathom.Application.Notifications;
 
-/// <summary>Turns what a synchronization run observed into what its owner is told about it.</summary>
+/// <summary>Turns what a synchronization run observed into what its user is told about it.</summary>
 /// <remarks>
 /// <para>
 /// The run is the only producer wired today, and it produces two things: that mail arrived, and that something about
@@ -28,7 +28,7 @@ namespace MailFathom.Application.Notifications;
 /// through this path.
 /// </para>
 /// <para>
-/// A row that was kept is also announced to whatever the owner has open, because this is the place that already
+/// A row that was kept is also announced to whatever the user has open, because this is the place that already
 /// observes it: the signal carries the row's own already-derived text and the count that follows from writing it, and a
 /// client draws the bell from that rather than from the next interval. A row the deduplication rule folded into a
 /// standing one is not announced, for the same reason it is not written.
@@ -169,7 +169,7 @@ public sealed class SynchronizationNotifications
 
         var notification = Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(occurredAt)),
-            account.Owner,
+            account.User,
             kind,
             title,
             body,
@@ -187,7 +187,7 @@ public sealed class SynchronizationNotifications
 
         // The count is read only where a row was actually written and something is listening, so a deployment serving
         // no client and a run that changed nothing both pay nothing for this.
-        var unreadCount = await this.store.CountUnreadAsync(account.Owner, cancellationToken);
+        var unreadCount = await this.store.CountUnreadAsync(account.User, cancellationToken);
 
         this.signals.Publish(ClientSignal.NotificationRaised(notification, unreadCount));
 

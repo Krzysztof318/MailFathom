@@ -44,7 +44,7 @@ public interface IEmailAttachmentPassageReader
     /// An empty answer covers every way a message can have no further attachment passage — none was ever read, every
     /// one of them was refused, the message carries no attachment at all, or the window has reached the end — because
     /// none of those is a state a caller acts on differently. What the reason was is on the attachment's own row, which
-    /// is where an owner asking why is answered.
+    /// is where a user asking why is answered.
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<AttachmentPassage>> ReadAttachmentPassagesAsync(

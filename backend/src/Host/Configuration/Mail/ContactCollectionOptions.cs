@@ -10,13 +10,13 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>Configures whether one account records the people it corresponds with, and under what bounds.</summary>
 /// <remarks>
 /// <para>
-/// Off unless an owner switched it on, and switched on per account. Collection builds a record of who writes to its
-/// owner — derived personal data about people who never dealt with MailFathom — so an instance nobody asked never
+/// Off unless a user switched it on, and switched on per account. Collection builds a record of who writes to its
+/// user — derived personal data about people who never dealt with MailFathom — so an instance nobody asked never
 /// accumulates one, and a deployment that reads a work mailbox and a personal one decides separately for each.
 /// </para>
 /// <para>
 /// Everything else here narrows what a switched-on account records. The two numbers bound who is written down and how
-/// fast, and the exclusions are the owner's own list on top of the automated senders, role mailboxes, and mailing lists
+/// fast, and the exclusions are the user's own list on top of the automated senders, role mailboxes, and mailing lists
 /// every deployment excludes without being asked.
 /// </para>
 /// </remarks>
@@ -45,7 +45,7 @@ internal sealed class ContactCollectionOptions
     /// The default of two is the difference between a book of correspondents and a list of everyone who has ever mailed
     /// the account: one message from a stranger is not correspondence, and a second is. A value of one records every
     /// admitted sender on first sight, which is a deliberate choice rather than the absence of one. It bounds only the
-    /// addresses that wrote to the owner — an address the owner themselves wrote to is recorded at once.
+    /// addresses that wrote to the user — an address the user themselves wrote to is recorded at once.
     /// </remarks>
     public int MinimumMessagesFromSender { get; set; } = 2;
 
@@ -60,9 +60,9 @@ internal sealed class ContactCollectionOptions
 
     /// <summary>Gets or sets the addresses and domains this account never records a contact from.</summary>
     /// <remarks>
-    /// The owner's half of the bounds. The structural half — role mailboxes, no-reply names, list administration, and a
+    /// The user's half of the bounds. The structural half — role mailboxes, no-reply names, list administration, and a
     /// message a mailing list or an automatic responder stamped as its own — needs no entry here and cannot be switched
-    /// off, because it names what nobody corresponds with rather than what one owner would rather not keep.
+    /// off, because it names what nobody corresponds with rather than what one user would rather not keep.
     /// </remarks>
     public List<ContactCollectionExclusionOptions> Exclusions { get; set; } = [];
 

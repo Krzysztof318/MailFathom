@@ -10,11 +10,11 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 
-/// <summary>Declares the messages an owner asked to have sent again, and the repetitions they named.</summary>
+/// <summary>Declares the messages a user asked to have sent again, and the repetitions they named.</summary>
 /// <remarks>
 /// <para>
 /// A table rather than a section of the deployment's configuration, because a declaration is state: it is made by
-/// the mailbox's owner out of a message they wrote, and it is stopped by them. The identity it is refused a
+/// the mailbox's user out of a message they wrote, and it is stopped by them. The identity it is refused a
 /// duplicate of is the sending account and the authoring act, exactly as an outgoing record's is and for the same
 /// reason — a retried command must read back what it already declared rather than double what a mailbox sends.
 /// </para>
@@ -52,7 +52,7 @@ internal sealed class RecurringSendConfiguration : IEntityTypeConfiguration<Recu
 
         entity.HasIndex(declaration => new
         {
-            declaration.OwnerId,
+            declaration.UserId,
             declaration.MailboxAccountId,
             declaration.RequesterOrigin,
             declaration.RequesterIdentity,

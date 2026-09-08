@@ -279,7 +279,7 @@ public sealed class AccountScopedMailFoldersTests
     private static IQueryable<StoredEmailEntity> Emails(params (string AccountId, string Alias)[] folders) => folders
         .Select(folder => new StoredEmailEntity
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = folder.AccountId,
             MailFolder = Folder(folder.AccountId, folder.Alias),
         })
@@ -287,10 +287,10 @@ public sealed class AccountScopedMailFoldersTests
 
     private static MailFolderEntity Folder(string accountId, string alias) => new()
     {
-        OwnerId = SyntheticMailOwner.Deployment.Value,
+        UserId = SyntheticMailUser.Deployment.Value,
         MailboxAccountId = accountId,
         Alias = alias,
         RemotePath = alias,
-        MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = accountId },
+        MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = accountId },
     };
 }

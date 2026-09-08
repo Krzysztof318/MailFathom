@@ -7,11 +7,11 @@ using System.Globalization;
 
 namespace MailFathom.Host.Configuration.Access;
 
-/// <summary>States that an owner-facing endpoint accepts a username and password, and how often one may be tried.</summary>
+/// <summary>States that a user-facing endpoint accepts a username and password, and how often one may be tried.</summary>
 /// <remarks>
 /// <para>
 /// The block is optional on the entry that names the method, which is the whole of what it is for: it carries no
-/// credential, because a username and a password are records of one owner's own, provisioned through the administrative
+/// credential, because a username and a password are records of one user's own, provisioned through the administrative
 /// surface and stored in relational columns. There is nothing for an operator to write here beyond the bound, and
 /// nothing for a deployment file to leak.
 /// </para>
@@ -47,15 +47,15 @@ internal sealed class BasicAuthenticationOptions
     /// <para>
     /// <strong>It counts wrong passwords rather than requests.</strong> A right password costs the allowance nothing
     /// however often it is presented, which is what Basic makes a client do, having no session — and nothing here caps
-    /// how many requests an owner may have in flight, which is a separate bound the limiter states for itself.
+    /// how many requests a user may have in flight, which is a separate bound the limiter states for itself.
     /// </para>
     /// <para>
     /// <strong>A wrong password holds its share for a minute and then gives it back.</strong> So an axis that has spent
     /// its allowance waits the window out rather than being locked out until an operator lifts something. That window is
-    /// the cost of the per-username axis being shared with the owner it protects: somebody who knows a username can
-    /// spend it on wrong passwords and have that owner's correct password refused until the minute elapses. Nothing can
+    /// the cost of the per-username axis being shared with the user it protects: somebody who knows a username can
+    /// spend it on wrong passwords and have that user's correct password refused until the minute elapses. Nothing can
     /// avoid that while the answer is unknowable before the derivation — what a lower number here buys in guessing cost
-    /// it pays for in how cheaply a stranger can hold one owner out, and what the per-source axis buys is catching the
+    /// it pays for in how cheaply a stranger can hold one user out, and what the per-source axis buys is catching the
     /// caller doing it wherever this deployment can tell one caller from another.
     /// </para>
     /// </remarks>

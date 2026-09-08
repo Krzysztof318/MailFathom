@@ -690,7 +690,7 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
     }
 
-    /// <summary>The way out for an owner who changed their mind, so what it removed is stated in both figures.</summary>
+    /// <summary>The way out for a user who changed their mind, so what it removed is stated in both figures.</summary>
     [Fact]
     public async Task DeleteCollected_WithTheFlag_ErasesWhatTheDeploymentCollectedWithoutAsking()
     {
@@ -779,7 +779,7 @@ public sealed class ContactCommandTests : IDisposable
     }
 
     /// <summary>
-    /// The export is one document on standard output, so redirecting the command produces the file an owner hands to
+    /// The export is one document on standard output, so redirecting the command produces the file a user hands to
     /// the person who asked, with nothing of the command's own mixed into it.
     /// </summary>
     [Fact]

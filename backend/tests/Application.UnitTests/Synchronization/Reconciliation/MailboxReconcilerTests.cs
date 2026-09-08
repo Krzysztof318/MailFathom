@@ -22,7 +22,7 @@ namespace MailFathom.Application.UnitTests.Synchronization.Reconciliation;
 public sealed class MailboxReconcilerTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("primary"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -126,7 +126,7 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(RunInstant, store.RowOf(11).ObservedAt);
     }
 
-    /// <summary>A delete the owner authored is disposed of by its own record rather than by the setting for somebody else's deletion.</summary>
+    /// <summary>A delete the user authored is disposed of by its own record rather than by the setting for somebody else's deletion.</summary>
     /// <remarks>
     /// The account erases what its server loses, which is the arrangement that makes the two settings distinguishable:
     /// every value below has to survive that, because reading the account's setting instead would destroy the local
@@ -405,7 +405,7 @@ public sealed class MailboxReconcilerTests
         Assert.True(store.RowOf(10).Snapshot!.IsSeen);
     }
 
-    /// <summary>A star standing where MailFathom's own store put it is that store completing, not the owner starring the message.</summary>
+    /// <summary>A star standing where MailFathom's own store put it is that store completing, not the user starring the message.</summary>
     [Fact]
     public async Task ReconcileAsync_FlaggedStateMailFathomSetItself_WithholdsTheChange()
     {
@@ -444,9 +444,9 @@ public sealed class MailboxReconcilerTests
         Assert.True(store.RowOf(10).Snapshot!.IsFlagged);
     }
 
-    /// <summary>Starring mail by hand is the mailbox owner's act, and it stays a change to react to.</summary>
+    /// <summary>Starring mail by hand is the mailbox user's act, and it stays a change to react to.</summary>
     [Fact]
-    public async Task ReconcileAsync_OwnerStarredMailThemselves_RaisesTheChange()
+    public async Task ReconcileAsync_UserStarredMailThemselves_RaisesTheChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
@@ -474,7 +474,7 @@ public sealed class MailboxReconcilerTests
 
     /// <summary>Keywords standing as MailFathom's own addition asked for are that addition completing.</summary>
     /// <remarks>
-    /// The occurrence already carried a label of the owner's, so the set the addition would have left is the earlier
+    /// The occurrence already carried a label of the user's, so the set the addition would have left is the earlier
     /// reading plus <c>$Todo</c> rather than whatever the server now reports. That is what makes this test able to fail:
     /// an attribution computing the expected set from the observed keywords would suppress this whatever the record
     /// asked for.
@@ -517,15 +517,15 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(RemoteEmailKeywords.Create(["$Invoice", "$Todo"]), store.RowOf(10).Snapshot!.Keywords);
     }
 
-    /// <summary>An addition accounts for the set it would have left and never for a set the owner also took a label off.</summary>
+    /// <summary>An addition accounts for the set it would have left and never for a set the user also took a label off.</summary>
     /// <remarks>
-    /// This is the direction the attribution has to fail in. The record asked for <c>$Todo</c> and the owner dropped
+    /// This is the direction the attribution has to fail in. The record asked for <c>$Todo</c> and the user dropped
     /// <c>$Invoice</c> in the same interval, so what the server now reports is nobody's single act; crediting the record
-    /// with it would withhold the owner's removal from rule evaluation as MailFathom's own doing, and nothing later
+    /// with it would withhold the user's removal from rule evaluation as MailFathom's own doing, and nothing later
     /// would report that it had.
     /// </remarks>
     [Fact]
-    public async Task ReconcileAsync_KeywordsMailFathomAddedBesideALabelTheOwnerRemoved_RaisesTheChange()
+    public async Task ReconcileAsync_KeywordsMailFathomAddedBesideALabelTheUserRemoved_RaisesTheChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true, isFlagged: false, "$Invoice"));
@@ -555,9 +555,9 @@ public sealed class MailboxReconcilerTests
         Assert.Empty(result.SuppressedChanges);
     }
 
-    /// <summary>Labelling mail in a client is the mailbox owner's act, and it stays a change to react to.</summary>
+    /// <summary>Labelling mail in a client is the mailbox user's act, and it stays a change to react to.</summary>
     [Fact]
-    public async Task ReconcileAsync_OwnerLabelledMailThemselves_RaisesTheChange()
+    public async Task ReconcileAsync_UserLabelledMailThemselves_RaisesTheChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true, isFlagged: false, "$Invoice"));
@@ -624,7 +624,7 @@ public sealed class MailboxReconcilerTests
     /// <remarks>
     /// Every record that could account for a value was staged after the reading the value moved from, so a bound taken
     /// from the latest reading in the window would withhold the records explaining every occurrence read before it —
-    /// and those changes would then be attributed to the mailbox owner and reacted to as their act. One occurrence
+    /// and those changes would then be attributed to the mailbox user and reacted to as their act. One occurrence
     /// cannot say which end of the window the bound came from, so this is the case that does.
     /// </remarks>
     [Fact]
@@ -677,7 +677,7 @@ public sealed class MailboxReconcilerTests
     /// <remarks>
     /// The attribution read is capped, and where that cap is spent decides what a truncation costs. Spent across the
     /// window, a message an agent marked and unmarked repeatedly takes every slot and the single record explaining the
-    /// message next to it is dropped — so that message's <c>\Seen</c> flag is credited to the mailbox owner and the
+    /// message next to it is dropped — so that message's <c>\Seen</c> flag is credited to the mailbox user and the
     /// rule that set it re-fires on the mail it just acted on. Spent within each occurrence, neither can reach the
     /// other's room. The pile is deliberately larger than the whole window's worth, and the record it would have
     /// displaced is the oldest of the lot, which is the one a newest-first truncation drops first.
@@ -800,9 +800,9 @@ public sealed class MailboxReconcilerTests
                 && suppressed.Kind == MailboxChangeKind.SeenStateChanged);
     }
 
-    /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
+    /// <summary>Marking mail read by hand is the mailbox user's act, and it stays a change to react to.</summary>
     [Fact]
-    public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
+    public async Task ReconcileAsync_UserMarkedMailReadThemselves_RaisesTheChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
@@ -827,13 +827,13 @@ public sealed class MailboxReconcilerTests
         Assert.Empty(result.SuppressedChanges);
     }
 
-    /// <summary>The suppression is scoped to the one change the record describes, so the owner setting that flag again later is their act.</summary>
+    /// <summary>The suppression is scoped to the one change the record describes, so the user setting that flag again later is their act.</summary>
     /// <remarks>
     /// This is the case a record that answered forever would get wrong, and it is silent when it happens: a rule
     /// conditioned on read mail would simply never fire again for a message MailFathom had once marked read.
     /// </remarks>
     [Fact]
-    public async Task ReconcileAsync_OwnerRestoresTheFlagMailFathomSetEarlier_RaisesItAsTheirOwnChange()
+    public async Task ReconcileAsync_UserRestoresTheFlagMailFathomSetEarlier_RaisesItAsTheirOwnChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
@@ -854,18 +854,18 @@ public sealed class MailboxReconcilerTests
             reconciledThroughModSeq: null,
             CancellationToken.None);
 
-        await using var afterOwnerCleared = CreateSessionReportingSeenState(isSeen: false, 10);
-        var clearedByOwner = await reconciler.ReconcileAsync(
-            mailboxSession: afterOwnerCleared,
+        await using var afterUserCleared = CreateSessionReportingSeenState(isSeen: false, 10);
+        var clearedByUser = await reconciler.ReconcileAsync(
+            mailboxSession: afterUserCleared,
             Account,
             InboxFolder,
             SelectedUidValidity,
             reconciledThroughModSeq: null,
             CancellationToken.None);
 
-        await using var afterOwnerSetItAgain = CreateSessionReportingSeenState(isSeen: true, 10);
-        var setAgainByOwner = await reconciler.ReconcileAsync(
-            mailboxSession: afterOwnerSetItAgain,
+        await using var afterUserSetItAgain = CreateSessionReportingSeenState(isSeen: true, 10);
+        var setAgainByUser = await reconciler.ReconcileAsync(
+            mailboxSession: afterUserSetItAgain,
             Account,
             InboxFolder,
             SelectedUidValidity,
@@ -875,21 +875,21 @@ public sealed class MailboxReconcilerTests
         // Assert
         Assert.Single(ownChange.SuppressedChanges);
         Assert.Equal(0, ownChange.SeenStateChangedEmailCount);
-        Assert.Empty(clearedByOwner.SuppressedChanges);
-        Assert.Equal(1, clearedByOwner.SeenStateChangedEmailCount);
-        Assert.Empty(setAgainByOwner.SuppressedChanges);
-        Assert.Equal(1, setAgainByOwner.SeenStateChangedEmailCount);
+        Assert.Empty(clearedByUser.SuppressedChanges);
+        Assert.Equal(1, clearedByUser.SeenStateChangedEmailCount);
+        Assert.Empty(setAgainByUser.SuppressedChanges);
+        Assert.Equal(1, setAgainByUser.SeenStateChangedEmailCount);
     }
 
     /// <summary>A record stops answering once the occurrence has been read, whether or not that reading found the flag where it put it.</summary>
     /// <remarks>
-    /// This is the case that decides where the expiry is recorded. The owner reverts the flag before any window sees it,
+    /// This is the case that decides where the expiry is recorded. The user reverts the flag before any window sees it,
     /// so the first window finds nothing changed and there is no matching change to mark a record spent by — and if the
-    /// expiry lived on the record, the owner marking the message read weeks later would be silently withheld. Anchoring
+    /// expiry lived on the record, the user marking the message read weeks later would be silently withheld. Anchoring
     /// it to the occurrence's own last observation is what makes that window count.
     /// </remarks>
     [Fact]
-    public async Task ReconcileAsync_OwnerRevertedTheFlagBeforeAnyWindowSawIt_StillRaisesTheirLaterChange()
+    public async Task ReconcileAsync_UserRevertedTheFlagBeforeAnyWindowSawIt_StillRaisesTheirLaterChange()
     {
         // Arrange
         var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
@@ -901,18 +901,18 @@ public sealed class MailboxReconcilerTests
             mutationStore: mutationStore);
 
         // Act
-        await using var afterTheOwnerReverted = CreateSessionReportingSeenState(isSeen: false, 10);
+        await using var afterTheUserReverted = CreateSessionReportingSeenState(isSeen: false, 10);
         var sawNothingChanged = await reconciler.ReconcileAsync(
-            mailboxSession: afterTheOwnerReverted,
+            mailboxSession: afterTheUserReverted,
             Account,
             InboxFolder,
             SelectedUidValidity,
             reconciledThroughModSeq: null,
             CancellationToken.None);
 
-        await using var afterTheOwnerMarkedItRead = CreateSessionReportingSeenState(isSeen: true, 10);
-        var ownerMarkedItRead = await reconciler.ReconcileAsync(
-            mailboxSession: afterTheOwnerMarkedItRead,
+        await using var afterTheUserMarkedItRead = CreateSessionReportingSeenState(isSeen: true, 10);
+        var userMarkedItRead = await reconciler.ReconcileAsync(
+            mailboxSession: afterTheUserMarkedItRead,
             Account,
             InboxFolder,
             SelectedUidValidity,
@@ -922,8 +922,8 @@ public sealed class MailboxReconcilerTests
         // Assert
         Assert.Equal(0, sawNothingChanged.SeenStateChangedEmailCount);
         Assert.Empty(sawNothingChanged.SuppressedChanges);
-        Assert.Equal(1, ownerMarkedItRead.SeenStateChangedEmailCount);
-        Assert.Empty(ownerMarkedItRead.SuppressedChanges);
+        Assert.Equal(1, userMarkedItRead.SeenStateChangedEmailCount);
+        Assert.Empty(userMarkedItRead.SuppressedChanges);
     }
 
     /// <summary>A record whose <c>STORE</c> never went out accounts for nothing, because the flag standing there is somebody else's doing.</summary>
@@ -1644,13 +1644,13 @@ public sealed class MailboxReconcilerTests
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(opened)),
             Request = isRelocation
                 ? MailboxMutationRequest.Relocate(
-                    storedEmailId, SyntheticMailOwner.Deployment,
+                    storedEmailId, SyntheticMailUser.Deployment,
                     occurrence,
                     requester,
                     RemoteFolderPath.Create("Archive", '/'),
                     relocationDisposition)
                 : MailboxMutationRequest.Delete(
-                    storedEmailId, SyntheticMailOwner.Deployment,
+                    storedEmailId, SyntheticMailUser.Deployment,
                     occurrence,
                     requester,
                     localDisposition),
@@ -1684,7 +1684,7 @@ public sealed class MailboxReconcilerTests
         {
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(staged)),
             Request = MailboxMutationRequest.SetSeen(
-                storedEmailId, SyntheticMailOwner.Deployment,
+                storedEmailId, SyntheticMailUser.Deployment,
                 occurrence,
                 MailboxMutationRequester.Rule("mark-newsletters-read", "1"),
                 isSeen),
@@ -1710,7 +1710,7 @@ public sealed class MailboxReconcilerTests
         MutationSettingSeen(storedEmailId, uid, isSeen: false, stagedAt: stagedAt) with
         {
             Request = MailboxMutationRequest.SetFlagged(
-                storedEmailId, SyntheticMailOwner.Deployment,
+                storedEmailId, SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
                 MailboxMutationRequester.Command("triage-1"),
                 isFlagged),
@@ -1724,7 +1724,7 @@ public sealed class MailboxReconcilerTests
         MutationSettingSeen(storedEmailId, uid, isSeen: false) with
         {
             Request = MailboxMutationRequest.AddKeywords(
-                storedEmailId, SyntheticMailOwner.Deployment,
+                storedEmailId, SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
                 MailboxMutationRequester.Command("triage-1"),
                 AuthoredMailKeywords.Create(keywords)),

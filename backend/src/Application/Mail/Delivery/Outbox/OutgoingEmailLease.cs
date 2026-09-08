@@ -14,7 +14,7 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// </para>
 /// <para>
 /// Two things keep that safe rather than merely likely, and they are the same two the durable job queue rests on. Every
-/// write against a leased record is conditional on the owner still matching, so a late writer whose lease was reclaimed
+/// write against a leased record is conditional on the user still matching, so a late writer whose lease was reclaimed
 /// writes nothing. And an attempt runs under a timeout strictly shorter than the lease it holds, so it is cancelled
 /// before its lease can expire underneath it.
 /// </para>
@@ -24,14 +24,14 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// by an expiry — the expiry is what makes work recoverable, and that one record is precisely the work that is not.
 /// </para>
 /// <para>
-/// The owner is a generated identity for the attempt rather than for the process, because two replicas of one
+/// The user is a generated identity for the attempt rather than for the process, because two replicas of one
 /// deployment are the case the compare-and-set exists for and neither can see what the other allocated. It is not a
 /// security token, so the ordinary UUID generator is what it needs.
 /// </para>
 /// </remarks>
-/// <param name="Owner">The attempt the lease is held by.</param>
+/// <param name="User">The attempt the lease is held by.</param>
 /// <param name="ExpiresAt">The instant after which the record is claimable again whatever the holder is doing.</param>
-public sealed record OutgoingEmailLease(Guid Owner, DateTimeOffset ExpiresAt)
+public sealed record OutgoingEmailLease(Guid User, DateTimeOffset ExpiresAt)
 {
     /// <summary>Reports whether the lease has run out by a given instant.</summary>
     /// <param name="instant">The instant to judge the lease at.</param>

@@ -48,7 +48,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var reader = new ContactBookReader(
             directory,
-            ContactBookOwnerships.ForTheServedOwner(),
+            ContactBookOwnerships.ForTheServedUser(),
             AuthorizationOf(AuthorizedPrincipal.Process));
 
         // Act, Assert
@@ -64,7 +64,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var reader = new ContactBookReader(
             directory,
-            ContactBookOwnerships.ForTheServedOwner(),
+            ContactBookOwnerships.ForTheServedUser(),
             AuthorizationOf(principal: null));
 
         // Act, Assert
@@ -241,7 +241,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var address = Address("anna@example.test");
         var contact = ContactOf("Anna Kowalska", "anna@example.test");
-        directory.FindByAddressAsync(Arg.Any<MailOwnerId>(), address, Arg.Any<CancellationToken>()).Returns(contact);
+        directory.FindByAddressAsync(Arg.Any<MailUserId>(), address, Arg.Any<CancellationToken>()).Returns(contact);
 
         var reader = ReaderOver(directory);
 
@@ -269,7 +269,7 @@ public sealed class ContactBookReaderTests
 
         return new ContactBookReader(
             directory,
-            ContactBookOwnerships.ForTheServedOwner(),
+            ContactBookOwnerships.ForTheServedUser(),
             AuthorizationOf(AuthorizedPrincipal.Caller(
                 "a-caller",
                 granted.Length == 0 ? [MailFathomPermission.MailContactsRead] : granted)));
@@ -278,7 +278,7 @@ public sealed class ContactBookReaderTests
     private static IContactDirectory DirectoryAnswering(ContactPage page)
     {
         var directory = Substitute.For<IContactDirectory>();
-        directory.ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
+        directory.ReadPageAsync(Arg.Any<MailUserId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
 
         return directory;
     }

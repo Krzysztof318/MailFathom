@@ -376,7 +376,7 @@ public sealed class BoundedAttachmentTextExtractorTests
 
     /// <summary>
     /// A package declaring one of these formats and holding none of the parts it is read from did not parse, and
-    /// reporting it as a successful read of nothing tells an owner their document was searched and found empty.
+    /// reporting it as a successful read of nothing tells a user their document was searched and found empty.
     /// </summary>
     [Theory]
     [InlineData("application/vnd.openxmlformats-officedocument.presentationml.presentation", "empty.pptx")]
@@ -893,7 +893,7 @@ public sealed class BoundedAttachmentTextExtractorTests
 
     /// <summary>
     /// A password-protected contract is not a failure to read and not an empty document. It is one of the reasons a
-    /// mailbox owner is owed, because it is the one they can act on.
+    /// mailbox user is owed, because it is the one they can act on.
     /// </summary>
     [Fact]
     public async Task ExtractTextAsync_APdfThisSystemHoldsNoPasswordFor_ReportsItAsEncrypted()
@@ -980,7 +980,7 @@ public sealed class BoundedAttachmentTextExtractorTests
     }
 
     /// <summary>
-    /// A password-protected Office package is an OLE compound file rather than an archive, and telling an owner their
+    /// A password-protected Office package is an OLE compound file rather than an archive, and telling a user their
     /// document is broken when what it is is locked sends them looking for a defect that is not there.
     /// </summary>
     [Theory]

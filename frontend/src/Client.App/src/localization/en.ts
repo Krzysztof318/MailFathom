@@ -525,7 +525,7 @@ export const en = {
     'connection.current': 'Every account is up to date.',
     'connection.behind': 'Some accounts are behind.',
     'connection.failing': 'Some accounts stopped synchronizing.',
-    'connection.noAccounts': 'No mail account is configured for this owner yet.',
+    'connection.noAccounts': 'No mail account is configured for this user yet.',
     'connection.retry': 'Try again',
     'connection.connecting': 'Reaching your deployment…',
     'connection.reconnecting': 'Your deployment did not answer. Trying again — attempt {attempt} of {total}.',

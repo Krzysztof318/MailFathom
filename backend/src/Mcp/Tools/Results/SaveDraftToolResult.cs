@@ -12,7 +12,7 @@ namespace MailFathom.Mcp.Tools.Results;
 /// <remarks>
 /// <para>
 /// It answers the two tools that write a draft, because what each of them leaves is the same thing: one draft, at one
-/// version, that the owner's folder either shows yet or does not. A caller that saved and then updated reads the same
+/// version, that the user's folder either shows yet or does not. A caller that saved and then updated reads the same
 /// properties and sees the version move, which is what tells it the edit replaced the message rather than adding a
 /// second one.
 /// </para>
@@ -33,8 +33,8 @@ internal sealed record SaveDraftToolResult
     [Description("The configured MailFathom account identifier the draft belongs to, and the one it would be sent as. Its Delivery configuration decides the From address, which a caller never supplies.")]
     public required string AccountId { get; init; }
 
-    /// <summary>Gets whether the owner's drafts folder shows this version of the draft.</summary>
-    [Description("Whether the owner's own drafts folder shows this version of the draft yet. The draft is held here either way and can be sent either way.")]
+    /// <summary>Gets whether the user's drafts folder shows this version of the draft.</summary>
+    [Description("Whether the user's own drafts folder shows this version of the draft yet. The draft is held here either way and can be sent either way.")]
     public required SavedDraftState State { get; init; }
 
     /// <summary>Gets which version of the draft the stored message is.</summary>

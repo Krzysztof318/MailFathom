@@ -229,7 +229,7 @@ and is enabled under **Settings → Mail → Forwarding and IMAP**.
 stopped working for these accounts on 16 September 2024 and that devices using POP or IMAP can no longer use app
 passwords. So an Outlook.com mailbox takes the `OAuth` block, registered through Microsoft Entra exactly as a Microsoft
 365 mailbox is; [mailbox OAuth § Microsoft — Entra](../operations/mailbox-oauth.md#microsoft--entra) is the
-registration. The delegated permission is the one a personal mailbox owner can consent to themselves.
+registration. The delegated permission is the one a personal mailbox user can consent to themselves.
 
 Sources: [POP, IMAP, and SMTP settings for Outlook.com](https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040),
 [Modern authentication methods now needed to continue syncing Outlook email in non-Microsoft email apps](https://support.microsoft.com/en-us/support/known-issues/modern-authentication-methods-now-needed-to-continue-syncing-outlook-email-in-non-microsoft-email-ap).
@@ -245,7 +245,7 @@ same change prevents the use of app passwords. OAuth 2.0 is the only way in, and
 developers is to keep the protocol and implement it.
 
 **Both grants are available here, and they are different mailboxes' answers.** A delegated registration carrying
-`IMAP.AccessAsUser.All` acts for one mailbox owner and needs a refresh token obtained once; an app-only registration
+`IMAP.AccessAsUser.All` acts for one mailbox user and needs a refresh token obtained once; an app-only registration
 carrying `IMAP.AccessAsApp` acts for the application, needs tenant administrator consent, and uses the
 `client_credentials` grant with no sign-in at all. [Mailbox OAuth § the two grants](../operations/mailbox-oauth.md#the-two-grants)
 states which applies, and [§ Microsoft — Entra](../operations/mailbox-oauth.md#microsoft--entra) is the registration for
@@ -458,9 +458,9 @@ where the setting lives.
 
 ---
 
-**Trademarks.** The product, service, and company names on this page are their owners' trademarks and are used solely to
+**Trademarks.** The product, service, and company names on this page are their users' trademarks and are used solely to
 identify the mail services a MailFathom deployment can be configured against. Their use implies no affiliation with,
-sponsorship by, endorsement by, or certification from those owners, in either direction, and this page reproduces no
+sponsorship by, endorsement by, or certification from those users, in either direction, and this page reproduces no
 third-party logo.
 
 Gmail and Google Workspace are trademarks of Google LLC. Microsoft, Outlook, Microsoft 365, Exchange Online, and
@@ -470,4 +470,4 @@ companies. Proton and Proton Mail are trademarks of Proton AG. Fastmail is a tra
 Ltd. Zoho and Zoho Mail are
 trademarks of Zoho Corporation Private Limited and/or its affiliates.
 [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
-records the per-owner review this statement comes out of, and why it sits here rather than in `NOTICE`.
+records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

@@ -20,14 +20,14 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// exercised the port.
 /// </para>
 /// <para>
-/// It is also where a job's turn is decided, which is the whole of what makes the claim fair across owners. Deciding it
+/// It is also where a job's turn is decided, which is the whole of what makes the claim fair across users. Deciding it
 /// here rather than in the claim is what keeps the claim one indexed statement: the order is a column by the time the
 /// queue is drained, so no worker has to rank a backlog to find out whose turn it is. The cost is one read of where the
-/// owner's waiting work has reached, on the enqueue rather than on the hot path.
+/// user's waiting work has reached, on the enqueue rather than on the hot path.
 /// </para>
 /// <para>
-/// Two enqueues for one owner arriving together both read the same latest turn and both take the one after it, so an
-/// owner occasionally holds two jobs at a single turn. That is the shape the queue-depth bound already has and is
+/// Two enqueues for one user arriving together both read the same latest turn and both take the one after it, so a
+/// user occasionally holds two jobs at a single turn. That is the shape the queue-depth bound already has and is
 /// answered the same way: what fairness owes is a limit on how far a backlog may run ahead of everybody else rather
 /// than an invariant, and a turn shared by as many jobs as raced for it costs nothing that serializing every enqueue
 /// behind a lock would not cost far more of. The identifier breaks the tie, so the order stays total and stays the
@@ -41,19 +41,19 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// </remarks>
 internal static class JobEnqueueStatement
 {
-    /// <summary>How far past its owner's latest waiting turn a newly enqueued job is placed.</summary>
+    /// <summary>How far past its user's latest waiting turn a newly enqueued job is placed.</summary>
     /// <remarks>
     /// <para>
-    /// The rate at which one owner may claim ground ahead of the clock: a second of turn per job. An owner enqueuing
-    /// nothing sits on the instant its work becomes available, so a deployment serving one owner claims in the order it
-    /// always did, and an owner enqueuing a thousand jobs at once holds turns spread over the next thousand seconds
-    /// rather than a thousand turns at the same instant. That is what lets another owner's due job, whose turn is the
+    /// The rate at which one user may claim ground ahead of the clock: a second of turn per job. A user enqueuing
+    /// nothing sits on the instant its work becomes available, so a deployment serving one user claims in the order it
+    /// always did, and a user enqueuing a thousand jobs at once holds turns spread over the next thousand seconds
+    /// rather than a thousand turns at the same instant. That is what lets another user's due job, whose turn is the
     /// instant it arrived, overtake the part of the backlog whose turn has not come.
     /// </para>
     /// <para>
     /// A second rather than a tuned figure, because what the spacing has to be smaller than is how fast the deployment
-    /// drains one owner's work, and every deployment that keeps up at all drains more than one job per second per
-    /// active owner. Larger would interleave more coarsely without bounding anything further; smaller would let a
+    /// drains one user's work, and every deployment that keeps up at all drains more than one job per second per
+    /// active user. Larger would interleave more coarsely without bounding anything further; smaller would let a
     /// backlog claim more of the clock than the workers can serve, which is the FIFO behaviour this replaces.
     /// </para>
     /// </remarks>
@@ -83,7 +83,7 @@ internal static class JobEnqueueStatement
 
         var jobTypeName = request.JobType.Name;
         var idempotencyKey = request.Key.Value;
-        var ownerId = request.Account?.Owner.Value;
+        var userId = request.Account?.User.Value;
         var accountId = request.Account?.Id.Value;
         var availableAt = request.AvailableAt ?? enqueuedAt;
         var pending = nameof(JobState.Pending);
@@ -92,30 +92,30 @@ internal static class JobEnqueueStatement
         var traceParent = enqueuedTrace?.TraceParent;
         var traceState = enqueuedTrace?.TraceState;
 
-        // The owner is a column of the row rather than something this statement looks up: whoever asked for the work
+        // The user is a column of the row rather than something this statement looks up: whoever asked for the work
         // resolved the account through a catalog, so writing it here is a read of mailbox_accounts that does not happen
         // and a row that can never say an account without saying whose it is.
         //
-        // The turn is taken from the queue's own owner column, walking the claim index backwards and stopping at the
-        // first row. That is one index read where the previous form needed a lateral join over every mailbox the owner
-        // holds, and it is why the index leads with the owner: an aggregate over a join is computed from the whole join,
+        // The turn is taken from the queue's own user column, walking the claim index backwards and stopping at the
+        // first row. That is one index read where the previous form needed a lateral join over every mailbox the user
+        // holds, and it is why the index leads with the user: an aggregate over a join is computed from the whole join,
         // and against a backlog of two hundred thousand rows PostgreSQL scanned the queue for it — measured at 6742
-        // buffers against 10 for a bounded backwards walk. An ownerless job compares against no rows, so the subquery
+        // buffers against 10 for a bounded backwards walk. A userless job compares against no rows, so the subquery
         // answers null, GREATEST ignores it, and the job stays claimable at the instant it was available at.
         return $"""
                 INSERT INTO jobs (
-                    "Id", "JobType", "IdempotencyKey", "Payload", "OwnerId", "MailboxAccountId",
+                    "Id", "JobType", "IdempotencyKey", "Payload", "UserId", "MailboxAccountId",
                     "State", "AvailableAt", "TurnAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
                     "EnqueuedTraceParent", "EnqueuedTraceState")
                 VALUES (
-                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {ownerId}, {accountId},
+                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {userId}, {accountId},
                     {pending}, {availableAt},
                     GREATEST(
                         {availableAt},
                         (SELECT waiting."TurnAt"
                          FROM jobs AS waiting
                          WHERE waiting."State" = ANY({claimableStates})
-                           AND waiting."OwnerId" = {ownerId}
+                           AND waiting."UserId" = {userId}
                          ORDER BY waiting."TurnAt" DESC
                          LIMIT 1) + {turnSpacing}),
                     {enqueuedAt}, {enqueuedAt}, 0,

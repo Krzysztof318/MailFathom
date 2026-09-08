@@ -7,7 +7,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <summary>Reports what collection concluded, without reporting whom it concluded it about.</summary>
 /// <remarks>
 /// Collection is the one part of this system that writes personal data about third parties on its own initiative, so
-/// what it did has to be visible or an owner could not tell a book that is filling from one that is not. The outcome is
+/// what it did has to be visible or a user could not tell a book that is filling from one that is not. The outcome is
 /// MailFathom's own closed set and carries no address, no name, and no message identity, which is what lets the
 /// instrument exist at all.
 /// </remarks>

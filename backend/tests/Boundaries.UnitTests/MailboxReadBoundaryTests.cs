@@ -38,7 +38,7 @@ public sealed class MailboxReadBoundaryTests
     private const string SharedNarrowingPattern =
         @"^MailFathom\.Infrastructure\.Persistence\.Emails\.StoredEmailSelectionPredicate$";
 
-    /// <summary>The protocol boundary, whose every tool answers one caller acting for one owner.</summary>
+    /// <summary>The protocol boundary, whose every tool answers one caller acting for one user.</summary>
     private const string ProtocolBoundaryNamespace = "MailFathom.Mcp.";
 
     /// <summary>What the traversal below follows, which is this solution's own code and nothing it is built on.</summary>
@@ -112,7 +112,7 @@ public sealed class MailboxReadBoundaryTests
             .Should()
             .NotDependOnAny(typeof(IDeploymentMailAccountCatalog))
             .Because(
-                "every MCP tool answers one caller acting for one owner, so a use case behind one that named the "
+                "every MCP tool answers one caller acting for one user, so a use case behind one that named the "
                     + "accounts the deployment serves would resolve one person's mailbox for another's request; the "
                     + "caller-scoped catalog is what a caller-facing resolution reads");
 

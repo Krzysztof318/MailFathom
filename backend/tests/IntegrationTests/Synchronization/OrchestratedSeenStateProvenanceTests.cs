@@ -17,7 +17,7 @@ using Xunit;
 
 namespace MailFathom.IntegrationTests.Synchronization;
 
-/// <summary>Proves that a <c>\Seen</c> flag MailFathom set is told from one the mailbox owner set, against a real server and a real database.</summary>
+/// <summary>Proves that a <c>\Seen</c> flag MailFathom set is told from one the mailbox user set, against a real server and a real database.</summary>
 /// <remarks>
 /// <para>
 /// One test, and it carries both messages and both directions, because the whole claim is a comparison: the server
@@ -54,13 +54,13 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
     /// A second rule, because the idempotency identity is the occurrence, the mutation, and who asked, and a
     /// <c>\Seen</c> change is the one mutation that leaves the occurrence where it was. The same rule asking again about
     /// the same occurrence is therefore answered from its own record and issues nothing, which is what stops a rule
-    /// fighting an owner who reverted its change by hand. Putting the two directions on one requester would test that
+    /// fighting a user who reverted its change by hand. Putting the two directions on one requester would test that
     /// answer rather than the clearing this class is about.
     /// </summary>
     private static readonly MailboxMutationRequester SurfacingRule =
         MailboxMutationRequester.Rule("surface-unpaid-invoices", "1");
 
-    /// <summary>Each flag MailFathom moved is withheld from rule evaluation, the owner's is not, and the stored value follows only an observation.</summary>
+    /// <summary>Each flag MailFathom moved is withheld from rule evaluation, the user's is not, and the stored value follows only an observation.</summary>
     [Fact]
     public async Task SynchronizeAsync_AfterSeenFlagsMovedByBothSidesInBothDirections_WithholdsOnlyItsOwnAndMirrorsOnlyWhatItObserved()
     {
@@ -70,9 +70,9 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         await mailbox.RecreateFolderAsync(FolderName, cancellationToken);
 
         var markedByMailFathom = $"seen-by-mailfathom-{Guid.NewGuid():N}";
-        var markedByOwner = $"seen-by-owner-{Guid.NewGuid():N}";
+        var markedByUser = $"seen-by-user-{Guid.NewGuid():N}";
         await mailbox.AppendAsync(FolderName, markedByMailFathom, cancellationToken);
-        await mailbox.AppendAsync(FolderName, markedByOwner, cancellationToken);
+        await mailbox.AppendAsync(FolderName, markedByUser, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
 
@@ -83,7 +83,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         Assert.Equal(2, firstRun.Reconciliation.ObservedEmailCount);
 
         var ours = await ReadStoredEmailAsync(services, markedByMailFathom, cancellationToken);
-        var theirs = await ReadStoredEmailAsync(services, markedByOwner, cancellationToken);
+        var theirs = await ReadStoredEmailAsync(services, markedByUser, cancellationToken);
 
         // Act
         //
@@ -97,14 +97,14 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
 
         var afterSetting = await SynchronizeAsync(services, cancellationToken);
         var oursAfterSettingRun = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
-        var theirsAfterSettingRun = await IsRemotelySeenAsync(services, markedByOwner, cancellationToken);
+        var theirsAfterSettingRun = await IsRemotelySeenAsync(services, markedByUser, cancellationToken);
 
         var clearOutcome = await ChangeSeenStateAsync(services, ours, SurfacingRule, isSeen: false, cancellationToken);
         var storedAfterTheClearCommand = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
 
         var afterClearing = await SynchronizeAsync(services, cancellationToken);
         var oursAfterClearingRun = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
-        var theirsAfterClearingRun = await IsRemotelySeenAsync(services, markedByOwner, cancellationToken);
+        var theirsAfterClearingRun = await IsRemotelySeenAsync(services, markedByUser, cancellationToken);
 
         // Assert
         Assert.Equal(MailboxMutationStatus.Performed, setOutcome.Status);
@@ -123,7 +123,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         AssertWithheld(afterClearing, ours.StoredEmailId, clearOutcome.RecordId);
 
         // The stored snapshot follows the server for every flag that moved, because what was withheld is the trigger
-        // and never the reading. An assertion that one change was withheld says nothing unless the owner's own change
+        // and never the reading. An assertion that one change was withheld says nothing unless the user's own change
         // beside it really did arrive, and unless the withheld one really did reach the column.
         Assert.True(oursAfterSettingRun);
         Assert.True(theirsAfterSettingRun);
@@ -168,7 +168,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, SyntheticMailAccount.Owner, occurrence, requester, isSeen);
+        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, SyntheticMailAccount.User, occurrence, requester, isSeen);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

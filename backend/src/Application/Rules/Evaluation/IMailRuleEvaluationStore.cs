@@ -30,7 +30,7 @@ namespace MailFathom.Application.Rules.Evaluation;
 public interface IMailRuleEvaluationStore
 {
     /// <summary>Reads the account's emails that no pass has evaluated, oldest identity first.</summary>
-    /// <param name="account">The account whose arrival queue is read, named by its owner and its identifier together.</param>
+    /// <param name="account">The account whose arrival queue is read, named by its user and its identifier together.</param>
     /// <param name="resumeAfter">The identity the previous batch of this walk reached, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">How many emails to read at most.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -47,7 +47,7 @@ public interface IMailRuleEvaluationStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the account's stored emails in identity order, whether or not a pass has evaluated them.</summary>
-    /// <param name="account">The account whose mailbox is walked, named by its owner and its identifier together.</param>
+    /// <param name="account">The account whose mailbox is walked, named by its user and its identifier together.</param>
     /// <param name="resumeAfter">The identity the requested run last committed, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">How many emails to read at most.</param>
     /// <param name="cancellationToken">Cancels the read.</param>

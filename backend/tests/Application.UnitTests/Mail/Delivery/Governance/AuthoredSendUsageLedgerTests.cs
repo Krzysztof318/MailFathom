@@ -19,7 +19,7 @@ public sealed class AuthoredSendUsageLedgerTests
     private const string Caller = "agent-key";
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A deployment that bounded no caller counts nothing, so the ordinary posture holds no identity at all.</summary>
     [Fact]

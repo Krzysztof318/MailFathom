@@ -40,7 +40,7 @@ describe('resolveCredentialEntry', () => {
     });
 
     it('keeps a colon inside a password, which the scheme reads as part of it', () => {
-        expect(authorization('owner', 'a:b')).toBe('Basic b3duZXI6YTpi');
+        expect(authorization('user', 'a:b')).toBe('Basic dXNlcjphOmI=');
     });
 
     it.each([
@@ -57,7 +57,7 @@ describe('resolveCredentialEntry', () => {
 
     it.each([
         ['a user name', 'u'.repeat(longestCredentialPart + 1), 'open sesame'],
-        ['a password', 'owner', 'p'.repeat(longestCredentialPart + 1)],
+        ['a password', 'user', 'p'.repeat(longestCredentialPart + 1)],
     ])('refuses %s past the bound rather than presenting one nobody typed', (_, userName, password) => {
         // The bound is here rather than on the input alone, because `maxLength` truncates a paste in silence — and a
         // password one character shorter than the one somebody was given is refused by the deployment and read back
@@ -67,7 +67,7 @@ describe('resolveCredentialEntry', () => {
 
     it.each([
         ['a user name', 'u'.repeat(longestCredentialPart), 'open sesame'],
-        ['a password', 'owner', 'p'.repeat(longestCredentialPart)],
+        ['a password', 'user', 'p'.repeat(longestCredentialPart)],
     ])(
         'composes %s exactly as long as the bound, which is what makes it a bound rather than a limit',
         (_, userName, password) => {

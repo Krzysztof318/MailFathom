@@ -126,7 +126,7 @@ internal static class SmtpDeliveryTestContext
     /// <summary>Builds a factory over one scripted client, the real classifier, and the host's controllable clock.</summary>
     /// <remarks>
     /// The transport is a parameter rather than something built here, because every attempt it serves allocates a
-    /// socket that only its owner can release: a test holds it for as long as it holds the factory. A test about a
+    /// socket that only its user can release: a test holds it for as long as it holds the factory. A test about a
     /// transport that never opens supplies <paramref name="socketConnector" /> instead, which hands out no socket at
     /// all and therefore owns nothing.
     /// </remarks>

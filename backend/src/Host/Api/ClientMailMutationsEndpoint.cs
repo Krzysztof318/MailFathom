@@ -34,12 +34,12 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// <b>Flags and tags are separate parts of the request, because they are different things with different
 /// consequences.</b> A flag is IMAP's own — <c>\Seen</c> and <c>\Flagged</c> are the two ADR 0007 permits — and lives
-/// on the mail server. A tag is a keyword, which also lives on the mail server and which the owner sees as a label in
+/// on the mail server. A tag is a keyword, which also lives on the mail server and which the user sees as a label in
 /// their own mail client. MailFathom holds no tag of its own today, so no tag this surface accepts stays local: every
 /// one of them is written to the mailbox, and the request says so by naming the mailbox as where both parts land.
 /// </para>
 /// <para>
-/// <b>Moving is its own route with its own grant.</b> A wrong flag misdescribes mail the owner can still find; a wrong
+/// <b>Moving is its own route with its own grant.</b> A wrong flag misdescribes mail the user can still find; a wrong
 /// move puts it somewhere else, and on a server without <c>MOVE</c> the sequence is a copy and a delete whose failure
 /// between them is the one mailbox change that can lose mail. <see cref="MailFathomPermission.MailMove" /> is therefore
 /// granted apart from <see cref="MailFathomPermission.MailFlagsWrite" />, and the half-finished case is reported rather
@@ -53,7 +53,7 @@ namespace MailFathom.Host.Api;
 /// settled; the routes that serve mail hold no write session and cannot reach one.
 /// </para>
 /// <para>
-/// No route names an owner, and none carries mail content in either direction. What travels is a local message
+/// No route names a user, and none carries mail content in either direction. What travels is a local message
 /// identity the caller already holds, MailFathom's own name for a folder, a mutation name, a lifecycle name, a count,
 /// and an error code — so nothing here reaches a log or a span that could not already be read from configuration.
 /// </para>
@@ -501,7 +501,7 @@ internal sealed record ClientMailFlagChangesRequest(
 /// <param name="Tags">What to do with the message's tags, or <see langword="null" /> to leave them alone.</param>
 /// <remarks>
 /// The two parts are separate because they are different acts on the mail server with different consequences: a flag
-/// is one bit IMAP defines, and a tag is a keyword the owner sees as a label. Both reach the mailbox, and a change
+/// is one bit IMAP defines, and a tag is a keyword the user sees as a label. Both reach the mailbox, and a change
 /// naming neither is refused rather than reported as a change of nothing.
 /// </remarks>
 internal sealed record ClientMailFlagChangeRequest(

@@ -9,13 +9,13 @@ namespace MailFathom.Domain.Accounts;
 /// <para>
 /// An account can be named two ways — by the <see cref="MailAccountId" /> an operator configured or by the
 /// <see cref="MailAccountDisplayName" /> it is published under — and a caller is not required to know which of the two
-/// it is holding. The distinction is settled where the accounts the caller's owner owns are known, so what travels from
+/// it is holding. The distinction is settled where the accounts the caller's user owns are known, so what travels from
 /// a protocol boundary into a use case is this: text that has been proven safe to carry and nothing more.
 /// </para>
 /// <para>
-/// Both spellings are the owner's own words and are unique within that owner rather than across the deployment, so the
-/// same text can name a different mailbox for somebody else. That is why it is resolved against one owner's accounts
-/// and never against the deployment's: text naming nothing, text naming another owner's account, and text naming an
+/// Both spellings are the user's own words and are unique within that user rather than across the deployment, so the
+/// same text can name a different mailbox for somebody else. That is why it is resolved against one user's accounts
+/// and never against the deployment's: text naming nothing, text naming another user's account, and text naming an
 /// account this deployment stopped serving are one refusal, and a caller cannot learn from it which of the three they
 /// were holding.
 /// </para>

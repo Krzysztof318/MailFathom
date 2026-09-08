@@ -7,7 +7,7 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// <summary>States what reading one attachment produced, or exactly what stopped it.</summary>
 /// <remarks>
 /// The set is closed, and every member is distinguishable from every other, because the whole point of the reasons is
-/// that a mailbox owner is told their contract was skipped rather than searched and found empty. Nothing here collapses
+/// that a mailbox user is told their contract was skipped rather than searched and found empty. Nothing here collapses
 /// into a generic failure and nothing is represented by an empty string.
 /// </remarks>
 public enum AttachmentTextExtractionOutcome
@@ -34,7 +34,7 @@ public enum AttachmentTextExtractionOutcome
     /// ceiling rather than a container ceiling of its own: a workbook's shared strings cost a list slot each whether or
     /// not they carry a character, so the count is bounded even where the characters are not. It is reported here
     /// rather than as <see cref="ExtractedTextTooLarge" /> because what was passed is a count of entries held in
-    /// memory rather than characters an owner would get back.
+    /// memory rather than characters a user would get back.
     /// </remarks>
     ContainerBoundExceeded = 5,
 

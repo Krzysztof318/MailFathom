@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
 
-/// <summary>Records every message an owner asked to have sent again, in PostgreSQL, and what each one last did.</summary>
+/// <summary>Records every message a user asked to have sent again, in PostgreSQL, and what each one last did.</summary>
 /// <remarks>
 /// <para>
 /// The write paths use the context enlisted in the caller's session, so a declaration and the draft it points at are
@@ -60,8 +60,8 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
             MailboxAccountId = request.Account.Id.Value,
 
             // Written from the identity the declaration carried, for the reason an outgoing record's is: the catalog
-            // resolved the account before the declaration was built, so the owner comes with it.
-            OwnerId = request.Account.Owner.Value,
+            // resolved the account before the declaration was built, so the user comes with it.
+            UserId = request.Account.User.Value,
             RequesterOrigin = request.Requester.Origin,
             RequesterIdentity = request.Requester.Identity,
             Schedule = request.Schedule,
@@ -123,7 +123,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
             .Select(declaration => new
             {
                 declaration.Id,
-                declaration.OwnerId,
+                declaration.UserId,
                 declaration.MailboxAccountId,
                 declaration.Schedule,
             })
@@ -134,7 +134,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
             .. rows.Select(row => new RecurringSendDeclaration(
                 RecurringSendId.Create(row.Id),
                 MailAccountIdentity.Create(
-                    MailOwnerId.Create(row.OwnerId),
+                    MailUserId.Create(row.UserId),
                     MailAccountId.Create(row.MailboxAccountId)),
                 row.Schedule)),
         ];
@@ -202,7 +202,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
         RecurringSendRequest request,
         CancellationToken cancellationToken)
     {
-        var ownerValue = request.Account.Owner.Value;
+        var userValue = request.Account.User.Value;
         var accountValue = request.Account.Id.Value;
         var origin = request.Requester.Origin;
         var identity = request.Requester.Identity;
@@ -212,7 +212,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
         return TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.RecurringSends,
             writeContext.RecurringSends,
-            declaration => declaration.OwnerId == ownerValue
+            declaration => declaration.UserId == userValue
                 && declaration.MailboxAccountId == accountValue
                 && declaration.RequesterOrigin == origin
                 && declaration.RequesterIdentity == identity,

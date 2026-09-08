@@ -29,7 +29,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Filing;
 public sealed class OutgoingMailFilingPassTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset RanAt = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -100,7 +100,7 @@ public sealed class OutgoingMailFilingPassTests
 
     /// <summary>
     /// The one ending nothing repeats. The server took the append and never said so, and a second one would put a
-    /// second copy of the owner's message in their sent folder with nothing afterwards telling the two apart.
+    /// second copy of the user's message in their sent folder with nothing afterwards telling the two apart.
     /// </summary>
     [Fact]
     public async Task SettleFiledCopiesAsync_AnAppendTheServerNeverAnswered_IsNeverAppendedAgain()
@@ -233,7 +233,7 @@ public sealed class OutgoingMailFilingPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>A message waiting for an instant still ahead is what an owner would look for in their own client.</summary>
+    /// <summary>A message waiting for an instant still ahead is what a user would look for in their own client.</summary>
     [Fact]
     public async Task MirrorWaitingSendsAsync_ASendWaitingForALaterInstant_IsMirroredAsADraft()
     {
@@ -282,7 +282,7 @@ public sealed class OutgoingMailFilingPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>A mirrored message that has left is taken out of the folder, so an outbox an owner reads drains.</summary>
+    /// <summary>A mirrored message that has left is taken out of the folder, so an outbox a user reads drains.</summary>
     [Fact]
     public async Task SettleFiledCopiesAsync_AMirroredSendThatHasLeft_WithdrawsTheMirror()
     {
@@ -387,7 +387,7 @@ public sealed class OutgoingMailFilingPassTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>A message that reached nobody is not a message to say <em>sent</em> about in the owner's own folder.</summary>
+    /// <summary>A message that reached nobody is not a message to say <em>sent</em> about in the user's own folder.</summary>
     [Fact]
     public async Task SettleFiledCopiesAsync_ARefusedSend_FilesNoSentCopy()
     {

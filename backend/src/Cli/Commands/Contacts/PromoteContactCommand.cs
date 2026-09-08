@@ -10,7 +10,7 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// <summary>Takes on a contact the deployment collected from arriving mail.</summary>
 /// <remarks>
 /// The one act that changes an origin, and it runs one way. A collected record is an address that appeared in mail
-/// rather than a person somebody wrote down, so it is not amended in place; promoting it is the owner saying this is
+/// rather than a person somebody wrote down, so it is not amended in place; promoting it is the user saying this is
 /// their record now, after which every other command here works on it. Nothing turns an asserted contact back.
 /// </remarks>
 internal static class PromoteContactCommand

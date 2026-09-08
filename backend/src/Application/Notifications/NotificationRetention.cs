@@ -6,18 +6,18 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Notifications;
 
-/// <summary>Ages one owner's notifications out at the bound the record is held to.</summary>
+/// <summary>Ages one user's notifications out at the bound the record is held to.</summary>
 /// <remarks>
 /// <para>
 /// A notification is derived personal data — it says what reached a person's mailbox and when — so a table nobody
 /// prunes becomes a mailbox history in miniature, held for longer than anybody undertook to hold it. The bound is what
-/// stops that, and it is the record's own rather than an account's: notifications belong to the owner, and an owner
+/// stops that, and it is the record's own rather than an account's: notifications belong to the user, and a user
 /// reading one notification centre cannot have two answers about how long it remembers.
 /// </para>
 /// <para>
 /// It rides the account's own synchronization run, beside the retention passes already there, for the reason those
 /// ride it: an account already has a loop that comes round, and a schedule of its own would be another thing to
-/// configure and watch for one bounded delete. An owner with several accounts is therefore swept once per account,
+/// configure and watch for one bounded delete. A user with several accounts is therefore swept once per account,
 /// which costs a query that erases nothing rather than a second mechanism.
 /// </para>
 /// </remarks>
@@ -60,13 +60,13 @@ public sealed class NotificationRetention
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Erases everything of one owner's that has outlived the window.</summary>
-    /// <param name="owner">The owner whose notifications are aged.</param>
+    /// <summary>Erases everything of one user's that has outlived the window.</summary>
+    /// <param name="user">The user whose notifications are aged.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>How many notifications were erased.</returns>
-    public Task<int> EraseExpiredAsync(MailOwnerId owner, CancellationToken cancellationToken) =>
+    public Task<int> EraseExpiredAsync(MailUserId user, CancellationToken cancellationToken) =>
         this.store.EraseOccurredBeforeAsync(
-            owner,
+            user,
             this.timeProvider.GetUtcNow() - Window,
             MaximumNotificationsErasedPerPass,
             cancellationToken);

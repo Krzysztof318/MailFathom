@@ -178,9 +178,9 @@ internal sealed class EmailContentStore(
             // Measured against what this session already staged rather than against the database, which still holds
             // whatever was there before this transaction began: a statement reading the stored row would count the
             // payload this session is replacing a second time.
-            await OwnerStoredContentLedger.MoveAsync(
+            await UserStoredContentLedger.MoveAsync(
                 dbContext,
-                storedEmail.OwnerId,
+                storedEmail.UserId,
                 storedEmail.MailboxAccountId,
                 placedContent.ByteLength - trackedEntity.MimeByteLength,
                 cancellationToken);
@@ -197,12 +197,12 @@ internal sealed class EmailContentStore(
             return;
         }
 
-        // What the owner's figure moves by is the difference between this payload and whatever is stored, which the
+        // What the user's figure moves by is the difference between this payload and whatever is stored, which the
         // statement measures for itself. It runs before the write below for that reason, and inside the same
         // transaction, so a rolled-back store leaves the figure exactly where it found it.
-        await OwnerStoredContentLedger.AdoptLengthAsync(
+        await UserStoredContentLedger.AdoptLengthAsync(
             dbContext,
-            storedEmail.OwnerId,
+            storedEmail.UserId,
             storedEmail.MailboxAccountId,
             storedEmailId.Value,
             placedContent.ByteLength,

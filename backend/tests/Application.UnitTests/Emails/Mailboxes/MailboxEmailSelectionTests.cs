@@ -21,7 +21,7 @@ public sealed class MailboxEmailSelectionTests
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     [Fact]
     public void Create_AddressFilters_KeepTheComparisonFormPersistenceIndexes()
@@ -361,7 +361,7 @@ public sealed class MailboxEmailSelectionTests
     {
         // Arrange
         var scope = MailboxScope.Create(
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             [Account.Id],
             []);
         var thread = EmailThreadId.Create(new Guid("55555555-5555-5555-5555-555555555555"));
@@ -383,7 +383,7 @@ public sealed class MailboxEmailSelectionTests
         catalog.OwnedAccounts.Returns(
         [
             new ServedMailAccount(
-                Account.Owner,
+                Account.User,
                 Account.Id,
                 MailAccountDisplayName.Create("Work mail"),
                 MailSynchronizationMode.Polling),

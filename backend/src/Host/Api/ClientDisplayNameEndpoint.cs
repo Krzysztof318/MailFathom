@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Configuration.OwnerSettings.Administration;
+using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -16,12 +16,12 @@ namespace MailFathom.Host.Api;
 /// <remarks>
 /// <para>
 /// A client draws a person, and until these routes existed it held a finished credential and nothing the person is
-/// called. The name is not in the record <see cref="ClientOwnerRecordEndpoint" /> serves: it is the envelope beside it,
-/// the column an operator tells one owner from another by, so a client reading the record would still have nothing to
+/// called. The name is not in the record <see cref="ClientUserRecordEndpoint" /> serves: it is the envelope beside it,
+/// the column an operator tells one user from another by, so a client reading the record would still have nothing to
 /// draw a menu with.
 /// </para>
 /// <para>
-/// <b>Neither route names an owner</b>, exactly as no record route does. The person is the one the credential
+/// <b>Neither route names a user</b>, exactly as no record route does. The person is the one the credential
 /// authenticated, resolved from the request rather than read out of the body or the path.
 /// </para>
 /// <para>
@@ -40,7 +40,7 @@ internal static class ClientDisplayNameEndpoint
 
     /// <summary>The greatest request body the write route reads before refusing it.</summary>
     /// <remarks>
-    /// One string bounded at <see cref="MailOwnerRecord.MaximumDisplayNameLength" /> characters, with room for the
+    /// One string bounded at <see cref="MailUserRecord.MaximumDisplayNameLength" /> characters, with room for the
     /// widest UTF-8 encoding of each and the JSON escaping around them. Far below the record's bound, because a body
     /// sized for a page of mail-account declarations would be a bound nobody decided on; a body past it is answered
     /// <c>413</c> before the handler is reached, as every other write on this surface is.
@@ -95,7 +95,7 @@ internal static class ClientDisplayNameEndpoint
 
         var outcome = await names.ChangeAsync(request.DisplayName, cancellationToken);
 
-        if (!outcome.OwnerHeld)
+        if (!outcome.UserHeld)
         {
             return NoRecord();
         }
@@ -108,7 +108,7 @@ internal static class ClientDisplayNameEndpoint
     }
 
     /// <summary>Answers that this deployment holds no record for the caller.</summary>
-    /// <remarks>Reached where the row behind an authenticated caller has gone, which is an owner erased under a credential that has not yet been withdrawn.</remarks>
+    /// <remarks>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</remarks>
     private static NotFound<ProblemDetails> NoRecord() => TypedResults.NotFound(new ProblemDetails
     {
         Status = StatusCodes.Status404NotFound,

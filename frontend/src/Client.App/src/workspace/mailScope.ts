@@ -15,7 +15,7 @@ import type { MessageKey } from '../localization/en';
 
 /** What every read and every question is scoped to. */
 export type MailScope =
-    /** Every folder of every account the owner has. */
+    /** Every folder of every account the user has. */
     | { readonly kind: 'everything' }
 
     /** The folders playing one role, across every account that has one — every inbox at once, every sent folder at once. */
@@ -27,7 +27,7 @@ export type MailScope =
     /** One folder of one account, named by the alias everything on the client surface names a folder by. */
     | { readonly kind: 'folder'; readonly accountId: string; readonly alias: string };
 
-/** Where the client opens: everything the owner has, which is the widest scope rather than an unset one. */
+/** Where the client opens: everything the user has, which is the widest scope rather than an unset one. */
 export const everything: MailScope = { kind: 'everything' };
 
 // The order the roles are offered in, which is the order a mail client has shown them in for thirty years rather than
@@ -103,7 +103,7 @@ export function sameScope(one: MailScope, other: MailScope): boolean {
     return scopeKey(one) === scopeKey(other);
 }
 
-/** The account a scope names, or `null` where it spans every account the owner has. */
+/** The account a scope names, or `null` where it spans every account the user has. */
 export function accountInScope(scope: MailScope): string | null {
     return scope.kind === 'account' || scope.kind === 'folder' ? scope.accountId : null;
 }

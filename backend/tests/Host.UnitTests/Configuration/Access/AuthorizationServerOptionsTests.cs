@@ -11,7 +11,7 @@ namespace MailFathom.Host.UnitTests.Configuration.Access;
 /// <summary>Covers one authorization server profile: what it must state, whose tokens it serves, and where it then looks for that server.</summary>
 public sealed class AuthorizationServerOptionsTests
 {
-    private const string OwnerSubject = "9f2c";
+    private const string UserSubject = "9f2c";
 
     [Fact]
     public void FindConfigurationErrors_ANamedProfileWithAnIssuer_IsAccepted()
@@ -148,7 +148,7 @@ public sealed class AuthorizationServerOptionsTests
 
     /// <summary>
     /// A tenant holds whoever the operator's identity platform holds, and every subject able to obtain a token for this
-    /// resource would otherwise read the configured owner's mail. The profile therefore states whose tokens it serves.
+    /// resource would otherwise read the configured user's mail. The profile therefore states whose tokens it serves.
     /// </summary>
     [Fact]
     public void FindConfigurationErrors_AProfileNamingNoSubject_IsRefused()
@@ -188,7 +188,7 @@ public sealed class AuthorizationServerOptionsTests
     {
         // Arrange
         var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
-        profile.AuthorizedSubjects.Add(OwnerSubject);
+        profile.AuthorizedSubjects.Add(UserSubject);
 
         // Act
         var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
@@ -211,7 +211,7 @@ public sealed class AuthorizationServerOptionsTests
         // Assert
         Assert.Equal(
             [
-                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", OwnerSubject),
+                OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", UserSubject),
                 OAuthIdentity.IdentityOf("https://sso.example.test/realms/mailfathom", "4b81"),
             ],
             identities);
@@ -235,12 +235,12 @@ public sealed class AuthorizationServerOptionsTests
         var profile = new AuthorizationServerOptions();
 
         // Act
-        profile.AuthorizedSubjects.Add(OwnerSubject);
+        profile.AuthorizedSubjects.Add(UserSubject);
 
         // Assert
         Assert.True(profile.IsConfigured);
     }
 
     private static AuthorizationServerOptions Profile(string? name, string? issuer) =>
-        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { OwnerSubject } };
+        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { UserSubject } };
 }

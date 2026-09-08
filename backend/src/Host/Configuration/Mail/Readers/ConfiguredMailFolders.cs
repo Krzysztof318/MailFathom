@@ -27,7 +27,7 @@ internal static class ConfiguredMailFolders
     /// </para>
     /// <para>
     /// Both places a mailbox is declared are read, exactly as <see cref="Rules.DeclaredMailAccounts.ReadFrom(MailSynchronizationOptions)" />
-    /// reads them: the deployment's own section, and each served owner's accounts. A deployment declaring owners is
+    /// reads them: the deployment's own section, and each served user's accounts. A deployment declaring users is
     /// refused a non-empty <c>MailSynchronization:Accounts</c>, so reading only the first leaves such a deployment with
     /// no mapped folder at all — every folder unmapped, no folder visible to a tool, and mail it has already stored
     /// reported as an empty mailbox.
@@ -35,13 +35,13 @@ internal static class ConfiguredMailFolders
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(MailSynchronizationOptions settings) =>
         Of((settings.Accounts ?? [])
-            .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? []));
+            .Concat(settings.ServedUsers?.SelectMany(static user => user.MailAccounts) ?? []));
 
     /// <summary>Reads one set of account declarations as the pair of identity and participation the ports answer with.</summary>
-    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
+    /// <param name="accounts">The declarations, which may be one user's own rather than the whole deployment's.</param>
     /// <returns>One entry per usable configured folder.</returns>
     /// <remarks>
-    /// The overload a decision about one owner's own mailboxes is read through. An owner's folders are theirs, so a
+    /// The overload a decision about one user's own mailboxes is read through. A user's folders are theirs, so a
     /// question asked about them has to be asked of their accounts and of no others — and asking it the same way the
     /// deployment's own section is read is what keeps one answer to *which folder plays which part*.
     /// </remarks>
@@ -52,7 +52,7 @@ internal static class ConfiguredMailFolders
             .OfType<ConfiguredFolder>();
 
     /// <summary>Reads the aliases one set of accounts maps to its inbox, which is the scope classification defaults to.</summary>
-    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
+    /// <param name="accounts">The declarations, which may be one user's own rather than the whole deployment's.</param>
     /// <returns>One alias per account that maps a folder to the inbox role.</returns>
     /// <remarks>
     /// Read beside the folder mappings because the default has to follow them: whoever's server presents the inbox

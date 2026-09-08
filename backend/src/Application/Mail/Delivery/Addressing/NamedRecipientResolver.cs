@@ -37,7 +37,7 @@ namespace MailFathom.Application.Mail.Delivery.Addressing;
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads the book a named contact is resolved against.</param>
-/// <param name="ownership">Answers whose book that is, which is the owner the send is being authored for.</param>
+/// <param name="ownership">Answers whose book that is, which is the user the send is being authored for.</param>
 public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBookOwnership ownership)
 {
     /// <summary>Resolves every recipient one authored message names.</summary>
@@ -106,7 +106,7 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
                 return RecipientResolution.Refused(RecipientResolutionRefusalReason.ContactAddressNotHeld);
             }
 
-            // The name written beside the address is the one the owner recorded for this person, which is the whole point
+            // The name written beside the address is the one the user recorded for this person, which is the whole point
             // of addressing them by it: a message to a contact reads as a message to somebody rather than to a mailbox.
             resolved.Add(new AuthoredEmailRecipient(
                 named.Role,
@@ -162,12 +162,12 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
             .ToArray();
 
         // Resolved once for the same reason the vouching does: every group of one act reads one book by construction.
-        var owner = ownership.Owner;
+        var user = ownership.User;
         var held = new Dictionary<ContactId, Contact>();
 
         foreach (var group in identities.Chunk(ContactQuery.MaximumPageSize))
         {
-            foreach (var (contactId, contact) in await contacts.FindAllAsync(owner, group, cancellationToken))
+            foreach (var (contactId, contact) in await contacts.FindAllAsync(user, group, cancellationToken))
             {
                 held[contactId] = contact;
             }
@@ -188,13 +188,13 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
             .Distinct()
             .ToArray();
 
-        var owner = ownership.Owner;
+        var user = ownership.User;
         var matches = new Dictionary<ContactDisplayName, ContactMatch>();
 
         foreach (var group in contactNames.Chunk(ContactQuery.MaximumPageSize))
         {
             foreach (var (contactName, match) in await contacts.MatchDisplayNamesAsync(
-                owner,
+                user,
                 group,
                 cancellationToken))
             {
@@ -209,7 +209,7 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBo
     /// <returns>The address to use, or <see langword="null" /> when the act chose one the contact does not hold.</returns>
     /// <remarks>
     /// The book's own spelling is what comes back rather than the caller's, so the record and the composed headers carry
-    /// the value the owner wrote down. Text naming no mailbox at all resolves to nothing here for the same reason an
+    /// the value the user wrote down. Text naming no mailbox at all resolves to nothing here for the same reason an
     /// address the contact does not hold does: nobody holds an address that is not one.
     /// </remarks>
     private static EmailAddress? AddressOf(NamedRecipient named, Contact contact)

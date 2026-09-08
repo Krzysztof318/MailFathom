@@ -294,12 +294,12 @@ services:
     # A digest rather than a tag, because the upstream publishes no immutable version tag — the digest is the only pin
     # that names one artifact, and it is the same pin the Helm chart and the integration suite use. It runs Apache
     # SpamAssassin 4.0.2 on Alpine under an MIT-licensed build and bundles no Razor2, no Pyzor, and no DCC, so nothing
-    # in it sends anything derived from the owner's mail anywhere. THIRD_PARTY_LICENSES.md records all of it.
+    # in it sends anything derived from the user's mail anywhere. THIRD_PARTY_LICENSES.md records all of it.
     image: ${MAILFATHOM_SPAMASSASSIN_IMAGE:-docker.io/axllent/spamassassin@sha256:9bea393891c92a3531cb7081e9b2c478a654a048c9a6fa6f9d1df4300bf3ab8b}
     restart: unless-stopped
     environment:
       # **The DNS posture, and it is off.** The daemon's blocklist rules would send sending addresses and URI host names
-      # out of the owner's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid.
+      # out of the user's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid.
       # Off, it runs local rules only. docs/features/spam-classification.md says what each choice costs.
       DNS_CHECKS: ${MAILFATHOM_SPAM_SCANNER_DNS_CHECKS:-0}
     healthcheck:
@@ -327,7 +327,7 @@ services:
     networks:
       # The internal network is how MailFathom reaches it. The second one is a route out of the host, and it is here for
       # exactly one thing: the daemon fetches its rule updates over HTTP on start and daily afterwards, and a corpus
-      # frozen at whatever the image was built with scores today's mail badly. Nothing derived from the owner's mail
+      # frozen at whatever the image was built with scores today's mail badly. Nothing derived from the user's mail
       # goes out that route — the blocklist rules that would are off above, and the image carries no plugin that reports
       # checksums anywhere. Remove this line for a daemon that can reach nothing at all, at the cost of those updates.
       - backend

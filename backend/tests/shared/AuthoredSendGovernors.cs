@@ -36,7 +36,7 @@ internal static class AuthoredSendGovernors
     /// <param name="settings">What to do about a recipient nothing here vouches for, or <see langword="null" /> to admit one.</param>
     /// <param name="ledger">What this caller has already been admitted for, or <see langword="null" /> for no ceiling at all.</param>
     /// <param name="contacts">The book an address is vouched against, or <see langword="null" /> for an empty one.</param>
-    /// <param name="accounts">The accounts the caller's owner owns, or <see langword="null" /> for none.</param>
+    /// <param name="accounts">The accounts the caller's user owns, or <see langword="null" /> for none.</param>
     /// <param name="senderIdentities">The addresses those accounts send as, or <see langword="null" /> for none.</param>
     /// <param name="auditor">Where the record of the send goes, or <see langword="null" /> to drop it.</param>
     /// <param name="authorization">The caller the send runs for, or <see langword="null" /> for one granted the send capability.</param>
@@ -55,7 +55,7 @@ internal static class AuthoredSendGovernors
     {
         // One authorization, because production composes one scoped instance that the vouching's ownership and the
         // governor both read. Resolving the default twice would let a change to one of them leave the vouching reading
-        // a different owner's book than the send is judged for, and an empty book vouches for nobody — so every suite
+        // a different user's book than the send is judged for, and an empty book vouches for nobody — so every suite
         // arranging a refusing posture would change verdict with nothing able to say why.
         var caller = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
 
@@ -79,57 +79,57 @@ internal static class AuthoredSendGovernors
     private sealed class VouchingNobody : IContactDirectory
     {
         public Task<Contact?> FindAsync(
-            MailOwnerId owner,
+            MailUserId user,
             ContactId contactId,
             CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
-            MailOwnerId owner,
+            MailUserId user,
             IReadOnlyCollection<ContactId> contactIds,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactId, Contact>>(new Dictionary<ContactId, Contact>());
 
         public Task<Contact?> FindByAddressAsync(
-            MailOwnerId owner,
+            MailUserId user,
             EmailAddress address,
             CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
-            MailOwnerId owner,
+            MailUserId user,
             IReadOnlyCollection<ContactDisplayName> displayNames,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactDisplayName, ContactMatch>>(
                 new Dictionary<ContactDisplayName, ContactMatch>());
 
         public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
-            MailOwnerId owner,
+            MailUserId user,
             IReadOnlyCollection<EmailAddress> addresses,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<EmailAddress, ContactId>>(new Dictionary<EmailAddress, ContactId>());
 
         public Task<ContactPage> ReadPageAsync(
-            MailOwnerId owner,
+            MailUserId user,
             ContactQuery query,
             CancellationToken cancellationToken) =>
             Task.FromResult(new ContactPage([], null));
     }
 
-    /// <summary>An owner owning no account, which vouches for no address of their own.</summary>
+    /// <summary>A user owning no account, which vouches for no address of their own.</summary>
     private sealed class OwningNobody : ICallerMailAccountCatalog
     {
         public IReadOnlyList<ServedMailAccount> OwnedAccounts { get; } = [];
 
         public bool SynchronizationEnabled => false;
 
-        /// <summary>Gets the owner this catalog answers for, who owns nothing rather than being nobody.</summary>
+        /// <summary>Gets the user this catalog answers for, who owns nothing rather than being nobody.</summary>
         /// <remarks>
-        /// An owner is still named, because owning no account and acting for no owner are different answers and only
-        /// the second is a refusal. A read narrowed on this owner returns nothing because the accounts are empty, not
-        /// because the owner is absent.
+        /// A user is still named, because owning no account and acting for no user are different answers and only
+        /// the second is a refusal. A read narrowed on this user returns nothing because the accounts are empty, not
+        /// because the user is absent.
         /// </remarks>
-        public MailOwnerId Owner => SyntheticMailOwner.Deployment;
+        public MailUserId User => SyntheticMailUser.Deployment;
     }
 
     /// <summary>A deployment whose accounts declare no sending address.</summary>

@@ -20,7 +20,7 @@ namespace MailFathom.Cli.Credentials;
 /// <b>What this protects against.</b> The key is not a literal in this source, and that is deliberate: the repository
 /// is public, so a key written here would be a key published permanently — it would obfuscate the file against a casual
 /// reader and against nobody who looked it up. The key is instead random, generated on first use, and kept beside the
-/// store with owner-only permissions; on Windows its file contents are additionally wrapped with DPAPI under the
+/// store with user-only permissions; on Windows its file contents are additionally wrapped with DPAPI under the
 /// current user, which binds them to that user on that machine.
 /// </para>
 /// <para>
@@ -108,7 +108,7 @@ internal sealed class TokenProtector
     }
 
     /// <summary>Reads the key, generating it on first use.</summary>
-    /// <remarks>Generated rather than derived from anything nameable, so there is no material to reconstruct from knowing the machine. Created owner-only in one step, for the reason the store itself is.</remarks>
+    /// <remarks>Generated rather than derived from anything nameable, so there is no material to reconstruct from knowing the machine. Created user-only in one step, for the reason the store itself is.</remarks>
     private byte[] ReadOrCreateKey()
     {
         try
@@ -120,9 +120,9 @@ internal sealed class TokenProtector
 
             var key = AesGcmEnvelope.CreateKey();
 
-            OwnerOnlyStorage.CreateDirectoryFor(this.keyPath);
+            UserOnlyStorage.CreateDirectoryFor(this.keyPath);
 
-            using (var contents = OwnerOnlyStorage.OpenForWriting(this.keyPath))
+            using (var contents = UserOnlyStorage.OpenForWriting(this.keyPath))
             {
                 var wrapped = Wrap(key);
                 contents.Write(wrapped, 0, wrapped.Length);

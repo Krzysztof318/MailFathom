@@ -21,7 +21,7 @@ namespace MailFathom.Application.Contacts;
 /// </para>
 /// <para>
 /// Every write acts under <see cref="ContactOrigin.Asserted" />, because a caller granted this permission is writing for
-/// the owner: what an agent is told to record is a person somebody wrote down. What follows from it is the one refusal a
+/// the user: what an agent is told to record is a person somebody wrote down. What follows from it is the one refusal a
 /// caller meets that is about the record rather than about the request — amending a contact this deployment collected is
 /// refused until it has been promoted. Promotion is the fourth act for exactly that reason: leaving it to the
 /// administrative surface alone would put every collected record permanently out of this one's reach, so it is offered
@@ -114,7 +114,7 @@ public sealed class ContactBookWriter
             cancellationToken);
     }
 
-    /// <summary>Takes on a contact this deployment collected, so it becomes one the owner asserted.</summary>
+    /// <summary>Takes on a contact this deployment collected, so it becomes one the user asserted.</summary>
     /// <param name="contactId">The contact to promote.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
@@ -123,7 +123,7 @@ public sealed class ContactBookWriter
     /// The act that turns a record nobody wrote down into one somebody did, and the only crossing between the origins.
     /// It is what unlocks amending a collected contact: a caller refused an amendment is told the record was collected,
     /// promotes it, and then amends it like any other. It acts under <see cref="CallerWriter" /> for the same reason
-    /// every other write here does — a caller granted this permission is writing for the owner — which is also what
+    /// every other write here does — a caller granted this permission is writing for the user — which is also what
     /// keeps collection from performing it on its own output.
     /// </remarks>
     public Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)

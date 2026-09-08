@@ -258,7 +258,7 @@ recorded, on the authentication verdict.
 Mail whose author writes from a domain one of this deployment's own accounts uses is trusted, on every account rather
 than on the account that owns the domain. An instance synchronizing a work mailbox and a personal one is synchronizing
 one person's correspondence, and mail that person sends from the first to the second is the least suspicious mail in the
-mailbox; recognizing it only against the receiving account's own domain would leave the owner's own mail unknown.
+mailbox; recognizing it only against the receiving account's own domain would leave the user's own mail unknown.
 
 The set is derived from the configured accounts rather than restated in configuration, so adding an account extends it
 and removing one narrows it without a second edit. It is read from each account's IMAP user name, which is the only
@@ -268,7 +268,7 @@ and a deployment in that position names its domains on the accounts' own lists i
 and never the names beneath it.
 
 `MailSynchronization:TrustOwnAccountDomains` is what turns the whole set off, and it defaults to on because that mail is
-either the owner's own or somebody who has taken their mailbox, and the first is far more common. **The case for turning
+either the user's own or somebody who has taken their mailbox, and the first is far more common. **The case for turning
 it off is an account on a large shared provider**: every user of that provider writes from the same domain, so the set
 would recognize all of them. A deployment that turns it off names the domains it does mean on the per-account list
 below.
@@ -277,7 +277,7 @@ below.
 
 Each account has one, and it is per account because the accounts an instance synchronizes are different correspondence:
 a work account's counterparties have nothing to do with a personal one's, and a single list would either recognize too
-much on one account or make an owner maintain the union of both.
+much on one account or make a user maintain the union of both.
 
 An entry names a domain or a single address, never both, and the two are different claims.
 
@@ -392,9 +392,9 @@ of them characterizes the message or the sender's intent. A failed authenticatio
   establishes no author and decides nothing about trust.
 - It acts on neither verdict by itself. Nothing here files, flags, or hides a message, and publishing the pair through
   the read tools is not acting on it: what a caller is handed is the stored conclusion, and what to make of it is the
-  caller's. What can act on it is a rule the owner wrote — `authorAuthentication` and `senderTrust` are
+  caller's. What can act on it is a rule the user wrote — `authorAuthentication` and `senderTrust` are
   [facts a condition can read](mail-rules.md#the-facts-a-condition-can-read), so filing mail on a verdict is something
-  an owner declares rather than something this feature does.
+  a user declares rather than something this feature does.
 - It does not let a caller filter or sort a listing or a search by either verdict. That is a question about what may be
   asked for rather than about what a result carries, and it is a decision of its own.
 

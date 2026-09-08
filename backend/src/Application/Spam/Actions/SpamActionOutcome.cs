@@ -9,7 +9,7 @@ namespace MailFathom.Application.Spam.Actions;
 /// Every member but <see cref="Requested" /> is a reason no mailbox was written to, and none of them is a failure. They
 /// are separate members rather than one negative because a caller reporting what a run did — above all a run an operator
 /// asked for over a whole mailbox — has to say why a message was left alone, and <em>nothing to change</em> and <em>the
-/// owner has already moved this back</em> are different answers to that question.
+/// user has already moved this back</em> are different answers to that question.
 /// </remarks>
 public enum SpamActionOutcome
 {

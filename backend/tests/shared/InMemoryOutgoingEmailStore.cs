@@ -142,7 +142,7 @@ internal sealed class InMemoryOutgoingEmailStore(
         var row = this.rows[outgoingEmailId];
         var lease = new OutgoingEmailLease(Guid.CreateVersion7(), this.clock.GetUtcNow().AddMinutes(10));
 
-        row.LeaseOwner = lease.Owner;
+        row.LeaseOwner = lease.User;
         row.LeaseExpiresAt = lease.ExpiresAt;
 
         return lease;
@@ -525,9 +525,9 @@ internal sealed class InMemoryOutgoingEmailStore(
             throw new InvalidOperationException($"No outgoing email record carries the identifier {outgoingEmailId}.");
         }
 
-        if (row.LeaseOwner != lease.Owner)
+        if (row.LeaseOwner != lease.User)
         {
-            throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.Owner);
+            throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.User);
         }
 
         if (row.Record.Stage is OutgoingEmailStage.Sent

@@ -42,7 +42,7 @@ public sealed class MailAttachmentTextPassTests
     private static readonly DateTimeOffset PeriodStart = new(2026, 9, 6, 0, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     /// <summary>
     /// The switch is honoured before anything is asked of the database, so an instance that reads no attachments costs
@@ -331,7 +331,7 @@ public sealed class MailAttachmentTextPassTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment, 4096);
+        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 4096);
         var backlog = new RecordingEmailEmbeddingBacklog();
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
@@ -359,7 +359,7 @@ public sealed class MailAttachmentTextPassTests
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Description, SyntheticMailOwner.Deployment, 25);
+        ledger.Seed(PeriodStart, AttachmentDerivationStep.Description, SyntheticMailUser.Deployment, 25);
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
             new RecordingEmailEmbeddingBacklog(),
@@ -397,7 +397,7 @@ public sealed class MailAttachmentTextPassTests
         Assert.Equal(AttachmentDerivationBound.None, report.PeriodCeilingBound);
         Assert.Equal(
             AttachmentOctets,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
     }
 
     /// <summary>
@@ -425,20 +425,20 @@ public sealed class MailAttachmentTextPassTests
         Assert.True(report.RunBudgetExhausted);
         Assert.Equal(
             AttachmentOctets,
-            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment)]);
+            ledger.Consumed[(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment)]);
     }
 
-    /// <summary>An owner's own ceiling refuses that owner's mail while the deployment's ceiling is nowhere near spent.</summary>
+    /// <summary>A user's own ceiling refuses that user's mail while the deployment's ceiling is nowhere near spent.</summary>
     [Fact]
-    public async Task RunAsync_AnExhaustedPerOwnerCeiling_StopsThePassForThatOwnerAlone()
+    public async Task RunAsync_AnExhaustedPerUserCeiling_StopsThePassForThatUserAlone()
     {
         // Arrange
         var ledger = new InMemoryAttachmentDerivationSpendLedger();
-        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailOwner.Deployment, 1024);
+        ledger.Seed(PeriodStart, AttachmentDerivationStep.Extraction, SyntheticMailUser.Deployment, 1024);
         var pass = CreatePass(
             StoreReturning([Awaiting(StoredEmailId.Create(Guid.CreateVersion7()))]),
             new RecordingEmailEmbeddingBacklog(),
-            spendGate: Gate(ledger, maxInputOctetsPerPeriod: 1_000_000, maxInputOctetsPerPeriodPerOwner: 1024));
+            spendGate: Gate(ledger, maxInputOctetsPerPeriod: 1_000_000, maxInputOctetsPerPeriodPerUser: 1024));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -447,14 +447,14 @@ public sealed class MailAttachmentTextPassTests
         Assert.Equal(0, report.ReadEmailCount);
         Assert.True(report.EmailsRemain);
         Assert.Equal(AttachmentDerivationStep.Extraction, report.PeriodCeilingReachedFor);
-        Assert.Equal(AttachmentDerivationBound.Owner, report.PeriodCeilingBound);
+        Assert.Equal(AttachmentDerivationBound.User, report.PeriodCeilingBound);
     }
 
     private static EmailAwaitingAttachmentText Awaiting(
         StoredEmailId storedEmailId,
         DerivedWorkAdmission admission = DerivedWorkAdmission.Admitted) => new(
         storedEmailId,
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         admission);
 
     private static IStoredEmailAttachmentTextStore StoreReturning(IReadOnlyList<EmailAwaitingAttachmentText> batch)
@@ -513,15 +513,15 @@ public sealed class MailAttachmentTextPassTests
     private static AttachmentDerivationSpendGate Gate(
         InMemoryAttachmentDerivationSpendLedger ledger,
         long maxInputOctetsPerPeriod = 0,
-        long maxInputOctetsPerPeriodPerOwner = 0,
+        long maxInputOctetsPerPeriodPerUser = 0,
         long maxDescriptionsPerPeriod = 0,
-        long maxDescriptionsPerPeriodPerOwner = 0) => new(
+        long maxDescriptionsPerPeriodPerUser = 0) => new(
         ledger,
         AttachmentDerivationBudget.Create(
             maxInputOctetsPerPeriod,
-            maxInputOctetsPerPeriodPerOwner,
+            maxInputOctetsPerPeriodPerUser,
             maxDescriptionsPerPeriod,
-            maxDescriptionsPerPeriodPerOwner,
+            maxDescriptionsPerPeriodPerUser,
             TimeSpan.FromDays(1)),
         new FakeTimeProvider(PeriodStart.AddHours(10)));
 

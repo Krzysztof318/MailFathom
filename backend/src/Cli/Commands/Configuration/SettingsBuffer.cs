@@ -12,7 +12,7 @@ namespace MailFathom.Cli.Commands.Configuration;
 /// <summary>The file an editing session opens, and what changed underneath one that was refused.</summary>
 /// <remarks>
 /// <para>
-/// The buffer is created readable by its owner alone, like the credential store beside it. Its contents are the
+/// The buffer is created readable by its user alone, like the credential store beside it. Its contents are the
 /// deployment's configuration with every secret redacted, which is not material — but it is a complete description of
 /// what a deployment does, and a temporary directory on a shared machine is not where that belongs to everybody.
 /// </para>
@@ -24,7 +24,7 @@ namespace MailFathom.Cli.Commands.Configuration;
 /// </remarks>
 internal static class SettingsBuffer
 {
-    /// <summary>Writes the document an editing session opens, readable by its owner alone.</summary>
+    /// <summary>Writes the document an editing session opens, readable by its user alone.</summary>
     /// <param name="path">Where to write it.</param>
     /// <param name="document">The document, as the deployment handed it over.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -34,7 +34,7 @@ internal static class SettingsBuffer
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(document);
 
-        using var buffer = OwnerOnlyStorage.OpenForWriting(path);
+        using var buffer = UserOnlyStorage.OpenForWriting(path);
         using StreamWriter writer = new(buffer);
 
         writer.Write(document);

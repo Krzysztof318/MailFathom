@@ -30,7 +30,7 @@ public enum AuthoredRecipientProvenance
     /// <remarks>The default, and the strict one: a recipient built without saying where it came from is treated as the caller's own word.</remarks>
     NamedByCaller = 0,
 
-    /// <summary>The address is the one the owner's contact book holds for somebody the author named.</summary>
+    /// <summary>The address is the one the user's contact book holds for somebody the author named.</summary>
     ResolvedFromContactBook = 1,
 
     /// <summary>The address is one the answered message's own headers named, which a reply is addressed by.</summary>

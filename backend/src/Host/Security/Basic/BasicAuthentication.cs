@@ -41,11 +41,11 @@ internal static class BasicAuthentication
     /// rate-limiting partition already name. A diagnostic that renders a principal therefore names a credential without
     /// naming a way to sign in.
     /// </remarks>
-    internal const string CredentialIdClaimType = "urn:mailfathom:owner-credential-id";
+    internal const string CredentialIdClaimType = "urn:mailfathom:user-credential-id";
 
     /// <summary>The claim type a role check reads on a password identity, which nothing ever issues.</summary>
     /// <remarks>Named rather than left empty for the reason <see cref="ApiKeyAuthentication.RoleClaimType" /> is: an identity given an empty role type silently reverts to the framework's default.</remarks>
-    internal const string RoleClaimType = "urn:mailfathom:owner-credential-role";
+    internal const string RoleClaimType = "urn:mailfathom:user-credential-role";
 
     /// <summary>The challenge naming the password method, with the encoding a modern client should use for it.</summary>
     /// <remarks>

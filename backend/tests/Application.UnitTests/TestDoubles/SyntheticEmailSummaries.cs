@@ -58,7 +58,7 @@ internal static class SyntheticEmailSummaries
         MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
-            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(accountId)),
+            Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(accountId)),
             FolderAlias = MailFolderAlias.Create(folderAlias),
             InternetMessageId = null,
             Subject = subject,

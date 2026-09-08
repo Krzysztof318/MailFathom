@@ -65,7 +65,7 @@ that refusal rather than with an empty answer.
 ## The scope is what a question was asked about, and it is applied in the database
 
 A question carries a [mailbox scope](mailbox-queries.md#what-each-filter-accepts-and-what-it-refuses) like any other
-read: the owner, the accounts, the folders a mapping admits, and the junk decision. Discover adds one narrowing to it — the conversation or
+read: the user, the accounts, the folders a mapping admits, and the junk decision. Discover adds one narrowing to it — the conversation or
 the messages the question was actually asked about — and that narrowing travels the same path as every other part of the
 scope, into the query itself.
 
@@ -74,7 +74,7 @@ rather than ranking the mailbox and discarding what was not selected afterwards 
 never reached for, and would return nothing at all whenever the four fell outside the ranked window. Because the
 narrowing is part of the scope, it reaches the lexical and the vector index equally, and it can only ever remove rows:
 a conversation reaching into a folder this caller may not read still yields nothing from that folder, and an identifier
-naming another owner's mail matches nothing rather than being refused.
+naming another user's mail matches nothing rather than being refused.
 
 ## What the model is shown
 
@@ -163,9 +163,9 @@ so rather than staying silent.
 ### What leaves the deployment, and what does not
 
 The extracts are mail, and they pass the [sensitive-content egress guard](sensitive-content-scanning.md) on the way to
-the provider exactly as the question does. What the **plan** quotes is not guarded, deliberately: that is the owner's
-own mail going back to the owner, and redacting it there would hide from somebody what they already have. So two copies
-of each extract exist for the length of one call — the guarded one the provider is shown, and the owner's own one the
+the provider exactly as the question does. What the **plan** quotes is not guarded, deliberately: that is the user's
+own mail going back to the user, and redacting it there would hide from somebody what they already have. So two copies
+of each extract exist for the length of one call — the guarded one the provider is shown, and the user's own one the
 evidence list quotes.
 
 One call leaves per composition, with no tools, so a question costs two turns however much mail it read. Both of them
@@ -202,7 +202,7 @@ question anywhere else:
 |---|---|
 | `POST /api/client/discovery/runs` | Asks the question. Answers `202` with the run's identifier and the address its events are read at, as soon as the question and its scope are known to be answerable. |
 | `GET /api/client/discovery/runs/{runId}/events` | Reads that run, from its beginning or from wherever a dropped connection left off. |
-| `DELETE /api/client/discovery/runs/{runId}` | Stops that run. Answers `204` once the run has been told to stop, and `404` for a run this owner did not start or this process no longer holds. |
+| `DELETE /api/client/discovery/runs/{runId}` | Stops that run. Answers `204` once the run has been told to stop, and `404` for a run this user did not start or this process no longer holds. |
 
 Several routes rather than one because **a run outlives the connection that asked for it**. A phone that changes network
 loses its reading connection and nothing else: the run goes on executing, and the client comes back to the reading route
@@ -271,7 +271,7 @@ Nothing crosses the wire as a whole presentation plan. What a client assembles i
 its parts. That is what makes *a failure keeps what came before* fall out rather than being arranged: the blocks that
 arrived stay exactly where they were, and the failure is one more event behind them.
 
-A run belongs to the owner who asked for it. Reading somebody else's is answered as **no such run** rather than as a
+A run belongs to the user who asked for it. Reading somebody else's is answered as **no such run** rather than as a
 refusal, so an identifier says nothing about whether it exists.
 
 ### Resuming a dropped connection

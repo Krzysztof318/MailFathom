@@ -24,12 +24,12 @@ public sealed class OutgoingEmailLeaseLostException : MailFathomException
 {
     /// <summary>Initializes a new lease-lost failure naming the record whose lease had moved on.</summary>
     /// <param name="outgoingEmailId">The record the refused write was about.</param>
-    /// <param name="owner">The attempt that was writing.</param>
-    public OutgoingEmailLeaseLostException(OutgoingEmailId outgoingEmailId, Guid owner)
-        : base($"Outgoing email record {outgoingEmailId} is no longer leased to attempt {owner}, so nothing was written for it.")
+    /// <param name="user">The attempt that was writing.</param>
+    public OutgoingEmailLeaseLostException(OutgoingEmailId outgoingEmailId, Guid user)
+        : base($"Outgoing email record {outgoingEmailId} is no longer leased to attempt {user}, so nothing was written for it.")
     {
         this.OutgoingEmailId = outgoingEmailId;
-        this.Owner = owner;
+        this.User = user;
     }
 
     /// <inheritdoc />
@@ -39,5 +39,5 @@ public sealed class OutgoingEmailLeaseLostException : MailFathomException
     public OutgoingEmailId OutgoingEmailId { get; }
 
     /// <summary>Gets the attempt whose write was refused.</summary>
-    public Guid Owner { get; }
+    public Guid User { get; }
 }

@@ -45,9 +45,9 @@ public sealed class MailRuleEndpointsTests
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
-    /// <summary>The account a stored run names, which is the owner and the identifier together.</summary>
+    /// <summary>The account a stored run names, which is the user and the identifier together.</summary>
     private static readonly MailAccountIdentity AccountIdentity =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailRuleEvaluationRunStore runs = Substitute.For<IMailRuleEvaluationRunStore>();
@@ -517,7 +517,7 @@ public sealed class MailRuleEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

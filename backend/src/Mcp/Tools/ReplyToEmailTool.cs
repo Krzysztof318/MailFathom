@@ -34,7 +34,7 @@ namespace MailFathom.Mcp.Tools;
 /// </para>
 /// <para>
 /// The annotations are <c>send_email</c>'s, for <c>send_email</c>'s reasons: this queues real mail to somebody who is
-/// not this mailbox's owner, and
+/// not this mailbox's user, and
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
 /// settles all four. <b>The call never transmits</b> either: it writes a durable record the account's delivery pass
 /// offers to a submission server afterwards, so the result says <c>queued</c> and a caller reading it must not report

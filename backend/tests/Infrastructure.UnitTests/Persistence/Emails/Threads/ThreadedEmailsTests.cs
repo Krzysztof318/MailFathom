@@ -57,15 +57,15 @@ public sealed class ThreadedEmailsTests
     private static StoredEmailEntity EntityOf(Guid storedEmailId) => new()
     {
         Id = storedEmailId,
-        OwnerId = SyntheticMailOwner.Deployment.Value,
+        UserId = SyntheticMailUser.Deployment.Value,
         MailboxAccountId = "primary",
         MailFolder = new MailFolderEntity
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             Alias = "inbox",
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "primary" },
         },
     };
 }

@@ -21,7 +21,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// <strong>The caller travels with the run.</strong> The request's own scope is gone by the time the run executes, so
 /// the principal the transport admitted is stated onto the run's scope rather than inherited: the use case reads the
-/// grant and the owner from it exactly as it would inside a request, and a run therefore refuses in the background
+/// grant and the user from it exactly as it would inside a request, and a run therefore refuses in the background
 /// whatever it would have refused in the foreground.
 /// </para>
 /// <para>

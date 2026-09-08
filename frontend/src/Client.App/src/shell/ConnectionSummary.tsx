@@ -153,7 +153,7 @@ function Freshness({ connection }: { readonly connection: Connection }) {
     const directory = accounts.value;
     const freshness = freshnessOf(directory);
 
-    // An owner holding no account is told so and told what would fill it, rather than being handed a disclosure with
+    // A user holding no account is told so and told what would fill it, rather than being handed a disclosure with
     // nothing behind it. Everything else opens onto the account-by-account reading of the same sentence.
     if (directory.accounts.length === 0) {
         return (

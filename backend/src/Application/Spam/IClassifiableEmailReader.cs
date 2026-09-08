@@ -35,7 +35,7 @@ public interface IClassifiableEmailReader
     Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
 
     /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
-    /// <param name="owner">The owner whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
+    /// <param name="user">The user whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
     /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
@@ -46,7 +46,7 @@ public interface IClassifiableEmailReader
     /// enqueued and the moment it ran.
     /// </remarks>
     Task<StoredEmailId?> FindStoredEmailIdAsync(
-        MailOwnerId owner,
+        MailUserId user,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken);
 

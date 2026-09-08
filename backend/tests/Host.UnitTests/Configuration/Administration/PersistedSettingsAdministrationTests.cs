@@ -521,7 +521,7 @@ public sealed class PersistedSettingsAdministrationTests
 
     /// <summary>
     /// The other half of what the writer refuses on: a setting the storage catalog routes somewhere other than the
-    /// root document. The top-level <c>Accounts</c> section is one owner document per owner rather than a settings
+    /// root document. The top-level <c>Accounts</c> section is one user document per user rather than a settings
     /// row, so adopting it could only ever be refused — and the catalog is built to grow, which is why the preview
     /// asks it rather than restating the rule.
     /// </summary>
@@ -530,7 +530,7 @@ public sealed class PersistedSettingsAdministrationTests
     {
         // Arrange
         using var deployment = Composed(
-            provisioned: """{ "Accounts": { "owner": { "Address": "someone@example.test" } } }""",
+            provisioned: """{ "Accounts": { "user": { "Address": "someone@example.test" } } }""",
             persisted: "{}");
 
         // Act

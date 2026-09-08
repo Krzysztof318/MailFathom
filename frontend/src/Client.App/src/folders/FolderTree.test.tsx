@@ -467,10 +467,10 @@ describe('FolderTree', () => {
         expect(carried().collapsed).toEqual(['account:work']);
     });
 
-    it('says an owner with no mailbox has none, and what would give them one', async () => {
+    it('says a user with no mailbox has none, and what would give them one', async () => {
         renderTree(answering(JSON.stringify({ synchronizationEnabled: false, accounts: [] })));
 
-        expect(await screen.findByText(/No mail account is configured for this owner yet\./)).toBeDefined();
+        expect(await screen.findByText(/No mail account is configured for this user yet\./)).toBeDefined();
         expect(screen.getByText(/none is declared yet\./)).toBeDefined();
     });
 

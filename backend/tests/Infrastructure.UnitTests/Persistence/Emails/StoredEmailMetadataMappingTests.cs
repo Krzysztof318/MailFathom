@@ -641,15 +641,15 @@ public sealed class StoredEmailMetadataMappingTests
     private static StoredEmailEntity CreateEntity() => new()
     {
         Id = Guid.CreateVersion7(),
-        OwnerId = SyntheticMailOwner.Deployment.Value,
+        UserId = SyntheticMailUser.Deployment.Value,
         MailboxAccountId = "primary",
         MailFolder = new MailFolderEntity
         {
-            OwnerId = SyntheticMailOwner.Deployment.Value,
+            UserId = SyntheticMailUser.Deployment.Value,
             MailboxAccountId = "primary",
             Alias = "inbox",
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { UserId = SyntheticMailUser.Deployment.Value, Id = "primary" },
         },
     };
 }

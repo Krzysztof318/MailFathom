@@ -31,9 +31,9 @@ public sealed class MailRuleEvaluationPassTests
 {
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
     private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Backup = MailFolderAlias.Create("backup");
 

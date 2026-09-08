@@ -68,7 +68,7 @@ public sealed class MailThreadBrowserTests
     /// nothing in this reading adds a narrowing of its own on top of the ownership one.
     /// </summary>
     [Fact]
-    public async Task BrowsePageAsync_AConversationHeldInTwoOfTheOwnersAccounts_NarrowsByNeitherOfThem()
+    public async Task BrowsePageAsync_AConversationHeldInTwoOfTheUsersAccounts_NarrowsByNeitherOfThem()
     {
         // Arrange
         var here = Message(1, Inbox, "2026-08-16T09:00:00Z");
@@ -443,7 +443,7 @@ public sealed class MailThreadBrowserTests
             Assert.Single(summaries.Calls));
     }
 
-    /// <summary>A conversation nobody holds and one this owner may not see answer identically, so neither discloses the other.</summary>
+    /// <summary>A conversation nobody holds and one this user may not see answer identically, so neither discloses the other.</summary>
     [Fact]
     public async Task BrowsePageAsync_AnIdentifierNamingNoConversationThisCallerMaySee_AnswersWithNothing()
     {
@@ -457,9 +457,9 @@ public sealed class MailThreadBrowserTests
         Assert.Null(thread);
     }
 
-    /// <summary>An owner who owns no account reads nothing rather than every other owner's conversation.</summary>
+    /// <summary>A user who owns no account reads nothing rather than every other user's conversation.</summary>
     [Fact]
-    public async Task BrowsePageAsync_AnOwnerWhoOwnsNoAccount_AnswersWithNothingWithoutReachingStorage()
+    public async Task BrowsePageAsync_AUserWhoOwnsNoAccount_AnswersWithNothingWithoutReachingStorage()
     {
         // Arrange
         var threadReader = new StubEmailThreadReader([.. ConversationOf(2).Select(message => (Conversation, message))]);

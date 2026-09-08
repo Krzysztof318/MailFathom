@@ -123,7 +123,7 @@ public sealed class RootSettingsReloaderTests
         // Arrange
         var provider = LoadedProvider();
         var reader = ReaderReturning(
-            new RootSettingsDocument("""{ "Accounts": { "0": { "DisplayName": "owner" } } }""", Version: 17));
+            new RootSettingsDocument("""{ "Accounts": { "0": { "DisplayName": "user" } } }""", Version: 17));
         var logger = new RecordingLogger<RootSettingsReloader>();
 
         // Act
@@ -132,8 +132,8 @@ public sealed class RootSettingsReloaderTests
         // Assert
         Assert.False(published);
         Assert.Equal(3, provider.Version);
-        provider.TryGet("Accounts:0:DisplayName", out var owner);
-        Assert.Null(owner);
+        provider.TryGet("Accounts:0:DisplayName", out var user);
+        Assert.Null(user);
         Assert.Contains(logger.Messages, message => message.Contains("version 17", StringComparison.Ordinal));
     }
 

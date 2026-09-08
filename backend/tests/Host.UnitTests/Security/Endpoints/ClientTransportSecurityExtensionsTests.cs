@@ -251,9 +251,9 @@ public sealed class ClientTransportSecurityExtensionsTests
             Issuer = "https://sso.example.test",
         });
 
-        endpointSettings.Authentication.Add(new OwnerFacingAuthenticationOptions
+        endpointSettings.Authentication.Add(new UserFacingAuthenticationOptions
         {
-            Method = OwnerCredentialMethod.OAuthSubject.Name,
+            Method = UserCredentialMethod.OAuthSubject.Name,
             OAuth = oauthSettings,
         });
 

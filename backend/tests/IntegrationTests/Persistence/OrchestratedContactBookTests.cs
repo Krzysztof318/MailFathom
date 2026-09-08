@@ -181,12 +181,12 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
                     .BeginSessionAsync(token);
 
                 await losingScope.GetRequiredService<IContactStore>()
-                    .AddAsync(losingSession, services.ServedOwner, losing, token);
+                    .AddAsync(losingSession, services.ServedUser, losing, token);
 
                 var committedFirst = await services.CommitAsync(
                     (winningScope, winningSession, winningToken) => winningScope
                         .GetRequiredService<IContactStore>()
-                        .AddAsync(winningSession, services.ServedOwner, winning, winningToken),
+                        .AddAsync(winningSession, services.ServedUser, winning, winningToken),
                     token);
 
                 return (committedFirst, await losingSession.CommitAsync(token));
@@ -464,7 +464,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         string address,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 Address(address),
                 token),
             cancellationToken);
@@ -475,7 +475,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         int pageSize,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 ContactQuery.Create(ContactOrigin.Collected, search: null, pageSize, cursor),
                 token),
             cancellationToken);
@@ -485,7 +485,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         IReadOnlyCollection<string> displayNames,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().MatchDisplayNamesAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 [.. displayNames.Select(ContactDisplayName.Create)],
                 token),
             cancellationToken);
@@ -495,7 +495,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().FindAllAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 contactIds,
                 token),
             cancellationToken);
@@ -505,7 +505,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         string search,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
-                services.ServedOwner,
+                services.ServedUser,
                 ContactQuery.Create(origin: null, ContactSearch.Create(search), pageSize: 20, cursor: null),
                 token),
             cancellationToken);

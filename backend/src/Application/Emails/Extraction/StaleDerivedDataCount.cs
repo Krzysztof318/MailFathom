@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Emails.Extraction;
 
-/// <summary>How much of what is stored was derived under something other than its own owner's current posture.</summary>
+/// <summary>How much of what is stored was derived under something other than its own user's current posture.</summary>
 /// <param name="EmailCount">How many stored messages hold body text, passages, and vectors written under an older configuration.</param>
 /// <param name="AttachmentReadingCount">How many readings of an attachment — a document's extracted text or a model's description of a picture — were written under one.</param>
 /// <remarks>
@@ -20,6 +20,6 @@ namespace MailFathom.Application.Emails.Extraction;
 /// </remarks>
 public sealed record StaleDerivedDataCount(int EmailCount, int AttachmentReadingCount)
 {
-    /// <summary>Gets whether everything stored was derived under the configuration its owner now runs.</summary>
+    /// <summary>Gets whether everything stored was derived under the configuration its user now runs.</summary>
     public bool IsEmpty => this.EmailCount == 0 && this.AttachmentReadingCount == 0;
 }

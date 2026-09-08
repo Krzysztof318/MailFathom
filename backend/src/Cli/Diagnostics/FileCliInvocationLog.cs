@@ -17,7 +17,7 @@ namespace MailFathom.Cli.Diagnostics;
 /// terminal's scrollback is gone.
 /// </para>
 /// <para>
-/// It is created readable by its owner alone, beside the credential store, and it is bounded: past
+/// It is created readable by its user alone, beside the credential store, and it is bounded: past
 /// <see cref="MaximumBytes" /> the current file is moved aside and a new one started, so the log occupies at most twice
 /// that and never grows without limit on a machine somebody administers daily.
 /// </para>
@@ -62,7 +62,7 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
 
         try
         {
-            OwnerOnlyStorage.CreateDirectoryFor(this.Location);
+            UserOnlyStorage.CreateDirectoryFor(this.Location);
             this.RollOverWhenFull();
 
             // Serialized to bytes and written in one call, because two invocations may end at the same moment and an
@@ -70,7 +70,7 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
             var line = Encoding.UTF8.GetBytes(
                 JsonSerializer.Serialize(entry, CliInvocationLogJsonContext.Default.CliInvocationEntry) + '\n');
 
-            using var contents = OwnerOnlyStorage.OpenForAppending(this.Location);
+            using var contents = UserOnlyStorage.OpenForAppending(this.Location);
 
             contents.Write(line);
 

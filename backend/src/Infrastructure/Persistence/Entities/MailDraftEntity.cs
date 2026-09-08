@@ -27,8 +27,8 @@ internal sealed class MailDraftEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the draft is authored from.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the draft is authored from.</summary>
+    public required Guid UserId { get; set; }
 
     public OutgoingEmailOrigin RequesterOrigin { get; set; }
 

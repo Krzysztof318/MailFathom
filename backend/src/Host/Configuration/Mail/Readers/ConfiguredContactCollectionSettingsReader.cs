@@ -33,7 +33,7 @@ internal sealed class ConfiguredContactCollectionSettingsReader : IContactCollec
     /// <inheritdoc />
     /// <remarks>
     /// An account this snapshot no longer names collects nothing, which is the honest answer as well as the safe one:
-    /// an account nobody configures has no owner to have asked for a book.
+    /// an account nobody configures has no user to have asked for a book.
     /// </remarks>
     public ContactCollectionSettings GetContactCollectionSettings(MailAccountId accountId) =>
         this.settingsByAccount.Value.TryGetValue(accountId.Value, out var accountSettings)
@@ -42,7 +42,7 @@ internal sealed class ConfiguredContactCollectionSettingsReader : IContactCollec
 
     /// <summary>Builds every account's collection settings once, keyed by the account identifier the lookups arrive with.</summary>
     /// <remarks>
-    /// The own addresses are read once for the whole deployment and handed to every account's policy, because an owner
+    /// The own addresses are read once for the whole deployment and handed to every account's policy, because a user
     /// writing from one of their mailboxes to another is not a correspondent of themselves. An entry whose text is
     /// unusable is skipped and two accounts configured under one identifier keep the first, both for the reason the
     /// trust policies do: startup validation refuses each of those, and a reload being rejected must not make an
@@ -75,11 +75,11 @@ internal sealed class ConfiguredContactCollectionSettingsReader : IContactCollec
             Policy = ContactCollectionPolicy.Create(configured.ConfiguredExclusions, ownAddresses),
         };
 
-    /// <summary>Reads the mailboxes this deployment reads on its owner's behalf.</summary>
+    /// <summary>Reads the mailboxes this deployment reads on its user's behalf.</summary>
     /// <remarks>
     /// Derived from each account's user name for the reason the trusted own domains are: it is the only mailbox
     /// identity an IMAP account states. An account whose user name is a bare login contributes nothing, which costs one
-    /// address that would have been excluded — and the two headers collection reads leave the owner out of both
+    /// address that would have been excluded — and the two headers collection reads leave the user out of both
     /// directions anyway, since an ordinary folder's author is a correspondent and a sent folder's recipients are.
     /// </remarks>
     private IReadOnlyList<EmailAddress> ReadOwnAccountAddresses() =>

@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// <summary>What one attachment of one message yielded, or the recorded reason it yielded nothing.</summary>
 /// <remarks>
 /// <para>
-/// One of these is written per attachment whichever way it went, which is what makes a mailbox owner's question
+/// One of these is written per attachment whichever way it went, which is what makes a mailbox user's question
 /// answerable: a contract that was skipped says so, rather than being searched and found empty. It is also what stops a
 /// retry loop — an attachment nothing could read has a durable record saying why, and the pass that walks the mailbox
 /// steps past it instead of offering it to a parser on every run.
@@ -111,7 +111,7 @@ public sealed record DerivedAttachmentText
     public bool BelongsInLexicalIndex => this.HasText && this.Kind == AttachmentTextKind.Document;
 
     /// <summary>Reports the same derivation with its words replaced by their redacted form.</summary>
-    /// <param name="redacted">The redaction the owner's switched-on scanner produced from these words.</param>
+    /// <param name="redacted">The redaction the user's switched-on scanner produced from these words.</param>
     /// <returns>The redacted derivation, or this one unchanged when it carries no words.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="redacted" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -156,7 +156,7 @@ public sealed record DerivedAttachmentText
     /// <remarks>
     /// Written rather than omitted, because
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.md">ADR 0029</see>
-    /// records an attachment past a ceiling as having yielded none rather than leaving it absent: an owner asking why
+    /// records an attachment past a ceiling as having yielded none rather than leaving it absent: a user asking why
     /// their contract was not searched is owed the ceiling as an answer. <see cref="Kind" /> is
     /// <see cref="AttachmentTextKind.Document" /> because nothing here opened the file far enough to know what it is,
     /// and the value decides nothing for a row carrying no words — neither index holds one either way.

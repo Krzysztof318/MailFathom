@@ -34,7 +34,7 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// <para>
 /// Nothing here raises for a copy that could not be filed. Past the issued write the append may already be in the
 /// folder, so every way it can end is classified into a code and returned, rather than raised into a retry that would
-/// leave the owner with two copies of their own message.
+/// leave the user with two copies of their own message.
 /// </para>
 /// </remarks>
 public sealed class MailboxCopyAppender

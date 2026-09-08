@@ -12,7 +12,7 @@ namespace MailFathom.Infrastructure.Persistence.Notifications.Configurations;
 /// <summary>Declares what a person is told about, and the two ways a row leaves again.</summary>
 /// <remarks>
 /// <para>
-/// Two cascades reach this table and they answer different obligations. The owner's own row takes their notifications
+/// Two cascades reach this table and they answer different obligations. The user's own row takes their notifications
 /// with them, so an erasure request never has to know this table exists; and a stored message takes the notifications
 /// that lead to it, so nothing can leave a row pointing at mail that is gone. That second one is the whole reason the
 /// message is an association here where the audit trails beside this table deliberately keep theirs as a value: a
@@ -54,9 +54,9 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         // Cascade rather than a statement in the erasure walk, for the reason the client's preferences cascade: what a
         // person was told is derived from them and goes when they do. It is also what makes the row reachable at all
         // by an erasure, since this table names no mail account and the walk enumerates the tables that do.
-        entity.HasOne<OwnerAccountEntity>()
+        entity.HasOne<UserAccountEntity>()
             .WithMany()
-            .HasForeignKey(notification => notification.OwnerId)
+            .HasForeignKey(notification => notification.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Optional, because most notifications lead to a screen or to nothing at all, and cascading so that the one
@@ -69,17 +69,17 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         // The deduplication rule, in the database rather than before the insert: a raise repeated while the first is
         // still unread passes any application check, and only the constraint closes that window. It is partial so that
         // reading the notification frees the condition to be said again when it recurs — and being partial is what
-        // also makes it the index the unread count is answered from, since the count is one owner's rows in it.
-        entity.HasIndex(notification => new { notification.OwnerId, notification.DeduplicationKey })
+        // also makes it the index the unread count is answered from, since the count is one user's rows in it.
+        entity.HasIndex(notification => new { notification.UserId, notification.DeduplicationKey })
             .IsUnique()
             .HasFilter($"NOT \"{nameof(NotificationEntity.IsRead)}\"")
             .HasDatabaseName(PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName);
 
-        // The one index the centre is walked through, and it serves both readers: a page is one owner's notifications
-        // newest first, and retention erases the same owner's oldest.
+        // The one index the centre is walked through, and it serves both readers: a page is one user's notifications
+        // newest first, and retention erases the same user's oldest.
         entity.HasIndex(notification => new
         {
-            notification.OwnerId,
+            notification.UserId,
             notification.OccurredAt,
             notification.Id,
         })

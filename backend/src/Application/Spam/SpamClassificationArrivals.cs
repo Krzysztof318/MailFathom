@@ -25,8 +25,8 @@ namespace MailFathom.Application.Spam;
 /// holding it.
 /// </para>
 /// <para>
-/// The two cheap questions are asked before the row is written, in the order they cost: whether this owner classifies
-/// at all, and whether their scope covers the folder the message arrived in. An owner with classification off therefore
+/// The two cheap questions are asked before the row is written, in the order they cost: whether this user classifies
+/// at all, and whether their scope covers the folder the message arrived in. A user with classification off therefore
 /// costs one settings read per stored message and reaches no queue, which is the same shape every other path through
 /// this feature has when it is switched off.
 /// </para>
@@ -51,7 +51,7 @@ public sealed class SpamClassificationArrivals
 
     /// <summary>Initializes the trigger over the queue it writes to and the settings that decide whether it does.</summary>
     /// <param name="jobs">The durable queue one classification is enqueued into.</param>
-    /// <param name="settingsReader">Answers whether the occurrence's owner classifies and which folders they cover.</param>
+    /// <param name="settingsReader">Answers whether the occurrence's user classifies and which folders they cover.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SpamClassificationArrivals(IJobStore jobs, ISpamClassificationSettingsReader settingsReader)
     {
@@ -65,7 +65,7 @@ public sealed class SpamClassificationArrivals
     /// <summary>Asks for one committed message to be classified.</summary>
     /// <param name="emailId">The local identity the occurrence was stored as, which the execution is keyed by.</param>
     /// <param name="occurrenceId">The occurrence synchronization has just stored, with its content.</param>
-    /// <param name="owner">The owner the run resolved the account under, which the queued work is recorded against.</param>
+    /// <param name="user">The user the run resolved the account under, which the queued work is recorded against.</param>
     /// <param name="cancellationToken">Cancels the enqueue.</param>
     /// <returns>A task that completes once the queue has answered, or at once where no classification is wanted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrenceId" /> is <see langword="null" />.</exception>
@@ -77,12 +77,12 @@ public sealed class SpamClassificationArrivals
     public async Task ScheduleAsync(
         StoredEmailId emailId,
         EmailOccurrenceId occurrenceId,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
-        var settings = this.settingsReader.SettingsFor(owner);
+        var settings = this.settingsReader.SettingsFor(user);
 
         if (!settings.IsEnabled || !settings.Covers(occurrenceId.FolderResolutionId.Alias))
         {
@@ -91,11 +91,11 @@ public sealed class SpamClassificationArrivals
 
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
-            ClassifyEmailSpamJobPayload.For(owner, occurrenceId),
+            ClassifyEmailSpamJobPayload.For(user, occurrenceId),
 
-            // Composed from the owner the run already resolved rather than looked up here: the queue row records whose
+            // Composed from the user the run already resolved rather than looked up here: the queue row records whose
             // account the classification is about, and the synchronization run settled that once for the whole run.
-            MailAccountIdentity.Create(owner, occurrenceId.AccountId));
+            MailAccountIdentity.Create(user, occurrenceId.AccountId));
 
         await this.jobs.EnqueueAsync(request, cancellationToken);
     }

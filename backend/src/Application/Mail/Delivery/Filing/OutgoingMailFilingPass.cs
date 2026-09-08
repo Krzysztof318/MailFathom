@@ -15,7 +15,7 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// <remarks>
 /// <para>
 /// Two moments, and they are the two an outbox pass already reaches. Before it claims anything it mirrors the sends
-/// that are waiting, so a message held until Monday is visible in the mail client the owner actually uses rather than
+/// that are waiting, so a message held until Monday is visible in the mail client the user actually uses rather than
 /// only to somebody running a command; after a send has settled it withdraws that mirror and, where the account asked
 /// for one, files the sent copy.
 /// </para>
@@ -124,7 +124,7 @@ public sealed class OutgoingMailFilingPass
     /// carries.
     /// </para>
     /// <para>
-    /// The order is deliberate. The mirror is withdrawn first, so a folder the owner is looking at never shows the same
+    /// The order is deliberate. The mirror is withdrawn first, so a folder the user is looking at never shows the same
     /// message as both waiting and sent; the sent copy is appended only after a delivery the server acknowledged, which
     /// is the one point at which saying <em>this was sent</em> is true.
     /// </para>

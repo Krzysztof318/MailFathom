@@ -23,7 +23,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <b>No message carries a recipient.</b> A policy refusal names which half of the policy refused, and a ceiling
 /// refusal names which ceiling was reached; neither names an address, a domain, or a count of the people a message was
 /// addressed to, because a refusal is a line in a log and a recipient is personal data of somebody who is not this
-/// mailbox's owner.
+/// mailbox's user.
 /// </para>
 /// </remarks>
 public sealed class OutgoingMailRefusedException : MailFathomException
@@ -144,7 +144,7 @@ public sealed class OutgoingMailRefusedException : MailFathomException
     /// <returns>The failure to raise.</returns>
     /// <remarks>
     /// It names neither the address nor how many were refused. A recipient is personal data of somebody who is not this
-    /// mailbox's owner, and a count would let a caller learn the contact book one send at a time by addressing people
+    /// mailbox's user, and a count would let a caller learn the contact book one send at a time by addressing people
     /// until the number changed — which is exactly the reconnaissance a caller acting on somebody else's instructions
     /// would perform.
     /// </remarks>

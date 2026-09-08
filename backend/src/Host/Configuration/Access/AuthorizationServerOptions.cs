@@ -63,11 +63,11 @@ internal sealed class AuthorizationServerOptions
     /// <para>
     /// A tenant holds whoever the operator's identity platform holds, and a token proves which of them is asking rather
     /// than that they were meant to administer this deployment. The administrative endpoint answers to the deployment
-    /// administrator, who is nobody's owner and holds no credential record, so without this list every colleague who can
+    /// administrator, who is nobody's user and holds no credential record, so without this list every colleague who can
     /// obtain a token for that resource administers the deployment.
     /// </para>
     /// <para>
-    /// It is read on the administrative endpoint alone. A mail-serving endpoint resolves a subject to one owner's
+    /// It is read on the administrative endpoint alone. A mail-serving endpoint resolves a subject to one user's
     /// credential record instead, so the setting is retired there and refused by name — see
     /// <see cref="OAuthSubjectAdmission" />.
     /// </para>
@@ -91,7 +91,7 @@ internal sealed class AuthorizationServerOptions
     /// <returns>One message per faulty setting, relative to this profile, empty when the profile is usable.</returns>
     /// <remarks>
     /// <see cref="AuthorizedSubjects" /> is read only where the configured list is what admits a person. On an endpoint
-    /// whose subjects resolve owner records the setting is retired rather than optional, and it is refused by the walk
+    /// whose subjects resolve user records the setting is retired rather than optional, and it is refused by the walk
     /// over the raw configuration that names every retired setting with the credential replacing it — so nothing here
     /// reports it a second time in weaker words.
     /// </remarks>

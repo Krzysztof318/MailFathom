@@ -14,7 +14,7 @@ namespace MailFathom.Application.SensitiveContent.Redaction;
 /// This is the single implementation the whole feature turns on. The derived path and the read path both redact through
 /// it, so a citation drawn from a redacted chunk lands on the same redacted text when a reader opens the message; two
 /// implementations would drift the moment either one gained a rule about ordering, overlap, or truncation. One instance
-/// answers for one posture, and a deployment serving owners with different postures holds one per distinct posture —
+/// answers for one posture, and a deployment serving users with different postures holds one per distinct posture —
 /// all of them sharing the single <see cref="SensitiveContentScanConcurrency" /> the process budgets scans by.
 /// </para>
 /// <para>

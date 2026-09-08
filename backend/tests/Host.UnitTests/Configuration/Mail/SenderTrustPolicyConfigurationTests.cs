@@ -21,13 +21,13 @@ public sealed class SenderTrustPolicyConfigurationTests
     {
         // Arrange
         var options = OptionsFor(
-            AccountAt("work", "owner@work.example"),
-            AccountAt("personal", "owner@personal.example"));
+            AccountAt("work", "user@work.example"),
+            AccountAt("personal", "user@personal.example"));
 
         // Act
         var trust = options
             .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("personal"))
-            .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
+            .Evaluate(WrittenBy("work.example"), AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Trusted, trust.Level);
@@ -40,14 +40,14 @@ public sealed class SenderTrustPolicyConfigurationTests
     {
         // Arrange
         var options = OptionsFor(
-            AccountAt("work", "owner@work.example"),
-            AccountAt("personal", "owner@personal.example"));
+            AccountAt("work", "user@work.example"),
+            AccountAt("personal", "user@personal.example"));
         options.TrustOwnAccountDomains = false;
 
         // Act
         var trust = options
             .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("personal"))
-            .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
+            .Evaluate(WrittenBy("work.example"), AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, trust.Level);
@@ -63,7 +63,7 @@ public sealed class SenderTrustPolicyConfigurationTests
         // Act
         var trust = options
             .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
-            .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
+            .Evaluate(WrittenBy("work.example"), AddressOf("user@work.example"));
 
         // Assert
         Assert.Equal(SenderTrustLevel.Unknown, trust.Level);
@@ -74,9 +74,9 @@ public sealed class SenderTrustPolicyConfigurationTests
     public void GetTrustPolicy_AnEntryOnOneAccount_DoesNotReachAnother()
     {
         // Arrange
-        var work = AccountAt("work", "owner@work.example");
+        var work = AccountAt("work", "user@work.example");
         work.TrustedSenders = [new TrustedSenderOptions { Domain = "partner.example" }];
-        var options = OptionsFor(work, AccountAt("personal", "owner@personal.example"));
+        var options = OptionsFor(work, AccountAt("personal", "user@personal.example"));
 
         // Act
         var onWork = options
@@ -101,7 +101,7 @@ public sealed class SenderTrustPolicyConfigurationTests
         SenderTrustLevel expected)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.TrustedSenders =
             [new TrustedSenderOptions { Domain = "partner.example", IncludeSubdomains = includeSubdomains }];
 
@@ -119,7 +119,7 @@ public sealed class SenderTrustPolicyConfigurationTests
     public void GetTrustPolicy_AccountThisSnapshotNoLongerNames_RecognizesNobody()
     {
         // Act
-        var policy = OptionsFor(AccountAt("work", "owner@work.example"))
+        var policy = OptionsFor(AccountAt("work", "user@work.example"))
             .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("removed"));
 
         // Assert
@@ -139,7 +139,7 @@ public sealed class SenderTrustPolicyConfigurationTests
         bool includeSubdomains)
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.TrustedSenders =
             [new TrustedSenderOptions { Domain = domain, Address = address, IncludeSubdomains = includeSubdomains }];
 
@@ -158,7 +158,7 @@ public sealed class SenderTrustPolicyConfigurationTests
     public void ValidateForSynchronization_UnusableTrustedSender_DoesNotEchoTheValue()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.TrustedSenders =
         [
             new TrustedSenderOptions { Domain = "partner.example" },
@@ -181,7 +181,7 @@ public sealed class SenderTrustPolicyConfigurationTests
     public void ValidateForSynchronization_UsableTrustedSenders_AreAccepted()
     {
         // Arrange
-        var account = AccountAt("work", "owner@work.example");
+        var account = AccountAt("work", "user@work.example");
         account.TrustedSenders =
         [
             new TrustedSenderOptions { Domain = "partner.example", IncludeSubdomains = true },

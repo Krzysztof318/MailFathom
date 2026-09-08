@@ -76,7 +76,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEntryAcceptingApiKeys_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(Accepting(OwnerCredentialMethod.ApiKey));
+        var options = EnabledWith(Accepting(UserCredentialMethod.ApiKey));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
@@ -93,8 +93,8 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(
-            Accepting(OwnerCredentialMethod.ApiKey),
-            Accepting(OwnerCredentialMethod.ApiKey));
+            Accepting(UserCredentialMethod.ApiKey),
+            Accepting(UserCredentialMethod.ApiKey));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -104,7 +104,7 @@ public sealed class McpEndpointOptionsTests
     }
 
     /// <summary>
-    /// A mapped subject resolves one owner, so several entries naming several authorization servers are what a
+    /// A mapped subject resolves one user, so several entries naming several authorization servers are what a
     /// deployment serving two of them writes — which is why that one method is the exception to the rule above.
     /// </summary>
     [Fact]
@@ -130,7 +130,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEntryNamingNoPublishedMethod_IsRefusedRatherThanIgnored(string? method)
     {
         // Arrange
-        var options = EnabledWith(new OwnerFacingAuthenticationOptions { Method = method });
+        var options = EnabledWith(new UserFacingAuthenticationOptions { Method = method });
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -144,7 +144,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEntryCarryingABlockAnotherMethodOwns_IsRefused()
     {
         // Arrange
-        var entry = Accepting(OwnerCredentialMethod.ApiKey);
+        var entry = Accepting(UserCredentialMethod.ApiKey);
         entry.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
         var options = EnabledWith(entry);
 
@@ -161,7 +161,7 @@ public sealed class McpEndpointOptionsTests
     {
         // Arrange
         var options = EnabledWith(
-            Accepting(OwnerCredentialMethod.ApiKey),
+            Accepting(UserCredentialMethod.ApiKey),
             OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")));
 
         // Act, Assert
@@ -175,7 +175,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_ScopesNarrowingAGrantOnAMethodCarryingNoToken_IsRefused()
     {
         // Arrange
-        var entry = Accepting(OwnerCredentialMethod.ApiKey);
+        var entry = Accepting(UserCredentialMethod.ApiKey);
         entry.PermissionsFromTokenScopes = true;
         var options = EnabledWith(entry);
 
@@ -194,7 +194,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_AnEntryAcceptingMappedSubjectsWithNoOAuthBlock_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(Accepting(OwnerCredentialMethod.OAuthSubject));
+        var options = EnabledWith(Accepting(UserCredentialMethod.OAuthSubject));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
@@ -445,7 +445,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = EnabledWith(new OwnerFacingAuthenticationOptions());
+        var options = EnabledWith(new UserFacingAuthenticationOptions());
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
@@ -539,7 +539,7 @@ public sealed class McpEndpointOptionsTests
 
     private static McpEndpointOptions Enabled() => new() { Enabled = true };
 
-    private static McpEndpointOptions EnabledWith(params OwnerFacingAuthenticationOptions[] methods)
+    private static McpEndpointOptions EnabledWith(params UserFacingAuthenticationOptions[] methods)
     {
         var options = Enabled();
 
@@ -553,12 +553,12 @@ public sealed class McpEndpointOptionsTests
         return options;
     }
 
-    private static OwnerFacingAuthenticationOptions Accepting(OwnerCredentialMethod method) =>
+    private static UserFacingAuthenticationOptions Accepting(UserCredentialMethod method) =>
         new() { Method = method.Name };
 
-    private static OwnerFacingAuthenticationOptions OAuthMethod(
+    private static UserFacingAuthenticationOptions OAuthMethod(
         params AuthorizationServerOptions[] authorizationServers) =>
-        new() { Method = OwnerCredentialMethod.OAuthSubject.Name, OAuth = OAuthWith(authorizationServers) };
+        new() { Method = UserCredentialMethod.OAuthSubject.Name, OAuth = OAuthWith(authorizationServers) };
 
     private static OAuthValidationOptions OAuthWith(params AuthorizationServerOptions[] authorizationServers)
     {

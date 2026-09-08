@@ -256,20 +256,20 @@ and is minted by the running deployment, over the [administrative endpoint](admi
 
 ```console
 $ mfctl credential create --method api-key
-Provisioned api-key credential 9b3e… for owner 6f1c….
+Provisioned api-key credential 9b3e… for user 6f1c….
 The client presents this key: mfk_…
 It is stored only as a digest, so nothing here or in the deployment can report it again. Copy it now.
 ```
 
 The deployment keeps only a digest, so no file, backup, or configuration on this machine holds anything a client could
 present — and a key nobody copied is replaced with `mfctl credential rotate` rather than recovered.
-[Owner credentials](../operations/admin-endpoint.md#owner-credentials) is the whole command group, including how a key
+[User credentials](../operations/admin-endpoint.md#user-credentials) is the whole command group, including how a key
 is disabled the moment it has to stop working.
 
 An empty `Authentication` list is legal — the reverse-proxy-and-loopback deployment is an ordinary one — but it is
 announced with a startup warning, because an unauthenticated endpoint serves your mailbox to whoever can reach its port. Read
 [the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the other three methods — a
-mapped OAuth subject, a client's public key, and [an owner's own username and password](../operations/mcp-endpoint.md#passwords)
+mapped OAuth subject, a client's public key, and [a user's own username and password](../operations/mcp-endpoint.md#passwords)
 — browser origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
 **A credential reaches the whole surface until its provisioning narrows it.** The command above named no `--permission`,

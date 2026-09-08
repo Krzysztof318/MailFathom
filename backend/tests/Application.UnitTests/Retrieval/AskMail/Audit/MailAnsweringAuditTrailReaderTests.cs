@@ -16,7 +16,7 @@ namespace MailFathom.Application.UnitTests.Retrieval.AskMail.Audit;
 public sealed class MailAnsweringAuditTrailReaderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailAnsweringAuditEntryStore entries = Substitute.For<IMailAnsweringAuditEntryStore>();
 

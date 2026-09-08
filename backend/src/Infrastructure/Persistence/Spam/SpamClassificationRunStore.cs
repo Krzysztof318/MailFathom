@@ -24,12 +24,12 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var outstanding = await dbContext.SpamClassificationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.OwnerId == owner
+                run => run.UserId == user
                     && run.MailboxAccountId == mailboxAccountId
                     && run.EndedAt == null,
                 cancellationToken);
@@ -43,12 +43,12 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var owner = account.Owner.Value;
+        var user = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         var latest = await dbContext.SpamClassificationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.OwnerId == owner && run.MailboxAccountId == mailboxAccountId,
+                run => run.UserId == user && run.MailboxAccountId == mailboxAccountId,
                 cancellationToken);
 
         return latest is null ? null : Read(latest, account);
@@ -69,7 +69,7 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.SpamClassificationRuns.FindAsync(
-            [run.Account.Owner.Value, run.Account.Id.Value],
+            [run.Account.User.Value, run.Account.Id.Value],
             cancellationToken);
 
         if (stored is null)
@@ -79,8 +79,8 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
                 MailboxAccountId = run.Account.Id.Value,
 
                 // Written from the identity the request resolved through the deployment's catalog, which is the account
-                // this run walks. A run belongs to the owner whose mail it classifies.
-                OwnerId = run.Account.Owner.Value,
+                // this run walks. A run belongs to the user whose mail it classifies.
+                UserId = run.Account.User.Value,
                 FolderAliases = [],
             };
 

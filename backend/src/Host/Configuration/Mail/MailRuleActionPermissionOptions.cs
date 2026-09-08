@@ -10,7 +10,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <summary>States which changes a rule may make to one account's mailbox.</summary>
 /// <remarks>
 /// <para>
-/// Several switches rather than one, because what an owner is willing to let automation do is not one decision: filing
+/// Several switches rather than one, because what a user is willing to let automation do is not one decision: filing
 /// mail, marking it read, flagging it, and labelling it are undone from any mail client, and a deletion is not. An
 /// account that says nothing gets the reversible actions and no deletion, so deletion is opt-in on every account of
 /// every deployment.
@@ -18,7 +18,7 @@ namespace MailFathom.Host.Configuration.Mail;
 /// <para>
 /// It is enforced where the rule set is read. A rule declaring an action one of its accounts refuses fails startup
 /// naming both, rather than being carried and quietly skipped when that account's mail reaches it — a rule that does
-/// nothing is indistinguishable from a rule that never matched, and this is exactly the setting an owner would check
+/// nothing is indistinguishable from a rule that never matched, and this is exactly the setting a user would check
 /// last.
 /// </para>
 /// <para>
@@ -48,7 +48,7 @@ internal sealed class MailRuleActionPermissionOptions
 
     /// <summary>Gets or sets whether a rule may add, remove, or replace the keywords of this account's mail.</summary>
     /// <remarks>
-    /// One switch for all three keyword actions, because an owner deciding whether automation may label their mail is
+    /// One switch for all three keyword actions, because a user deciding whether automation may label their mail is
     /// answering one question: permitting an addition while refusing a removal would leave mail accumulating labels
     /// nothing is allowed to take off again.
     /// </remarks>

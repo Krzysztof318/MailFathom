@@ -65,7 +65,7 @@ public sealed record MailOutboxPassReport(
     /// <summary>Gets how many copies this pass could not put where the account asked for them.</summary>
     /// <remarks>
     /// It is deliberately not part of <see cref="AccountDeferred" /> and of nothing else that decides what happens
-    /// next. A copy that was not filed is a message the owner cannot see in their own client; it is never a message
+    /// next. A copy that was not filed is a message the user cannot see in their own client; it is never a message
     /// that failed to reach anybody, and no send is attempted again because of it.
     /// </remarks>
     public int NotFiledCount => this.FilingResults.Count(result => result.Outcome

@@ -107,7 +107,7 @@ public sealed record OutboxQuery
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(MailAccountIdentity? account, OutgoingEmailStage? stage) =>
         PageFilterFingerprint.Of(
-            account?.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account?.User.Value.ToString("N", CultureInfo.InvariantCulture),
             account?.Id.Value,
             stage?.ToString());
 

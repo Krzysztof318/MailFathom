@@ -1198,7 +1198,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var signal = Assert.Single(
             harness.SignalChannel.Published,
             published => published.Kind == ClientSignalKind.AccountState);
-        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(MailAccountId.Create("primary"), signal.Account);
         Assert.Null(signal.Folder);
         Assert.Empty(signal.Emails);
@@ -1351,7 +1351,7 @@ public sealed class AccountSynchronizationSupervisorTests
             settings,
             clock,
             MailAccountIdentity.Create(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 MailAccountId.Create(options.Accounts[0].AccountId)));
     }
 

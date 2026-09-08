@@ -308,7 +308,7 @@ public sealed class AttachmentTextOptionsTests
     /// <summary>A negative period ceiling is refused, because a period admitting less than nothing is not a budget.</summary>
     [Theory]
     [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriod))]
-    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerOwner))]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerUser))]
     public void Validate_ANegativePeriodCeiling_IsRefused(string key)
     {
         // Arrange
@@ -329,7 +329,7 @@ public sealed class AttachmentTextOptionsTests
     /// </summary>
     [Theory]
     [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriod))]
-    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerOwner))]
+    [InlineData(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerUser))]
     public void Validate_APeriodCeilingBelowOneMessage_IsRefused(string key)
     {
         // Arrange
@@ -344,15 +344,15 @@ public sealed class AttachmentTextOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(key));
     }
 
-    /// <summary>A per-owner ceiling above the deployment's own bounds nothing, so it is refused rather than ignored.</summary>
+    /// <summary>A per-user ceiling above the deployment's own bounds nothing, so it is refused rather than ignored.</summary>
     [Fact]
-    public void Validate_APerOwnerCeilingAboveTheDeploymentCeiling_IsRefused()
+    public void Validate_APerUserCeilingAboveTheDeploymentCeiling_IsRefused()
     {
         // Arrange
         AttachmentTextOptions settings = new()
         {
             MaxInputOctetsPerPeriod = 128L * 1024 * 1024,
-            MaxInputOctetsPerPeriodPerOwner = 256L * 1024 * 1024,
+            MaxInputOctetsPerPeriodPerUser = 256L * 1024 * 1024,
         };
 
         // Act
@@ -361,7 +361,7 @@ public sealed class AttachmentTextOptionsTests
         // Assert
         Assert.Contains(
             errors,
-            error => error.MemberNames.Contains(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerOwner)));
+            error => error.MemberNames.Contains(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerUser)));
     }
 
     /// <summary>Zero declares no ceiling at all, which is the default a deployment starts on and is never refused.</summary>
@@ -376,11 +376,11 @@ public sealed class AttachmentTextOptionsTests
 
         // Assert
         Assert.Equal(0, settings.MaxInputOctetsPerPeriod);
-        Assert.Equal(0, settings.MaxInputOctetsPerPeriodPerOwner);
+        Assert.Equal(0, settings.MaxInputOctetsPerPeriodPerUser);
         Assert.DoesNotContain(
             errors,
             error => error.MemberNames.Contains(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriod))
-                || error.MemberNames.Contains(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerOwner)));
+                || error.MemberNames.Contains(nameof(AttachmentTextOptions.MaxInputOctetsPerPeriodPerUser)));
     }
 
     private static void WritePeriodCeiling(AttachmentTextOptions settings, string key, long value)
@@ -392,7 +392,7 @@ public sealed class AttachmentTextOptionsTests
             return;
         }
 
-        settings.MaxInputOctetsPerPeriodPerOwner = value;
+        settings.MaxInputOctetsPerPeriodPerUser = value;
     }
 
     private static IReadOnlyList<ValidationResult> Validate(AttachmentTextOptions settings) =>

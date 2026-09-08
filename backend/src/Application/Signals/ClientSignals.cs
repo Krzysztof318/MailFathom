@@ -14,7 +14,7 @@ namespace MailFathom.Application.Signals;
 /// <para>
 /// <b>Signals are folded per scope over a short window.</b> A run that commits forty messages into one folder is one
 /// arrival to the person who was away from the screen, exactly as it is one notification, so the statements are held
-/// for <see cref="FoldingWindow" /> and the fold is what a channel is handed. The scope is the owner, the kind, and the
+/// for <see cref="FoldingWindow" /> and the fold is what a channel is handed. The scope is the user, the kind, and the
 /// place, so two folders' arrivals stay two statements — folding them into one would leave a client told that mail
 /// arrived without being told where to look.
 /// </para>
@@ -41,8 +41,8 @@ public sealed class ClientSignals : IAsyncDisposable
 
     /// <summary>The most scopes held at once before a further one is delivered unfolded.</summary>
     /// <remarks>
-    /// A bound rather than a tuning value: the buffer is keyed by owner, kind, and place, so a deployment serving many
-    /// owners whose accounts all run at once would otherwise grow it without limit. A scope arriving past the bound is
+    /// A bound rather than a tuning value: the buffer is keyed by user, kind, and place, so a deployment serving many
+    /// users whose accounts all run at once would otherwise grow it without limit. A scope arriving past the bound is
     /// delivered straight away, which is the accurate degradation — more statements rather than lost ones.
     /// </remarks>
     public const int MostFoldedScopes = 1_000;

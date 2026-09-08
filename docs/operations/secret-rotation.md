@@ -170,8 +170,8 @@ A rotated `Persistence:ConnectionString` is also parsed before it is published. 
 
 ## Rotating a database-backed secret
 
-A document keeps the same `database:<uuid>` reference while `POST /api/admin/owners/{ownerId}/secrets` replaces the
-sealed material behind it. Send the same declared name used to create the secret; the owner and name are its stable
+A document keeps the same `database:<uuid>` reference while `POST /api/admin/users/{userId}/secrets` replaces the
+sealed material behind it. Send the same declared name used to create the secret; the user and name are its stable
 rotation identity, so the response returns the reference the document already carries. The write uses the ring's
 current `ActiveKeyId`, so replacing the material and re-sealing an unchanged secret are the same operation; the next
 resolution opens only the replacement. The plaintext is not written into the document, a log, a metric, or the response.

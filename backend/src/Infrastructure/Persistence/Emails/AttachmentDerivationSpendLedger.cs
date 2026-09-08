@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>EF Core ledger of what each budget period has consumed reading attachments, per step and per owner.</summary>
+/// <summary>EF Core ledger of what each budget period has consumed reading attachments, per step and per user.</summary>
 [RequiresIntegrationCoverage]
 internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbContext) : IAttachmentDerivationSpendLedger
 {
@@ -26,9 +26,9 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
     /// </remarks>
     private const string RecordSpendStatement = $$"""
         INSERT INTO {{AttachmentDerivationSpendPeriodEntity.TableName}}
-            ("{{AttachmentDerivationSpendPeriodEntity.PeriodStartsAtColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.OwnerIdColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.StepColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.ConsumedUnitCountColumnName}}")
+            ("{{AttachmentDerivationSpendPeriodEntity.PeriodStartsAtColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.UserIdColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.StepColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.ConsumedUnitCountColumnName}}")
         VALUES ({0}, {1}, {2}, {3})
-        ON CONFLICT ("{{AttachmentDerivationSpendPeriodEntity.PeriodStartsAtColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.OwnerIdColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.StepColumnName}}") DO UPDATE
+        ON CONFLICT ("{{AttachmentDerivationSpendPeriodEntity.PeriodStartsAtColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.UserIdColumnName}}", "{{AttachmentDerivationSpendPeriodEntity.StepColumnName}}") DO UPDATE
         SET "{{AttachmentDerivationSpendPeriodEntity.ConsumedUnitCountColumnName}}" =
             {{AttachmentDerivationSpendPeriodEntity.TableName}}."{{AttachmentDerivationSpendPeriodEntity.ConsumedUnitCountColumnName}}"
             + EXCLUDED."{{AttachmentDerivationSpendPeriodEntity.ConsumedUnitCountColumnName}}"
@@ -43,17 +43,17 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
     public async Task<AttachmentDerivationTotals> ReadConsumedAsync(
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken)
     {
-        var ownerId = owner.Value;
+        var userId = user.Value;
 
         var totals = await dbContext.AttachmentDerivationSpendPeriods
             .AsNoTracking()
             .Where(period => period.PeriodStartsAt == periodStart && period.Step == derivationStep)
             .GroupBy(_ => 1)
             .Select(rows => new AttachmentDerivationTotals(
-                rows.Sum(period => period.OwnerId == ownerId ? period.ConsumedUnitCount : 0L),
+                rows.Sum(period => period.UserId == userId ? period.ConsumedUnitCount : 0L),
                 rows.Sum(period => period.ConsumedUnitCount)))
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -75,7 +75,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
         IPersistenceSession session,
         DateTimeOffset periodStart,
         AttachmentDerivationStep derivationStep,
-        MailOwnerId owner,
+        MailUserId user,
         long unitCount,
         CancellationToken cancellationToken)
     {
@@ -93,7 +93,7 @@ internal sealed class AttachmentDerivationSpendLedger(MailFathomDbContext dbCont
         // constants, are part of the statement. The step travels as its name because that is how the column stores it.
         await sessionDbContext.Database.ExecuteSqlRawAsync(
             RecordSpendStatement,
-            [periodStart, owner.Value, derivationStep.ToString(), unitCount],
+            [periodStart, user.Value, derivationStep.ToString(), unitCount],
             cancellationToken);
     }
 }

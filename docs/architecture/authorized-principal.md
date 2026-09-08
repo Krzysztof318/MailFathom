@@ -1,6 +1,6 @@
 # Who a use case is running for
 
-<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerOwner.cs, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
+<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerUser.cs, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Application/Emails/DownloadAttachment/** -->
 
 A use case can be reached by more than one thing. Today an MCP tool, an administrative route, a background worker, and
 the attachment download link all end at application-layer code, and each of them arrives by a different path with
@@ -30,7 +30,7 @@ transport having already asked, and the transport never relies on the use case b
 ## What the application layer is told
 
 `AuthorizedPrincipal` is the whole of it: the identity the work was admitted under, the permissions that identity holds,
-and — where the work is somebody's mail rather than the deployment's — the owner it is acting for. Nothing from
+and — where the work is somebody's mail rather than the deployment's — the user it is acting for. Nothing from
 `System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that line, and no use case learns *which* credential
 admitted a caller — that is a question the transport already answered. `Boundaries.UnitTests` holds a
 rule keeping claims types out of `Application` and `Domain`, because those are the one family of types the project
@@ -54,33 +54,33 @@ The process identity is a kind of its own rather than a caller holding everythin
 it. A principal that could be admitted by holding a permission would be reachable by whoever an operator granted that
 permission to — so a use case that may run without a caller admits it **by name**, and never by a permission check.
 
-**The owner is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
-the owner says whose mail those operations run against, and no grant an operator writes can make one caller act for
-another. So a principal carries an owner or carries none, and the two questions are asked separately: `RequirePermission`
-answers the first and `RequireOwner` the second. A caller admitted on a surface that serves one owner's mail acts for
-that owner; the deployment administrator and this process's own identity act for nobody, and a caller-scoped read
+**The user is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
+the user says whose mail those operations run against, and no grant an operator writes can make one caller act for
+another. So a principal carries a user or carries none, and the two questions are asked separately: `RequirePermission`
+answers the first and `RequireUser` the second. A caller admitted on a surface that serves one user's mail acts for
+that user; the deployment administrator and this process's own identity act for nobody, and a caller-scoped read
 reached by either is refused rather than answered with an empty set — an empty answer there would publish the read to
-them in the shape of an answer. Which surfaces carry an owner is settled where a request becomes a principal, one
+them in the shape of an answer. Which surfaces carry a user is settled where a request becomes a principal, one
 section below.
 
 **Work that runs for nobody still has to know whose mail it touches.** Synchronization and embedding are performed
-under this process's own identity, which carries no owner by construction — so a bound stated per owner cannot be read
-off the principal, and asking `RequireOwner` there would refuse the work rather than answer it. `IMailOwnership` is what
-answers instead: it resolves the owner of a stored message from the mail graph, where ownership lives on the row itself,
-and it is the only way to reach that fact without a caller. It has nothing to resolve an owner *from an account* with,
-and deliberately so — an account identifier names one mailbox within its owner rather than across the deployment, so a
+under this process's own identity, which carries no user by construction — so a bound stated per user cannot be read
+off the principal, and asking `RequireUser` there would refuse the work rather than answer it. `IMailOwnership` is what
+answers instead: it resolves the user of a stored message from the mail graph, where ownership lives on the row itself,
+and it is the only way to reach that fact without a caller. It has nothing to resolve a user *from an account* with,
+and deliberately so — an account identifier names one mailbox within its user rather than across the deployment, so a
 question that names the identifier alone has no single answer, and whoever holds the account already holds the pair. Reading it is not an authorization
 decision and grants nothing — a worker was already admitted by name — and it is deliberately not a way for a caller to
 act for somebody else, because nothing published to a caller consults it.
 
 **Not everything owned is caller-scoped, and the difference is a second reading rather than a second rule.** The contact
-book belongs to an owner exactly as mail does, and it is reached by the administrator and by MailFathom's own
-synchronization as well as by a caller — so requiring an owner there would refuse the two principals that legitimately
-maintain it. `ActingOwner` is the reading those paths take: it answers with the owner the principal acts for, or with
-nothing when the principal acts for none, and one resolution then falls back to the owner this deployment serves. It
-refuses work reached under no principal exactly as `RequireOwner` does, because that is the case where nothing said what
+book belongs to a user exactly as mail does, and it is reached by the administrator and by MailFathom's own
+synchronization as well as by a caller — so requiring a user there would refuse the two principals that legitimately
+maintain it. `ActingUser` is the reading those paths take: it answers with the user the principal acts for, or with
+nothing when the principal acts for none, and one resolution then falls back to the user this deployment serves. It
+refuses work reached under no principal exactly as `RequireUser` does, because that is the case where nothing said what
 admitted the work at all. `ContactBookOwnership` is the only reader, and [Contacts § A book belongs to one
-owner](../features/contacts.md#a-book-belongs-to-one-owner) is where what it decides is described.
+user](../features/contacts.md#a-book-belongs-to-one-user) is where what it decides is described.
 
 The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
@@ -100,7 +100,7 @@ use cases.
 The host composes one `IAuthorizedPrincipalSource` per scope, which for a served request is that request:
 
 - **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — the
-  identifier of the owner credential the presented value resolved to on a mail-serving surface, and on the
+  identifier of the user credential the presented value resolved to on a mail-serving surface, and on the
   administrative surface the configured name of an API key or a client public key, or the issuer and subject the access
   policy checked against the configured authorization servers. The permissions travel as claims the scheme wrote when
   the credential was judged, so nothing per request re-reads a configuration section or the credential's row.
@@ -121,41 +121,41 @@ credential — a second and weaker way into an attachment than the signature the
 one posture only. The adapter therefore answers no principal for a path that route serves before it asks either surface,
 and the route's own statement, made once the ticket verifies, is the only thing that authorizes it.
 
-**Two of the three surfaces serve one owner's mail, and the adapter is where that is decided.** A caller admitted on
-the MCP surface or on the client surface is admitted to act for the owner this deployment serves; a caller admitted on
+**Two of the three surfaces serve one user's mail, and the adapter is where that is decided.** A caller admitted on
+the MCP surface or on the client surface is admitted to act for the user this deployment serves; a caller admitted on
 the administrative surface is not, because an administrator is admitted to a deployment rather than to somebody's
 mailbox. The split holds on either posture — a caller the surface authenticated and a caller admitted by the surface
 configuring no credential are both admitted the same way — because it follows from the path the request arrived on
 rather than from what it presented.
 
-**Which owner that is comes from the credential wherever a credential was presented, and from a startup gate
-otherwise.** Every credential a mail-serving surface accepts resolves one owner record, whichever of the four methods it
-is, so a request admitted on one carries that owner as a claim and the adapter acts for it — which is what lets one
-deployment serve more than one person's mail over one address, and what makes a credential resolving no owner refusable
+**Which user that is comes from the credential wherever a credential was presented, and from a startup gate
+otherwise.** Every credential a mail-serving surface accepts resolves one user record, whichever of the four methods it
+is, so a request admitted on one carries that user as a claim and the adapter acts for it — which is what lets one
+deployment serve more than one person's mail over one address, and what makes a credential resolving no user refusable
 exactly as an unknown credential is.
 
-The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
-they own, every owner whose record is already their own and whom no file declares, and the deployment's own
-`MailSynchronization:Accounts` belonging to the sole owner such a deployment holds. A caller that names no owner needs exactly one owner
+The gate settles the whole roster while the host starts — every user the file declares, each with the mail accounts
+they own, every user whose record is already their own and whom no file declares, and the deployment's own
+`MailSynchronization:Accounts` belonging to the sole user such a deployment holds. A caller that names no user needs exactly one user
 to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or `ClientEndpoint` admits such a
 caller** — which is a surface requiring no authentication and nothing else. Every credential these two surfaces admit is
-a record naming the owner it belongs to, whichever of the four methods presents it, so what an entry states is a method
+a record naming the user it belongs to, whichever of the four methods presents it, so what an entry states is a method
 rather than a person and reading the entry would answer nothing; what frees the roster is requiring a credential on both
 surfaces — or the surfaces being off.
 
 **The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
-than for a person, and every route there that is about one owner names the owner it is about, so a roster of several
-leaves nothing unanswered. That is also what makes recording a second owner reachable at all: the surface an operator
+than for a person, and every route there that is about one user names the user it is about, so a roster of several
+leaves nothing unanswered. That is also what makes recording a second user reachable at all: the surface an operator
 would use to correct the other two cannot be the surface the refusal closes. What it costs is the handful of
-administrative reads that still resolve the sole owner — the contact book among them — and those have no answer on a
-roster of several; each is a separate act to scope, and no route silently picks one owner out of several. Which mail
-accounts a caller owns is not one of them: it is resolved from the owner each served account carries, so every mailbox
+administrative reads that still resolve the sole user — the contact book among them — and those have no answer on a
+roster of several; each is a separate act to scope, and no route silently picks one user out of several. Which mail
+accounts a caller owns is not one of them: it is resolved from the user each served account carries, so every mailbox
 read answers a caller with their own half of a deployment serving several.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 
 The claim is read on the two mail-serving surfaces alone. A request admitted on the administrative surface acts for no
-owner whether or not it carried one, which is why the method that produces the claim
+user whether or not it carried one, which is why the method that produces the claim
 [is refused there at startup](../operations/mcp-endpoint.md#passwords): a credential naming a person would otherwise be
 admitted to a surface with nowhere to put them, and what it authorized would be the deployment's own authority.
 
@@ -173,12 +173,12 @@ requirement was a grant rather than a kind, the permission that would have suffi
 than a status code or a protocol result, because the same refusal is meant to reach two boundaries that answer it
 differently — and a use case that raised either shape directly would have decided both.
 
-A use case that acts on one owner's mail and is reached by a principal acting for no owner is refused the same way and
+A use case that acts on one user's mail and is reached by a principal acting for no user is refused the same way and
 with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
-about. A deployment that cannot resolve its own owner never reaches a use case at all, and answers
-`14002 DeploymentMailOwnerUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
+about. A deployment that cannot resolve its own user never reaches a use case at all, and answers
+`14002 DeploymentMailUserUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
 is a refusal to start, so nothing serves. A roster of several is a start that succeeds, and the code is then answered
-per request, as `409` on the handful of acts above that resolve the sole owner and name none themselves.
+per request, as `409` on the handful of acts above that resolve the sole user and name none themselves.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

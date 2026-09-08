@@ -31,10 +31,10 @@ public sealed class MailDraftBookTests
     private const string ScreenedMarker = "AKIAEXAMPLEKEY";
 
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly MailAccountIdentity OtherAccount =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -61,7 +61,7 @@ public sealed class MailDraftBookTests
         Assert.Equal("first version", Encoding.ASCII.GetString(harness.Contents.Peek(draft.Id).Span)[^13..]);
     }
 
-    /// <summary>An edit stores the new message over the old one and leaves the owner one draft in the folder.</summary>
+    /// <summary>An edit stores the new message over the old one and leaves the user one draft in the folder.</summary>
     [Fact]
     public async Task SaveAsync_RevisionOfAHeldDraft_ReplacesTheMessageAndTheCopy()
     {
@@ -199,7 +199,7 @@ public sealed class MailDraftBookTests
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
-                MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")),
+                MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("personal")),
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("second version"),
                 draft.Id,
@@ -213,7 +213,7 @@ public sealed class MailDraftBookTests
     /// <summary>The sending grant does not carry the drafting one, because no permission here implies another.</summary>
     /// <remarks>
     /// The pair of refusals is what makes the two halves of authoring separable at all. A deployment that granted
-    /// sending alone meant an agent to send the messages it was asked for, and writing into the owner's own drafts
+    /// sending alone meant an agent to send the messages it was asked for, and writing into the user's own drafts
     /// folder is a different act on a different folder — so it is refused here rather than admitted as the lesser of
     /// the two.
     /// </remarks>
@@ -375,7 +375,7 @@ public sealed class MailDraftBookTests
 
     /// <summary>
     /// A draft carrying what this deployment screens outgoing mail for leaves nothing behind: no record, no stored
-    /// message, and no copy in the owner's drafts folder.
+    /// message, and no copy in the user's drafts folder.
     /// </summary>
     [Fact]
     public async Task SaveAsync_DraftCarryingScreenedMaterial_RefusesAndWritesNothing()

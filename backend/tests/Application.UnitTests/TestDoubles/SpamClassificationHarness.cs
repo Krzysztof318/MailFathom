@@ -85,7 +85,7 @@ internal sealed class SpamClassificationHarness
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(call => new SpamActionOccurrence(
                 call.Arg<StoredEmailId>(),
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 EmailOccurrenceId.Create(
                     accountId,
                     new MailFolderResolutionId(folderAlias, MailFolderResolutionGeneration.First),
@@ -140,7 +140,7 @@ internal sealed class SpamClassificationHarness
         OptimisticConcurrencyRetryPolicy commitPolicy)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
-        settingsReader.ActionsFor(Arg.Any<MailOwnerId>()).Returns(actions);
+        settingsReader.ActionsFor(Arg.Any<MailUserId>()).Returns(actions);
 
         var dispositions = Substitute.For<IAuthoredDeleteEmailDispositionReader>();
         dispositions

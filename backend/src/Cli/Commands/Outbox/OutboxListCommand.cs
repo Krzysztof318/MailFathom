@@ -18,7 +18,7 @@ namespace MailFathom.Cli.Commands.Outbox;
 /// at, how many attempts it has had, and the codes that say what the last one ended in.
 /// </para>
 /// <para>
-/// It names no recipient and no subject. A page of an outbox is a page of who this owner writes to and when, and a
+/// It names no recipient and no subject. A page of an outbox is a page of who this user writes to and when, and a
 /// terminal is exactly the place such a page would end up in a screenshot; who one particular message was for is read
 /// with <c>outbox show</c>, which answers about one send somebody already has in front of them.
 /// </para>

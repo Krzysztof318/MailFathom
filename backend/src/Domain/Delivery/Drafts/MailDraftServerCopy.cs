@@ -19,7 +19,7 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// <para>
 /// The occurrence recorded here is the server's own statement about the copy it accepted, never a search for something
 /// that looks like the message. That is the whole of what makes the removal safe: the only UID this system ever expunges
-/// is one an <c>APPEND</c> of its own reported, so a draft the owner wrote themselves is unreachable from here by
+/// is one an <c>APPEND</c> of its own reported, so a draft the user wrote themselves is unreachable from here by
 /// construction rather than by a check.
 /// </para>
 /// <para>
@@ -72,7 +72,7 @@ public sealed record MailDraftServerCopy
     /// <remarks>
     /// Both halves are required. A copy the server named no placement for is in the folder and cannot be pointed at, and
     /// a copy whose append was never answered may not even be there — so neither is removable, and both are left as the
-    /// owner's with the divergence recorded.
+    /// user's with the divergence recorded.
     /// </remarks>
     public bool IsRemovable => this.IsStanding && this.Placement is { UidValidity: not null, Uid: not null };
 

@@ -90,7 +90,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     {
         if (this.mcpEndpointSettings.Enabled)
         {
-            this.ReportOwnerFacing(
+            this.ReportUserFacing(
                 McpEndpointName,
                 McpEndpointRoute.Path,
                 McpEndpointOptions.SectionName,
@@ -110,7 +110,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
         if (this.clientEndpointSettings.Enabled)
         {
-            this.ReportOwnerFacing(
+            this.ReportUserFacing(
                 ClientEndpointName,
                 ClientEndpointOptions.RoutePrefix,
                 ClientEndpointOptions.SectionName,
@@ -175,7 +175,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// <summary>States which methods a mail-serving endpoint accepts, and where the grant behind each of them lives.</summary>
     /// <remarks>
     /// The line an operator needs here is a different one, because there is no written grant to read back: what an
-    /// admitted caller holds is recorded on the credential the administrative surface provisioned, per owner and per
+    /// admitted caller holds is recorded on the credential the administrative surface provisioned, per user and per
     /// credential, so a report that printed a ceiling would be printing a number this section does not hold. What is
     /// worth stating is which methods are open and where to go and read what each credential may do.
     /// <para>
@@ -185,21 +185,21 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// and meet a process that will not start.
     /// </para>
     /// </remarks>
-    private void ReportOwnerFacing(
+    private void ReportUserFacing(
         string endpointName,
         string endpointPath,
         string sectionName,
         ProtectedSurface surface,
-        IReadOnlyList<OwnerFacingAuthenticationOptions> methods)
+        IReadOnlyList<UserFacingAuthenticationOptions> methods)
     {
-        var settingPath = $"{sectionName}:{OwnerFacingAuthenticationConfiguration.SettingName}";
+        var settingPath = $"{sectionName}:{UserFacingAuthenticationConfiguration.SettingName}";
         var enforcement = EnforcementOn(surface);
 
         if (methods.Count == 0)
         {
             var wholeSurface = Describe(MailFathomPermission.PublishedFor(surface));
 
-            this.LogOwnerFacingSurfaceGrantedWithoutAnyEntry(
+            this.LogUserFacingSurfaceGrantedWithoutAnyEntry(
                 endpointName,
                 endpointPath,
                 wholeSurface,
@@ -211,11 +211,11 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
         foreach (var (index, method) in methods.Index())
         {
-            var entryPath = OwnerFacingAuthenticationConfiguration.SettingPathOf(sectionName, method, index);
+            var entryPath = UserFacingAuthenticationConfiguration.SettingPathOf(sectionName, method, index);
 
             if (method.PermissionsFromTokenScopes)
             {
-                this.LogOwnerFacingEntryNarrowedByTokenScopes(
+                this.LogUserFacingEntryNarrowedByTokenScopes(
                     endpointName,
                     entryPath,
                     method.AcceptedMethod.Name,
@@ -223,7 +223,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
             }
             else
             {
-                this.LogOwnerFacingEntry(endpointName, entryPath, method.AcceptedMethod.Name, enforcement);
+                this.LogUserFacingEntry(endpointName, entryPath, method.AcceptedMethod.Name, enforcement);
             }
         }
     }
@@ -286,9 +286,9 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and what each "
-            + "credential of that method grants is recorded beside the owner it resolves rather than here. Read it "
+            + "credential of that method grants is recorded beside the user it resolves rather than here. Read it "
             + "with 'mfctl credential list'. {GrantEnforcement}")]
-    private partial void LogOwnerFacingEntry(
+    private partial void LogUserFacingEntry(
         string endpointName,
         string entrySettingPath,
         string acceptedMethod,
@@ -299,7 +299,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and each token holds "
             + "whichever of its credential's recorded permissions its own scopes carry. Read the ceiling with "
             + "'mfctl credential list'. {GrantEnforcement}")]
-    private partial void LogOwnerFacingEntryNarrowedByTokenScopes(
+    private partial void LogUserFacingEntryNarrowedByTokenScopes(
         string endpointName,
         string entrySettingPath,
         string acceptedMethod,
@@ -309,9 +309,9 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} configures no credential entry, so every caller it "
             + "serves holds {GrantedPermissions} — everything this surface publishes. Add an entry under "
-            + "{AuthenticationSettingPath} naming a method this endpoint accepts, and provision each owner's own grant "
+            + "{AuthenticationSettingPath} naming a method this endpoint accepts, and provision each user's own grant "
             + "with 'mfctl credential create'; an entry here carries no permissions of its own. {GrantEnforcement}")]
-    private partial void LogOwnerFacingSurfaceGrantedWithoutAnyEntry(
+    private partial void LogUserFacingSurfaceGrantedWithoutAnyEntry(
         string endpointName,
         string endpointPath,
         string grantedPermissions,

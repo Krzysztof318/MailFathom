@@ -29,11 +29,11 @@ public sealed class MailDraftAttachmentsTests
 
     /// <summary>A staged file joins the draft and is described by what it was uploaded as.</summary>
     [Fact]
-    public async Task StageAsync_AFileOnADraftThisOwnerIsWriting_JoinsTheDraftAsItWasUploaded()
+    public async Task StageAsync_AFileOnADraftThisUserIsWriting_JoinsTheDraftAsItWasUploaded()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -55,7 +55,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         await attachments.StageAsync(
@@ -78,7 +78,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -99,7 +99,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         await attachments.StageAsync(draft.Id, File("one.txt", "text/plain", 8), TestContext.Current.CancellationToken);
@@ -123,7 +123,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -137,13 +137,13 @@ public sealed class MailDraftAttachmentsTests
         Assert.Equal(MailFathomErrorCode.AuthoredMailFieldRefused, refusal.ErrorCode);
     }
 
-    /// <summary>A draft another owner holds is refused as one nobody holds, so no file reaches it.</summary>
+    /// <summary>A draft another user holds is refused as one nobody holds, so no file reaches it.</summary>
     [Fact]
-    public async Task StageAsync_ADraftAnotherOwnerHolds_IsRefusedAsOneNobodyHolds()
+    public async Task StageAsync_ADraftAnotherUserHolds_IsRefusedAsOneNobodyHolds()
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+        var theirs = await OpenAsync(drafts, SyntheticMailUser.Another);
         var attachments = AttachmentsOver(drafts);
 
         // Act
@@ -164,7 +164,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(drafts);
 
         var staged = await attachments.StageAsync(
@@ -188,7 +188,7 @@ public sealed class MailDraftAttachmentsTests
     {
         // Arrange
         var drafts = new InMemoryMailDraftStore();
-        var draft = await OpenAsync(drafts, SyntheticMailOwner.Deployment);
+        var draft = await OpenAsync(drafts, SyntheticMailUser.Deployment);
         var attachments = AttachmentsOver(
             drafts,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
@@ -258,11 +258,11 @@ public sealed class MailDraftAttachmentsTests
     private static AuthoredEmailAttachment File(string fileName, string mediaType, string content) =>
         new(fileName, mediaType, Encoding.UTF8.GetBytes(content).AsMemory());
 
-    /// <summary>Writes one draft down for one owner, which is the arrangement every test here starts from.</summary>
-    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailOwnerId owner) =>
+    /// <summary>Writes one draft down for one user, which is the arrangement every test here starts from.</summary>
+    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore drafts, MailUserId user) =>
         drafts.OpenAsync(
             Substitute.For<IPersistenceSession>(),
-            MailAccountIdentity.Create(owner, Work),
+            MailAccountIdentity.Create(user, Work),
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [],
             "a draft",

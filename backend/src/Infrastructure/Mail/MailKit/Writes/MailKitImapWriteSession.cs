@@ -142,7 +142,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
 
         // The journal is taken and never advanced, because a `\Seen` store is idempotent for one UID: repeating it
         // reaches the same flag state, so there is no stage a resumed attempt would want to skip. What the record is
-        // for here is provenance — the change comes back through synchronization looking like the owner marking mail
+        // for here is provenance — the change comes back through synchronization looking like the user marking mail
         // read in their own client — and that is written before this session is opened at all.
         await this.PerformAsync(
             MailboxMutation.SetSeen,

@@ -7,7 +7,7 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// <summary>The two halves of one presented Basic credential, with the password still erasable.</summary>
 /// <remarks>
 /// <para>
-/// It exists so a password read off a request has an owner and a lifetime. The characters stay in the pinned buffer
+/// It exists so a password read off a request has a user and a lifetime. The characters stay in the pinned buffer
 /// they were decoded into and are reached only as a span, so nothing between here and the key derivation copies them
 /// into a string the collector would keep until it felt like moving it. Disposing clears the whole buffer, and every
 /// caller disposes within the request that produced it.

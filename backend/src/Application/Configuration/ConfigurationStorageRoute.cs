@@ -36,16 +36,16 @@ public readonly record struct ConfigurationStorageRoute
     /// <remarks>This is where every path no special route names is persisted, so it is the answer for almost every setting.</remarks>
     public static ConfigurationStorageRoute RootDocument { get; } = new("root-document");
 
-    /// <summary>Gets the store holding one configuration document per owner.</summary>
+    /// <summary>Gets the store holding one configuration document per user.</summary>
     /// <remarks>
-    /// The top-level <c>Accounts</c> collection of owner accounts is routed here, one document per owner rather than
+    /// The top-level <c>Accounts</c> collection of user accounts is routed here, one document per user rather than
     /// one per mailbox, which is why those documents are not values inside the root document.
     /// </remarks>
-    public static ConfigurationStorageRoute OwnerAccounts { get; } = new("owner-accounts");
+    public static ConfigurationStorageRoute UserAccounts { get; } = new("user-accounts");
 
     /// <summary>Gets every store this build persists configuration into.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<ConfigurationStorageRoute> All { get; } = [RootDocument, OwnerAccounts];
+    public static IReadOnlyList<ConfigurationStorageRoute> All { get; } = [RootDocument, UserAccounts];
 
     /// <summary>Gets whether this value names a store rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

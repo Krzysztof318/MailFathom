@@ -53,17 +53,17 @@ repeated per client below:
   served: `http://127.0.0.1:8080` under the Compose defaults, or the public HTTPS address your proxy or
   [MailFathom's own TLS](../operations/mcp-endpoint.md#https-and-your-own-domain) serves.
 - **An API key travels as `Authorization: Bearer <the key material>`**, and nothing else about it is client-specific.
-  The key is minted for one owner by whoever administers the deployment, over
-  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials), and printed once;
+  The key is minted for one user by whoever administers the deployment, over
+  [the administrative endpoint](../operations/admin-endpoint.md#user-credentials), and printed once;
   [The MCP endpoint § API keys](../operations/mcp-endpoint.md#api-keys) records what a key is, how it rotates, and what
   every refusal looks like.
 - **A username and password travels as `Authorization: Basic <the pair, base64-encoded>`**, on a deployment that accepts
   one, and any client able to send a static header can present it. Every credential this endpoint accepts names the
-  person whose mail it reaches, so a request admitted with any of them reads that owner's mail rather than whichever
-  owner the deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords)
+  person whose mail it reaches, so a request admitted with any of them reads that user's mail rather than whichever
+  user the deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords)
   records how a deployment turns the method on, what a password crossing a clear-text address costs and what the
   deployment says about it at every startup, and what the refusal looks like; the credential itself is provisioned over
-  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials), like every other one here.
+  [the administrative endpoint](../operations/admin-endpoint.md#user-credentials), like every other one here.
 - **A browser-based client is also subject to the origin policy.** A client that runs as a web page sends an `Origin`
   header, and a deployment that narrowed `McpEndpoint:Cors:AllowedOrigins` has to list that client's origin;
   [CORS and the `Origin` header](../operations/mcp-endpoint.md#cors-and-the-origin-header) holds the rule. A client that
@@ -143,7 +143,7 @@ application: Anthropic's own documentation for the command-line tool below recor
 load there too, for whoever is signed in with that account.
 
 **Where the dialog is.** On an individual plan, **Customize → Connectors → + → Add custom connector**, then enter the
-remote MCP server URL. On a Team or Enterprise plan an owner adds it instead, under **Organization settings →
+remote MCP server URL. On a Team or Enterprise plan a user adds it instead, under **Organization settings →
 Connectors**, and members reach it from their own **Customize → Connectors**.
 
 **The address has to be public.** Anthropic documents that the server must be reachable over the public internet from
@@ -177,7 +177,7 @@ claude mcp add --transport http mailfathom http://127.0.0.1:8080/mcp \
 
 **What each part is.** `--transport http` is the Streamable HTTP transport; `mailfathom` is a name you choose, and it is
 what labels the tools in a session; the URL is the endpoint; `$MAILFATHOM_KEY` is the key
-[`mfctl credential create`](../operations/admin-endpoint.md#owner-credentials) printed once, which nothing can report
+[`mfctl credential create`](../operations/admin-endpoint.md#user-credentials) printed once, which nothing can report
 again. The server is registered for the current project by
 default — add `--scope user` to register it once for every project, or `--scope project` to write it into the
 repository's own `.mcp.json`.
@@ -355,13 +355,13 @@ other kind of failure, and it is the per-client section rather than this table t
 
 ---
 
-**Trademarks.** The product, service, and company names on this page are their owners' trademarks and are used solely to
+**Trademarks.** The product, service, and company names on this page are their users' trademarks and are used solely to
 identify the client applications a MailFathom deployment can be connected from. Their use implies no affiliation with,
-sponsorship by, endorsement by, or certification from those owners, in either direction, and this page reproduces no
+sponsorship by, endorsement by, or certification from those users, in either direction, and this page reproduces no
 third-party logo, icon, wordmark, or screenshot.
 
 OpenAI and ChatGPT are trademarks of OpenAI, Inc. Anthropic, Claude, and Claude Code are trademarks of Anthropic, PBC.
 Microsoft, Visual Studio Code, GitHub, and GitHub Copilot are trademarks of the Microsoft group of companies. Cursor is
 a trademark of Anysphere, Inc.
 [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
-records the per-owner review this statement comes out of, and why it sits here rather than in `NOTICE`.
+records the per-user review this statement comes out of, and why it sits here rather than in `NOTICE`.

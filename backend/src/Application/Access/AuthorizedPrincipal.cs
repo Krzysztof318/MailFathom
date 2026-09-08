@@ -10,19 +10,19 @@ namespace MailFathom.Application.Access;
 /// <remarks>
 /// <para>
 /// This is the whole of what the application layer learns about the outside of a request. It carries the identity the
-/// work was admitted under, the owner it is acting for where there is one, and the permissions that identity holds, and
+/// work was admitted under, the user it is acting for where there is one, and the permissions that identity holds, and
 /// nothing else: no credential, no claim an authorization server issued, no scheme, no transport. Which credential
 /// admitted a caller is a question the transport answered and no use case has any business re-deciding, which is why
 /// nothing here can be asked it.
 /// </para>
 /// <para>
-/// The owner and the permissions are two axes rather than one, and neither implies the other. A permission says what
-/// the work may do and the owner says whose mail it may do it to, so ownership adds no name to the published permission
-/// set and a grant however broad still reaches one owner's mail. A principal acting for nobody is not a principal
-/// acting for everybody: the deployment administrator and this process's own identity carry no owner, and every use
-/// case that reads or writes one owner's mail refuses them. A record that belongs to an owner without being mail — the
-/// contact book is the one — may resolve the absent owner instead of refusing, and where it does it says what it
-/// resolves it to; <see cref="AccessAuthorization.ActingOwner" /> is the only reading that permits it.
+/// The user and the permissions are two axes rather than one, and neither implies the other. A permission says what
+/// the work may do and the user says whose mail it may do it to, so ownership adds no name to the published permission
+/// set and a grant however broad still reaches one user's mail. A principal acting for nobody is not a principal
+/// acting for everybody: the deployment administrator and this process's own identity carry no user, and every use
+/// case that reads or writes one user's mail refuses them. A record that belongs to a user without being mail — the
+/// contact book is the one — may resolve the absent user instead of refusing, and where it does it says what it
+/// resolves it to; <see cref="AccessAuthorization.ActingUser" /> is the only reading that permits it.
 /// </para>
 /// <para>
 /// It is an ordinary class rather than a record, because two principals are never compared. A record's generated
@@ -43,12 +43,12 @@ public sealed class AuthorizedPrincipal
     private AuthorizedPrincipal(
         AuthorizedPrincipalKind kind,
         string identity,
-        MailOwnerId? owner,
+        MailUserId? user,
         IReadOnlySet<MailFathomPermission> permissions)
     {
         this.Kind = kind;
         this.Identity = identity;
-        this.Owner = owner;
+        this.User = user;
         this.Permissions = permissions;
     }
 
@@ -57,7 +57,7 @@ public sealed class AuthorizedPrincipal
     public static AuthorizedPrincipal Process { get; } = new(
         AuthorizedPrincipalKind.ProcessIdentity,
         ProcessIdentityName,
-        owner: null,
+        user: null,
         new HashSet<MailFathomPermission>());
 
     /// <summary>Gets which of the three things this principal is.</summary>
@@ -80,14 +80,14 @@ public sealed class AuthorizedPrincipal
     /// </remarks>
     public string Identity { get; }
 
-    /// <summary>Gets the owner this work is acting for, or <see langword="null" /> where it acts for nobody's mail.</summary>
+    /// <summary>Gets the user this work is acting for, or <see langword="null" /> where it acts for nobody's mail.</summary>
     /// <remarks>
     /// <para>
-    /// Absence is a state rather than a gap. This process's own identity acts for no owner because work no caller
+    /// Absence is a state rather than a gap. This process's own identity acts for no user because work no caller
     /// requested is not being done on anybody's behalf, and the deployment administrator acts for none because the acts
-    /// it reaches are the deployment's rather than one owner's. Both are refused by a use case that reads or writes one
-    /// owner's mail, which is what stops "acting for nobody" from being read as "acting for everybody" — and a use case
-    /// over a record that belongs to an owner without being mail resolves the absence rather than reading it as
+    /// it reaches are the deployment's rather than one user's. Both are refused by a use case that reads or writes one
+    /// user's mail, which is what stops "acting for nobody" from being read as "acting for everybody" — and a use case
+    /// over a record that belongs to a user without being mail resolves the absence rather than reading it as
     /// everybody, which is a different act and is stated where it happens.
     /// </para>
     /// <para>
@@ -97,12 +97,12 @@ public sealed class AuthorizedPrincipal
     /// reading.
     /// </para>
     /// </remarks>
-    public MailOwnerId? Owner { get; }
+    public MailUserId? User { get; }
 
     /// <summary>Gets the permissions this principal holds, which is empty for every kind but a caller.</summary>
     public IReadOnlySet<MailFathomPermission> Permissions { get; }
 
-    /// <summary>Describes a caller the transport admitted that acts for no owner's mail.</summary>
+    /// <summary>Describes a caller the transport admitted that acts for no user's mail.</summary>
     /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
     /// <param name="grantedPermissions">The permissions the entry that admitted it resolved to, empty when it granted none.</param>
     /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
@@ -122,69 +122,69 @@ public sealed class AuthorizedPrincipal
     public static AuthorizedPrincipal Caller(
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions) =>
-        AdmittedCaller(owner: null, identity, grantedPermissions);
+        AdmittedCaller(user: null, identity, grantedPermissions);
 
-    /// <summary>Describes a caller the transport admitted that acts for one owner's mail.</summary>
-    /// <param name="owner">The owner whose mail the caller was admitted to act on.</param>
+    /// <summary>Describes a caller the transport admitted that acts for one user's mail.</summary>
+    /// <param name="user">The user whose mail the caller was admitted to act on.</param>
     /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
     /// <param name="grantedPermissions">The permissions the entry that admitted it resolved to, empty when it granted none.</param>
     /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> or <paramref name="grantedPermissions" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is empty or white space, or when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is empty or white space, or when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
-    /// This is the caller every mail-reading surface admits. The owner is decided by whatever admitted the caller and is
-    /// carried rather than chosen, so no argument of any tool can move it: a request cannot name an owner, and a grant
-    /// however broad cannot widen the mail it reaches beyond that owner's own.
+    /// This is the caller every mail-reading surface admits. The user is decided by whatever admitted the caller and is
+    /// carried rather than chosen, so no argument of any tool can move it: a request cannot name a user, and a grant
+    /// however broad cannot widen the mail it reaches beyond that user's own.
     /// </remarks>
     public static AuthorizedPrincipal CallerActingFor(
-        MailOwnerId owner,
+        MailUserId user,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions)
     {
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
             throw new ArgumentException(
-                "A caller admitted to act for an owner is admitted for a named one, never for the identity that names nobody.",
-                nameof(owner));
+                "A caller admitted to act for a user is admitted for a named one, never for the identity that names nobody.",
+                nameof(user));
         }
 
-        return AdmittedCaller(owner, identity, grantedPermissions);
+        return AdmittedCaller(user, identity, grantedPermissions);
     }
 
     /// <summary>Describes the principal a verified signature produced.</summary>
-    /// <param name="owner">The owner the capability was minted for, whose mail is the only mail it reaches.</param>
+    /// <param name="user">The user the capability was minted for, whose mail is the only mail it reaches.</param>
     /// <param name="authorizedObject">MailFathom's own description of the one object the signature was bounded to.</param>
     /// <returns>The principal the use case behind the capability is consulted with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="authorizedObject" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="authorizedObject" /> is empty or white space, or when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="authorizedObject" /> is empty or white space, or when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
     /// The bound itself stays where a signature put it: the verified ticket the use case is handed names the object,
     /// and reading that is what confines the work. What this principal adds is the statement that a signature — rather
     /// than a credential or this process — is what authorized the work at all, so a use case reached under a capability
-    /// admits that kind by name instead of admitting an unidentified caller. The owner is carried beside it because a
-    /// capability is redeemed by whoever holds the URL, and the mail behind it is one owner's rather than the
+    /// admits that kind by name instead of admitting an unidentified caller. The user is carried beside it because a
+    /// capability is redeemed by whoever holds the URL, and the mail behind it is one user's rather than the
     /// deployment's.
     /// </remarks>
-    public static AuthorizedPrincipal SignedCapability(MailOwnerId owner, string authorizedObject)
+    public static AuthorizedPrincipal SignedCapability(MailUserId user, string authorizedObject)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(authorizedObject);
 
-        if (!owner.IsSpecified)
+        if (!user.IsSpecified)
         {
             throw new ArgumentException(
-                "A capability is minted for a named owner, never for the identity that names nobody.",
-                nameof(owner));
+                "A capability is minted for a named user, never for the identity that names nobody.",
+                nameof(user));
         }
 
         return new AuthorizedPrincipal(
             AuthorizedPrincipalKind.SignedCapability,
             authorizedObject,
-            owner,
+            user,
             new HashSet<MailFathomPermission>());
     }
 
     private static AuthorizedPrincipal AdmittedCaller(
-        MailOwnerId? owner,
+        MailUserId? user,
         string identity,
         IEnumerable<MailFathomPermission> grantedPermissions)
     {
@@ -194,7 +194,7 @@ public sealed class AuthorizedPrincipal
         return new AuthorizedPrincipal(
             AuthorizedPrincipalKind.Caller,
             identity,
-            owner,
+            user,
             grantedPermissions.Where(permission => permission.IsSpecified).ToHashSet());
     }
 

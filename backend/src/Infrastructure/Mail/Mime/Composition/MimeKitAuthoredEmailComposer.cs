@@ -92,7 +92,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     }
 
     /// <summary>Runs the whole composition, from the refusals that need nothing built to the bytes that were built.</summary>
-    /// <param name="account">The account the message is composed as, named by its owner and its identifier.</param>
+    /// <param name="account">The account the message is composed as, named by its user and its identifier.</param>
     /// <param name="authored">What somebody wrote.</param>
     /// <param name="capabilities">What the servers involved are known to support.</param>
     /// <param name="requireRecipients">Whether a message addressed to nobody is refused, which a send is and a draft is not.</param>

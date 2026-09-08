@@ -91,7 +91,7 @@ public sealed class PasswordClearTextTransportWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = new ClientEndpointOptions { Enabled = true };
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.ApiKey));
         var warning = WarningFor(logs, client: settings);
 
         // Act
@@ -163,7 +163,7 @@ public sealed class PasswordClearTextTransportWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = new ClientEndpointOptions();
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.Password));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.Password));
         var warning = WarningFor(logs, client: settings);
 
         // Act
@@ -225,7 +225,7 @@ public sealed class PasswordClearTextTransportWarningTests
     private static McpEndpointOptions AcceptingAPassword(McpEndpointOptions settings)
     {
         settings.Enabled = true;
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.Password));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.Password));
 
         return settings;
     }
@@ -233,7 +233,7 @@ public sealed class PasswordClearTextTransportWarningTests
     private static ClientEndpointOptions AcceptingAPassword(ClientEndpointOptions settings)
     {
         settings.Enabled = true;
-        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.Password));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(UserCredentialMethod.Password));
 
         return settings;
     }

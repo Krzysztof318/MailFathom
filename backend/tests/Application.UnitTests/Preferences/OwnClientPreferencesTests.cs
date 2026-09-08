@@ -13,7 +13,7 @@ namespace MailFathom.Application.UnitTests.Preferences;
 
 /// <summary>
 /// Covers the use case a person reads and writes their own client preferences through. What it has to hold is that the
-/// owner acted on is the one the credential authenticated rather than one a caller could name, that the grant required
+/// user acted on is the one the credential authenticated rather than one a caller could name, that the grant required
 /// is the one a signed-in person already holds rather than the grant over their mail configuration, and that somebody
 /// who has set nothing is answered with the unset preferences rather than with a refusal.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(SyntheticMailOwner.Deployment, Arg.Any<CancellationToken>()).Returns(Chosen);
+        store.ReadAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(Chosen);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
 
@@ -43,7 +43,7 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.ReadAsync(Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
+        store.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns((ClientPreferences?)null);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
 
@@ -54,20 +54,20 @@ public sealed class OwnClientPreferencesTests
         Assert.Equal(ClientPreferences.Unset, read);
     }
 
-    /// <summary>The owner is resolved from the principal, so a deployment serving two people reads the caller's own row and never the other.</summary>
+    /// <summary>The user is resolved from the principal, so a deployment serving two people reads the caller's own row and never the other.</summary>
     [Fact]
-    public async Task ReadAsync_ADeploymentServingSeveralPeople_ReadsTheRowOfTheOwnerTheCredentialAuthenticated()
+    public async Task ReadAsync_ADeploymentServingSeveralPeople_ReadsTheRowOfTheUserTheCredentialAuthenticated()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        var preferences = ReachedBy(store, SyntheticMailOwner.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
 
         // Act
         await preferences.ReadAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        await store.Received(1).ReadAsync(SyntheticMailOwner.Another, Arg.Any<CancellationToken>());
-        await store.DidNotReceive().ReadAsync(SyntheticMailOwner.Deployment, Arg.Any<CancellationToken>());
+        await store.Received(1).ReadAsync(SyntheticMailUser.Another, Arg.Any<CancellationToken>());
+        await store.DidNotReceive().ReadAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class OwnClientPreferencesTests
 
     /// <summary>An administrator acts for nobody's mail, so there is no row of theirs to read here.</summary>
     [Fact]
-    public async Task ReadAsync_ACallerActingForNoOwner_IsRefused()
+    public async Task ReadAsync_ACallerActingForNoUser_IsRefused()
     {
         // Arrange
         var preferences = new OwnClientPreferences(
@@ -100,26 +100,26 @@ public sealed class OwnClientPreferencesTests
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var preferences = ReachedBy(store, SyntheticMailOwner.Another, MailFathomPermission.MailRead);
+        var preferences = ReachedBy(store, SyntheticMailUser.Another, MailFathomPermission.MailRead);
 
         // Act
         var written = await preferences.SaveAsync(Chosen, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(written);
-        await store.Received(1).SaveAsync(SyntheticMailOwner.Another, Chosen, Arg.Any<CancellationToken>());
+        await store.Received(1).SaveAsync(SyntheticMailUser.Another, Chosen, Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The row behind an authenticated caller can be gone, which is an owner erased under a credential that has not yet been withdrawn.</summary>
+    /// <summary>The row behind an authenticated caller can be gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task SaveAsync_ACallerWhoseRowHasGone_ReportsThatThereWasNobodyToWriteFor()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
-        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var preferences = ReachedBy(store, MailFathomPermission.MailRead);
@@ -161,17 +161,17 @@ public sealed class OwnClientPreferencesTests
             () => preferences.SaveAsync(null!, TestContext.Current.CancellationToken));
 
         await store.DidNotReceive()
-            .SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
     }
 
     private static OwnClientPreferences ReachedBy(
         IClientPreferencesStore store,
         params MailFathomPermission[] granted) =>
-        ReachedBy(store, SyntheticMailOwner.Deployment, granted);
+        ReachedBy(store, SyntheticMailUser.Deployment, granted);
 
     private static OwnClientPreferences ReachedBy(
         IClientPreferencesStore store,
-        MailOwnerId owner,
+        MailUserId user,
         params MailFathomPermission[] granted) =>
-        new(AccessAuthorizations.ForOwnerGranted(owner, granted), store);
+        new(AccessAuthorizations.ForUserGranted(user, granted), store);
 }

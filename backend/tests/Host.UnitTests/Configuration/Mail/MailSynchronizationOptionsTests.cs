@@ -12,7 +12,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
@@ -38,12 +38,12 @@ public sealed class MailSynchronizationOptionsTests
     }
 
     /// <summary>
-    /// This section names no owner, so an operator who declared every mailbox under an owner leaves it empty and has
+    /// This section names no user, so an operator who declared every mailbox under a user leaves it empty and has
     /// misconfigured nothing. Whether the deployment has anything at all to synchronize is decided where the effective
-    /// set is visible, which is the declared-owner rules rather than here.
+    /// set is visible, which is the declared-user rules rather than here.
     /// </summary>
     [Fact]
-    public void ValidateForSynchronization_EnabledWithNoAccountsOfItsOwn_LeavesTheQuestionToTheDeclaredOwners()
+    public void ValidateForSynchronization_EnabledWithNoAccountsOfItsOwn_LeavesTheQuestionToTheDeclaredUsers()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Enabled = true };
@@ -97,15 +97,15 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
     }
 
-    /// <summary>An owner's share that cannot hold one message would leave that owner with nothing storable.</summary>
+    /// <summary>A user's share that cannot hold one message would leave that user with nothing storable.</summary>
     [Fact]
-    public void ValidateForSynchronization_PerOwnerStoredContentCeilingBelowTheMessageSizeLimit_IsRejected()
+    public void ValidateForSynchronization_PerUserStoredContentCeilingBelowTheMessageSizeLimit_IsRejected()
     {
         // Arrange
         var options = new MailSynchronizationOptions
         {
             MaxRawMimeBytes = 25L * 1024L * 1024L,
-            MaxStoredContentBytesPerOwner = 1024L * 1024L,
+            MaxStoredContentBytesPerUser = 1024L * 1024L,
         };
 
         // Act
@@ -113,15 +113,15 @@ public sealed class MailSynchronizationOptionsTests
 
         // Assert
         var result = Assert.Single(results);
-        Assert.Contains("per-owner stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("per-user stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
     }
 
-    /// <summary>An owner's share is unset by default, which is what a deployment serving one owner wants.</summary>
+    /// <summary>A user's share is unset by default, which is what a deployment serving one user wants.</summary>
     [Fact]
-    public void ValidateForSynchronization_NoPerOwnerStoredContentCeilingConfigured_ReportsNoError()
+    public void ValidateForSynchronization_NoPerUserStoredContentCeilingConfigured_ReportsNoError()
     {
         // Arrange
-        var options = new MailSynchronizationOptions { MaxStoredContentBytesPerOwner = null };
+        var options = new MailSynchronizationOptions { MaxStoredContentBytesPerUser = null };
 
         // Act
         var results = options.ValidateForSynchronization().ToArray();
@@ -318,7 +318,7 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Equal(MailAccountId.Create("primary"), Assert.Single(ConfiguredMailAccounts.CatalogOver(options).ServedAccounts).Id);
     }
 
-    /// <summary>Two spellings of one identifier are one account's name written twice, and the owner may hold it once.</summary>
+    /// <summary>Two spellings of one identifier are one account's name written twice, and the user may hold it once.</summary>
     /// <remarks>
     /// Case joins the whitespace the identifier is already normalized of, because the shared naming space it belongs
     /// to is compared without regard to case: a display name colliding with an identifier is refused that way, and two
@@ -346,7 +346,7 @@ public sealed class MailSynchronizationOptionsTests
         // Assert
         Assert.Contains(
             results,
-            result => result.ErrorMessage!.Contains("names one mailbox within its owner", StringComparison.Ordinal));
+            result => result.ErrorMessage!.Contains("names one mailbox within its user", StringComparison.Ordinal));
     }
 
     /// <summary>Two accounts whose identifiers genuinely differ are two mailboxes, and nothing is reported about them.</summary>
@@ -369,7 +369,7 @@ public sealed class MailSynchronizationOptionsTests
         // Assert
         Assert.DoesNotContain(
             results,
-            result => result.ErrorMessage!.Contains("names one mailbox within its owner", StringComparison.Ordinal));
+            result => result.ErrorMessage!.Contains("names one mailbox within its user", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -922,7 +922,7 @@ public sealed class MailSynchronizationOptionsTests
     /// <summary>The two dispositions are independent settings, so one account can follow its server and still keep what it deletes.</summary>
     /// <remarks>
     /// This is the confusion the second setting exists to prevent. An account that erases what its server loses would
-    /// otherwise erase what MailFathom itself was told to delete, which is precisely where the owner is most likely to
+    /// otherwise erase what MailFathom itself was told to delete, which is precisely where the user is most likely to
     /// have meant the opposite: deleting on the server frees quota, and the local archive is the reason to do it.
     /// </remarks>
     [Fact]
@@ -1370,7 +1370,7 @@ public sealed class MailSynchronizationOptionsTests
 
     /// <summary>An adoption supersedes the file without rewriting it, so the published document must win immediately.</summary>
     [Fact]
-    public void FindConfiguredAccount_AdoptedOwnerDocument_PrecedesTheDeploymentSectionItSuperseded()
+    public void FindConfiguredAccount_AdoptedUserDocument_PrecedesTheDeploymentSectionItSuperseded()
     {
         // Arrange
         var configured = CreateAccount("primary");
@@ -1380,12 +1380,12 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions
         {
             Accounts = [configured],
-            ServedOwners =
+            ServedUsers =
             [
-                new ServedMailOwner(
-                    MailOwnerId.Create(new Guid("57ee8cd9-f68a-4231-9e09-b64a17806518")),
-                    "owner",
-                    MailOwnerAccountSource.OwnerDocument,
+                new ServedMailUser(
+                    MailUserId.Create(new Guid("57ee8cd9-f68a-4231-9e09-b64a17806518")),
+                    "user",
+                    MailUserAccountSource.UserDocument,
                     [adopted]),
             ],
         };

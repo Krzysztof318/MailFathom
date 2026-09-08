@@ -77,7 +77,7 @@ public sealed class StoredEmailSummaryRowTests
 
     private static StoredEmailSummaryRow RowWith(MachineAuthorshipBand band, double likelihood) => new(
         Guid.CreateVersion7(),
-        SyntheticMailOwner.Deployment.Value,
+        SyntheticMailUser.Deployment.Value,
         "primary",
         "INBOX",
         ThreadId: null,

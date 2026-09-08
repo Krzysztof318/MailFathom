@@ -103,7 +103,7 @@ public sealed class OutgoingMailFilingConfigurationTests
 
     /// <summary>
     /// An account that says nothing about it files the copy, because a submission server files nothing and a deployment
-    /// that appended nothing would leave the owner with mail they sent and no record of it.
+    /// that appended nothing would leave the user with mail they sent and no record of it.
     /// </summary>
     [Fact]
     public void FilesSentCopy_AnAccountThatSaysNothing_FilesTheCopy()

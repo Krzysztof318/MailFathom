@@ -186,18 +186,18 @@ internal sealed partial class RootSettingsWriter(
             return null;
         }
 
-        // An owner's record is the one store with an answer better than "configure it elsewhere", and which answer it
-        // is depends on where that owner is read from — which this writer cannot know, because a change names a path
-        // rather than an owner. So the sentence names both halves: the declaration to edit while the owner is still
-        // read from a configuration source, and the owner commands that change the record once one has been adopted.
-        return target.Route == ConfigurationStorageRoute.OwnerAccounts
-            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. An owner still read from a configuration source is changed in the declaration that supplies them — the owner's own section of the top-level Accounts collection — and served from it at the next restart; an owner who has been adopted is changed with 'mfctl owner account add' and 'mfctl owner account remove'."
+        // A user's record is the one store with an answer better than "configure it elsewhere", and which answer it
+        // is depends on where that user is read from — which this writer cannot know, because a change names a path
+        // rather than a user. So the sentence names both halves: the declaration to edit while the user is still
+        // read from a configuration source, and the user commands that change the record once one has been adopted.
+        return target.Route == ConfigurationStorageRoute.UserAccounts
+            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. A user still read from a configuration source is changed in the declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at the next restart; a user who has been adopted is changed with 'mfctl user account add' and 'mfctl user account remove'."
             : $"MailFathom persists {path} in the {target.Route.Name} store, which this build does not write. Configure it where that store is provisioned from.";
     }
 
     /// <summary>Finds the changes writing a secret's material where the document may only carry a reference to it.</summary>
     /// <remarks>
-    /// What counts as material is <see cref="PersistedSecretMaterial" />'s, because an owner's record is judged by the
+    /// What counts as material is <see cref="PersistedSecretMaterial" />'s, because a user's record is judged by the
     /// same rule and a credential kept out of one document and admitted into the other would be no rule at all. What
     /// belongs here is the message: it names the setting and says what belongs there, and repeats neither the value
     /// nor its length, because a length is what turns a guess about a credential into a shorter list of guesses.

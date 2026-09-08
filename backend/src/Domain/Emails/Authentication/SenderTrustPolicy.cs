@@ -16,7 +16,7 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// <b>Every configured account's domain counts, not only the receiving one.</b> An instance synchronizing a work
 /// mailbox and a personal one is synchronizing one person's correspondence, and mail sent from the first to the second
 /// is the least suspicious mail in the mailbox; recognizing it only against the receiving account's own domain would
-/// leave the owner's own mail unrecognized. Whether the set is consulted at all is the deployment's choice, and a
+/// leave the user's own mail unrecognized. Whether the set is consulted at all is the deployment's choice, and a
 /// policy built without it simply receives no domains.
 /// </para>
 /// <para>

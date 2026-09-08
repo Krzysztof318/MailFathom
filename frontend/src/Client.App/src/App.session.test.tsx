@@ -228,10 +228,10 @@ describe('App session', () => {
         expect(panel.getByText('The mail server did not answer')).toBeDefined();
     });
 
-    it('tells an owner holding no account what would fill it, rather than showing a failure', async () => {
+    it('tells a user holding no account what would fill it, rather than showing a failure', async () => {
         renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [])));
 
-        expect(await screen.findByText(/No mail account is configured for this owner yet\./)).toBeDefined();
+        expect(await screen.findByText(/No mail account is configured for this user yet\./)).toBeDefined();
         expect(
             screen.getByText(/Whoever runs this deployment declares which mailboxes it reads for you/),
         ).toBeDefined();

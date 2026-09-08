@@ -42,7 +42,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// The surface's protection is structural: <see cref="AdminApiEndpoints.MapAdminApi" /> maps every route into one
 /// group, and the composition root attaches the requirement to that group. A route mapped outside it, or mapped after
 /// the requirement was attached, would be served to anybody who can reach the address — and for the write route that
-/// means placing a mailbox owner's long-lived credential. So what is asserted here is that the routes the mapping
+/// means placing a mailbox user's long-lived credential. So what is asserted here is that the routes the mapping
 /// produces are all inside the group, whichever routes those come to be.
 /// </para>
 /// <para>
@@ -145,10 +145,10 @@ public sealed class AdminApiEndpointsTests
         // The content move appears twice at its own path and once at each of the two the operator stops and resumes it
         // on, because pausing and resuming are opposite decisions and a body naming which one was meant would make a
         // mistyped value the difference between them.
-        // An owner's credentials appear twice at one path, which is the listing and the provisioning, and the password
+        // A user's credentials appear twice at one path, which is the listing and the provisioning, and the password
         // and the enabled state each appear at a path of their own, because rotating a password and disabling a
         // credential are separate acts an operator audits separately.
-        // The owners appear twice at the roster path, which is the listing and the recording, once at the owner's own
+        // The users appear twice at the roster path, which is the listing and the recording, once at the user's own
         // path for the erasure, once at the label's path for the rename, twice at their record's path for the reading
         // and the saving, twice at the adoption path for the preview and the act, and once at the secret path for a
         // sealed write — the same reason the configuration adoption has both.
@@ -190,22 +190,6 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.RequeueRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SummaryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SendRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnersRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnersRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialEnablementRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialMaterialRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerDisplayNameRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerRecordRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerRecordRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerAdoptionRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerAdoptionRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerMailAccountsRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerMailAccountRemovalRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerSecretsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
@@ -214,6 +198,22 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.ClassificationsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.RunsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.RunsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UsersRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UsersRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialEnablementRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserCredentialEndpoints.UserCredentialMaterialRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserDisplayNameRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserAdoptionRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserAdoptionRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountRemovalRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserSecretsRoute}",
             ],
             routes);
     }
@@ -299,22 +299,22 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.PauseRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.ResumeRoute} -> {MailFathomPermission.AdminOperate.Name}",
-                $"GET {prefix}{OwnerRecordEndpoints.OwnersRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnersRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"DELETE {prefix}{OwnerRecordEndpoints.OwnerRoute} -> {MailFathomPermission.AdminErase.Name}",
-                $"PUT {prefix}{OwnerRecordEndpoints.OwnerDisplayNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"GET {prefix}{OwnerRecordEndpoints.OwnerRecordRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnerRecordRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnerMailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnerMailAccountRemovalRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"GET {prefix}{OwnerRecordEndpoints.OwnerAdoptionRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnerAdoptionRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"POST {prefix}{OwnerRecordEndpoints.OwnerSecretsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"GET {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"POST {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
-                $"PUT {prefix}{OwnerCredentialEndpoints.OwnerCredentialMaterialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
-                $"PUT {prefix}{OwnerCredentialEndpoints.OwnerCredentialEnablementRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
-                $"DELETE {prefix}{OwnerCredentialEndpoints.OwnerCredentialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"GET {prefix}{UserRecordEndpoints.UsersRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UsersRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"DELETE {prefix}{UserRecordEndpoints.UserRoute} -> {MailFathomPermission.AdminErase.Name}",
+                $"PUT {prefix}{UserRecordEndpoints.UserDisplayNameRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UserMailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UserMailAccountRemovalRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{UserRecordEndpoints.UserAdoptionRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UserAdoptionRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"POST {prefix}{UserRecordEndpoints.UserSecretsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"GET {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"PUT {prefix}{UserCredentialEndpoints.UserCredentialMaterialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"PUT {prefix}{UserCredentialEndpoints.UserCredentialEnablementRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"DELETE {prefix}{UserCredentialEndpoints.UserCredentialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminErase.Name}",
             }.Order(StringComparer.Ordinal),
@@ -384,7 +384,7 @@ public sealed class AdminApiEndpointsTests
     }
 
     /// <summary>
-    /// The bound on each owner-route body, which the routes carry as metadata the routing pipeline reads. Without it
+    /// The bound on each user-route body, which the routes carry as metadata the routing pipeline reads. Without it
     /// the server's own default applies, and a saved record is a body an authenticated client states the whole of. The
     /// verb is named beside the path because three of these paths carry a read as well, and reading the bound off
     /// whichever endpoint the pattern matched first would pass with the write's metadata deleted.
@@ -392,13 +392,13 @@ public sealed class AdminApiEndpointsTests
     /// <param name="method">The verb the write is made with.</param>
     /// <param name="route">The route it is made on.</param>
     [Theory]
-    [InlineData("POST", OwnerRecordEndpoints.OwnersRoute)]
-    [InlineData("PUT", OwnerRecordEndpoints.OwnerDisplayNameRoute)]
-    [InlineData("POST", OwnerRecordEndpoints.OwnerRecordRoute)]
-    [InlineData("POST", OwnerRecordEndpoints.OwnerMailAccountsRoute)]
-    [InlineData("POST", OwnerRecordEndpoints.OwnerMailAccountRemovalRoute)]
-    [InlineData("POST", OwnerRecordEndpoints.OwnerAdoptionRoute)]
-    public void MapAdminApi_AnOwnerRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
+    [InlineData("POST", UserRecordEndpoints.UsersRoute)]
+    [InlineData("PUT", UserRecordEndpoints.UserDisplayNameRoute)]
+    [InlineData("POST", UserRecordEndpoints.UserRecordRoute)]
+    [InlineData("POST", UserRecordEndpoints.UserMailAccountsRoute)]
+    [InlineData("POST", UserRecordEndpoints.UserMailAccountRemovalRoute)]
+    [InlineData("POST", UserRecordEndpoints.UserAdoptionRoute)]
+    public void MapAdminApi_AUserRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -414,7 +414,7 @@ public sealed class AdminApiEndpointsTests
                 && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains(method));
 
         Assert.Equal(
-            OwnerRecordEndpoints.MaxWriteRequestBytes,
+            UserRecordEndpoints.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
@@ -432,10 +432,10 @@ public sealed class AdminApiEndpointsTests
             .OfType<RouteEndpoint>()
             .Single(endpoint =>
                 $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" ==
-                    $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerSecretsRoute}");
+                    $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserSecretsRoute}");
 
         Assert.Equal(
-            OwnerRecordEndpoints.MaxStoredSecretWriteRequestBytes,
+            UserRecordEndpoints.MaxStoredSecretWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
@@ -605,7 +605,7 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => new ContactBook(
             Substitute.For<IContactStore>(),
             directory,
-            ContactBookOwnerships.ForTheServedOwner(),
+            ContactBookOwnerships.ForTheServedUser(),
             new OptimisticConcurrencyRetryPolicy(
                 Substitute.For<IPersistenceSessionFactory>(),
                 new PersistenceConcurrencyOptions(),

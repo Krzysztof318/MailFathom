@@ -16,7 +16,7 @@ namespace MailFathom.Cli.Commands.Contacts;
 /// </para>
 /// <para>
 /// A collected contact is refused here rather than amended, because it is a record the deployment wrote from arriving
-/// mail. <c>contact promote</c> is the act that makes it the owner's, and the refusal says so.
+/// mail. <c>contact promote</c> is the act that makes it the user's, and the refusal says so.
 /// </para>
 /// </remarks>
 internal static class UpdateContactCommand

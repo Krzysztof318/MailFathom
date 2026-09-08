@@ -28,7 +28,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
 
     private static readonly EmailKnowledgeQuery Query = EmailKnowledgeQuery.ForText(QueryText);
 
-    private static readonly MailboxScope Scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []);
+    private static readonly MailboxScope Scope = MailboxScope.Create(SyntheticMailUser.Deployment, [MailAccountId.Create("primary")], []);
 
     [Fact]
     public async Task FindPassagesAsync_CandidatesJudgedAboveTheThreshold_HandsThemOverInTheOrderRetrievalRankedThem()

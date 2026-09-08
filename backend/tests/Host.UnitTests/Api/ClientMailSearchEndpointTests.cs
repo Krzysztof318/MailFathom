@@ -275,7 +275,7 @@ public sealed class ClientMailSearchEndpointTests
     private static EmailSummary SyntheticMatchedEmail() => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
+        Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work")),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         Subject = "the invoice",
         SentAt = FirstJuly,

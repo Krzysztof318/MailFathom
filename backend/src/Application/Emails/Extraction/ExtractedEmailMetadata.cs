@@ -63,7 +63,7 @@ public sealed record ExtractedEmailMetadata(
     /// </remarks>
     public MachineAuthorshipAssessment MachineAuthorship { get; init; } = MachineAuthorshipAssessment.NotAssessed;
 
-    /// <summary>Gets the owner's scanning posture this reading was redacted under, or nothing where none redacted it.</summary>
+    /// <summary>Gets the user's scanning posture this reading was redacted under, or nothing where none redacted it.</summary>
     /// <remarks>
     /// Carried on the reading rather than resolved where the reading is written, because the two happen at different
     /// moments and a posture can change between them: a batch of mail is read outside any transaction and commits
@@ -71,7 +71,7 @@ public sealed record ExtractedEmailMetadata(
     /// and a row stamped with a posture stricter than the one that produced it is a row nothing ever revisits. The
     /// value is set by <see cref="RedactingEmailMimeReader" /> for the same reason
     /// <see cref="SenderTrust" /> is set by the reader that judges it, and is <see langword="null" /> exactly where
-    /// nothing scans this owner's mail.
+    /// nothing scans this user's mail.
     /// </remarks>
     public SensitiveContentDerivationStamp? RedactedUnder { get; init; }
 }

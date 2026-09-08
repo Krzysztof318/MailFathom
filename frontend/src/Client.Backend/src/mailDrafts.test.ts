@@ -323,7 +323,7 @@ describe('discardMailDraft', () => {
         expect(answer.outcome).toBe('read');
     });
 
-    it('reads a draft this owner no longer holds as a deployment that would not do it', async () => {
+    it('reads a draft this user no longer holds as a deployment that would not do it', async () => {
         const answer = await discardMailDraft(session, answering({ status: 404, body: '' }), draftId);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: 404 } });

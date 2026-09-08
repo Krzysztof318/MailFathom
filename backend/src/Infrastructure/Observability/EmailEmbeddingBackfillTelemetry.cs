@@ -60,7 +60,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
     private readonly Counter<long> embeddedEmailCount;
     private readonly Counter<long> passageCount;
     private readonly Counter<long> callBudgetExhaustedEmailCount;
-    private readonly Counter<long> ownerSpendCeilingEmailCount;
+    private readonly Counter<long> userSpendCeilingEmailCount;
     private readonly Counter<long> generationSwitchCount;
     private readonly Counter<long> removedSupersededVectorCount;
     private int outstandingEmailCount;
@@ -88,10 +88,10 @@ public sealed class EmailEmbeddingBackfillTelemetry
             "mailfathom.embedding.backfill.exhausted",
             unit: "{message}",
             description: "Messages the backfill left part-way through because one turn spent every provider call it is allowed.");
-        this.ownerSpendCeilingEmailCount = Telemetry.Meter.CreateCounter<long>(
-            "mailfathom.embedding.backfill.owner_ceiling",
+        this.userSpendCeilingEmailCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.backfill.user_ceiling",
             unit: "{message}",
-            description: "Messages the backfill stepped past because the owner they belong to had spent what one period admits for them.");
+            description: "Messages the backfill stepped past because the user they belong to had spent what one period admits for them.");
         this.generationSwitchCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.embedding.generation.switches",
             unit: "{switch}",
@@ -171,9 +171,9 @@ public sealed class EmailEmbeddingBackfillTelemetry
         // The one number here that says a bound was reached without the run stopping. The worker's own line is written
         // once per period so it does not bury the log, which is exactly why the meter has to carry every pass: without
         // it there is nothing an operator can read the size of the refusal from after the first line.
-        if (result.OwnerSpendCeilingEmailCount > 0)
+        if (result.UserSpendCeilingEmailCount > 0)
         {
-            this.ownerSpendCeilingEmailCount.Add(result.OwnerSpendCeilingEmailCount);
+            this.userSpendCeilingEmailCount.Add(result.UserSpendCeilingEmailCount);
         }
 
         if (result.OutstandingEmailCountAtSweepStart is { } outstanding)

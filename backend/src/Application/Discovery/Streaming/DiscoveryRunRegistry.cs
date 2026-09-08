@@ -27,8 +27,8 @@ namespace MailFathom.Application.Discovery.Streaming;
 /// store's own sweep does: a process holding no runs needs no sweeping, and a timer would keep it awake to prove it.
 /// </para>
 /// <para>
-/// Every lookup is against an owner. A run holds one person's mail, and an identifier alone is a bearer value that
-/// travelled to a client and back, so the owner the caller was admitted for decides what they may be shown — a run
+/// Every lookup is against a user. A run holds one person's mail, and an identifier alone is a bearer value that
+/// travelled to a client and back, so the user the caller was admitted for decides what they may be shown — a run
 /// belonging to somebody else is reported as no such run rather than as a refusal, which is the same answer a client
 /// gets for one this process has already forgotten.
 /// </para>
@@ -52,13 +52,13 @@ public sealed class DiscoveryRunRegistry
     /// <summary>Gets how many runs this process is holding, executing or not, including any it has not yet forgotten.</summary>
     public int HeldCount => this.runs.Count;
 
-    /// <summary>Opens a run for one owner, unless this process is already holding as many as it may.</summary>
-    /// <param name="owner">Whose mail the run will read, which is who may read what it publishes.</param>
+    /// <summary>Opens a run for one user, unless this process is already holding as many as it may.</summary>
+    /// <param name="user">Whose mail the run will read, which is who may read what it publishes.</param>
     /// <param name="journal">The run's journal when one was opened; otherwise <see langword="null" />.</param>
     /// <returns><see langword="true" /> when the run was opened; <see langword="false" /> when this process is at its bound.</returns>
     /// <remarks>
     /// <para>
-    /// The bound is over the whole process rather than per owner, because what it protects is this process's memory.
+    /// The bound is over the whole process rather than per user, because what it protects is this process's memory.
     /// Sweeping first is what keeps a deployment answering after a burst: the runs a bound is measured against are the
     /// ones somebody may still come back for, never the ones nobody did.
     /// </para>
@@ -69,7 +69,7 @@ public sealed class DiscoveryRunRegistry
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the source passes to the held run; it is disposed when the registry forgets the run, and here when the entry was not taken.")]
-    public bool TryOpen(MailOwnerId owner, [NotNullWhen(true)] out DiscoveryRunJournal? journal)
+    public bool TryOpen(MailUserId user, [NotNullWhen(true)] out DiscoveryRunJournal? journal)
     {
         lock (this.opening)
         {
@@ -83,7 +83,7 @@ public sealed class DiscoveryRunRegistry
             }
 
             var stopping = new CancellationTokenSource();
-            var opened = new DiscoveryRunJournal(DiscoveryRunId.New(), owner, stopping.Token);
+            var opened = new DiscoveryRunJournal(DiscoveryRunId.New(), user, stopping.Token);
 
             if (!this.runs.TryAdd(opened.Id, new HeldRun(opened, stopping, this.timeProvider.GetUtcNow())))
             {
@@ -101,17 +101,17 @@ public sealed class DiscoveryRunRegistry
         }
     }
 
-    /// <summary>Finds a run this owner started and this process is still holding.</summary>
+    /// <summary>Finds a run this user started and this process is still holding.</summary>
     /// <param name="id">The run the caller is asking for.</param>
-    /// <param name="owner">The owner the caller was admitted for.</param>
-    /// <param name="journal">The run's journal when it is this owner's and still held; otherwise <see langword="null" />.</param>
+    /// <param name="user">The user the caller was admitted for.</param>
+    /// <param name="journal">The run's journal when it is this user's and still held; otherwise <see langword="null" />.</param>
     /// <returns><see langword="true" /> when the run was found; <see langword="false" /> when it belongs to somebody else, has been forgotten, or never existed.</returns>
     /// <remarks>Finding one is use: the retention window runs from here as well as from a publish, so a client that is reading is never forgotten out from under itself.</remarks>
-    public bool TryFind(DiscoveryRunId id, MailOwnerId owner, [NotNullWhen(true)] out DiscoveryRunJournal? journal)
+    public bool TryFind(DiscoveryRunId id, MailUserId user, [NotNullWhen(true)] out DiscoveryRunJournal? journal)
     {
         this.ForgetRunsNobodyCameBackFor();
 
-        if (!this.runs.TryGetValue(id, out var held) || held.Journal.Owner != owner)
+        if (!this.runs.TryGetValue(id, out var held) || held.Journal.User != user)
         {
             journal = null;
 
@@ -124,20 +124,20 @@ public sealed class DiscoveryRunRegistry
         return true;
     }
 
-    /// <summary>Stops a run this owner started, so it makes no further provider call and abandons the retrieval it is waiting on.</summary>
+    /// <summary>Stops a run this user started, so it makes no further provider call and abandons the retrieval it is waiting on.</summary>
     /// <param name="id">The run the caller is stopping.</param>
-    /// <param name="owner">The owner the caller was admitted for.</param>
+    /// <param name="user">The user the caller was admitted for.</param>
     /// <returns><see langword="true" /> when the run was found and stopped; <see langword="false" /> when it belongs to somebody else, has been forgotten, or never existed.</returns>
     /// <remarks>
-    /// Found the same way a read is, against the same owner, and for the same reason: an identifier is a bearer value
+    /// Found the same way a read is, against the same user, and for the same reason: an identifier is a bearer value
     /// that travelled to a client and back, so somebody else's run is reported as no such run rather than as a refusal.
     /// A run that has already ended is stopped successfully and nothing happens, because whoever asked could not have
     /// known it finished a moment earlier — and reporting that as a failure would make a control that worked look
     /// broken.
     /// </remarks>
-    public bool TryStop(DiscoveryRunId id, MailOwnerId owner)
+    public bool TryStop(DiscoveryRunId id, MailUserId user)
     {
-        if (!this.TryFind(id, owner, out var journal) || !this.runs.TryGetValue(journal.Id, out var held))
+        if (!this.TryFind(id, user, out var journal) || !this.runs.TryGetValue(journal.Id, out var held))
         {
             return false;
         }

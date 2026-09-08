@@ -477,7 +477,7 @@ public sealed class BatchArgumentsTests
     {
         // Arrange, Act
         var failure = Assert.Throws<SyntheticMailFailure>(
-            () => Parse(recipient: "owner@example.test", sensitivePercentage: 0, exportPath: "corpus.zip"));
+            () => Parse(recipient: "user@example.test", sensitivePercentage: 0, exportPath: "corpus.zip"));
 
         // Assert
         // A flat batch's threading holds only while a submission server leaves Message-Id alone, so a corpus of one
@@ -490,7 +490,7 @@ public sealed class BatchArgumentsTests
     {
         // Arrange, Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(
-            recipient: "owner@example.com",
+            recipient: "user@example.com",
             conversation: true,
             sensitivePercentage: 0,
             exportPath: "corpus.zip"));
@@ -498,7 +498,7 @@ public sealed class BatchArgumentsTests
         // Assert
         // An exported corpus outlives the run that wrote it, and every invented participant is fabricated already:
         // the mailbox is the one address an invocation supplies, so it is the one that could be somebody's.
-        Assert.Contains("owner@example.com", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("user@example.com", failure.Message, StringComparison.Ordinal);
         Assert.Contains(".test", failure.Message, StringComparison.Ordinal);
     }
 
@@ -507,7 +507,7 @@ public sealed class BatchArgumentsTests
     {
         // Arrange, Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(
-            recipient: "owner@example.test",
+            recipient: "user@example.test",
             conversation: true,
             sensitivePercentage: 20,
             exportPath: "corpus.zip"));
@@ -523,7 +523,7 @@ public sealed class BatchArgumentsTests
     {
         // Arrange, Act
         var arguments = Parse(
-            recipient: "owner@example.test",
+            recipient: "user@example.test",
             conversation: true,
             sensitivePercentage: 0,
             exportPath: "corpus.zip");
@@ -540,7 +540,7 @@ public sealed class BatchArgumentsTests
     {
         // Arrange, Act
         var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(
-            recipient: "owner@example.test",
+            recipient: "user@example.test",
             conversation: true,
             sensitivePercentage: 0,
             exportPath: "corpus.zip",

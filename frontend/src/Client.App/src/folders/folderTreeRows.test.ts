@@ -77,7 +77,7 @@ describe('folderTreeOf', () => {
         expect(keysOf(folderTreeOf(directory))).toEqual(['everything', 'account:work', 'account:personal']);
     });
 
-    it('offers the roles the owner’s mailboxes play as scopes spanning all of them', () => {
+    it('offers the roles the user’s mailboxes play as scopes spanning all of them', () => {
         const rows = folderTreeOf(directory);
 
         expect(keysOf(find(rows, 'everything')?.children ?? [])).toEqual(['role:Inbox', 'role:Sent']);
@@ -121,7 +121,7 @@ describe('folderTreeOf', () => {
         expect(news?.state).toBe('NeverSynchronized');
     });
 
-    it('reads an owner with no mailbox as a tree with no rows rather than as a row with nothing under it', () => {
+    it('reads a user with no mailbox as a tree with no rows rather than as a row with nothing under it', () => {
         expect(folderTreeOf({ synchronizationEnabled: true, accounts: [] })).toEqual([]);
     });
 });

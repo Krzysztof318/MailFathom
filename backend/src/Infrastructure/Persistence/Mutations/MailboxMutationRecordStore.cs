@@ -74,8 +74,8 @@ internal sealed class MailboxMutationRecordStore(
             MailboxAccountId = request.Occurrence.AccountId.Value,
 
             // Copied off the folder row this occurrence was resolved through, which is the account's own binding. A
-            // change belongs to the owner whose mailbox it was performed in.
-            OwnerId = folder.OwnerId,
+            // change belongs to the user whose mailbox it was performed in.
+            UserId = folder.UserId,
             MailFolderId = folder.Id,
             MailFolder = folder,
             UidValidity = request.Occurrence.UidValidity.Value,
@@ -148,12 +148,12 @@ internal sealed class MailboxMutationRecordStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// The owner is part of the predicate rather than a check over what came back, so the database never returns a row
+    /// The user is part of the predicate rather than a check over what came back, so the database never returns a row
     /// belonging to somebody else and there is nothing in this process for a later mistake to leak. The folder binding
     /// is included because rebuilding a record needs the alias and generation its occurrence identity is made of.
     /// </remarks>
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
@@ -164,13 +164,13 @@ internal sealed class MailboxMutationRecordStore(
             return [];
         }
 
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
         var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
 
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.OwnerId == ownerValue && identifiers.Contains(mutation.Id))
+            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -186,7 +186,7 @@ internal sealed class MailboxMutationRecordStore(
     /// </remarks>
     public async Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
@@ -201,16 +201,16 @@ internal sealed class MailboxMutationRecordStore(
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
-        var ownerValue = owner.Value;
+        var userValue = user.Value;
 
         // One query for the whole call rather than one per record: a caller withdrawing a full batch is the ordinary
         // case here, and the commit this joins retries as a whole, so a round trip per record would be paid again on
         // every attempt. Tracked, because the stage this may write has to be part of the caller's commit, and joined to
-        // the folder because rebuilding the record needs the binding its occurrence identity is made of. The owner is
+        // the folder because rebuilding the record needs the binding its occurrence identity is made of. The user is
         // part of the predicate so a row belonging to somebody else is absent rather than read and then rejected.
         var entities = await writeContext.MailboxMutations
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.OwnerId == ownerValue && identifiers.Contains(mutation.Id))
+            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);
@@ -300,7 +300,7 @@ internal sealed class MailboxMutationRecordStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         // The binding is joined rather than copied onto the row, because it is what turns a folder key back into the
@@ -308,7 +308,7 @@ internal sealed class MailboxMutationRecordStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.OwnerId == ownerValue &&
+            .Where(mutation => mutation.UserId == userValue &&
                 mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled)
@@ -330,7 +330,7 @@ internal sealed class MailboxMutationRecordStore(
         MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var ownerValue = account.Owner.Value;
+        var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
         // Grouped by the stored stage rather than by the lifecycle, because the lifecycle is derived by a domain method
@@ -338,7 +338,7 @@ internal sealed class MailboxMutationRecordStore(
         // answer that is at most one row per mutation per stage.
         var groupedStages = await readContext.MailboxMutations
             .AsNoTracking()
-            .Where(mutation => mutation.OwnerId == ownerValue &&
+            .Where(mutation => mutation.UserId == userValue &&
                 mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
                 mutation.Stage != MailboxMutationStage.Cancelled)

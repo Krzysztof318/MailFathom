@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// <para>
 /// The never-marks-mail-read guarantee is a property of the types rather than of a review, and this is the assertion
 /// that keeps it one. Reading mail is what MailFathom does constantly and writing the <c>\Seen</c> flag is what it does
-/// on an owner's instruction, so the two acts are separated by which session a component can obtain — and a change that
+/// on a user's instruction, so the two acts are separated by which session a component can obtain — and a change that
 /// gave a synchronization pass, a reconciliation pass, or a content fetch that session would break the guarantee
 /// silently, because everything it did afterwards would still compile and still pass its own tests.
 /// </para>
@@ -28,7 +28,7 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// <para>
 /// The expected set is the list of tiers the decision record names and nothing else, so growing it by a *tier* is an
 /// amendment to that record rather than an edit here. It has grown once that way: filing a copy of a message MailFathom
-/// composed is a write no mutation of the owner's own mail can express, because the message it appends does not exist
+/// composed is a write no mutation of the user's own mail can express, because the message it appends does not exist
 /// on the server yet. It has grown twice more without a tier being added, both times inside the filing tier — a draft's
 /// copies are filed by a type of their own, which that record decided in advance when it said the drafts role is
 /// decided by the filing tier and filed by nothing yet, and the append itself is one type both filers call rather than
@@ -42,7 +42,7 @@ public sealed class MailboxWriteCapabilityBoundaryTests
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
-    /// refuses it, and a change to the owner's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
+    /// refuses it, and a change to the user's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
     /// A further name is admissible only where the act it performs is one that record already decided — which is what
     /// the draft filer is, since the copies it appends and withdraws are messages MailFathom composed and stored itself,
     /// in the folder the drafts role names, carrying the flag that tier assigns, and which the appender is by being the

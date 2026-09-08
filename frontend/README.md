@@ -432,7 +432,7 @@ itself is folded to its rail. It is kept in the store the web head keeps its cre
 screen; signing in and signing out both empty it, because what somebody was looking at and about to ask is theirs rather
 than the machine's.
 
-`src/folders/` is what writes that scope. It draws the owner's mailboxes and their folders as one tree, read from the
+`src/folders/` is what writes that scope. It draws the user's mailboxes and their folders as one tree, read from the
 folders route in a single exchange, with the roles that span every mailbox above them — so asking about every inbox at
 once is one act rather than three. A folder is placed and named by the role the deployment gave it rather than by what
 its server calls it, because a name is whatever a provider chose in whatever language. The same tree is what the folded
@@ -576,7 +576,7 @@ to the composer, so nothing above it can read half a message off the frame.
 **Two drafts are kept, and they are different promises.** What is being typed is written continuously to the tab's own
 store, so a reload returns to it — that is `keptComposition.ts`, and it is the session's store rather than the
 machine's because words, a subject, and the addresses they are for are personal data under the same rules as the mail
-already on the screen; signing out drops it in the same act that empties the workspace. The draft in the owner's own
+already on the screen; signing out drops it in the same act that empties the workspace. The draft in the user's own
 drafts folder is a separate thing that somebody asks for, because every revision of that one reaches their mail
 server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
 author asked for.

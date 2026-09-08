@@ -38,8 +38,8 @@ internal sealed class OutgoingEmailFilingEntity
     /// </summary>
     public required string MailboxAccountId { get; set; }
 
-    /// <summary>Gets or sets the owner whose account the sent message was filed into.</summary>
-    public required Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user whose account the sent message was filed into.</summary>
+    public required Guid UserId { get; set; }
 
     /// <summary>Gets or sets MailFathom's own name for the folder the copy went into.</summary>
     public required string FolderAlias { get; set; }

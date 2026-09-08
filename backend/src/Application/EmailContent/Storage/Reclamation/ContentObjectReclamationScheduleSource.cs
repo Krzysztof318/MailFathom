@@ -32,7 +32,7 @@ public sealed class ContentObjectReclamationScheduleSource : IScheduledJobSource
     /// <param name="recurrence">The occasions a sweep is dispatched on.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recurrence" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Held rather than read per pass, unlike the sources over rules and over an owner's declarations. Those change
+    /// Held rather than read per pass, unlike the sources over rules and over a user's declarations. Those change
     /// while the process runs; this one is composed from a setting the host reads once, because a bucket cannot be
     /// repointed without the client being rebuilt in any case.
     /// </remarks>

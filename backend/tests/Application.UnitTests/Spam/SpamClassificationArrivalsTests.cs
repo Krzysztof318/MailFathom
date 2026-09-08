@@ -19,7 +19,7 @@ namespace MailFathom.Application.UnitTests.Spam;
 public sealed class SpamClassificationArrivalsTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -45,7 +45,7 @@ public sealed class SpamClassificationArrivalsTests
             .ScheduleAsync(
                 StoredEmail,
                 occurrence,
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 TestContext.Current.CancellationToken);
 
         // Assert
@@ -76,7 +76,7 @@ public sealed class SpamClassificationArrivalsTests
             .ScheduleAsync(
                 StoredEmail,
                 occurrence,
-                SyntheticMailOwner.Deployment,
+                SyntheticMailUser.Deployment,
                 TestContext.Current.CancellationToken);
 
         // Assert
@@ -98,12 +98,12 @@ public sealed class SpamClassificationArrivalsTests
         await arrivals.ScheduleAsync(
             StoredEmail,
             occurrence,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
         await arrivals.ScheduleAsync(
             StoredEmail,
             occurrence,
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -120,7 +120,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SpamClassificationSettings.Disabled).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Inbox, uid: 4401),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -134,7 +134,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SettingsCovering(Inbox)).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Archive, uid: 4401),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -154,7 +154,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SettingsCovering(Inbox)).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Inbox, uid: 4401),
-            SyntheticMailOwner.Deployment,
+            SyntheticMailUser.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -173,7 +173,7 @@ public sealed class SpamClassificationArrivalsTests
     private SpamClassificationArrivals CreateArrivals(SpamClassificationSettings settings)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(settings);
+        settingsReader.SettingsFor(Arg.Any<MailUserId>()).Returns(settings);
 
         return new SpamClassificationArrivals(this.jobs, settingsReader);
     }

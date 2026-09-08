@@ -128,7 +128,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailFathomOrchestra
         CancellationToken cancellationToken) => scope
             .GetRequiredService<IEmailMetadataRepository>()
             .UpsertMetadataAsync(
-                session, SyntheticMailAccount.Owner,
+                session, SyntheticMailAccount.User,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                 extractedMetadata: null,
                 StoredEmailContentAvailability.ExceededSizeLimit,

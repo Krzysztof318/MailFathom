@@ -47,7 +47,7 @@ internal sealed class StoredEmailChunkingStore(
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var ownerId = account.Owner.Value;
+        var userId = account.User.Value;
         var mailboxAccountId = account.Id.Value;
         // One snapshot for both halves, exactly as the embedding sweep reads it: the predicate narrows the batch and the
         // answer below names which of the gate's decisions admitted each row, so a second reading taken microseconds
@@ -56,7 +56,7 @@ internal sealed class StoredEmailChunkingStore(
 
         var candidates = await Selecting(
                 dbContext.StoredEmails.AsNoTracking(),
-                ownerId,
+                userId,
                 mailboxAccountId,
                 folderParticipation.FoldersGeneratingEmbeddings,
                 terms)
@@ -92,7 +92,7 @@ internal sealed class StoredEmailChunkingStore(
 
     /// <summary>Narrows stored mail to the messages the arrival pipeline still owes passages for.</summary>
     /// <param name="emails">The emails to narrow.</param>
-    /// <param name="ownerId">The owner whose account this pass belongs to, which is what the index leads with.</param>
+    /// <param name="userId">The user whose account this pass belongs to, which is what the index leads with.</param>
     /// <param name="mailboxAccountId">The configured account this pass belongs to.</param>
     /// <param name="embeddedFolders">The folders a mapping admits to embedding, which is what decides the cut.</param>
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
@@ -121,14 +121,14 @@ internal sealed class StoredEmailChunkingStore(
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
-        Guid ownerId,
+        Guid userId,
         string mailboxAccountId,
         IReadOnlyList<MailFolderIdentity> embeddedFolders,
         DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
         AccountScopedMailFolders.Admitting(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
-                .Where(email => email.OwnerId == ownerId
+                .Where(email => email.UserId == userId
                     && email.MailboxAccountId == mailboxAccountId
                     // A body passage rather than any passage. email_chunks also holds what an attachment yielded, and
                     // the two passes walk different sets from the front of their own queues, so nothing orders them:

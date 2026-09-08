@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Contacts.Collection;
 
-/// <summary>Covers the owner's own half of collection's bounds: what one deployment says it never records.</summary>
+/// <summary>Covers the user's own half of collection's bounds: what one deployment says it never records.</summary>
 public sealed class ContactCollectionExclusionTests
 {
     /// <summary>A domain entry is the shape for correspondence that all arrives from one place.</summary>

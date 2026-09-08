@@ -89,7 +89,7 @@ public sealed class MailboxMutationAuditCursorTests
     {
         Id = EntryId,
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
-        Owner = SyntheticMailOwner.Deployment,
+        User = SyntheticMailUser.Deployment,
         AccountId = MailAccountId.Create("work"),
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7(CompletedAt)),
         Mutation = MailboxMutation.Relocate,

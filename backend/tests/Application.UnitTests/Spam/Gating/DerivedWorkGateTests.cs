@@ -95,11 +95,11 @@ public sealed class DerivedWorkGateTests
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
     }
 
-    /// <summary>Classification is each owner's own, so one owner's posture never withholds another owner's mail.</summary>
+    /// <summary>Classification is each user's own, so one user's posture never withholds another user's mail.</summary>
     /// <remarks>
     /// The per-account half of the gate, and the one thing that can prove it: with the account guard replaced by the
     /// deployment-wide switch, this message would be withheld as junk on the strength of a verdict recorded before its
-    /// owner switched classification off, and its chunking, embedding, and rule evaluation would stop for good.
+    /// user switched classification off, and its chunking, embedding, and rule evaluation would stop for good.
     /// </remarks>
     [Fact]
     public void Admit_MailOfAnAccountThatDoesNotClassify_IsAdmittedWhateverWasRecordedAboutIt()
@@ -304,7 +304,7 @@ public sealed class DerivedWorkGateTests
         SpamVerdict? verdict) =>
         new(Primary, folderAlias, storedAt, StoredEmailContentAvailability.Available, verdict);
 
-    /// <summary>Builds the gate over the accounts whose owners classify, which is every account unless a test says otherwise.</summary>
+    /// <summary>Builds the gate over the accounts whose users classify, which is every account unless a test says otherwise.</summary>
     private static DerivedWorkGate Gate(
         SpamClassificationSettings settings,
         StubJunkMailFolderCatalog junkFolders,

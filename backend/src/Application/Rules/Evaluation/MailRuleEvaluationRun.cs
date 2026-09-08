@@ -28,7 +28,7 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// </remarks>
 public sealed record MailRuleEvaluationRun
 {
-    /// <summary>Gets the account whose mail the run walks, named by its owner and its identifier together.</summary>
+    /// <summary>Gets the account whose mail the run walks, named by its user and its identifier together.</summary>
     public required MailAccountIdentity Account { get; init; }
 
     /// <summary>Gets when the run was asked for.</summary>

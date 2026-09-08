@@ -35,7 +35,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.ContactAddressUniqueIndexName,
         PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName,
         PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName,
-        PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName,
+        PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName,
         PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName,
     ];
 

@@ -62,35 +62,35 @@ public sealed class JobLeaseTests
         Assert.False(lease.IsHeldBy(JobLeaseOwner.Create("attempt-b")));
     }
 
-    /// <summary>Two replicas cannot see what the other allocated, so a generated owner has to be unique on its own.</summary>
+    /// <summary>Two replicas cannot see what the other allocated, so a generated user has to be unique on its own.</summary>
     [Fact]
-    public void NewAttempt_CalledTwice_ProducesOwnersThatDoNotMatch()
+    public void NewAttempt_CalledTwice_ProducesUsersThatDoNotMatch()
     {
         // Act
-        var owner = JobLeaseOwner.NewAttempt();
-        var otherOwner = JobLeaseOwner.NewAttempt();
+        var user = JobLeaseOwner.NewAttempt();
+        var otherUser = JobLeaseOwner.NewAttempt();
 
         // Assert
-        Assert.NotEqual(owner, otherOwner);
+        Assert.NotEqual(user, otherUser);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("attempt\ta")]
-    public void Create_AnOwnerThatIsBlankOrCarriesAControlCharacter_IsRefused(string value)
+    public void Create_AUserThatIsBlankOrCarriesAControlCharacter_IsRefused(string value)
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => JobLeaseOwner.Create(value));
     }
 
     [Fact]
-    public void Create_AnOwnerLongerThanTheBound_IsRefused()
+    public void Create_AUserLongerThanTheBound_IsRefused()
     {
         // Arrange
-        var overLongOwner = new string('o', JobLeaseOwner.MaximumLength + 1);
+        var overLongUser = new string('o', JobLeaseOwner.MaximumLength + 1);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => JobLeaseOwner.Create(overLongOwner));
+        Assert.Throws<ArgumentException>(() => JobLeaseOwner.Create(overLongUser));
     }
 }

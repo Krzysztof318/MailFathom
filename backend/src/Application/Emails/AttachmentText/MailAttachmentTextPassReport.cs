@@ -21,8 +21,8 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// an operator acting on it has to know which one bound.
 /// </param>
 /// <param name="PeriodCeilingBound">
-/// Whether it was the deployment's ceiling or that owner's share of it, and <see cref="AttachmentDerivationBound.None" />
-/// where neither bound. The step alone does not answer it, and the two have different remedies: raising an owner's
+/// Whether it was the deployment's ceiling or that user's share of it, and <see cref="AttachmentDerivationBound.None" />
+/// where neither bound. The step alone does not answer it, and the two have different remedies: raising a user's
 /// share achieves nothing while the deployment itself has stopped spending.
 /// </param>
 public sealed record MailAttachmentTextPassReport(

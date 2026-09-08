@@ -23,7 +23,7 @@ import { useAttachmentUpload } from '../deployment/attachmentUpload';
 import { wireComposition, type Composition } from './composition';
 
 // What the deployment holds for the message being written, and the five acts that change it. It is a hook rather than
-// state inside the composer because none of it is what is on the screen: the draft in the owner's own drafts folder,
+// state inside the composer because none of it is what is on the screen: the draft in the user's own drafts folder,
 // the files staged against it, and what became of a send are all the deployment's, and each act is a sequence with an
 // outcome rather than a value to render.
 //
@@ -58,7 +58,7 @@ export interface DraftAtDeployment {
     /** The files staged against it, oldest first, which is nothing until one is attached. */
     readonly staged: readonly MailStagedAttachment[];
 
-    /** Files the draft in the owner's own drafts folder, creating it where nothing has been saved yet. */
+    /** Files the draft in the user's own drafts folder, creating it where nothing has been saved yet. */
     readonly save: (composition: Composition) => Promise<boolean>;
 
     /** Stages one file against the draft, saving it first where nothing has been saved yet. */
@@ -73,7 +73,7 @@ export interface DraftAtDeployment {
     /** Takes a queued send back while it has not begun transmitting. */
     readonly withdraw: () => Promise<void>;
 
-    /** Gives the draft up, taking its copies back out of the owner's drafts folder. */
+    /** Gives the draft up, taking its copies back out of the user's drafts folder. */
     readonly discard: () => Promise<boolean>;
 }
 

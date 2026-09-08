@@ -202,7 +202,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
         // Act
         var result = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<EmailSpamClassifier>().ClassifyAsync(
-                SyntheticMailAccount.Owner,
+                SyntheticMailAccount.User,
                 storedEmailId,
                 SpamClassificationMode.Reclassify,
                 token),
@@ -247,7 +247,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
         var rawMime = Encoding.ASCII.GetBytes(string.Join(
             "\r\n",
             "From: sender@mailfathom.test",
-            "To: owner@mailfathom.test",
+            "To: user@mailfathom.test",
             "Subject: Notes from Tuesday",
             "Date: Tue, 04 May 2026 08:30:00 +0000",
             "Message-ID: <spam-scan@mailfathom.test>",
@@ -305,7 +305,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session, SyntheticMailAccount.Owner,
+                    session, SyntheticMailAccount.User,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, "Notes from Tuesday", rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

@@ -13,7 +13,7 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// limiter runs ahead of the authorization middleware, so every caller shares one partition until a credential has been
 /// judged — which is the stronger bound for unbounded key guessing and exactly the wrong shape here, because the
 /// callers are all authenticated and one of them exporting continuously would spend the capacity a person reading their
-/// mail needs. This runs behind authentication, where there is an owner to count against.
+/// mail needs. This runs behind authentication, where there is a user to count against.
 /// </para>
 /// <para>
 /// The numbers are constants rather than settings. What an operator configures is whether telemetry is forwarded at
@@ -29,10 +29,10 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// </remarks>
 internal sealed class ClientTelemetryQuota : IDisposable
 {
-    /// <summary>The most exports one owner may have outstanding capacity for at any instant.</summary>
+    /// <summary>The most exports one user may have outstanding capacity for at any instant.</summary>
     internal const int BurstCapacity = 120;
 
-    /// <summary>How much capacity one owner regains each period.</summary>
+    /// <summary>How much capacity one user regains each period.</summary>
     internal const int ExportsPerPeriod = 120;
 
     /// <summary>How long a refused client is asked to hold for, which is one replenishment away from having capacity again.</summary>
@@ -41,8 +41,8 @@ internal sealed class ClientTelemetryQuota : IDisposable
     private static readonly TimeSpan ReplenishmentPeriod = RetryAfter;
 
     private readonly PartitionedRateLimiter<string> exports = PartitionedRateLimiter.Create<string, string>(
-        owner => RateLimitPartition.GetTokenBucketLimiter(
-            owner,
+        user => RateLimitPartition.GetTokenBucketLimiter(
+            user,
             _ => new TokenBucketRateLimiterOptions
             {
                 AutoReplenishment = true,
@@ -57,16 +57,16 @@ internal sealed class ClientTelemetryQuota : IDisposable
             }),
         StringComparer.Ordinal);
 
-    /// <summary>Spends one export's capacity for one owner, or reports that there is none left.</summary>
-    /// <param name="owner">The owner the export was attributed to.</param>
+    /// <summary>Spends one export's capacity for one user, or reports that there is none left.</summary>
+    /// <param name="user">The user the export was attributed to.</param>
     /// <returns><see langword="true" /> when the export may proceed.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="user" /> is <see langword="null" />.</exception>
     /// <remarks>The lease is released immediately, which returns nothing to a token bucket: what it holds is permission that has already been spent.</remarks>
-    internal bool TryAdmit(string owner)
+    internal bool TryAdmit(string user)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(user);
 
-        using var lease = this.exports.AttemptAcquire(owner);
+        using var lease = this.exports.AttemptAcquire(user);
 
         return lease.IsAcquired;
     }

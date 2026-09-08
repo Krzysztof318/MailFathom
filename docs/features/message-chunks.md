@@ -19,7 +19,7 @@ describes the table they are stored in.
 
 A message is cut **after** it has been stored and never in the transaction that stored it. Two stages stand between the
 two, and both can change what the cut should produce: spam classification can decide the message is not derived from at
-all, and the owner's rules can file it into a folder mapped differently from the one it arrived in. Passages are not
+all, and the user's rules can file it into a folder mapped differently from the one it arrived in. Passages are not
 undone by a message moving afterwards, so the account's synchronization run cuts as its last local step — after the
 classification pass and after the rule pass — and offers each message it cut for embedding.
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws the whole order and states what each stage waits for.
@@ -173,7 +173,7 @@ decides and what keeps a single search over a message and its attachment one ran
   it. A redaction moves those boundaries with the text — a placeholder is rarely the length of what it replaced — so
   each is carried across by the shift the redaction applied before it, and a boundary pointing into text the scan's
   analyzed ceiling dropped is left out rather than published pointing at the wrong place.
-- **An attachment that reported a reason produces no passage.** A refusal is stored against the file so an owner asking
+- **An attachment that reported a reason produces no passage.** A refusal is stored against the file so a user asking
   why their contract was never searched is given the reason, and nothing is cut from a row that carries no words.
 - **Reconciliation is per attachment.** The reading that arrives later replaces the passages of the attachment it read
   and touches no other attachment's and none of the message's own, so an unchanged reading writes nothing exactly as an

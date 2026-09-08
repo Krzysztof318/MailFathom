@@ -10,7 +10,7 @@ namespace MailFathom.Cli.Administration.Contacts;
 /// <param name="ContactsErased">How many contacts the deployment had collected.</param>
 /// <param name="AddressesErased">How many addresses went with them.</param>
 /// <remarks>
-/// Two counts and nobody's identity, for the reason the single erasure beside it carries none. What an owner reversing
+/// Two counts and nobody's identity, for the reason the single erasure beside it carries none. What a user reversing
 /// their mind about collection is told is how much of a record about other people their instance had built, not who was
 /// in it.
 /// </remarks>

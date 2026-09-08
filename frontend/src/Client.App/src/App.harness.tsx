@@ -73,7 +73,7 @@ export const heldCredential = 'Basic dGVzdDpzZWNyZXQ=';
 export const heldPerson = 'test';
 
 /** What the screen composes out of what `signIn` below types, which is what a test asserts was kept and presented. */
-export const typedCredential = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
+export const typedCredential = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
 
 export function directory(synchronizationEnabled: boolean, accounts: readonly unknown[]): Answer {
     return { status: 200, body: JSON.stringify({ synchronizationEnabled, accounts }) };
@@ -213,7 +213,7 @@ const folderWithOneMessage: Answer = {
                 sentAt: '2026-08-31T09:41:00+00:00',
                 senderAddress: 'billing@example.invalid',
                 senderDisplayName: 'Billing',
-                toAddresses: ['owner@example.invalid'],
+                toAddresses: ['user@example.invalid'],
                 unread: true,
                 flagged: false,
                 answered: false,
@@ -336,7 +336,7 @@ const drawnConversation: Answer = {
                     sentAt: '2026-08-31T09:41:00+00:00',
                     senderAddress: 'billing@example.invalid',
                     senderDisplayName: 'Billing',
-                    toAddresses: ['owner@example.invalid'],
+                    toAddresses: ['user@example.invalid'],
                     unread: true,
                     flagged: false,
                     answered: false,
@@ -594,7 +594,7 @@ export function typeAddress(entry: string): void {
     fireEvent.change(screen.getByRole('textbox', { name: 'Server' }), { target: { value: entry } });
 }
 
-export function signIn(userName = 'owner', password = 'open sesame'): void {
+export function signIn(userName = 'user', password = 'open sesame'): void {
     fireEvent.change(screen.getByRole('textbox', { name: 'Login' }), { target: { value: userName } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));

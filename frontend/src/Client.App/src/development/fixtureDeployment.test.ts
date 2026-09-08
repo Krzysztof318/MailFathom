@@ -24,7 +24,7 @@ function asking(route: string, method: ClientRequest['method'] = 'GET', body?: s
     return {
         method,
         path: `${deploymentAddress}/api/client${route}`,
-        headers: { Accept: 'application/json', Authorization: 'Basic b3duZXI6b3BlbiBzZXNhbWU=' },
+        headers: { Accept: 'application/json', Authorization: 'Basic dXNlcjpvcGVuIHNlc2FtZQ==' },
         ...(body === undefined ? {} : { body }),
     };
 }

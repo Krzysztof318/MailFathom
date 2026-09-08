@@ -37,7 +37,7 @@ public sealed class DiscoveryPlanningAgentTests
     private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly MailboxScope WholeMailbox = MailboxScope.Create(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         []);
 
@@ -119,7 +119,7 @@ public sealed class DiscoveryPlanningAgentTests
         using var provider = ScriptedTransport.Answering(Completion(
             """{\"intent\": \"findFact\", \"lookups\": [{\"queryText\": \"key\"}]}"""));
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var planner = provider.PlannerOver(egressGuard: egress.Guard);
         var question = new MailQuestion(
             MailQuestionText.Create($"what do I do about the key {Marker} a colleague sent"),

@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Signals;
 
-/// <summary>Carries a signal to whatever an owner is reachable through.</summary>
+/// <summary>Carries a signal to whatever a user is reachable through.</summary>
 /// <remarks>
 /// <para>
 /// One implementation is registered today, and it is SignalR: a hub reaches a client that is running, which is the web
@@ -21,7 +21,7 @@ namespace MailFathom.Application.Signals;
 /// </remarks>
 public interface IClientSignalChannel
 {
-    /// <summary>Delivers one signal to the owner it names, and to no other owner.</summary>
+    /// <summary>Delivers one signal to the user it names, and to no other user.</summary>
     /// <param name="signal">What changed and for whom.</param>
     /// <param name="cancellationToken">Cancels the delivery when the process is stopping.</param>
     /// <returns>A task that completes when the channel has done what it can with the signal.</returns>

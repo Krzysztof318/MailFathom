@@ -98,7 +98,7 @@ public sealed class MailboxMutationAuditEntryMappingTests
     {
         Id = Guid.CreateVersion7(RecordedAt),
         MutationRecordId = Guid.CreateVersion7(RecordedAt),
-        OwnerId = SyntheticMailOwner.Deployment.Value,
+        UserId = SyntheticMailUser.Deployment.Value,
         MailboxAccountId = "work",
         StoredEmailId = Guid.CreateVersion7(RecordedAt),
         Mutation = MailboxMutation.Relocate.Name,

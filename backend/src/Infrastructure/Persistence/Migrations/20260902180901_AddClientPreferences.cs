@@ -19,17 +19,17 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 name: "client_preferences",
                 columns: table => new
                 {
-                    OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     Document = table.Column<string>(type: "jsonb", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_client_preferences", x => x.OwnerId);
+                    table.PrimaryKey("PK_client_preferences", x => x.UserId);
                     table.ForeignKey(
-                        name: "FK_client_preferences_settings_accounts_OwnerId",
-                        column: x => x.OwnerId,
+                        name: "FK_client_preferences_settings_accounts_UserId",
+                        column: x => x.UserId,
                         principalTable: "settings_accounts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);

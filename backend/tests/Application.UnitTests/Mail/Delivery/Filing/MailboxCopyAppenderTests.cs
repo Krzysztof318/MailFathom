@@ -39,7 +39,7 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Filing;
 public sealed class MailboxCopyAppenderTests
 {
     private static readonly MailAccountIdentity Account =
-        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+        MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 21, 9, 0, 0, TimeSpan.Zero);
 

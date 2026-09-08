@@ -15,24 +15,24 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// <para>
 /// The two shapes are not interchangeable and are deliberately built by separate methods. The administrative endpoint
 /// configures the deployment's own credentials, so its entry carries the key itself; a mail-serving endpoint states
-/// which methods it accepts and nothing about who holds one, because an owner-facing credential is a row beside the
-/// owner it resolves.
+/// which methods it accepts and nothing about who holds one, because a user-facing credential is a row beside the
+/// user it resolves.
 /// </para>
 /// </remarks>
 internal static class ConfiguredAuthentication
 {
-    /// <summary>An owner-facing entry accepting one method, which is the whole of what such an entry states.</summary>
+    /// <summary>A user-facing entry accepting one method, which is the whole of what such an entry states.</summary>
     /// <param name="method">The method the endpoint accepts.</param>
     /// <returns>The entry.</returns>
-    internal static OwnerFacingAuthenticationOptions Accepting(OwnerCredentialMethod method) =>
+    internal static UserFacingAuthenticationOptions Accepting(UserCredentialMethod method) =>
         new() { Method = method.Name };
 
-    /// <summary>An owner-facing entry accepting subjects one authorization server issued for the given resource.</summary>
+    /// <summary>A user-facing entry accepting subjects one authorization server issued for the given resource.</summary>
     /// <param name="resource">The canonical resource identifier every token's audience is compared against.</param>
     /// <param name="authorizationServerName">The name diagnostics and scheme names are read by.</param>
     /// <param name="issuer">The issuer compared against a token's <c>iss</c>.</param>
     /// <returns>The entry.</returns>
-    internal static OwnerFacingAuthenticationOptions AcceptingSubjectsFrom(
+    internal static UserFacingAuthenticationOptions AcceptingSubjectsFrom(
         string resource,
         string authorizationServerName = "workforce",
         string issuer = "https://sso.example.test/realms/mailfathom")
@@ -44,9 +44,9 @@ internal static class ConfiguredAuthentication
             Issuer = issuer,
         });
 
-        return new OwnerFacingAuthenticationOptions
+        return new UserFacingAuthenticationOptions
         {
-            Method = OwnerCredentialMethod.OAuthSubject.Name,
+            Method = UserCredentialMethod.OAuthSubject.Name,
             OAuth = oauth,
         };
     }

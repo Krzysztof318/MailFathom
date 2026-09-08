@@ -26,7 +26,7 @@ namespace MailFathom.Application.Mail.Mutations;
 /// </para>
 /// <para>
 /// The message names the account alias, the folder alias, and the mutation. The destination path is deliberately absent:
-/// a remote folder path is the mailbox owner's own naming of their mail, which no message an operator reads may carry.
+/// a remote folder path is the mailbox user's own naming of their mail, which no message an operator reads may carry.
 /// </para>
 /// </remarks>
 public sealed class MailboxDestinationFolderMissingException : MailboxMutationRefusedException

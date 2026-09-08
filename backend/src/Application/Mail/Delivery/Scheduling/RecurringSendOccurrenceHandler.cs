@@ -111,7 +111,7 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
         var declaration = await this.recurringSends.FindAsync(declarationId, cancellationToken);
 
         // A declaration stopped between the dispatch and this attempt produces nothing, which is the whole of what
-        // stopping one means: the occasion had come, and the owner said no further message.
+        // stopping one means: the occasion had come, and the user said no further message.
         if (declaration is null || !declaration.IsActive)
         {
             return;

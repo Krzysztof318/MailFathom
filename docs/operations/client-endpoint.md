@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -161,7 +161,7 @@ behind a permission would make that permission a component of every client grant
 GET /api/client/accounts
 ```
 
-It answers with the mail accounts the signed-in owner owns, and how current the local copy of each one is:
+It answers with the mail accounts the signed-in user owns, and how current the local copy of each one is:
 
 ```jsonc
 {
@@ -186,7 +186,7 @@ It answers with the mail accounts the signed-in owner owns, and how current the 
 ```
 
 `id` is the identifier the account was declared under and `displayName` is the name it is published under; each is
-unique within the owner rather than across the deployment, and both are MailFathom's own names for the mailbox. The mail
+unique within the user rather than across the deployment, and both are MailFathom's own names for the mailbox. The mail
 server, the port, the user name, and every credential are deliberately absent, and so is everything of the mailbox
 itself — no message, no subject, no correspondent, no folder listing.
 
@@ -221,19 +221,19 @@ that was failing is not one this process is applying. A host shutting down mid-a
 supervisor counts it under none, so an account backed off for every restart would be one approached less often for being
 stopped.
 
-**`synchronizationEnabled` is the deployment's switch rather than the owner's**, and it is reported beside the accounts
+**`synchronizationEnabled` is the deployment's switch rather than the user's**, and it is reported beside the accounts
 because no per-account value carries it: a copy that last moved a week ago means one thing where the deployment is still
 trying every few minutes and another where an operator switched synchronization off.
 
-**An owner with no mail account reads an empty `accounts` list**, which is a state to render rather than an error. A
+**A user with no mail account reads an empty `accounts` list**, which is a state to render rather than an error. A
 credential whose grant does not carry `mailfathom.mail.read` is answered `403` instead, naming the permission it lacks,
 so the two are never confused; naming it discloses nothing, since the session route already tells that same caller its
-whole grant. **An account another owner holds is absent exactly as an account this deployment does not serve is
+whole grant. **An account another user holds is absent exactly as an account this deployment does not serve is
 absent** — nothing in the response, its timing, or its failure modes separates the two.
 
 Nothing here contacts a mail server. The answer is composed from local state, so it is the same whether or not a mailbox
 is reachable at the moment it is asked, and asking cannot set the remote `\Seen` flag. It is bounded by how many
-accounts the owner has and by nothing else — not by their folders, their messages, or how many times synchronization has
+accounts the user has and by nothing else — not by their folders, their messages, or how many times synchronization has
 run.
 
 ### The folders route
@@ -242,7 +242,7 @@ run.
 GET /api/client/folders
 ```
 
-It answers with the owner's mailboxes and every folder in them, which is the one tree a mail screen is drawn from:
+It answers with the user's mailboxes and every folder in them, which is the one tree a mail screen is drawn from:
 
 ```jsonc
 {
@@ -327,11 +327,11 @@ discovered but never synchronized *is* present, carrying `NeverSynchronized`, no
 recorded yet, and both counts at zero, because an empty folder and an unsynchronized one are not the same thing on
 screen.
 
-**An owner with no mail account reads an empty `accounts` list**, and a credential whose grant does not carry
-`mailfathom.mail.read` is answered `403` — the same two answers the accounts route gives, because naming an owner's
+**A user with no mail account reads an empty `accounts` list**, and a credential whose grant does not carry
+`mailfathom.mail.read` is answered `403` — the same two answers the accounts route gives, because naming a user's
 folders is the same disclosure as naming their mailboxes.
 
-The answer is bounded by the folders the owner's accounts have, which configuration bounds, and by nothing the mailbox
+The answer is bounded by the folders the user's accounts have, which configuration bounds, and by nothing the mailbox
 can grow. Nothing here contacts a mail server, and asking cannot set the remote `\Seen` flag.
 
 ### The mail list route
@@ -340,7 +340,7 @@ can grow. Nothing here contacts a mail server, and asking cannot set the remote 
 GET /api/client/emails?account=work&folder=INBOX&pageSize=50
 ```
 
-It answers with one page of the owner's mail, ordered by when each message was received, and with the cursor that
+It answers with one page of the user's mail, ordered by when each message was received, and with the cursor that
 continues the list at each end:
 
 ```jsonc
@@ -427,7 +427,7 @@ leading end and answering with the leading page would read as having scrolled to
 
 | Parameter | Accepts | Default |
 | --- | --- | --- |
-| `account` | An account identifier or display name | every account the owner owns |
+| `account` | An account identifier or display name | every account the user owns |
 | `folder` | A folder alias, or a role as `role:Inbox` | every folder of those accounts |
 | `includeJunk` | `true`, `false` | `false` |
 | `unread` | `true`, `false` | both |
@@ -463,7 +463,7 @@ before the change belong to a different list. Changing `pageSize` alone does not
 reading a folder cannot set the remote `\Seen` flag. How current that copy is, per folder, is what
 [the folders route](#the-folders-route) answers; it is not repeated on every page.
 
-**An owner with no mail account reads an empty `emails` list**, and a credential whose grant does not carry
+**A user with no mail account reads an empty `emails` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403`.
 
 ### The mail search route
@@ -472,7 +472,7 @@ reading a folder cannot set the remote `\Seen` flag. How current that copy is, p
 GET /api/client/emails/search?query=invoice%20from%20accounting&folder=INBOX&pageSize=20
 ```
 
-It answers with one page of the owner's mail ranked against what they are looking for:
+It answers with one page of the user's mail ranked against what they are looking for:
 
 ```jsonc
 {
@@ -570,7 +570,7 @@ on rather than results that quietly got worse.
 | Parameter | Accepts | Default |
 | --- | --- | --- |
 | `query` | The text to search for, up to 512 characters | required |
-| `account` | An account identifier or display name | every account the owner owns |
+| `account` | An account identifier or display name | every account the user owns |
 | `folder` | A folder alias, or a role as `role:Inbox` | every folder of those accounts |
 | `includeJunk` | `true`, `false` | `false` |
 | `sender` | An address the sender must carry | any sender |
@@ -610,7 +610,7 @@ this surface carries.
 this deployment has stored but not yet indexed matches nothing here. Nothing on this route contacts a mail server, so
 no search waits on IMAP and none can set the remote `\Seen` flag.
 
-**An owner with no mail account reads an empty `results` list**, and a credential whose grant does not carry
+**A user with no mail account reads an empty `results` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403`.
 ### The conversation route
 
@@ -685,7 +685,7 @@ It answers with one conversation as a single document — the messages in it, wh
 
 **A conversation is not scoped to a folder, and the route takes no account or folder to scope it by.** The question is
 in the inbox, the answer is in `SENT`, and a forwarded copy is in a project folder — so it is read across every folder
-of every account the signed-in owner owns, and the junk folder takes part too, because a reply that landed in junk is
+of every account the signed-in user owns, and the junk folder takes part too, because a reply that landed in junk is
 still part of the exchange somebody is reading. A folder an operator withheld from tools is the one exception, and it is
 absent for the reason it is absent everywhere: the message is in no conversation this surface publishes, in no count of
 one, and in no participant list.
@@ -741,7 +741,7 @@ defect in the client.
 | `pageSize` | 1 to 100 | 25 |
 | `cursor` | A cursor a previous page returned | the beginning of the conversation |
 
-**A conversation this owner does not hold is answered `404`**, and so is one no deployment ever held: nothing in the
+**A conversation this user does not hold is answered `404`**, and so is one no deployment ever held: nothing in the
 answer, its timing, or its failure separates somebody else's exchange from one that never existed. Text that is not a
 UUID matches no route and is the same `404`. A credential whose grant does not carry `mailfathom.mail.read` is answered
 `403`, as everywhere else on this surface.
@@ -859,7 +859,7 @@ empty beside it for the same reason.
 | --- | --- | --- |
 | `storedEmailId` | The message's identifier, as a list row or a conversation published it | required, in the path |
 
-**A message this owner does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
+**A message this user does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
 stored content is missing or damaged. Text that is not a UUID matches no route and is the same `404`. A credential whose
 grant does not carry `mailfathom.mail.read` is answered `403`, as everywhere else on this surface.
 
@@ -1006,7 +1006,7 @@ first, because there was no body to reduce.
 | `remoteImages` | `true` to fetch what the message asks for from other servers on this read alone | `false` |
 | `fullHtml` | `true` to also answer with the sender's own markup, self-contained | `false` |
 
-**A message this owner does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
+**A message this user does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
 stored content is missing or damaged: nothing in the answer separates somebody else's mail from mail that never existed
 or from this deployment's own defect. Text that is not a UUID matches no route and is the same `404`. A credential
 whose grant does not carry `mailfathom.mail.read` is answered `403`, as everywhere else on this surface.
@@ -1065,7 +1065,7 @@ has already authenticated and holds
 `mailfathom.mail.read`, so the credential they presented is the access control and nothing is minted. That is also what
 keeps this working on a deployment serving no MCP endpoint, which serves no link route either.
 
-**A file of a message this owner does not hold is answered `404`**, and so is one of a message no deployment ever held,
+**A file of a message this user does not hold is answered `404`**, and so is one of a message no deployment ever held,
 and so is one whose stored content is missing or damaged: nothing in the answer separates somebody else's mail from mail
 that never existed or from this deployment's own defect. A credential whose grant does not carry `mailfathom.mail.read`
 is answered `403`, as everywhere else on this surface.
@@ -1075,13 +1075,13 @@ and cannot set the remote `\Seen` flag.
 
 **A screened deployment reads the file before it streams it.** Where
 [sensitive-content scanning](../features/sensitive-content-scanning.md#an-attachment-is-screened-on-the-way-out-as-well)
-is switched on for this owner, the document's own text is extracted and scanned, and the route answers `409` with
+is switched on for this user, the document's own text is extracted and scanned, and the route answers `409` with
 `errorCode` `59004` rather than the octets when a scanner names something in it — and equally when nothing could read
 the file at all, since an attachment that was not read is never treated as clean. The answer names no scanner, no
 category, and nothing about the file, and it is deliberately a different status from the `404` above: this reader is
 already authenticated for this message and this position, so what they learn is that the deployment screens what it
 serves rather than anything about mail they may not read. Nothing is redacted — a file is served whole or refused —
-and an owner who screens nothing pays no extraction and reads exactly the answer the paragraphs above describe.
+and a user who screens nothing pays no extraction and reads exactly the answer the paragraphs above describe.
 
 ### The citation route
 
@@ -1143,7 +1143,7 @@ composed, or its parts changed — and the resolution still carries the message,
 correspondence rather than told the fact has no source. `PrivateSource` means the caller may not read it, and carries
 nothing but the identity the caller already sent.
 
-**Mail this owner does not hold and mail belonging to somebody else are both `PrivateSource`**, and nothing in the
+**Mail this user does not hold and mail belonging to somebody else are both `PrivateSource`**, and nothing in the
 answer separates them: telling them apart would take a read outside the caller's own scope, and its answer would say
 whether somebody else's message exists. A local copy that is stored and damaged is `Unresolvable` instead, carrying no
 message, which is this deployment's own defect rather than a statement about anyone's mail.
@@ -1259,7 +1259,7 @@ same rule that makes mail in a withheld folder a message that is not there: fili
 read would move it out of sight rather than be a capability of its own.
 
 **Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
-flag misdescribes mail the owner can still find; a move puts the mail somewhere else, and on a server without `MOVE` it
+flag misdescribes mail the user can still find; a move puts the mail somewhere else, and on a server without `MOVE` it
 is a copy followed by a delete — which is why the two are granted separately and why the record exists at all.
 
 **A move either completes or leaves the message where it was, and a half-finished one is reported rather than
@@ -1317,17 +1317,17 @@ every write here is separately granted — reading somebody's mail is not decidi
 
 | Route | What it does |
 | --- | --- |
-| `GET /api/client/record` | Hands over the signed-in owner's record as redacted JSON, with the version it was read at |
+| `GET /api/client/record` | Hands over the signed-in user's record as redacted JSON, with the version it was read at |
 | `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
 | `POST /api/client/record/mail-accounts` | Declares one more mailbox in it |
 | `POST /api/client/record/mail-accounts/removal` | Stops it declaring one mailbox, named by the identifier it was declared under |
 
-**No route here names an owner, and that is the whole of the isolation.** The record acted on is the one belonging to
+**No route here names a user, and that is the whole of the isolation.** The record acted on is the one belonging to
 the credential that authenticated, resolved from the request rather than read out of the body or the path, so there is
 no identifier a client could put in a request to reach somebody else's record. It follows that a request naming another
-owner cannot be composed at all — there is nowhere to put the name — and a deployment serving several people publishes
+user cannot be composed at all — there is nowhere to put the name — and a deployment serving several people publishes
 no route through which any of them learns that the others exist. [The administrative
-surface](admin-endpoint.md#owners-and-their-records) is where a roster is read, and it is not reachable with a
+surface](admin-endpoint.md#users-and-their-records) is where a roster is read, and it is not reachable with a
 credential issued for this one.
 
 **A withdrawal withdraws no mail.** Stopping the record declaring a mailbox stops this deployment synchronizing it;
@@ -1344,38 +1344,38 @@ reference to it.
 
 **A candidate is validated before it is committed, and committed whole or not at all.** It is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to this owner, and put through the same mail-synchronization validators a start applies —
+account in it belongs to this user, and put through the same mail-synchronization validators a start applies —
 including the walk that resolves every credential the record names, so a reference that reaches nothing is refused here
 rather than committed and then refusing the whole deployment's next start. What the record asks about [scanning this
-owner's mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) is judged here too: an owner
+user's mail](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is judged here too: a user
 may switch a scanner on for their own mail and never off, and asking for the personal-data scanner where the deployment
 stood no analyzer up is refused at the write rather than left to fail closed on the next message. A refusal names what
-to correct — for a scanning one, the deployment setting behind it — and carries nothing that was supplied as a secret. A record another writer moved on in the meantime — the owner from a second
+to correct — for a scanning one, the deployment setting behind it — and carries nothing that was supplied as a secret. A record another writer moved on in the meantime — the user from a second
 device, or an administrator — is refused as superseded rather than overwritten, so the client re-reads and composes the
 change again.
 
-**A mailbox declared here names a credential this deployment provisioned for this owner, and nothing else.** A record
+**A mailbox declared here names a credential this deployment provisioned for this user, and nothing else.** A record
 never carries a password: what it carries is a [reference](secret-provisioning.md) to material the deployment can
 resolve, and that material is reached by whatever the reference names — a mounted file, a systemd credential, an
-environment variable. The mail server the account names is the owner's own, so a reference written here decides what
+environment variable. The mail server the account names is the user's own, so a reference written here decides what
 this deployment hands to a machine that person controls; unbounded, `mailfathom.mail.accounts.write` would reach the
 database password and every other secret this deployment can resolve.
 
 Two references are therefore admissible and no others. One the record already carries stays admissible whoever put it
 there, so a change that was never about the credential is never refused over it. And one whose material was provisioned
-for this owner is admissible, which is read from the name the operator gave it: **the last segment of the reference's
-target begins with `owner-<owner identifier>-`**. So `file:/run/secrets/owner-3f1d…-work-password` and
-`systemd-credential:owner-3f1d…-work-password` are the owner's to name, and `file:/run/secrets/database-password` is
+for this user is admissible, which is read from the name the operator gave it: **the last segment of the reference's
+target begins with `user-<user identifier>-`**. So `file:/run/secrets/user-3f1d…-work-password` and
+`systemd-credential:user-3f1d…-work-password` are the user's to name, and `file:/run/secrets/database-password` is
 not — whatever path is written in front of it, because the bound is the name of the material rather than the way to it.
 An operator provisioning a mailbox credential for somebody to declare themselves names it that way; one who would
-rather not writes the mail account through [`mfctl owner account
-add`](admin-endpoint.md#owners-and-their-records) instead, which is bounded by nothing here. A refusal names both
+rather not writes the mail account through [`mfctl user account
+add`](admin-endpoint.md#users-and-their-records) instead, which is bounded by nothing here. A refusal names both
 routes out.
 
-**An owner whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
-refused, naming the administrative `mfctl owner adopt` that moves them into the record first, because committing it
+**A user whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
+refused, naming the administrative `mfctl user adopt` that moves them into the record first, because committing it
 would leave two answers to which mailboxes this deployment reads and the files would win at the next restart. Nothing on
-this surface can perform that move: which decisions leave a deployment's own files is the operator's, not the owner's.
+this surface can perform that move: which decisions leave a deployment's own files is the operator's, not the user's.
 
 **An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
 without a restart. The coordinator drains work already in flight against the immutable document version it began with,
@@ -1395,7 +1395,7 @@ the person is called, so the account menu and the Settings screen had an anonymo
 { "displayName": "Ada Lovelace", "changeable": true }
 ```
 
-**The name is the envelope rather than the record.** It is the same label `mfctl owner list` shows and
+**The name is the envelope rather than the record.** It is the same label `mfctl user list` shows and
 [the record routes](#the-record-routes) do not serve: a column beside the document, unique across the deployment, that
 nothing resolves anybody by. A client reading the record alone would still have nothing to draw a person with, which is
 why this is a route of its own rather than a key in that document.
@@ -1407,8 +1407,8 @@ field either way, and naming the grant a credential lacks would report a deploym
 holding a token.
 
 **A person a configuration source declares is refused, and told what to correct.** A start writes every declared
-owner's name back from the declaration, so a change made here would stand until the next restart and then revert. What
-comes back names the entry to change instead, or `mfctl owner adopt` to move the accounts into the person's own record.
+user's name back from the declaration, so a change made here would stand until the next restart and then revert. What
+comes back names the entry to change instead, or `mfctl user adopt` to move the accounts into the person's own record.
 
 **The name is bound exactly as the envelope binds it.** Blank is refused, so is anything past 128 characters, and so is
 a name somebody else on this deployment already carries — each naming what to correct. Surrounding white space is
@@ -1418,7 +1418,7 @@ other on this surface, and one past the bound is answered `413`.
 **It carries no version.** The version the record's writes state guards the document a change was composed over, and
 the name is not part of that document, so nothing here is refused as superseded.
 
-**Neither route names an owner**, exactly as no record route does: the name read and written is that of the credential
+**Neither route names a user**, exactly as no record route does: the name read and written is that of the credential
 that authenticated, resolved from the request rather than out of the body or the path. Neither adds a name to
 [the published permission set](permissions.md).
 
@@ -1465,7 +1465,7 @@ the sign-in screen — and what this answers replaces that device value once a s
 
 **`markReadOnOpen` covers every account that person reads, and turning it off stores no read state instead.** It is one
 value rather than one per mailbox because read state is what must not differ between the machines somebody reads on, and
-a client whose owner has turned it off shows what their mail server last reported and remembers no reading of its own.
+a client whose user has turned it off shows what their mail server last reported and remembers no reading of its own.
 It governs opening a message and nothing else: marking a message read or unread deliberately, through the flag
 mutations above, is unaffected by it.
 [ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
@@ -1497,7 +1497,7 @@ this surface, and one past the bound is answered `413`.
 whose change could be lost — and a superseded refusal here would be a conflict screen over a checkbox. That is the one
 way these routes differ from [the record routes](#the-record-routes), which are written by an administrator too.
 
-**No route here names an owner**, exactly as no record route does: the preferences acted on are those of the credential
+**No route here names a user**, exactly as no record route does: the preferences acted on are those of the credential
 that authenticated, resolved from the request rather than read out of the body or the path.
 
 **Reading and writing are both `mailfathom.mail.read`.** The write is deliberately not
@@ -1507,7 +1507,7 @@ what may be said about a person must not be decided by a grant over their mail c
 to [the published permission set](permissions.md).
 
 **Nothing here reports when anything was set, or from where.** This deployment keeps no record of the machines somebody
-signed in from, and a response saying when a switch last moved would be the beginning of one. Erasing an owner erases
+signed in from, and a response saying when a switch last moved would be the beginning of one. Erasing a user erases
 their preferences with everything else derived from them.
 
 **A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged, so a person's
@@ -1518,7 +1518,7 @@ a sentence saying so in place of the switch — a control over a client that is 
 ### The portrait routes
 
 These three hold the picture a person is drawn by, which the account menu and the settings screen put beside their
-name. It is stored on the owner axis beside the preferences document rather than inside one: a megabyte of image
+name. It is stored on the user axis beside the preferences document rather than inside one: a megabyte of image
 octets is not a small closed document, and reading a switch should not carry a photograph.
 
 | Route | What it does |
@@ -1547,7 +1547,7 @@ the octets and `Cache-Control: private, no-cache`, so the second screen that dra
 rather than the picture again, while a replaced one reaches the next screen rather than the next expiry. It is
 deliberately not cached without revalidation: a portrait is personal data.
 
-**No route here names an owner**, exactly as no record route does: the picture acted on is that of the credential that
+**No route here names a user**, exactly as no record route does: the picture acted on is that of the credential that
 authenticated, resolved from the request rather than read out of the body or the path.
 
 **All three are `mailfathom.mail.read`**, and none adds a name to [the published permission set](permissions.md). The
@@ -1555,19 +1555,19 @@ two writes are deliberately not `mailfathom.mail.accounts.write`, for the reason
 write](#the-preferences-routes) is not: that grant decides which mailboxes this deployment connects to, and what a
 person is drawn by must not be decided by a grant over their mail configuration.
 
-**The octets hang off the owner row.** Erasing an owner erases their portrait with everything else derived from them,
+**The octets hang off the user row.** Erasing a user erases their portrait with everything else derived from them,
 without an erasure naming that table.
 
 ### The drafts routes
 
 These are what a person writes mail through, and the first thing to know about them is that **a draft here is the one
-in the owner's own drafts folder**. Composing one writes a row and a stored message in this deployment and files a copy
+in the user's own drafts folder**. Composing one writes a row and a stored message in this deployment and files a copy
 on their mail server in the same act, so there is no second kind held only here for somebody to go looking for, and no
 route to promote one into the other.
 
 | Route | What it does |
 | --- | --- |
-| `GET /api/client/drafts` | Lists what the signed-in owner is writing, newest first, optionally narrowed to one account |
+| `GET /api/client/drafts` | Lists what the signed-in user is writing, newest first, optionally narrowed to one account |
 | `POST /api/client/drafts` | Writes one new draft, as a message of its own or as an answer to stored mail |
 | `GET /api/client/drafts/{draftId}` | Opens one draft with the words its stored message carries |
 | `PUT /api/client/drafts/{draftId}` | Replaces one draft with what the author has written since |
@@ -1576,23 +1576,23 @@ route to promote one into the other.
 | `DELETE /api/client/drafts/{draftId}/attachments/{attachmentId}` | Takes one staged file back off |
 | `POST /api/client/drafts/{draftId}/send` | Queues the message the draft holds, which is the one act here that reaches anybody else |
 
-**Every route is scoped to the caller's own owner, and a draft another owner holds answers exactly as one nobody
-holds.** A save names the account it belongs to and that name is resolved against the accounts the caller's owner owns;
-every other act names a draft, and the identifier becomes a draft this owner holds before anything acts on it. So a
+**Every route is scoped to the caller's own user, and a draft another user holds answers exactly as one nobody
+holds.** A save names the account it belongs to and that name is resolved against the accounts the caller's user owns;
+every other act names a draft, and the identifier becomes a draft this user holds before anything acts on it. So a
 `404` here says nothing about whether such a draft exists somewhere in the deployment.
 
 **A draft survives a restart and is reachable from another head**, because it is a row, a stored message, and a copy in
-the owner's own drafts folder rather than anything the client holds: the desktop shell and the browser sign in to the
-same deployment and list the same drafts, and the owner's phone shows them from their mail server.
+the user's own drafts folder rather than anything the client holds: the desktop shell and the browser sign in to the
+same deployment and list the same drafts, and the user's phone shows them from their mail server.
 
 **The grants are two rather than one, because writing a draft and sending it are different powers.** Writing, listing,
-opening, revising, giving up, and attaching are `mailfathom.mail.drafts.write`, whose effect reaches the owner's own
+opening, revising, giving up, and attaching are `mailfathom.mail.drafts.write`, whose effect reaches the user's own
 mailbox and nobody else's; sending is `mailfathom.mail.send`, which puts a message in somebody else's mailbox and is
 the one act here that cannot be taken back. A client granted the first alone composes freely and sends nothing. They
 are the same two names [the drafting tools](../features/mcp-tools.md#the-drafting-surface) are published under, because
 a draft written here and a draft written by an agent are the same thing in the same folder.
 
-**Every save is an `APPEND` and a removal against the owner's mail server**, since IMAP has no command that changes a
+**Every save is an `APPEND` and a removal against the user's mail server**, since IMAP has no command that changes a
 stored message. So a revision is what an author asks for rather than what a keystroke produces: the client saves when
 somebody says to save, and holds what they are typing until then.
 
@@ -1629,7 +1629,7 @@ client watches what becomes of it.
 
 ### The outbox routes
 
-These are what a client draws after a message has been sent: the send the owner just asked for has not left yet, and
+These are what a client draws after a message has been sent: the send the user just asked for has not left yet, and
 this is where the screen watches it go, takes one back while it is still queued, or offers a failed one another chance.
 
 | Route | What it does |
@@ -1640,22 +1640,22 @@ this is where the screen watches it go, takes one back while it is still queued,
 | `POST /api/client/outbox/requeue` | Offers one send again |
 
 **A listing names an account and never the deployment.** The narrowing is required rather than optional, so there is no
-unnarrowed reading here at all: one that fell back to every account would page through every owner's outgoing mail,
-which is the deployment-wide catalog an owner-facing surface must never compose. An account another owner owns is
-refused exactly as one nobody configured, and a send another owner made answers exactly as one nobody made.
+unnarrowed reading here at all: one that fell back to every account would page through every user's outgoing mail,
+which is the deployment-wide catalog a user-facing surface must never compose. An account another user owns is
+refused exactly as one nobody configured, and a send another user made answers exactly as one nobody made.
 
 **What the answers carry is what [the administrative outbox](admin-endpoint.md) already settled.** A page names no
-recipient and no subject, because a page of an outbox would otherwise be an export of who this owner writes to, a page
+recipient and no subject, because a page of an outbox would otherwise be an export of who this user writes to, a page
 at a time; one send read by identity names its recipients and what the server said about each, because that is the
 question it was asked. Neither reads the message, at any size.
 
 **A decision reports what became of the send it named rather than refusing.** A send that has gone past the point of
-recall, and one this owner does not hold, are outcomes in the answer — which is exactly what somebody acting on a
+recall, and one this user does not hold, are outcomes in the answer — which is exactly what somebody acting on a
 screen a moment old needs. Only a request naming no send at all is refused. Each decision names one send and never a
 set, because a message whose outcome nobody knows may already be in somebody's mailbox, so a filtered re-queue would be
 an unknown number of duplicates asked for in one request.
 
-**Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this owner is
+**Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this user is
 sending, so a credential granted to read a mailbox learns nothing here, and withdrawing a send is part of sending
 rather than a power beside it.
 
@@ -1691,7 +1691,7 @@ silently jumping back to the top. Paging is keyset rather than offset, so a noti
 reading neither shifts the window nor repeats a row; the walk ends when `nextCursor` is absent rather than when a page
 comes back short.
 
-**No route names an owner.** The person is the one the credential authenticated, exactly as on
+**No route names a user.** The person is the one the credential authenticated, exactly as on
 [the record routes](#the-record-routes), so a reading of somebody else's centre cannot be composed. The one route that
 names a record names it by identifier, and **a notification another person holds answers `404` exactly as one nobody
 holds** — so nothing here reports whether such a notification exists.
@@ -1776,7 +1776,7 @@ could not have known.
 
 A run outlives the connection that asked for it, so a client that lost its network reattaches to the second route with
 `Last-Event-ID` and is given what it missed — which a browser's own `EventSource` sends without being asked to. The run
-belongs to the owner who asked for it: somebody else's reads as `404` rather than as a refusal, on the reading route and
+belongs to the user who asked for it: somebody else's reads as `404` rather than as a refusal, on the reading route and
 on the stopping one alike. The asking route answers `429` while this process is already running as many as it may, and
 `400` naming what was wrong with the question or the mail it named.
 [The Discover run](../features/discovery-run.md#a-run-is-watched-rather-than-waited-for) is what each event carries,
@@ -1805,13 +1805,13 @@ decided its own signals stay in the process does not become a relay for somebody
 [the published permission set](permissions.md) — like the session route, and for a narrower reason: a permission would
 have to be granted to every client that reports anything, which makes it a component of every grant rather than a
 decision anybody takes. What the credential does decide is whose telemetry this is. The resource attributes naming the
-owner are written here from the authenticated credential and **replace** whatever the client put in their place, so a
+user are written here from the authenticated credential and **replace** whatever the client put in their place, so a
 page cannot report as somebody else however its bundle was modified. Nothing else in the payload is transformed: the
 batch is forwarded as it arrived, so a signal a client's own instrumentation names arrives at the collector under that
 name.
 
 **Read attribution off the resource, which is the level this holds at.** A client is free to write anything into a
-span, a log record, or a metric data point, a key spelled like the owner one included, exactly as it is free to write
+span, a log record, or a metric data point, a key spelled like the user one included, exactly as it is free to write
 anything into a span's name — those are its own words about its own work, they are forwarded untouched like every other
 field it sends, and nothing here reads them. Reaching them would mean decoding all three signals against their schemas,
 which is what would make this a processor rather than a proxy. So a dashboard, a query, or a retention rule that has to
@@ -1867,13 +1867,13 @@ judged, its request is bounded, and its act is recorded.
 
 **A connection is opened against a ticket, because a browser cannot put a header on a WebSocket.** The client mints one
 over the route above — an ordinary authenticated route on this surface, requiring `mailfathom.mail.read` like the mail
-it announces — and hands it to the connection. A ticket names the owner the credential behind it already named, is
+it announces — and hands it to the connection. A ticket names the user the credential behind it already named, is
 drawn from a cryptographically secure source, lives 30 seconds, and stops working the first time it is presented, so one
 read out of a proxy's access log or a browser's own history is already spent or already expired. Nothing else opens a
 connection: a connection presenting nothing, something malformed, something expired, or something already spent is
 closed without being told which.
 
-**One owner's signals reach that owner's connections and no other's.** A connection joins a group named from the owner's
+**One user's signals reach that user's connections and no other's.** A connection joins a group named from the user's
 own identifier the moment it is admitted, and every statement is published to one group; nothing here reads a group name
 a caller supplied, because nothing here takes one.
 
@@ -1891,7 +1891,7 @@ record's already-derived text and reach a client entitled to read that record ov
 | `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
 | `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
 
-**Statements are folded per owner, per kind, and per place over half a second.** A run committing a folder's worth of
+**Statements are folded per user, per kind, and per place over half a second.** A run committing a folder's worth of
 mail is one arrival to the person who was away from the screen rather than one statement per message, and two folders'
 arrivals stay two statements so a client is never told that mail arrived without being told where to look.
 
@@ -1922,7 +1922,7 @@ schemes and its own authorization policy, and a policy consults only its own sch
 
 `Authentication` takes the same entries the MCP section takes — one entry per accepted method, each naming a `Method` of
 `password`, `api-key`, `public-key`, or `oauth-subject` — and every method is documented once, under
-[the MCP endpoint](mcp-endpoint.md#authentication). The credentials themselves are rows beside the owner rather than
+[the MCP endpoint](mcp-endpoint.md#authentication). The credentials themselves are rows beside the user rather than
 settings here, and one credential is presented on whichever surface accepts its method; what keeps the two apart for a
 signed assertion is the audience it names, `urn:mailfathom:client`, so an assertion minted to read a mailbox as an agent
 cannot sign in as somebody's mail client.
@@ -1939,7 +1939,7 @@ configures.
 
 **A username and password** is what the client's own sign-in screen asks for. A deployment that runs no authorization
 server reaches for it; the entry names the method and the credentials are provisioned over
-[the administrative endpoint](admin-endpoint.md#owner-credentials):
+[the administrative endpoint](admin-endpoint.md#user-credentials):
 
 ```json
 {
@@ -1953,14 +1953,14 @@ reported at every startup and never refused**, naming this surface and its port,
 scheme of its own socket and nothing beyond it. A loopback deployment behind nothing, and a public socket nobody meant
 to expose, are one reading from here.
 
-A caller admitted this way acts for **the owner the credential belongs to**, and so does every other method here: each
-of the four resolves a record beside one owner. That is what lets one deployment serve more than one person's mail over
+A caller admitted this way acts for **the user the credential belongs to**, and so does every other method here: each
+of the four resolves a record beside one user. That is what lets one deployment serve more than one person's mail over
 one address.
 
 **An access token** is the other, and it is what a deployment that already runs an authorization server uses.
 MailFathom is a protected resource only — it signs nobody in, holds no user, and issues no token — so what a deployment
 configures here is which authorization server's tokens are believed, and each person's subject is mapped onto their
-owner record with `mfctl credential create --method oauth-subject`.
+user record with `mfctl credential create --method oauth-subject`.
 
 **Every `OAuth` entry must name a `Resource` ending in `/api/client`.** Startup refuses anything else, naming the
 setting. The reason is discovery rather than OAuth: the client is configured with an address and finds the

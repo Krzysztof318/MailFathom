@@ -11,7 +11,7 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// <summary>Resolves a reference under any scheme a deployment registers, and refuses every other one.</summary>
 /// <remarks>
 /// <para>
-/// It answers the question a start asks of material that is not the deployment's own: whether the reference an owner
+/// It answers the question a start asks of material that is not the deployment's own: whether the reference a user
 /// carries reaches something. A persisted document may not carry a literal, so a test about one cannot state its
 /// secret as <c>plaintext:</c>, and <see cref="PlaintextOnlySecretReferenceResolver" /> is therefore the wrong double
 /// for it — this one resolves the schemes <see cref="DeclaredSecretScheme.Registered" /> names and nothing else, which

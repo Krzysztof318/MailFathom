@@ -527,7 +527,7 @@ spamScanning:
     maximumConcurrentScans: 5
 
     # **Whether the daemon resolves DNS blocklists, and it is off.** SpamAssassin's DNSBL and URIBL rules send the
-    # sending addresses and the URI host names out of the owner's mail to third-party blocklists, which is the one thing
+    # sending addresses and the URI host names out of the user's mail to third-party blocklists, which is the one thing
     # scanning inside the trust boundary exists to avoid; the free tiers of those lists also answer a shared public
     # resolver with a blocked marker rather than an answer, so the common arrangement leaks without contributing. Off,
     # the daemon runs local rules only — header and body tests, HTML tests, and the corpus `sa-update` fetches. Turn it

@@ -9,7 +9,7 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-// One conversation, read across every folder and every account the owner holds. It is the one mail read that names no
+// One conversation, read across every folder and every account the user holds. It is the one mail read that names no
 // folder at all: the question is in the inbox, the answer is in the sent folder, and a forwarded copy is somewhere else
 // again, so the route names the conversation and the deployment decides what of it this caller may see.
 //
@@ -103,7 +103,7 @@ const longestText = 4_096;
 const mostParticipants = 1_024;
 
 /**
- * Reads one page of one of the owner's conversations, answering an expected failure as a value rather than by throwing.
+ * Reads one page of one of the user's conversations, answering an expected failure as a value rather than by throwing.
  *
  * @param session The address to reach and the finished header value to present.
  * @param transport How the request goes out.

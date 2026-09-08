@@ -33,7 +33,7 @@ internal sealed class DatabaseSecretReferenceResolver(
     private const string SelectStoredSecret =
         """
         SELECT
-            "OwnerId",
+            "UserId",
             "Name",
             "DataEncryptionKeyId",
             octet_length("SealedMaterial") AS "Length",
@@ -57,7 +57,7 @@ internal sealed class DatabaseSecretReferenceResolver(
 
         try
         {
-            MailOwnerId owner;
+            MailUserId user;
             SecretName name;
             SealedValue sealedValue;
 
@@ -93,17 +93,17 @@ internal sealed class DatabaseSecretReferenceResolver(
                     return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
                 }
 
-                var ownerId = reader.GetGuid(0);
-                if (ownerId == Guid.Empty)
+                var userId = reader.GetGuid(0);
+                if (userId == Guid.Empty)
                 {
                     return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
                 }
 
-                owner = MailOwnerId.Create(ownerId);
+                user = MailUserId.Create(userId);
                 sealedValue = new SealedValue(reader.GetString(2), reader.GetFieldValue<byte[]>(4));
             }
 
-            return await this.OpenAsync(owner, databaseReference, name, sealedValue, cancellationToken);
+            return await this.OpenAsync(user, databaseReference, name, sealedValue, cancellationToken);
         }
         catch (NpgsqlException exception)
         {
@@ -121,7 +121,7 @@ internal sealed class DatabaseSecretReferenceResolver(
     }
 
     private async Task<SecretResolutionResult> OpenAsync(
-        MailOwnerId owner,
+        MailUserId user,
         DatabaseSecretReference reference,
         SecretName name,
         SealedValue sealedValue,
@@ -131,7 +131,7 @@ internal sealed class DatabaseSecretReferenceResolver(
         try
         {
             plaintext = await readFieldEncryptor().OpenAsync(
-                StoredSecretBinding.Create(owner, reference, name),
+                StoredSecretBinding.Create(user, reference, name),
                 sealedValue,
                 cancellationToken);
         }

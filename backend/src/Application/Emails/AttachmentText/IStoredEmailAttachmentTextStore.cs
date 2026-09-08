@@ -16,7 +16,7 @@ namespace MailFathom.Application.Emails.AttachmentText;
 /// attachment on every run or read none of them ever again.
 /// </para>
 /// <para>
-/// The selection carries the same admissions the cut does — the message is still local, the owner's rules have finished
+/// The selection carries the same admissions the cut does — the message is still local, the user's rules have finished
 /// with it and are not still moving it, its folder is one an operator asked to have embedded, and the classification
 /// gate admits it. That is what makes withholding reach here without a second evaluation: an attachment cannot be more
 /// visible than the message that carried it, so it inherits the message's verdict by never being selected.

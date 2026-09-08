@@ -18,15 +18,15 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// the planner to have a choice is seeded.
 /// </summary>
 /// <remarks>
-/// Every claim here is about the owner being part of the structure rather than a predicate a reader remembers to carry.
-/// A book scoped only in the queries would pass every test of those queries and still let a page of one owner's book be
-/// a walk of the table, an address one owner holds refuse another's, and a person outlive the owner who wrote them down.
+/// Every claim here is about the user being part of the structure rather than a predicate a reader remembers to carry.
+/// A book scoped only in the queries would pass every test of those queries and still let a page of one user's book be
+/// a walk of the table, an address one user holds refuse another's, and a person outlive the user who wrote them down.
 /// </remarks>
 public sealed class ContactModelTests
 {
-    /// <summary>The one order a book is listed in, which leads with the owner because a page is always of one book.</summary>
+    /// <summary>The one order a book is listed in, which leads with the user because a page is always of one book.</summary>
     [Fact]
-    public void ContactModel_TheListingIndex_LeadsWithTheOwnerAndEndsWithTheIdentity()
+    public void ContactModel_TheListingIndex_LeadsWithTheUserAndEndsWithTheIdentity()
     {
         // Arrange
         using var context = CreateContext();
@@ -36,7 +36,7 @@ public sealed class ContactModelTests
 
         // Assert
         Assert.Equal(
-            ["OwnerId", "DisplayNameSortKey", "Id"],
+            ["UserId", "DisplayNameSortKey", "Id"],
             index.Properties.Select(property => property.Name));
         Assert.False(index.IsUnique);
     }
@@ -56,9 +56,9 @@ public sealed class ContactModelTests
         Assert.Equal("C", sortKey.GetCollation());
     }
 
-    /// <summary>One address is one person's within one book, which is the index leading with the owner rather than the address.</summary>
+    /// <summary>One address is one person's within one book, which is the index leading with the user rather than the address.</summary>
     [Fact]
-    public void ContactAddressModel_TheUniquenessOverAnAddress_HoldsWithinOneOwnersBook()
+    public void ContactAddressModel_TheUniquenessOverAnAddress_HoldsWithinOneUsersBook()
     {
         // Arrange
         using var context = CreateContext();
@@ -69,16 +69,16 @@ public sealed class ContactModelTests
             PersistenceConstraintNames.ContactAddressUniqueIndexName);
 
         // Assert
-        Assert.Equal(["OwnerId", "NormalizedAddress"], index.Properties.Select(property => property.Name));
+        Assert.Equal(["UserId", "NormalizedAddress"], index.Properties.Select(property => property.Name));
         Assert.True(index.IsUnique);
     }
 
     /// <summary>
-    /// An address row carries the owner as well as the contact, and the key is what keeps the repetition honest: it
-    /// points at the pair on the contact, so no row can name an owner other than the one its contact is filed under.
+    /// An address row carries the user as well as the contact, and the key is what keeps the repetition honest: it
+    /// points at the pair on the contact, so no row can name a user other than the one its contact is filed under.
     /// </summary>
     [Fact]
-    public void ContactAddressModel_TheKeyBackToThePerson_CarriesTheOwnerAndCascades()
+    public void ContactAddressModel_TheKeyBackToThePerson_CarriesTheUserAndCascades()
     {
         // Arrange
         using var context = CreateContext();
@@ -87,19 +87,19 @@ public sealed class ContactModelTests
         var foreignKey = Assert.Single(EntityTypeOf<ContactAddressEntity>(context).GetForeignKeys());
 
         // Assert
-        Assert.Equal(["ContactId", "OwnerId"], foreignKey.Properties.Select(property => property.Name));
-        Assert.Equal(["Id", "OwnerId"], foreignKey.PrincipalKey.Properties.Select(property => property.Name));
+        Assert.Equal(["ContactId", "UserId"], foreignKey.Properties.Select(property => property.Name));
+        Assert.Equal(["Id", "UserId"], foreignKey.PrincipalKey.Properties.Select(property => property.Name));
         Assert.Equal(typeof(ContactEntity), foreignKey.PrincipalEntityType.ClrType);
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
 
-        // The half a nullable owner would slip past: PostgreSQL treats NULLs as distinct in a unique index, so an
-        // address row written under no owner would escape (OwnerId, NormalizedAddress) and stay claimable in every book.
+        // The half a nullable user would slip past: PostgreSQL treats NULLs as distinct in a unique index, so an
+        // address row written under no user would escape (UserId, NormalizedAddress) and stay claimable in every book.
         Assert.True(foreignKey.IsRequired);
     }
 
-    /// <summary>Erasing an owner takes their whole book, which is this key rather than a statement somebody remembers to write.</summary>
+    /// <summary>Erasing a user takes their whole book, which is this key rather than a statement somebody remembers to write.</summary>
     [Fact]
-    public void ContactModel_TheKeyOntoTheOwner_CascadesFromTheOwnerRecord()
+    public void ContactModel_TheKeyOntoTheUser_CascadesFromTheUserRecord()
     {
         // Arrange
         using var context = CreateContext();
@@ -108,8 +108,8 @@ public sealed class ContactModelTests
         var foreignKey = Assert.Single(EntityTypeOf<ContactEntity>(context).GetForeignKeys());
 
         // Assert
-        Assert.Equal([nameof(ContactEntity.OwnerId)], foreignKey.Properties.Select(property => property.Name));
-        Assert.Equal(typeof(OwnerAccountEntity), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal([nameof(ContactEntity.UserId)], foreignKey.Properties.Select(property => property.Name));
+        Assert.Equal(typeof(UserAccountEntity), foreignKey.PrincipalEntityType.ClrType);
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
         Assert.True(foreignKey.IsRequired);
     }

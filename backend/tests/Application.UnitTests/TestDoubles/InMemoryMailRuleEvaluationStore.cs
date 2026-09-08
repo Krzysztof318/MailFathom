@@ -36,10 +36,10 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
     /// <param name="awaitsExtraction">Whether text is still expected to be derived from the email's content.</param>
     /// <param name="bodyText">The extracted text a condition naming the body text resolves.</param>
     /// <param name="evaluatedAt">When a pass last evaluated it, which takes it out of the arrival queue.</param>
-    /// <param name="owner">
-    /// The owner whose account the email belongs to, defaulting to the one a deployment serves. Stated separately from
+    /// <param name="user">
+    /// The user whose account the email belongs to, defaulting to the one a deployment serves. Stated separately from
     /// the facts because the facts name the account as the identifier an operator wrote, and an identifier names one
-    /// account within its owner — so a test that wants mail this deployment must not read names another owner here.
+    /// account within its user — so a test that wants mail this deployment must not read names another user here.
     /// </param>
     /// <returns>The identity of the added email.</returns>
     internal StoredEmailId Add(
@@ -47,12 +47,12 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
         bool awaitsExtraction = false,
         string? bodyText = null,
         DateTimeOffset? evaluatedAt = null,
-        MailOwnerId? owner = null)
+        MailUserId? user = null)
     {
         var row = new StoredRow
         {
             Id = StoredEmailId.Create(Guid.CreateVersion7()),
-            Owner = owner ?? SyntheticMailOwner.Deployment,
+            User = user ?? SyntheticMailUser.Deployment,
             Occurrence = EmailOccurrenceId.Create(
                 MailAccountId.Create(facts.Account),
                 new MailFolderResolutionId(
@@ -143,7 +143,7 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
         [
             .. this.rows
                 .Skip(startIndex)
-                .Where(row => row.Owner == account.Owner
+                .Where(row => row.User == account.User
                     && row.Facts.Account == account.Id.Value
                     && admits(row))
                 .Take(batchSize)
@@ -159,7 +159,7 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
     {
         internal required StoredEmailId Id { get; init; }
 
-        internal required MailOwnerId Owner { get; init; }
+        internal required MailUserId User { get; init; }
 
         internal required EmailOccurrenceId Occurrence { get; init; }
 

@@ -135,7 +135,7 @@ public sealed class DiscoveryRunJournalTests
     }
 
     private static DiscoveryRunJournal NewJournal() =>
-        new(DiscoveryRunId.New(), SyntheticMailOwner.Deployment);
+        new(DiscoveryRunId.New(), SyntheticMailUser.Deployment);
 
     private static DiscoveryRetrievalProgressed Progressed(int lookupsRun) =>
         new(

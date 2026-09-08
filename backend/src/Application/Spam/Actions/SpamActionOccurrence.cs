@@ -11,7 +11,7 @@ namespace MailFathom.Application.Spam.Actions;
 
 /// <summary>Where a classified email is and how it stands, which is everything an action has to know about it.</summary>
 /// <param name="Id">The local email, which is what a mutation record hangs off and what its filing history is read by.</param>
-/// <param name="Owner">The owner whose account the occurrence belongs to.</param>
+/// <param name="User">The user whose account the occurrence belongs to.</param>
 /// <param name="Occurrence">
 /// Where the email is on the mail server, which is what an IMAP command is issued against. It is read now rather than
 /// derived from the classification, because a classification is a durable record and the message may have moved since.
@@ -25,21 +25,21 @@ namespace MailFathom.Application.Spam.Actions;
 /// read is not written to, which keeps the flag change an act rather than a repeated statement.
 /// </param>
 /// <remarks>
-/// Nothing here is mail content: a local identifier, an owner, a remote occurrence, a folder alias, and a flag are
-/// MailFathom's own or the server's own names for things — the owner is generated and names nobody outside this
+/// Nothing here is mail content: a local identifier, a user, a remote occurrence, a folder alias, and a flag are
+/// MailFathom's own or the server's own names for things — the user is generated and names nobody outside this
 /// deployment. That is what lets an action be decided and written down without the message it is about being read again.
 /// </remarks>
 public sealed record SpamActionOccurrence(
     StoredEmailId Id,
-    MailOwnerId Owner,
+    MailUserId User,
     EmailOccurrenceId Occurrence,
     MailFolderAlias FolderAlias,
     bool IsRemotelySeen)
 {
-    /// <summary>Gets the account the occurrence belongs to, named by its owner and its identifier.</summary>
+    /// <summary>Gets the account the occurrence belongs to, named by its user and its identifier.</summary>
     /// <remarks>
     /// Composed from the two halves the row carries rather than resolved again, so an action written about this message
     /// records whose mail it was without asking the account table.
     /// </remarks>
-    public MailAccountIdentity Account => MailAccountIdentity.Create(this.Owner, this.Occurrence.AccountId);
+    public MailAccountIdentity Account => MailAccountIdentity.Create(this.User, this.Occurrence.AccountId);
 }

@@ -28,9 +28,9 @@ namespace MailFathom.Host.Api;
 /// will serve it.
 /// </para>
 /// <para>
-/// The record routes, which <see cref="ClientOwnerRecordEndpoint" /> describes, are where a person changes what this
+/// The record routes, which <see cref="ClientUserRecordEndpoint" /> describes, are where a person changes what this
 /// deployment reads for them, and the mutation routes, which <see cref="ClientMailMutationsEndpoint" /> describes, are
-/// where they change the mailbox itself. None of them names an owner: the acting owner comes off the credential, which
+/// where they change the mailbox itself. None of them names a user: the acting user comes off the credential, which
 /// is what makes a request about somebody else something a caller cannot express here rather than something the
 /// surface has to refuse.
 /// </para>
@@ -61,7 +61,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// The citation route, which <see cref="ClientCitationEndpoint" /> describes, is where an answer stops being something
 /// to be believed: it follows the citations a presentation plan declared to the mail behind them. It sits among the
-/// mail routes rather than beside a run, because what it does is read the acting owner's own mail under the reading
+/// mail routes rather than beside a run, because what it does is read the acting user's own mail under the reading
 /// grant — the plan it follows was composed somewhere else, and may have been composed for somebody else.
 /// </para>
 /// <para>
@@ -122,7 +122,7 @@ internal static class ClientApiEndpoints
                 TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry)))
             .RequireNoPermission();
 
-        api.MapClientOwnerRecord();
+        api.MapClientUserRecord();
         api.MapClientDisplayName();
         api.MapClientPreferences();
         api.MapClientPortrait();

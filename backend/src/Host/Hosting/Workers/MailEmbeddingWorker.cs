@@ -34,15 +34,15 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
     private readonly ILogger<MailEmbeddingWorker> logger;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>The period an owner's ceiling has already been reported for, so one line is written per period.</summary>
+    /// <summary>The period a user's ceiling has already been reported for, so one line is written per period.</summary>
     /// <remarks>
-    /// An owner at their share is met once per message of theirs the backlog holds, and the line says the same thing
-    /// every time — it names no owner, because the message it is about is the one thing an operator cannot act on. A
-    /// warning per message would bury the rest of the log for as long as that owner has mail waiting, so the first of a
+    /// A user at their share is met once per message of theirs the backlog holds, and the line says the same thing
+    /// every time — it names no user, because the message it is about is the one thing an operator cannot act on. A
+    /// warning per message would bury the rest of the log for as long as that user has mail waiting, so the first of a
     /// period is written and the rest are the counter's to report. The field is only ever touched from the single loop
     /// below, which is why it needs no synchronization.
     /// </remarks>
-    private DateTimeOffset? ownerCeilingReportedForPeriodEndingAt;
+    private DateTimeOffset? userCeilingReportedForPeriodEndingAt;
 
     /// <summary>Initializes a new embedding worker.</summary>
     public MailEmbeddingWorker(
@@ -80,9 +80,9 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
     /// left for the backfill — a queue drained at the speed of a database read instead of work that waits.
     /// </para>
     /// <para>
-    /// Only the deployment's ceiling pauses. One owner's says nothing about the messages behind theirs, and waiting on
+    /// Only the deployment's ceiling pauses. One user's says nothing about the messages behind theirs, and waiting on
     /// it would let one person's spending stop everybody else's mail from being embedded — which is the harm a
-    /// per-owner ceiling exists to prevent. Such a turn is reported and the backlog moves on; the message keeps its
+    /// per-user ceiling exists to prevent. Such a turn is reported and the backlog moves on; the message keeps its
     /// outstanding passages, which is what the backfill selects on.
     /// </para>
     /// <para>
@@ -211,14 +211,14 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
                 break;
 
-            // One owner's ceiling stops nothing else, so no pause follows to report it and this is where it is said —
+            // One user's ceiling stops nothing else, so no pause follows to report it and this is where it is said —
             // once for the period, for the reason the field it reads holds.
             case StoredEmailEmbeddingOutcome.SpendCeilingReached
-                when run.ReachedSpendBound is EmbeddingSpendBound.Owner:
-                if (this.ownerCeilingReportedForPeriodEndingAt != run.SpendPeriodEndsAt)
+                when run.ReachedSpendBound is EmbeddingSpendBound.User:
+                if (this.userCeilingReportedForPeriodEndingAt != run.SpendPeriodEndsAt)
                 {
-                    this.ownerCeilingReportedForPeriodEndingAt = run.SpendPeriodEndsAt;
-                    this.LogOwnerSpendCeilingReached(this.backlog.Depth);
+                    this.userCeilingReportedForPeriodEndingAt = run.SpendPeriodEndsAt;
+                    this.LogUserSpendCeilingReached(this.backlog.Depth);
                 }
 
                 break;
@@ -279,8 +279,8 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A message was left unembedded because the owner it belongs to has spent what one period admits for them; embedding continues for every other owner and {BacklogDepth} messages are waiting. Every further message of an owner at their share this period is counted rather than logged again. The rolled-over period reaches them, and nothing is lost. Raise Embeddings:MaxInputCharactersPerPeriodPerOwner to admit more per owner, or set it to zero to bound only the deployment.")]
-    private partial void LogOwnerSpendCeilingReached(int backlogDepth);
+        Message = "A message was left unembedded because the user it belongs to has spent what one period admits for them; embedding continues for every other user and {BacklogDepth} messages are waiting. Every further message of a user at their share this period is counted rather than logged again. The rolled-over period reaches them, and nothing is lost. Raise Embeddings:MaxInputCharactersPerPeriodPerUser to admit more per user, or set it to zero to bound only the deployment.")]
+    private partial void LogUserSpendCeilingReached(int backlogDepth);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

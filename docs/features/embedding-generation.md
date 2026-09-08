@@ -385,10 +385,10 @@ one leaves every stored vector exactly as comparable as it was.
   Unix epoch, so every restart agrees on where one begins without anything being stored to say so, and what each period
   has spent is kept in the database rather than in memory: a process crashing and restarting in a loop would otherwise
   begin every period again from zero.
-- **What one owner may cost of it.** `MaxInputCharactersPerPeriodPerOwner` bounds any one person's share of the same
+- **What one user may cost of it.** `MaxInputCharactersPerPeriodPerUser` bounds any one person's share of the same
   window, in the same unit, and is unset by default. It exists because the aggregate ceiling is otherwise the only
-  thing bounding spend: on a deployment serving several owners, one person's backfill can consume the whole window
-  before anybody else's arriving mail is embedded. What each owner has spent is recorded on its own row, so the ledger
+  thing bounding spend: on a deployment serving several users, one person's backfill can consume the whole window
+  before anybody else's arriving mail is embedded. What each user has spent is recorded on its own row, so the ledger
   answers both questions from one key without a second count.
 
 A fifth block sits beside those four in the same section and counts something else. `Embeddings:AttachmentText` bounds
@@ -402,7 +402,7 @@ ceilings above exactly as a body's are — the block below counts the parsing, a
 That block carries a period ceiling of its own beside the three, and describing an image carries a second one, because
 neither of the two workloads is counted in characters. `MaxInputOctetsPerPeriod` counts the octets every account run
 together opened out of attachments inside `SpendPeriod`, and `Embeddings:ImageDescription:MaxDescriptionsPerPeriod`
-counts the calls a chat provider answered about a picture inside the same window; each has a per-owner share beside it,
+counts the calls a chat provider answered about a picture inside the same window; each has a per-user share beside it,
 and each is `0` by default, which declares no ceiling and still counts. Reaching one waits exactly as reaching the
 sending ceiling does — the run ends with the message untouched and the first run after the roll-over reaches it. What
 is deliberately absent is a *third* ceiling on sending an attachment's characters: `MaxInputCharactersPerPeriod` counts
@@ -419,22 +419,22 @@ paid for whole, because weighing a batch against what remains would stall a depl
 batch for ever — it would refuse the same request at every roll-over. The overshoot is therefore at most one batch per
 call in flight.
 
-**One owner's ceiling stops that owner and nobody else.** A request is admitted only where both ceilings admit it, and
+**One user's ceiling stops that user and nobody else.** A request is admitted only where both ceilings admit it, and
 a refusal names which of the two it met, because they need different actions: the aggregate one asks for a larger
-budget, an owner's asks for a larger share or for that owner to wait out the period. Meeting the aggregate one pauses
-the worker and ends the backfill sweep, since nothing more can be spent for anybody. Meeting one owner's does neither —
+budget, a user's asks for a larger share or for that user to wait out the period. Meeting the aggregate one pauses
+the worker and ends the backfill sweep, since nothing more can be spent for anybody. Meeting one user's does neither —
 the worker takes the next message and the backfill walk steps past theirs, committing its position, so every other
-owner's mail keeps being embedded and the stepped-over messages keep their outstanding passages for the next sweep.
+user's mail keeps being embedded and the stepped-over messages keep their outstanding passages for the next sweep.
 Where both are reached the aggregate one is what is reported, because raising a share changes nothing while the
 deployment itself has stopped spending.
 
 **The backfill's resume position and the embedding profile stay deployment-wide, by decision rather than by omission.**
-One walk serves every owner at once, in identifier order, so a cursor per owner would record the same walk several times
-over and the run would still visit every message to decide which cursor to move; what an owner's ceiling costs is their
+One walk serves every user at once, in identifier order, so a cursor per user would record the same walk several times
+over and the run would still visit every message to decide which cursor to move; what a user's ceiling costs is their
 messages being stepped over for the rest of the period, which the walk already does without remembering anything. The
 profile is deployment-wide because [ADR
 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
-makes it the meaning of a stored vector, and two owners' vectors sharing an index have to mean the same thing.
+makes it the meaning of a stored vector, and two users' vectors sharing an index have to mean the same thing.
 
 **Concurrency is not one of these keys.** How many provider calls may be in flight at once is
 `Resilience:AiProviderInvocation:ConcurrencyLimit`, which is the one mechanism that owns that question; [outbound

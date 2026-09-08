@@ -34,7 +34,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
-        SyntheticMailOwner.Deployment,
+        SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
         [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 
@@ -253,7 +253,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create($"sign in with {Marker} today", subject: $"re: {Marker}"));
@@ -287,7 +287,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create(
@@ -325,7 +325,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create("an ordinary extract"));
@@ -346,7 +346,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
-        using var actingFor = egress.ActingForOwner();
+        using var actingFor = egress.ActingForUser();
         var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
             Query,
             KnowledgePassages.Create($"sign in with {Marker} today"));

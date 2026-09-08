@@ -23,7 +23,7 @@ public sealed record NewContact
     /// <summary>Gets the address to use by default, which must be one of <see cref="Addresses" />.</summary>
     public required EmailAddress PreferredAddress { get; init; }
 
-    /// <summary>Gets what the owner wrote about this person, or <see langword="null" /> for none.</summary>
+    /// <summary>Gets what the user wrote about this person, or <see langword="null" /> for none.</summary>
     public ContactNote? Note { get; init; }
 
     /// <summary>Gets the origin the writer acts under, which becomes the record's own.</summary>

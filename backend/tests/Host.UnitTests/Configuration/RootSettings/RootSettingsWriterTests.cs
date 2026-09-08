@@ -288,7 +288,7 @@ public sealed class RootSettingsWriterTests
     /// <param name="named">The declared setting the refusal has to name for the operator to find it in the row.</param>
     [Theory]
     [InlineData("""{ "Persistence": { "Password": { "SecretReference": "file:/run/secrets/db" } } }""", "Persistence:Password")]
-    [InlineData("""{ "Accounts": { "0": { "DisplayName": "owner" } } }""", "Accounts")]
+    [InlineData("""{ "Accounts": { "0": { "DisplayName": "user" } } }""", "Accounts")]
     public async Task WriteAsync_ARowAlreadyCarryingASettingTheLayerMayNotCarry_IsRefusedRatherThanRaised(
         string rowSomebodyEdited,
         string named)
@@ -365,9 +365,9 @@ public sealed class RootSettingsWriterTests
 
     /// <summary>A setting another store owns is refused rather than written into the root document.</summary>
     /// <remarks>
-    /// The refusal names both ways an owner's mail accounts are changed, because this writer sees a path rather than an
-    /// owner and cannot tell which of the two applies: an operator handed only one of them would be sent to edit a file
-    /// that no longer reaches that owner, or to a command that refuses one who has not been adopted.
+    /// The refusal names both ways a user's mail accounts are changed, because this writer sees a path rather than a
+    /// user and cannot tell which of the two applies: an operator handed only one of them would be sent to edit a file
+    /// that no longer reaches that user, or to a command that refuses one who has not been adopted.
     /// </remarks>
     [Fact]
     public async Task WriteAsync_ASettingAnotherStoreOwns_IsRefused()
@@ -376,16 +376,16 @@ public sealed class RootSettingsWriterTests
         using var deployment = Deployment.WithPersisted("{}", version: 4);
 
         // Act
-        var result = await deployment.WriteAsync(ConfigurationEdit.SetTo("Accounts:0:DisplayName", "owner"));
+        var result = await deployment.WriteAsync(ConfigurationEdit.SetTo("Accounts:0:DisplayName", "user"));
 
         // Assert
         Assert.False(result.IsCommitted);
         Assert.Equal(MailFathomErrorCode.ConfigurationPathNotWritable, result.Refusal);
         var refusal = Assert.Single(result.RefusalMessages);
 
-        Assert.Contains("owner-accounts", refusal, StringComparison.Ordinal);
+        Assert.Contains("user-accounts", refusal, StringComparison.Ordinal);
         Assert.Contains("Accounts collection", refusal, StringComparison.Ordinal);
-        Assert.Contains("mfctl owner account add", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl user account add", refusal, StringComparison.Ordinal);
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 

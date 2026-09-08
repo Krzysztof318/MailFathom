@@ -50,7 +50,7 @@ internal static class ClientSignalEndpoints
     }
 
     /// <summary>Mints a ticket for the person the credential named.</summary>
-    /// <param name="authorization">Reports the grant the caller holds and the owner it acts for.</param>
+    /// <param name="authorization">Reports the grant the caller holds and the user it acts for.</param>
     /// <param name="tickets">Mints the ticket and holds it until it is spent or expires.</param>
     /// <returns><c>200</c> with the ticket, or <c>503</c> where too many tickets already stand outstanding.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
@@ -65,7 +65,7 @@ internal static class ClientSignalEndpoints
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(tickets);
 
-        var minted = tickets.Mint(authorization.RequireOwner());
+        var minted = tickets.Mint(authorization.RequireUser());
 
         return minted is null
             ? TypedResults.Problem(

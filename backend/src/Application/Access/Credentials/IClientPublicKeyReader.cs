@@ -9,7 +9,7 @@ namespace MailFathom.Application.Access.Credentials;
 /// <summary>Reads a client's public key into the two things a credential row keeps of it.</summary>
 /// <remarks>
 /// <para>
-/// A public key registered for an owner is stored whole, because the assertion it verifies has to be checked against
+/// A public key registered for a user is stored whole, because the assertion it verifies has to be checked against
 /// it, and it is resolved by a fingerprint, because the assertion names one in its own <c>kid</c> header rather than
 /// naming a credential this deployment invented a handle for. Deriving both from the same reading is what keeps the
 /// two in step: a fingerprint computed anywhere but beside the material it describes is one that can be computed over
@@ -40,4 +40,4 @@ public interface IClientPublicKeyReader
 /// <param name="Material">The key in the deployment's own canonical encoding, which is what an assertion is verified against.</param>
 /// <param name="Lookup">The key's fingerprint, which an assertion names and a row is resolved by.</param>
 /// <remarks>Nothing here is secret, which is the whole point of the method: a deployment holding this cannot sign anything, so a copy of the row, of a backup, or of an administrative answer is worth nothing to whoever took it.</remarks>
-public sealed record ClientPublicKey(string Material, OwnerCredentialLookup Lookup);
+public sealed record ClientPublicKey(string Material, UserCredentialLookup Lookup);

@@ -17,7 +17,7 @@ Nothing between MIME parsing and the embedding pipeline looks past an attachment
 
 Two shapes are available. A vision-capable chat provider can write down what an image shows, and that text then flows through the extraction-to-chunk-to-embedding pipeline [ADR 0006](0006-embedding-profile-identity-lifecycle-and-activation-cost.md), issue 425, and ADR 0029 already built. Or a dedicated multimodal embedding model can place the image directly into a vector space of its own, with its own profile, its own dimension, and its own provider requirement.
 
-The other half of the question is a product requirement issue 1562 states outright rather than a preference discovered while building: a match derived from a picture must never be shown ahead of a match found in something somebody actually wrote. A mailbox owner searching for words expects word matches first, and a picture that happens to score well against a query vector is corroborating evidence rather than the headline. Whichever mechanism produces the vector, the ranking has to bound it — and the bound's shape depends on the mechanism, because a description embedded under the ordinary profile competes inside the one ranked list every other passage competes in, while a separate multimodal profile would be a separate list a fusion step would have to combine on its own terms.
+The other half of the question is a product requirement issue 1562 states outright rather than a preference discovered while building: a match derived from a picture must never be shown ahead of a match found in something somebody actually wrote. A mailbox user searching for words expects word matches first, and a picture that happens to score well against a query vector is corroborating evidence rather than the headline. Whichever mechanism produces the vector, the ranking has to bound it — and the bound's shape depends on the mechanism, because a description embedded under the ordinary profile competes inside the one ranked list every other passage competes in, while a separate multimodal profile would be a separate list a fusion step would have to combine on its own terms.
 
 Recorded on issue 1549, under the parent issue 1562. Issue 1551 is the description step written against whichever mechanism this record names, issue 1555 chunks and embeds what it produces, issues 1557 and 1559 are the retrieval surfaces that implement the ranking rule, and issue 1561 bounds and reports what any of it spends.
 
@@ -164,7 +164,7 @@ Describing an image sends the attachment's bytes to a provider, which is a discl
 
 What comes back is text, and from there it inherits ADR 0029's guard chain whole by being an ordinary passage: redacted before it is written, and redacted again in flight where a passage is sent to a hosted embedding endpoint. That inheritance is the argument for A1 restated on the privacy side — a second vector space would have carried image bytes down a path of its own with none of it, and the failure mode of forgetting one is the one ADR 0029 already named.
 
-Everything derived from an image inherits the classification of the mail that carried it, as ADR 0006 already established for vectors and chunks: the description is personal data, it is stored under the same retention rules, and deleting the message, the attachment, or the owner's mail removes it with them. An attachment on a withheld message is never described at all, following the rule issue 1260 already set rather than a second evaluation.
+Everything derived from an image inherits the classification of the mail that carried it, as ADR 0006 already established for vectors and chunks: the description is personal data, it is stored under the same retention rules, and deleting the message, the attachment, or the user's mail removes it with them. An attachment on a withheld message is never described at all, following the rule issue 1260 already set rather than a second evaluation.
 
 ### Consequences
 
@@ -244,7 +244,7 @@ Everything derived from an image inherits the classification of the mail that ca
 
 - Good, because a depicted match can then never displace anything, under any window size.
 - Good, because it is the least code.
-- Bad, because it defeats the requirement it was meant to serve: a mailbox owner wanting a photograph findable "so I don't have to remember it was a picture" would have to remember it was a picture in order to set the filter.
+- Bad, because it defeats the requirement it was meant to serve: a mailbox user wanting a photograph findable "so I don't have to remember it was a picture" would have to remember it was a picture in order to set the filter.
 - Bad, because it makes a capability the deployment paid to build reachable only by a caller who already knows it exists.
 
 ## More Information

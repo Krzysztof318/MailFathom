@@ -427,7 +427,7 @@ internal static class HostPipeline
             // carries the CORS policy of its own, because unlike that surface's reader this one is a page: a document
             // a browser is refused permission to read is a client that cannot discover where to authorize, which is the
             // one thing it needed before it could hold any credential at all.
-            app.MapOwnerFacingProtectedResourceMetadata(
+            app.MapUserFacingProtectedResourceMetadata(
                     [.. composition.Client.Authentication],
                     ClientEndpointOptions.GrantedSurface)
                 .RequireCors(ClientTransportSecurityExtensions.CorsPolicyName);

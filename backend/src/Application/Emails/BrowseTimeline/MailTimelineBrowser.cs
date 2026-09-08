@@ -96,7 +96,7 @@ public sealed class MailTimelineBrowser
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the request names an order or a page direction that is not a defined member.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when a filter carries a value or a count the query does not accept, and when a backward page is asked for without a cursor.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account its owner does not own.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account its user does not own.</exception>
     /// <exception cref="MailboxQueryPageSizeOutOfRangeException">Thrown when the request names a page size outside the accepted range.</exception>
     /// <exception cref="MailboxQueryCursorMalformedException">Thrown when the request carries a cursor this system did not issue.</exception>
     /// <exception cref="MailboxQueryCursorFilterMismatchException">Thrown when the cursor was issued for a different list than the request describes.</exception>
@@ -116,14 +116,14 @@ public sealed class MailTimelineBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 
-        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.User);
 
         var sortedList = this.SortedList(request);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var pageDirection = DefinedPageDirection(request.PageDirection);
         var boundary = ContinuationBoundary(request.Cursor, sortedList, pageDirection);
 
-        // Every value has been validated by this point, so a deployment serving this owner no account answers the same
+        // Every value has been validated by this point, so a deployment serving this user no account answers the same
         // refusals a deployment serving several does, and only then reports that it holds nothing to draw.
         if (sortedList.Selection.Scope.AccountIds.Count is 0)
         {
@@ -357,7 +357,7 @@ public sealed class MailTimelineBrowser
         IReadOnlyDictionary<StoredEmailId, EmailEnrichment> enrichments) =>
         enrichments.TryGetValue(email.StoredEmailId, out var enrichment) ? enrichment : null;
 
-    /// <summary>Validates what the request asked for and restricts the list to the accounts its owner owns.</summary>
+    /// <summary>Validates what the request asked for and restricts the list to the accounts its user owns.</summary>
     private EmailTimelineFilter SortedList(BrowseTimelineRequest request) => EmailTimelineFilter.Create(
         this.scopeResolver.ReadableScope(
             request.Accounts,

@@ -4,9 +4,9 @@
 
 namespace MailFathom.Application.Emails.Embeddings.Limits;
 
-/// <summary>Where one owner stands inside the current budget period, against both ceilings that bound them.</summary>
-/// <param name="Owner">What the named owner has spent in this period and what their own ceiling admits.</param>
-/// <param name="Deployment">What every owner together has spent in this period and what the deployment's ceiling admits.</param>
+/// <summary>Where one user stands inside the current budget period, against both ceilings that bound them.</summary>
+/// <param name="User">What the named user has spent in this period and what their own ceiling admits.</param>
+/// <param name="Deployment">What every user together has spent in this period and what the deployment's ceiling admits.</param>
 /// <remarks>
 /// <para>
 /// The two halves are the same shape because they are the same question asked of two populations, and both are needed
@@ -14,20 +14,20 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// refused. Both share the period's instants, so a paused worker wakes at one roll-over whichever bound stopped it.
 /// </para>
 /// <para>
-/// Counts and instants only — no message, passage, or vector is describable from it, and the owner appears as the
+/// Counts and instants only — no message, passage, or vector is describable from it, and the user appears as the
 /// generated identity the accounts already carry.
 /// </para>
 /// </remarks>
-public sealed record EmbeddingSpendAdmission(EmbeddingSpendPeriod Owner, EmbeddingSpendPeriod Deployment)
+public sealed record EmbeddingSpendAdmission(EmbeddingSpendPeriod User, EmbeddingSpendPeriod Deployment)
 {
     /// <summary>Gets which ceiling this period has reached, if either.</summary>
     public EmbeddingSpendBound ReachedBound => this.Deployment.IsExhausted
         ? EmbeddingSpendBound.Deployment
-        : this.Owner.IsExhausted
-            ? EmbeddingSpendBound.Owner
+        : this.User.IsExhausted
+            ? EmbeddingSpendBound.User
             : EmbeddingSpendBound.None;
 
-    /// <summary>Gets whether a request may be sent for this owner right now.</summary>
+    /// <summary>Gets whether a request may be sent for this user right now.</summary>
     public bool AdmitsRequest => this.ReachedBound is EmbeddingSpendBound.None;
 
     /// <summary>Gets when the period rolls over, which is the instant paused work resumes at whichever bound stopped it.</summary>

@@ -27,7 +27,7 @@ public sealed class ContactMappingTests
             note: "Owes an answer.");
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailOwner.Deployment, contact);
+        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact);
 
         // Assert
         Assert.Equal("Anna Kowalska", entity.DisplayName);
@@ -50,7 +50,7 @@ public sealed class ContactMappingTests
         var contact = ContactOf("Anna Kowalska", ["anna@example.test", "anna@personal.test"]);
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailOwner.Deployment, contact);
+        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact);
 
         // Assert
         Assert.All(entity.Addresses, address => Assert.Equal(contact.Id.Value, address.ContactId));
@@ -59,24 +59,24 @@ public sealed class ContactMappingTests
 
     /// <summary>Whose book a record belongs to is written onto the contact and onto every address row of it.</summary>
     /// <remarks>
-    /// The address row carries the owner as well as the contact it hangs from, because uniqueness is over the owner and
+    /// The address row carries the user as well as the contact it hangs from, because uniqueness is over the user and
     /// the address and an index cannot reach through a foreign key to read one. An address row written under nobody
-    /// would take an address out of every other owner's book.
+    /// would take an address out of every other user's book.
     /// </remarks>
     [Fact]
-    public void ToEntity_AContactOfOneOwnersBook_WritesThatOwnerOntoTheRecordAndItsAddresses()
+    public void ToEntity_AContactOfOneUsersBook_WritesThatUserOntoTheRecordAndItsAddresses()
     {
         // Arrange
         var contact = ContactOf("Anna Kowalska", ["anna@example.test", "anna@personal.test"]);
 
         // Act
-        var entity = ContactMapping.ToEntity(SyntheticMailOwner.Another, contact);
+        var entity = ContactMapping.ToEntity(SyntheticMailUser.Another, contact);
 
         // Assert
-        Assert.Equal(SyntheticMailOwner.Another.Value, entity.OwnerId);
+        Assert.Equal(SyntheticMailUser.Another.Value, entity.UserId);
         Assert.All(
             entity.Addresses,
-            address => Assert.Equal(SyntheticMailOwner.Another.Value, address.OwnerId));
+            address => Assert.Equal(SyntheticMailUser.Another.Value, address.UserId));
     }
 
     /// <summary>A stored contact reads back as the record it was written from.</summary>
@@ -92,7 +92,7 @@ public sealed class ContactMappingTests
             origin: ContactOrigin.Collected);
 
         // Act
-        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailOwner.Deployment, contact));
+        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact));
 
         // Assert
         Assert.Equal(contact.Id, rebuilt.Id);
@@ -113,18 +113,18 @@ public sealed class ContactMappingTests
         var contact = ContactOf("Anna Kowalska", ["anna@example.test"]);
 
         // Act
-        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailOwner.Deployment, contact));
+        var rebuilt = ContactMapping.ToContact(ContactMapping.ToEntity(SyntheticMailUser.Deployment, contact));
 
         // Assert
         Assert.Null(rebuilt.Note);
     }
 
-    /// <summary>Which address is the default is the owner's choice, so a row naming one it does not hold is refused rather than repaired.</summary>
+    /// <summary>Which address is the default is the user's choice, so a row naming one it does not hold is refused rather than repaired.</summary>
     [Fact]
     public void ToContact_ARowNamingAPreferredAddressTheContactDoesNotHold_IsRefused()
     {
         // Arrange
-        var entity = ContactMapping.ToEntity(SyntheticMailOwner.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
+        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
         entity.PreferredNormalizedAddress = "SOMEBODY.ELSE@EXAMPLE.TEST";
 
         // Act, Assert
@@ -136,7 +136,7 @@ public sealed class ContactMappingTests
     public void ToContact_ARowWithNoAddress_IsRefused()
     {
         // Arrange
-        var entity = ContactMapping.ToEntity(SyntheticMailOwner.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
+        var entity = ContactMapping.ToEntity(SyntheticMailUser.Deployment, ContactOf("Anna Kowalska", ["anna@example.test"]));
         entity.Addresses.Clear();
 
         // Act, Assert
@@ -157,12 +157,12 @@ public sealed class ContactMappingTests
             amendedAt);
 
         // Act
-        var row = ContactMapping.ToAddressEntity(SyntheticMailOwner.Deployment, amended, Address("anna@personal.test"));
+        var row = ContactMapping.ToAddressEntity(SyntheticMailUser.Deployment, amended, Address("anna@personal.test"));
 
         // Assert
         Assert.Equal(amendedAt, TimestampOf(row.Id));
         Assert.NotEqual(RecordedAt, TimestampOf(row.Id));
-        Assert.Equal(SyntheticMailOwner.Deployment.Value, row.OwnerId);
+        Assert.Equal(SyntheticMailUser.Deployment.Value, row.UserId);
     }
 
     /// <summary>Reads back the instant a version 7 identifier was minted over, which is its leading 48 bits.</summary>

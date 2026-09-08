@@ -21,7 +21,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail.Readers;
-using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
@@ -60,7 +60,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// </remarks>
     internal MailSynchronizationSettingsReaders Readers => this.readers.Value;
 
-    /// <summary>Gets or sets the owners this deployment serves, which is where a declaration outside this section lives.</summary>
+    /// <summary>Gets or sets the users this deployment serves, which is where a declaration outside this section lives.</summary>
     /// <remarks>
     /// <para>
     /// Not bound from anything: the roster is established against the database while the host starts, so it is put onto
@@ -69,19 +69,19 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// candidate's own.
     /// </para>
     /// <para>
-    /// It is the immutable roster this snapshot was published with. A later owner-document commit produces another
+    /// It is the immutable roster this snapshot was published with. A later user-document commit produces another
     /// settings snapshot, so a run already under way never sees its account declaration change beneath it.
     /// </para>
     /// </remarks>
-    internal IReadOnlyList<ServedMailOwner>? ServedOwners { get; set; }
+    internal IReadOnlyList<ServedMailUser>? ServedUsers { get; set; }
 
-    /// <summary>Copies these bound settings onto one immutable owner roster, with readers of its own.</summary>
-    internal MailSynchronizationOptions WithServedOwners(IReadOnlyList<ServedMailOwner> servedOwners)
+    /// <summary>Copies these bound settings onto one immutable user roster, with readers of its own.</summary>
+    internal MailSynchronizationOptions WithServedUsers(IReadOnlyList<ServedMailUser> servedUsers)
     {
-        ArgumentNullException.ThrowIfNull(servedOwners);
+        ArgumentNullException.ThrowIfNull(servedUsers);
 
         var snapshot = (MailSynchronizationOptions)this.MemberwiseClone();
-        snapshot.ServedOwners = servedOwners;
+        snapshot.ServedUsers = servedUsers;
         snapshot.readers = ReadersFor(snapshot);
 
         return snapshot;
@@ -131,7 +131,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(1, 20)]
     public int MaxConcurrentFoldersPerAccount { get; set; } = 1;
 
-    /// <summary>Gets or sets how many open or establishing IMAP connections one server host may hold across all owners.</summary>
+    /// <summary>Gets or sets how many open or establishing IMAP connections one server host may hold across all users.</summary>
     /// <remarks>
     /// Push sessions, folder synchronization, discovery, and the account's write connection all consume this one
     /// process-wide budget. Push may consume at most one less than the bound, so a long-lived watch cannot prevent
@@ -335,30 +335,30 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(1024, long.MaxValue)]
     public long? MaxStoredContentBytes { get; set; }
 
-    /// <summary>Gets or sets how much stored content any one owner's mail may occupy, or nothing for no such ceiling.</summary>
+    /// <summary>Gets or sets how much stored content any one user's mail may occupy, or nothing for no such ceiling.</summary>
     /// <remarks>
     /// <para>
     /// The same bound asked of one person rather than of the instance. It exists because
     /// <see cref="MaxStoredContentBytes" /> is the only thing bounding storage otherwise, so one large mailbox can fill
-    /// it and leave every other owner's mail recorded without content. Reaching this one defers that owner's messages
+    /// it and leave every other user's mail recorded without content. Reaching this one defers that user's messages
     /// and nobody else's, and a later run with room for them fetches exactly what was left.
     /// </para>
     /// <para>
-    /// It is compared against what that owner's stored payloads hold, which is not the quantity
+    /// It is compared against what that user's stored payloads hold, which is not the quantity
     /// <see cref="MaxStoredContentBytes" /> is compared against: a catalogue reports what a table occupies on disk and
     /// can never report a share of one. The two are therefore different measures of the same storage and are not
-    /// expected to agree — an owner's figure excludes the indexes, the row overhead, and the space a deletion freed
+    /// expected to agree — a user's figure excludes the indexes, the row overhead, and the space a deletion freed
     /// that PostgreSQL has not reclaimed.
     /// </para>
     /// <para>
-    /// There is deliberately no default, and leaving it unset is what a deployment serving one owner wants: the
+    /// There is deliberately no default, and leaving it unset is what a deployment serving one user wants: the
     /// instance ceiling already bounds that person. What leaving it unset exposes on a deployment serving several is
     /// exactly the fault above, and the configuration reference says so. It may not be lower than
     /// <see cref="MaxRawMimeBytes" />, which would leave no message storable for anybody.
     /// </para>
     /// </remarks>
     [Range(1024, long.MaxValue)]
-    public long? MaxStoredContentBytesPerOwner { get; set; }
+    public long? MaxStoredContentBytesPerUser { get; set; }
 
     /// <summary>Gets or sets how many bytes of raw MIME every folder work unit together may hold in memory at once.</summary>
     /// <remarks>
@@ -425,7 +425,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// correspondence, and mail sent from the first to the second is the least suspicious mail in the mailbox.
     /// </para>
     /// <para>
-    /// It defaults to on because that mail is either the owner's own or somebody who has taken their mailbox, and the
+    /// It defaults to on because that mail is either the user's own or somebody who has taken their mailbox, and the
     /// first is far more common. The case for turning it off is an account on a large shared provider, where every
     /// user of that provider writes from the same domain and the set would recognize all of them; a deployment that
     /// turns it off names the domains it does mean on the accounts' own trusted-sender lists instead.
@@ -633,12 +633,12 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
                 [nameof(this.MaxStoredContentBytes)]);
         }
 
-        if (this.MaxStoredContentBytesPerOwner is { } ownerStorageCeiling
-            && ownerStorageCeiling < this.MaxRawMimeBytes)
+        if (this.MaxStoredContentBytesPerUser is { } userStorageCeiling
+            && userStorageCeiling < this.MaxRawMimeBytes)
         {
             yield return new ValidationResult(
-                $"The per-owner stored content ceiling of {ownerStorageCeiling} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no owner could ever have a message stored.",
-                [nameof(this.MaxStoredContentBytesPerOwner)]);
+                $"The per-user stored content ceiling of {userStorageCeiling} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no user could ever have a message stored.",
+                [nameof(this.MaxStoredContentBytesPerUser)]);
         }
 
         if (this.MaxInFlightRawMimeBytes < this.MaxRawMimeBytes)
@@ -655,12 +655,12 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         }
 
         // Whether anything is declared at all is deliberately not asked here. This section is one of two places a
-        // mailbox is declared — the other being each owner's own section of the top-level Accounts collection — and a
-        // deployment that moved its mailboxes under their owners has emptied this one on purpose. The rule is stated
-        // once, over the effective set, in DeclaredOwners.
+        // mailbox is declared — the other being each user's own section of the top-level Accounts collection — and a
+        // deployment that moved its mailboxes under their users has emptied this one on purpose. The rule is stated
+        // once, over the effective set, in DeclaredUsers.
         //
-        // Every account this section declares belongs to the one owner such a deployment serves, which is why the whole
-        // section is one naming space here. A second owner declaring an account of the same name is not a collision
+        // Every account this section declares belongs to the one user such a deployment serves, which is why the whole
+        // section is one naming space here. A second user declaring an account of the same name is not a collision
         // and never reaches this, because their accounts are in their own section rather than in this list.
         foreach (var result in MailAccountNamingSpace.FindCollisions(this.Accounts, nameof(this.Accounts)))
         {
@@ -686,15 +686,15 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
     /// </para>
     /// <para>
-    /// The roster is searched first because an adoption publishes the owner's document without rewriting the file it
+    /// The roster is searched first because an adoption publishes the user's document without rewriting the file it
     /// superseded. A later start refuses that stale deployment section, but the running process must follow the commit
     /// now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
-    /// that <c>DeclaredOwners</c> states.
+    /// that <c>DeclaredUsers</c> states.
     /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
-        this.ServedOwners?
-            .SelectMany(static owner => owner.MailAccounts)
+        this.ServedUsers?
+            .SelectMany(static user => user.MailAccounts)
             .SingleOrDefault(
                 candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
                     && StringComparer.Ordinal.Equals(
@@ -814,7 +814,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <para>
     /// Per account rather than deployment-wide, because the accounts an instance synchronizes are different
     /// correspondence: a work account's counterparties have nothing to do with a personal one's, and one list would
-    /// either recognize too much on one account or make an owner maintain the union of both.
+    /// either recognize too much on one account or make a user maintain the union of both.
     /// </para>
     /// <para>
     /// This is the declared half of the list and the store holds the half somebody adds while the deployment is
@@ -879,7 +879,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <para>
     /// It is a separate setting from <see cref="RemotelyDeletedEmailDisposition" /> and takes precedence over it for
     /// every deletion MailFathom performed, because the two answer for different acts. That one governs a disappearance
-    /// somebody else caused; this one governs one the mailbox owner authored, and an account that erases what its
+    /// somebody else caused; this one governs one the mailbox user authored, and an account that erases what its
     /// server loses must not thereby erase what it was just told to delete — freeing space on the server is not the
     /// same instruction as forgetting the mail.
     /// </para>
@@ -1537,20 +1537,20 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     }
 
     /// <summary>Builds what this account is published as, or nothing when its configuration cannot name it.</summary>
-    /// <param name="owner">The owner a configured account belongs to, which configuration itself cannot name.</param>
+    /// <param name="user">The user a configured account belongs to, which configuration itself cannot name.</param>
     /// <returns>The served account, or <see langword="null" /> when the identifier or the display name is unusable.</returns>
     /// <remarks>
     /// The absence is the reload case rather than an ordinary one: startup refuses configuration this returns nothing
     /// for, so the only way to reach it is a reload being rejected while the previous snapshot is still serving.
-    /// The owner is a parameter rather than a configured key because no account block names one: an account declared in
-    /// a file belongs to the one owner such a deployment holds, and the caller is what knows which that is.
+    /// The user is a parameter rather than a configured key because no account block names one: an account declared in
+    /// a file belongs to the one user such a deployment holds, and the caller is what knows which that is.
     /// </remarks>
-    internal ServedMailAccount? CreateServedAccount(MailOwnerId owner)
+    internal ServedMailAccount? CreateServedAccount(MailUserId user)
     {
         try
         {
             return new ServedMailAccount(
-                owner,
+                user,
                 MailAccountId.Create(this.AccountId),
                 MailAccountDisplayName.Create(this.DisplayName),
                 this.Mode);

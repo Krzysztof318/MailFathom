@@ -130,7 +130,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
             .HasForeignKey(email => email.MailFolderId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Neither association takes the mail with it. A thread is an assembly of messages rather than their owner,
+        // Neither association takes the mail with it. A thread is an assembly of messages rather than their user,
         // so losing one must leave every message readable and unthreaded; and an answer must outlive the message it
         // answers, published as a root of what remains rather than erased alongside it.
         entity.HasOne<EmailThreadEntity>()
@@ -147,10 +147,10 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
     /// <summary>Declares the indexes mailbox reads are planned against, and with them the timeline ordering contract.</summary>
     /// <remarks>
     /// <para>
-    /// Every index a mailbox read narrows on leads with the owner, because that is the first term such a read carries:
-    /// an account identifier is unique within its owner and nowhere else, so a structure led by the account alone would
-    /// interleave two owners' mail under one key. The folder-led indexes are the exception and stay as they are — a
-    /// folder identity is generated and belongs to exactly one account, so it already names one owner's rows.
+    /// Every index a mailbox read narrows on leads with the user, because that is the first term such a read carries:
+    /// an account identifier is unique within its user and nowhere else, so a structure led by the account alone would
+    /// interleave two users' mail under one key. The folder-led indexes are the exception and stay as they are — a
+    /// folder identity is generated and belongs to exactly one account, so it already names one user's rows.
     /// </para>
     /// <para>
     /// All three timeline indexes reproduce <see cref="EmailTimelinePosition.NewestFirst" /> column for column after
@@ -174,7 +174,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailOccurrenceUniqueIndexName);
 
-        entity.HasIndex(email => new { email.OwnerId, email.MailboxAccountId, email.ReceivedAt, email.Id })
+        entity.HasIndex(email => new { email.UserId, email.MailboxAccountId, email.ReceivedAt, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountTimelineIndexName)
             .IsDescending(false, false, true, true)
             .HasNullSortOrder(
@@ -225,14 +225,14 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // The order a requested whole-mailbox rule run walks in. It is the identity rather than the timeline because a
         // walk that has to resume needs a total order no later write disturbs, and because the position it commits is
         // one column rather than a nullable timestamp paired with a tie-breaker.
-        entity.HasIndex(email => new { email.OwnerId, email.MailboxAccountId, email.Id })
+        entity.HasIndex(email => new { email.UserId, email.MailboxAccountId, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountIdentityIndexName);
 
         // The arrival queue, and the filter is the whole point of it. In steady state almost every row of an account
         // has been evaluated, so without the filter this read would walk the account's entire index once per run to
         // find the handful of rows that qualify — and it runs for every account on every synchronization run.
         entity.HasIndex(
-                email => new { email.OwnerId, email.MailboxAccountId, email.Id },
+                email => new { email.UserId, email.MailboxAccountId, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasFilter(
@@ -244,7 +244,7 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // in full, once per account run, for ever, to return nothing. The messages carrying no attachment at all are
         // the larger part of a mailbox and are outside the filter too, since the walk requires a positive count.
         entity.HasIndex(
-                email => new { email.OwnerId, email.MailboxAccountId, email.Id },
+                email => new { email.UserId, email.MailboxAccountId, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingAttachmentTextIndexName)
             .HasFilter(

@@ -68,7 +68,7 @@ Four things it will not decide for you, because each is a decision rather than a
 **The MCP endpoint is the answer it asks for**, and it is the one with a cost worth stating before it is given. The
 endpoint accepts an API key unless you ask for none, which is legal, announced with a startup warning, and the only
 shape the chat clients with no field for a static header can connect to. The key itself is not written here: what a
-client presents to that endpoint is a record beside the owner whose mail it reaches, minted with
+client presents to that endpoint is a record beside the user whose mail it reaches, minted with
 `mfctl credential create` once the deployment is running, and the script prints that command when it finishes.
 
 The administrative endpoint comes with what that credential needs rather than from an answer. Minting the MCP key is
@@ -228,7 +228,7 @@ docker compose exec --no-TTY postgres sh -c \
   < 'mailfathom-schema-<version>.sql'
 ```
 
-**As `mailfathom`, never as `postgres`.** PostgreSQL makes the role that ran the DDL the owner of everything it
+**As `mailfathom`, never as `postgres`.** PostgreSQL makes the role that ran the DDL the user of everything it
 created, and ownership grants nothing to anybody else, so a schema applied by the superuser leaves MailFathom refusing
 to start against a schema that plainly exists — `42501: permission denied for table __EFMigrationsHistory`, reported
 as a schema of unknown shape. This deployment has one role that both applies the schema and serves requests, which is
@@ -353,7 +353,7 @@ docker compose up -d
 Two details of those commands are what keep the restore clean, and both follow from the database being owned by an
 unprivileged role. The dump **excludes the `vector` extension**, because the extension belongs to initialization rather
 than to the data: a superuser installs it, `mailfathom` does not own it, and a dump carrying it makes `pg_restore`
-fail on `COMMENT ON EXTENSION` with `must be owner of extension vector`. The restore takes **no `--clean`**, because
+fail on `COMMENT ON EXTENSION` with `must be user of extension vector`. The restore takes **no `--clean`**, because
 the database it restores into was created moments earlier and holds nothing to drop — and `--clean` would reach for
 that same extension. Either one left in place ends the restore at exit `1` with the rows already in, which reads like a
 failed migration and is not one.
@@ -622,7 +622,7 @@ unredacted, and the feature page states what pointing it outside gives up.
 The daemon publishes no port and it accepts a connection from any address it can be reached from, so what limits who may
 ask it is the network it is on. It is attached to `frontend` as well as `backend`, and that is the one deliberate
 difference from the analyzer: the daemon fetches its rule updates on start and daily afterwards, and a corpus frozen at
-the image's build scores today's mail worse than a fresh one. Nothing derived from the owner's mail goes out that route
+the image's build scores today's mail worse than a fresh one. Nothing derived from the user's mail goes out that route
 — `MAILFATHOM_SPAM_SCANNER_DNS_CHECKS` is `0`, which keeps the blocklist rules that would send sending addresses and URI
 host names to third parties switched off, and the image bundles no plugin that reports anything anywhere. Remove
 `frontend` from the service to take the egress away and keep the corpus the image shipped with.

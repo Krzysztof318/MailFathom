@@ -77,14 +77,14 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     /// </remarks>
     public long MaxInputOctetsPerPeriod { get; set; }
 
-    /// <summary>Gets or sets the octets one budget period may read for any one owner, or zero to bound no owner.</summary>
+    /// <summary>Gets or sets the octets one budget period may read for any one user, or zero to bound no user.</summary>
     /// <remarks>
     /// The same ceiling asked of one person rather than of the instance, and it exists for the reason the embedding
-    /// one's per-owner companion does: a deployment serving several owners bounds the whole cost with the key above and
+    /// one's per-user companion does: a deployment serving several users bounds the whole cost with the key above and
     /// nothing else, so one mailbox full of large attachments can exhaust the window everybody else was working in.
-    /// Reaching this one leaves that owner's mail unread and every other owner's read normally.
+    /// Reaching this one leaves that user's mail unread and every other user's read normally.
     /// </remarks>
-    public long MaxInputOctetsPerPeriodPerOwner { get; set; }
+    public long MaxInputOctetsPerPeriodPerUser { get; set; }
 
     /// <summary>Gets the formats an attachment is offered to a parser for.</summary>
     /// <remarks>
@@ -223,13 +223,13 @@ internal sealed class AttachmentTextOptions : IValidatableObject
         }
 
         if (this.MaxInputOctetsPerPeriod != 0
-            && this.MaxInputOctetsPerPeriodPerOwner > this.MaxInputOctetsPerPeriod)
+            && this.MaxInputOctetsPerPeriodPerUser > this.MaxInputOctetsPerPeriod)
         {
             yield return new ValidationResult(
-                "Embeddings AttachmentText MaxInputOctetsPerPeriodPerOwner is at most MaxInputOctetsPerPeriod. Above "
-                + "it, the per-owner ceiling bounds nothing the deployment's own ceiling has not already bound, which "
+                "Embeddings AttachmentText MaxInputOctetsPerPeriodPerUser is at most MaxInputOctetsPerPeriod. Above "
+                + "it, the per-user ceiling bounds nothing the deployment's own ceiling has not already bound, which "
                 + "reads as a limit somebody chose and refuses nothing.",
-                [nameof(this.MaxInputOctetsPerPeriodPerOwner)]);
+                [nameof(this.MaxInputOctetsPerPeriodPerUser)]);
         }
     }
 
@@ -237,7 +237,7 @@ internal sealed class AttachmentTextOptions : IValidatableObject
     private IEnumerable<(string Name, long Value)> AggregateCeilings() =>
     [
         (nameof(this.MaxInputOctetsPerPeriod), this.MaxInputOctetsPerPeriod),
-        (nameof(this.MaxInputOctetsPerPeriodPerOwner), this.MaxInputOctetsPerPeriodPerOwner),
+        (nameof(this.MaxInputOctetsPerPeriodPerUser), this.MaxInputOctetsPerPeriodPerUser),
     ];
 
     /// <summary>Reads the ceilings one message and one account run are read under.</summary>

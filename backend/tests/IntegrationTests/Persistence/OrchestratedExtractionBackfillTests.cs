@@ -168,7 +168,7 @@ public sealed class OrchestratedExtractionBackfillTests(MailFathomOrchestrationF
                     var storedEmail = new StoredEmailEntity
                     {
                         Id = Guid.CreateVersion7(SyntheticEmail.SentAt.AddSeconds(index)),
-                        OwnerId = folder.OwnerId,
+                        UserId = folder.UserId,
                         MailboxAccountId = folder.MailboxAccountId,
                         MailFolder = folder,
                         UidValidity = SyntheticEmail.UidValidity,

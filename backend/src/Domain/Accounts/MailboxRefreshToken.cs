@@ -7,7 +7,7 @@ using System.Text;
 
 namespace MailFathom.Domain.Accounts;
 
-/// <summary>The long-lived credential MailFathom holds on one mailbox owner's behalf, owned by the operation that read it.</summary>
+/// <summary>The long-lived credential MailFathom holds on one mailbox user's behalf, owned by the operation that read it.</summary>
 /// <remarks>
 /// <para>
 /// The token acts for a named person, so it is personal data by this repository's own classification: it is never

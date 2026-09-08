@@ -9,7 +9,7 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-// One page of the owner's mail ranked against what they are looking for. It is one route rather than two because
+// One page of the user's mail ranked against what they are looking for. It is one route rather than two because
 // finding a message is one question: somebody who cannot remember whether the words they have are the words the
 // message used should not be asked to choose between a word search and a meaning search, so the deployment ranks both
 // ways wherever it can and says in the answer which of them happened.
@@ -90,7 +90,7 @@ export interface MailSearchQuery {
     /** The text to search for, which every search carries and which no search may leave blank. */
     readonly text: string;
 
-    /** The account to search, by its identifier or its display name, or `null` for every account the owner owns. */
+    /** The account to search, by its identifier or its display name, or `null` for every account the user owns. */
     readonly account: string | null;
 
     /** The folder to search, by its alias or as `role:Inbox`, or `null` for every folder. */
@@ -219,7 +219,7 @@ const retrievals: readonly MailSearchRetrieval[] = ['Lexical', 'Hybrid'];
 const semantics: readonly MailSemanticSearch[] = ['Inactive', 'Available', 'Degraded'];
 
 /**
- * Reads one page of the signed-in owner's mail ranked against what they are looking for, answering an expected failure
+ * Reads one page of the signed-in user's mail ranked against what they are looking for, answering an expected failure
  * as a value rather than by throwing.
  *
  * @param session The address to reach and the finished header value to present.

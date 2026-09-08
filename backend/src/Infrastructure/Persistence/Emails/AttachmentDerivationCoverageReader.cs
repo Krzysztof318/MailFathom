@@ -46,10 +46,10 @@ internal sealed class AttachmentDerivationCoverageReader(
 
         if (account is { } named)
         {
-            var ownerId = named.Owner.Value;
+            var userId = named.User.Value;
             var mailboxAccountId = named.Id.Value;
 
-            scoped = scoped.Where(email => email.OwnerId == ownerId && email.MailboxAccountId == mailboxAccountId);
+            scoped = scoped.Where(email => email.UserId == userId && email.MailboxAccountId == mailboxAccountId);
         }
 
         var reachable = StoredEmailAttachmentTextStore.ReachableEverywhere(

@@ -6,27 +6,27 @@ using MailFathom.CodeCoverage;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
-/// <summary>What one owner's budget period has already sent to an embedding provider.</summary>
+/// <summary>What one user's budget period has already sent to an embedding provider.</summary>
 /// <remarks>
 /// <para>
-/// One row per period and owner, keyed by the instant the period began and the owner the spend was incurred for. Every
+/// One row per period and user, keyed by the instant the period began and the user the spend was incurred for. Every
 /// process derives the instant from the configured period length and the Unix epoch rather than reading it from
 /// anywhere. Nothing allocates a period: the first spend inside one inserts its row and every later spend adds to it.
 /// </para>
 /// <para>
-/// The key is ordered period first so that one index answers both bounds this table exists for: what a named owner has
+/// The key is ordered period first so that one index answers both bounds this table exists for: what a named user has
 /// spent inside a period is the whole key, and what the deployment has spent inside it is the rows sharing its
 /// leading column.
 /// </para>
 /// <para>
-/// The owner is a plain column with no foreign key onto the owner record, and that is the one place in the mail graph
+/// The user is a plain column with no foreign key onto the user record, and that is the one place in the mail graph
 /// where the cascade is deliberately absent.
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
-/// keeps a row recording spend an owner incurred as a cost record rather than erasing it with the vectors it paid for,
-/// so erasing an owner leaves what their embedding cost this deployment standing.
+/// keeps a row recording spend a user incurred as a cost record rather than erasing it with the vectors it paid for,
+/// so erasing a user leaves what their embedding cost this deployment standing.
 /// </para>
 /// <para>
-/// Nothing here is mail or derived from it. A character count, an instant, and a generated owner identity say how much
+/// Nothing here is mail or derived from it. A character count, an instant, and a generated user identity say how much
 /// was spent and for whom, and none of them names a message, a passage, or a vector — which is what lets the row
 /// outlive every generation whose cost it recorded.
 /// </para>
@@ -46,7 +46,7 @@ internal sealed class EmbeddingSpendPeriodEntity
     internal const string PeriodStartsAtColumnName = "PeriodStartsAt";
 
     /// <summary>The second key column, named here for the same reason the table is.</summary>
-    internal const string OwnerIdColumnName = "OwnerId";
+    internal const string UserIdColumnName = "UserId";
 
     /// <summary>The counted column, named here for the same reason the table is.</summary>
     internal const string ConsumedInputCharacterCountColumnName = "ConsumedInputCharacterCount";
@@ -54,8 +54,8 @@ internal sealed class EmbeddingSpendPeriodEntity
     /// <summary>Gets or sets when the period began, in UTC.</summary>
     public DateTimeOffset PeriodStartsAt { get; set; }
 
-    /// <summary>Gets or sets the owner this spend was incurred for.</summary>
-    public Guid OwnerId { get; set; }
+    /// <summary>Gets or sets the user this spend was incurred for.</summary>
+    public Guid UserId { get; set; }
 
     /// <summary>Gets or sets the characters this period has sent to a provider.</summary>
     /// <remarks>

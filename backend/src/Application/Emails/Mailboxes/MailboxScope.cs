@@ -13,8 +13,8 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// <remarks>
 /// <para>
 /// This is what a query runs with rather than what a request asked for. Both differences are settled before the scope is
-/// built: an unnamed account list becomes the accounts the caller's owner owns, because a store holds rows for accounts
-/// an operator has since removed and rows belonging to every other owner, and every folder a request named — by its
+/// built: an unnamed account list becomes the accounts the caller's user owns, because a store holds rows for accounts
+/// an operator has since removed and rows belonging to every other user, and every folder a request named — by its
 /// alias or by the role it plays — becomes the folder of the account it means. A folder is therefore named here as an account and an alias together, never as an
 /// alias alone, so one account's junk folder cannot admit another account's folder that happens to share the name.
 /// </para>
@@ -46,7 +46,7 @@ public sealed record MailboxScope
     /// It counts what the caller wrote rather than folders, which is the same distinction the bound above makes and one
     /// a role sharpens: <c>role:Junk</c> is one name however many accounts answer it. Both bounds are enforced where the
     /// caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than over the resolved lists this type
-    /// holds. Resolution can only produce more: a request naming no account resolves to every account its owner owns,
+    /// holds. Resolution can only produce more: a request naming no account resolves to every account its user owns,
     /// and one role a request named resolves to a folder on each of them.
     /// </remarks>
     public const int MaximumFolders = 64;
@@ -60,11 +60,11 @@ public sealed record MailboxScope
     public const int MaximumSelectedEmails = 64;
 
     private MailboxScope(
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<MailAccountId> accountIds,
         IReadOnlyList<MailFolderIdentity> selectedFolders)
     {
-        this.Owner = owner;
+        this.User = user;
         this.AccountIds = accountIds;
         this.SelectedFolders = selectedFolders;
     }
@@ -73,10 +73,10 @@ public sealed record MailboxScope
     /// <remarks>
     /// <para>
     /// Two callers resolve to it. A deployment serving no account is the first and the older one. The second is a
-    /// caller acting for an owner who owns none of the accounts the deployment does serve, which is a real read on a
+    /// caller acting for a user who owns none of the accounts the deployment does serve, which is a real read on a
     /// populated deployment rather than a degenerate configuration — <see cref="MailboxScopeResolver" /> answers it
     /// with this scope before any folder decision is applied, because those decisions are the deployment's and would
-    /// otherwise admit every other owner's folders beside an account list that names nobody.
+    /// otherwise admit every other user's folders beside an account list that names nobody.
     /// </para>
     /// <para>
     /// A use case handed it answers with nothing, which is what both cases have to mean: there is no folder this caller
@@ -86,11 +86,11 @@ public sealed record MailboxScope
     /// </remarks>
     public static MailboxScope NothingReadable { get; } = new(default, [], []);
 
-    /// <summary>Gets the owner whose mail the query is restricted to, which names nobody on <see cref="NothingReadable" />.</summary>
+    /// <summary>Gets the user whose mail the query is restricted to, which names nobody on <see cref="NothingReadable" />.</summary>
     /// <remarks>
     /// <para>
     /// The first term of every mail-returning query, ahead of the accounts and applied whatever the account list holds.
-    /// An account identifier names one account within its owner rather than across the deployment, so a read narrowed
+    /// An account identifier names one account within its user rather than across the deployment, so a read narrowed
     /// on the account alone would compare a value that does not say whose mail it is; and every index those reads are
     /// planned against leads with this column, so it is what the plan is chosen for as well.
     /// </para>
@@ -100,7 +100,7 @@ public sealed record MailboxScope
     /// empty account list — which every narrowing site reads as unrestricted — safe rather than merely unreachable.
     /// </para>
     /// </remarks>
-    public MailOwnerId Owner { get; }
+    public MailUserId User { get; }
 
     /// <summary>Gets the accounts the query is restricted to, deduplicated and ordered, or empty when the request named none.</summary>
     public IReadOnlyList<MailAccountId> AccountIds { get; }
@@ -177,8 +177,8 @@ public sealed record MailboxScope
     /// how <see cref="ReadableFolders" /> reads, because that list is configuration and this one is a caller's choice.
     /// </para>
     /// <para>
-    /// An identifier naming mail this scope's owner does not own matches nothing rather than being refused. The owner is
-    /// the first term of every mail-returning query whatever else narrows it, so a caller cannot reach another owner's
+    /// An identifier naming mail this scope's user does not own matches nothing rather than being refused. The user is
+    /// the first term of every mail-returning query whatever else narrows it, so a caller cannot reach another user's
     /// mail by naming its identifier, and answering with nothing is what naming an email that no longer exists already
     /// does.
     /// </para>
@@ -186,8 +186,8 @@ public sealed record MailboxScope
     public IReadOnlyList<StoredEmailId> SelectedEmails { get; private init; } = [];
 
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
-    /// <param name="owner">The owner whose mail the query is restricted to, which every narrowing then sits inside.</param>
-    /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's owner owns when a request named none.</param>
+    /// <param name="user">The user whose mail the query is restricted to, which every narrowing then sits inside.</param>
+    /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's user owns when a request named none.</param>
     /// <param name="selectedFolders">The folders the query runs against, one pair per account, with every role a request named already turned into the folder it means on that account, or <see langword="null" /> to name none.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>
     /// <remarks>
@@ -197,7 +197,7 @@ public sealed record MailboxScope
     /// a folder on each of those accounts.
     /// </remarks>
     public static MailboxScope Create(
-        MailOwnerId owner,
+        MailUserId user,
         IEnumerable<MailAccountId>? accountIds,
         IEnumerable<MailFolderIdentity>? selectedFolders)
     {
@@ -217,7 +217,7 @@ public sealed record MailboxScope
 
         return accounts.Length is 0 && folders.Length is 0
             ? NothingReadable
-            : new MailboxScope(owner, accounts, folders);
+            : new MailboxScope(user, accounts, folders);
     }
 
     /// <summary>Admits the folders configuration says a tool may read from, and nothing else.</summary>

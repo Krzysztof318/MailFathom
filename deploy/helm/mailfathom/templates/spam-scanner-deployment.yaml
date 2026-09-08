@@ -59,7 +59,7 @@ spec:
           env:
             {{- /*
               The DNS posture, stated by the deployment rather than inherited. Off, the daemon runs local rules only and
-              nothing derived from the owner's mail is resolved anywhere; on, its DNSBL and URIBL rules send sending
+              nothing derived from the user's mail is resolved anywhere; on, its DNSBL and URIBL rules send sending
               addresses and URI host names to third-party blocklists through whatever resolver this pod has.
             */}}
             - name: DNS_CHECKS

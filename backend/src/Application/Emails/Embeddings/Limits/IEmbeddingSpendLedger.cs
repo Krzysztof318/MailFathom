@@ -21,8 +21,8 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// watching.
 /// </para>
 /// <para>
-/// Every spend names the owner it was incurred for, because a deployment serving several people bounds each of them as
-/// well as itself and a ledger keyed by the period alone could say only what was spent and never by whom. The owner
+/// Every spend names the user it was incurred for, because a deployment serving several people bounds each of them as
+/// well as itself and a ledger keyed by the period alone could say only what was spent and never by whom. The user
 /// outlives its own record here on purpose:
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md">ADR 0014</see>
 /// keeps a spend row as a cost record rather than erasing it with the mail it paid to index.
@@ -30,37 +30,37 @@ namespace MailFathom.Application.Emails.Embeddings.Limits;
 /// </remarks>
 public interface IEmbeddingSpendLedger
 {
-    /// <summary>Reads what one period has consumed so far, for one owner and for every owner together.</summary>
+    /// <summary>Reads what one period has consumed so far, for one user and for every user together.</summary>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
-    /// <param name="owner">The owner whose own consumption is asked for beside the deployment's.</param>
+    /// <param name="user">The user whose own consumption is asked for beside the deployment's.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Both totals, which are zero for a period nothing has spent in yet.</returns>
     /// <remarks>
-    /// One read rather than two, because a gate weighing an owner's figure taken at one moment against a deployment
+    /// One read rather than two, because a gate weighing a user's figure taken at one moment against a deployment
     /// figure taken at another could admit a request neither total alone admits.
     /// </remarks>
     Task<EmbeddingSpendTotals> ReadConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
-        MailOwnerId owner,
+        MailUserId user,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads what one period has consumed across every owner, without naming one.</summary>
+    /// <summary>Reads what one period has consumed across every user, without naming one.</summary>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The characters already sent inside that period by every owner together.</returns>
+    /// <returns>The characters already sent inside that period by every user together.</returns>
     /// <remarks>
-    /// This is what an administrative reading asks. A deployment administrator acts for no owner, so the question they
-    /// can be answered is the deployment's, and a gate that had to invent an owner to answer it would be attributing a
+    /// This is what an administrative reading asks. A deployment administrator acts for no user, so the question they
+    /// can be answered is the deployment's, and a gate that had to invent a user to answer it would be attributing a
     /// figure to somebody who did not ask for it.
     /// </remarks>
     Task<long> ReadDeploymentConsumedInputCharactersAsync(
         DateTimeOffset periodStart,
         CancellationToken cancellationToken);
 
-    /// <summary>Adds what one provider call sent to the period and owner it belongs to.</summary>
+    /// <summary>Adds what one provider call sent to the period and user it belongs to.</summary>
     /// <param name="session">The session whose transaction this write joins.</param>
     /// <param name="periodStart">The period's start, as the budget places it.</param>
-    /// <param name="owner">The owner whose mail the call was embedding.</param>
+    /// <param name="user">The user whose mail the call was embedding.</param>
     /// <param name="inputCharacterCount">The characters the call sent.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the increment has been issued inside the caller's transaction.</returns>
@@ -75,7 +75,7 @@ public interface IEmbeddingSpendLedger
     Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
-        MailOwnerId owner,
+        MailUserId user,
         long inputCharacterCount,
         CancellationToken cancellationToken);
 }

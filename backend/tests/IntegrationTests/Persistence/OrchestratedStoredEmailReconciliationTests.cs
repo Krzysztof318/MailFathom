@@ -363,7 +363,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     var subject = $"reconciled-{uid}";
 
                     storedEmailIds[uid] = await repository.UpsertMetadataAsync(
-                        session, SyntheticMailAccount.Owner,
+                        session, SyntheticMailAccount.User,
                         SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                         SyntheticEmail.ExtractionOf(
                             occurrenceId,

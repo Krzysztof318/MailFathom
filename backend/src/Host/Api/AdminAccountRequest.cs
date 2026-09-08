@@ -30,9 +30,9 @@ internal static class AdminAccountRequest
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
     /// <returns>The served account, or <see langword="null" /> when the request named none or named one this deployment does not serve.</returns>
     /// <remarks>
-    /// The answer is the account and its owner together, because an identifier names one account within its owner and
+    /// The answer is the account and its user together, because an identifier names one account within its user and
     /// every write an administrative request leads to records whose mail it was about. The catalog is what supplies the
-    /// owner, so the pair comes from the same lookup that decided the account is served rather than from a second read.
+    /// user, so the pair comes from the same lookup that decided the account is served rather than from a second read.
     /// </remarks>
     internal static MailAccountIdentity? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
     {

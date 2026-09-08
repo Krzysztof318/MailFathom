@@ -23,7 +23,7 @@ public interface IEmailMetadataRepository
 {
     /// <summary>Inserts or updates metadata for one remote occurrence idempotently and returns its stable local identity.</summary>
     /// <param name="session">The explicit persistence session this metadata write participates in.</param>
-    /// <param name="owner">The owner whose account the occurrence belongs to, which the stored row records beside the account.</param>
+    /// <param name="user">The user whose account the occurrence belongs to, which the stored row records beside the account.</param>
     /// <param name="metadata">The remote occurrence metadata to store.</param>
     /// <param name="extractedMetadata">
     /// What was read out of the occurrence's raw MIME, or <see langword="null" /> when nothing was read from it.
@@ -41,7 +41,7 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -49,7 +49,7 @@ public interface IEmailMetadataRepository
 
     /// <summary>Moves one stored email onto the occurrence a relocation put it at, instead of storing a second email there.</summary>
     /// <param name="session">The explicit persistence session this write participates in.</param>
-    /// <param name="owner">The owner whose account the occurrence belongs to.</param>
+    /// <param name="user">The user whose account the occurrence belongs to.</param>
     /// <param name="storedEmailId">The email that was relocated, named by the mutation record.</param>
     /// <param name="occurrenceId">Where the destination folder now holds it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -76,7 +76,7 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
-        MailOwnerId owner,
+        MailUserId user,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken);
@@ -91,10 +91,10 @@ public interface IEmailMetadataRepository
     /// <exception cref="InvalidOperationException">Thrown when no stored email carries <paramref name="storedEmailId" />.</exception>
     /// <remarks>
     /// <para>
-    /// The copy is stored like any other message — the owner searches it, reads it, and sees it in a mailbox listing —
+    /// The copy is stored like any other message — the user searches it, reads it, and sees it in a mailbox listing —
     /// and this is the one thing that has to be different about it: everything that reacts to newly synchronized mail
     /// must not react to a message this deployment itself put there. A rule conditioned on arriving mail would
-    /// otherwise fire on the owner's own outgoing message the moment its sent copy came back.
+    /// otherwise fire on the user's own outgoing message the moment its sent copy came back.
     /// </para>
     /// <para>
     /// It is a join to the outgoing record rather than a flag, because the useful question is which send this copy is

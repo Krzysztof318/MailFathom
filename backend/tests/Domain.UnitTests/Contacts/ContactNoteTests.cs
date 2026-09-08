@@ -11,7 +11,7 @@ public sealed class ContactNoteTests
 {
     /// <summary>A note about a person runs to more than one line, so line breaks and tabs survive it.</summary>
     [Fact]
-    public void Create_NoteSpanningLines_KeepsTheLayoutTheOwnerWrote()
+    public void Create_NoteSpanningLines_KeepsTheLayoutTheUserWrote()
     {
         // Arrange
         const string written = "Met at the conference.\nOwes an answer about the contract.\n\tDeadline in March.";
@@ -59,7 +59,7 @@ public sealed class ContactNoteTests
         Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
     }
 
-    /// <summary>A note is written in whatever script the owner writes in, joiners included.</summary>
+    /// <summary>A note is written in whatever script the user writes in, joiners included.</summary>
     [Fact]
     public void Create_NoteJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten()
     {

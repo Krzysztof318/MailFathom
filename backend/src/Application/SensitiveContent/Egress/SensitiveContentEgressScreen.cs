@@ -42,9 +42,9 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// without constructing a detector, taking a concurrency permit, or touching an instrument.
 /// </para>
 /// <para>
-/// <b>Which findings stop an act is the owner's own posture.</b> The deployment names the categories nothing may carry
-/// out of it and an owner may add to that set for their own mail, so what an act is judged by is composed from both
-/// rather than read off the deployment alone. The owner is an argument here because every caller — the outbox, the
+/// <b>Which findings stop an act is the user's own posture.</b> The deployment names the categories nothing may carry
+/// out of it and a user may add to that set for their own mail, so what an act is judged by is composed from both
+/// rather than read off the deployment alone. The user is an argument here because every caller — the outbox, the
 /// draft book, and the reader that serves one attachment — holds whose mail it is before it holds any bytes.
 /// </para>
 /// </remarks>
@@ -55,7 +55,7 @@ public sealed class SensitiveContentEgressScreen
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the screen of a deployment, whether or not it screens anything.</summary>
-    /// <param name="postures">Answers which of an owner's findings stop their outgoing message.</param>
+    /// <param name="postures">Answers which of a user's findings stop their outgoing message.</param>
     /// <param name="telemetry">Reports what each screened act found and what it cost.</param>
     /// <param name="timeProvider">Measures what the scan added to the act being screened.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -73,19 +73,19 @@ public sealed class SensitiveContentEgressScreen
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Reports whether anything stops one owner's message at this kind of egress.</summary>
-    /// <param name="owner">The owner whose message is about to be queued or filed.</param>
+    /// <summary>Reports whether anything stops one user's message at this kind of egress.</summary>
+    /// <param name="user">The user whose message is about to be queued or filed.</param>
     /// <returns><see langword="true" /> when a finding in their message could stop it.</returns>
     /// <remarks>
     /// Read by a consumer deciding whether work only a screen makes necessary is worth doing — parsing a message back
     /// into the values to screen, for one — never as permission to let the act happen unscreened, which is what calling
     /// the screen already does when it is inactive.
     /// </remarks>
-    public bool IsActiveFor(MailOwnerId owner) => this.postures.ForOwner(owner).ScreensAnything;
+    public bool IsActiveFor(MailUserId user) => this.postures.ForUser(user).ScreensAnything;
 
     /// <summary>Screens every text of one act, and reports the first thing that stops it.</summary>
     /// <param name="egressPoint">Where the texts were about to go.</param>
-    /// <param name="owner">The owner whose message is about to leave, whose posture the findings are judged by.</param>
+    /// <param name="user">The user whose message is about to leave, whose posture the findings are judged by.</param>
     /// <param name="texts">The texts to screen, each a value rather than a document composed around one.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
     /// <returns>What stopped the act, or <see langword="null" /> where nothing did.</returns>
@@ -106,16 +106,16 @@ public sealed class SensitiveContentEgressScreen
     /// </remarks>
     public Task<SensitiveContentEgressRefusal?> ScreenAsync(
         SensitiveContentEgressPoint egressPoint,
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
-        var posture = this.postures.ForOwner(owner);
+        var posture = this.postures.ForUser(user);
 
         return texts.Count > 0 && posture is { ScreensAnything: true, Redactor: { } active }
-            ? this.ScreenEachAsync(active, posture.Screening, egressPoint, owner, texts, cancellationToken)
+            ? this.ScreenEachAsync(active, posture.Screening, egressPoint, user, texts, cancellationToken)
             : Task.FromResult<SensitiveContentEgressRefusal?>(null);
     }
 
@@ -123,11 +123,11 @@ public sealed class SensitiveContentEgressScreen
         SensitiveContentRedactor active,
         SensitiveContentScreeningPolicy policy,
         SensitiveContentEgressPoint egressPoint,
-        MailOwnerId owner,
+        MailUserId user,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
-        using var operation = this.telemetry.BeginGuardedOperation(egressPoint, owner, cancellationToken);
+        using var operation = this.telemetry.BeginGuardedOperation(egressPoint, user, cancellationToken);
 
         try
         {

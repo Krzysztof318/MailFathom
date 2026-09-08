@@ -11,8 +11,8 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,13 +43,13 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// <summary>The alias this class binds, so the account row its jobs point at exists without disturbing another test's folder.</summary>
     private const string FolderAlias = "job-store";
 
-    /// <summary>The mailbox of the second owner the fairness of the claim is judged against.</summary>
-    private const string SecondOwnerAccount = "job-store-second-owner";
+    /// <summary>The mailbox of the second user the fairness of the claim is judged against.</summary>
+    private const string SecondUserAccount = "job-store-second-user";
 
     /// <summary>The one instant the fairness test queues everything at, so no turn it asserts depends on the clock.</summary>
     /// <remarks>
     /// Long past, so every job it writes is claimable the moment it exists. What the instant has to be is the same for
-    /// all of them: the turn an enqueue stamps is one spacing past its owner's latest, floored at this value, so a
+    /// all of them: the turn an enqueue stamps is one spacing past its user's latest, floored at this value, so a
     /// shared floor makes the ladder a function of the order the jobs were queued in rather than of how long the
     /// database took to answer.
     /// </remarks>
@@ -125,7 +125,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var claimedJobs = claims.SelectMany(claim => claim).ToArray();
         Assert.Equal(2, claimedJobs.Length);
         Assert.Equal(2, claimedJobs.Select(job => job.JobId).Distinct().Count());
-        Assert.Equal(2, claimedJobs.Select(job => job.Lease.Owner).Distinct().Count());
+        Assert.Equal(2, claimedJobs.Select(job => job.Lease.User).Distinct().Count());
 
         // Each attempt is the first for its own job, because the claim counts one attempt per job rather than per call.
         Assert.All(claimedJobs, job => Assert.Equal(1, job.AttemptCount));
@@ -190,18 +190,18 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var job = Assert.Single(reclaimed);
         Assert.Equal(jobId, job.JobId);
         Assert.Equal(2, job.AttemptCount);
-        Assert.NotEqual(abandoned[0].Lease.Owner, job.Lease.Owner);
+        Assert.NotEqual(abandoned[0].Lease.User, job.Lease.User);
 
         // Releasing on shutdown is what the displaced attempt is most likely to reach, and it is the more damaging of
-        // the two: a release that ignored the owner would put a job the second attempt is actively running back into
+        // the two: a release that ignored the user would put a job the second attempt is actively running back into
         // Pending, and a third attempt would then run it alongside.
-        Assert.False(await ReleaseAsync(services, jobId, abandoned[0].Lease.Owner, cancellationToken));
+        Assert.False(await ReleaseAsync(services, jobId, abandoned[0].Lease.User, cancellationToken));
         Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
-        Assert.Equal(job.Lease.Owner.Value, await ReadLeaseOwnerAsync(services, jobId, cancellationToken));
+        Assert.Equal(job.Lease.User.Value, await ReadLeaseOwnerAsync(services, jobId, cancellationToken));
 
         // Completing is the same compare-and-set, which is what stops a slow worker finishing late and overwriting the
         // outcome of the attempt that replaced it.
-        Assert.False(await CompleteAsync(services, jobId, abandoned[0].Lease.Owner, cancellationToken));
+        Assert.False(await CompleteAsync(services, jobId, abandoned[0].Lease.User, cancellationToken));
         Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
     }
 
@@ -292,7 +292,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         // Act
         var renewed = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>()
-                .RenewLeaseAsync(jobId, holder.Owner, TimeSpan.FromMinutes(30), token),
+                .RenewLeaseAsync(jobId, holder.User, TimeSpan.FromMinutes(30), token),
             cancellationToken);
         var refused = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>()
@@ -301,7 +301,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
         // Assert
         Assert.NotNull(renewed);
-        Assert.Equal(holder.Owner, renewed.Owner);
+        Assert.Equal(holder.User, renewed.User);
         Assert.True(renewed.ExpiresAt > holder.ExpiresAt);
         Assert.Null(refused);
     }
@@ -329,7 +329,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var completed = await CompleteAsync(
             services,
             JobIdOf(enqueued),
-            Assert.Single(claimed).Lease.Owner,
+            Assert.Single(claimed).Lease.User,
             cancellationToken);
 
         // Assert
@@ -367,7 +367,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken);
 
         // Act
-        var released = await ReleaseAsync(services, jobId, Assert.Single(claimed).Lease.Owner, cancellationToken);
+        var released = await ReleaseAsync(services, jobId, Assert.Single(claimed).Lease.User, cancellationToken);
 
         // Assert
         Assert.True(released);
@@ -404,7 +404,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var deadLettered = await DeadLetterAsync(
             services,
             JobIdOf(enqueued),
-            Assert.Single(claimed).Lease.Owner,
+            Assert.Single(claimed).Lease.User,
             PermanentFailure,
             cancellationToken);
 
@@ -481,7 +481,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var scheduled = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().ScheduleRetryAsync(
                 jobId,
-                Assert.Single(claimed).Lease.Owner,
+                Assert.Single(claimed).Lease.User,
                 TransientFailure,
                 availableAt,
                 token),
@@ -551,29 +551,29 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     }
 
     /// <summary>
-    /// One owner with a backlog and another with a single due job, and a claim bounded to two hands back one of each.
+    /// One user with a backlog and another with a single due job, and a claim bounded to two hands back one of each.
     /// Under the ordering this replaced — the instant a job became available, which is the order the backlog was queued
-    /// in — the same claim would have returned two of the backlog and the second owner would have waited for the whole
+    /// in — the same claim would have returned two of the backlog and the second user would have waited for the whole
     /// of it. Only a real database settles it: the fairness is entirely in what one statement selects and in what an
     /// insert stamped, and a substitute would prove that the code meant to interleave rather than that PostgreSQL does.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The second owner is provisioned here and erased in the finally, because a deployment holding two owner records
+    /// The second user is provisioned here and erased in the finally, because a deployment holding two user records
     /// cannot attribute a configured mail account — so every folder binding this class arranges is committed before the
-    /// second owner exists, and the deployment is left with the one record the classes after this one resolve against.
+    /// second user exists, and the deployment is left with the one record the classes after this one resolve against.
     /// </para>
     /// <para>
     /// Every job here names the same available instant rather than taking the clock, so the turns the enqueue stamps
-    /// are decided by the order the jobs were queued in and by nothing else. Left to the clock, the second owner's job
+    /// are decided by the order the jobs were queued in and by nothing else. Left to the clock, the second user's job
     /// would have to be written within one spacing of the backlog's first — a margin four commits against a shared
     /// container have to fit inside — and the test would report a fair claim as unfair whenever the machine was busy.
     /// A fixed instant is also what makes the expected ordering exact: the backlog holds the instant and the three
-    /// turns after it, the second owner holds the instant, and a claim of two can only be the two rows at it.
+    /// turns after it, the second user holds the instant, and a claim of two can only be the two rows at it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task ClaimAsync_ABacklogOfOneOwnerBesideAnotherOwnersDueJob_HandsBackOneOfEachWithinABoundedClaim()
+    public async Task ClaimAsync_ABacklogOfOneUserBesideAnotherUsersDueJob_HandsBackOneOfEachWithinABoundedClaim()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -586,21 +586,21 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             backlog.Add(await EnqueueAtQueuedInstantAsync(services, uid, cancellationToken));
         }
 
-        var secondOwnerId = Guid.CreateVersion7();
+        var secondUserId = Guid.CreateVersion7();
 
         try
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await SeedSecondOwnerAsync(services, secondOwnerId, cancellationToken));
+                await SeedSecondUserAsync(services, secondUserId, cancellationToken));
 
-            var otherOwnersJob = await services.InScopeAsync(
+            var otherUsersJob = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
-                    SecondOwnerRequest(secondOwnerId),
+                    SecondUserRequest(secondUserId),
                     token),
                 cancellationToken);
 
-            Assert.Equal(JobEnqueueOutcome.Created, otherOwnersJob.Outcome);
+            Assert.Equal(JobEnqueueOutcome.Created, otherUsersJob.Outcome);
 
             // Act
             var claimed = await services.InScopeAsync(
@@ -612,10 +612,10 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             // account identifiers sorts first is not what this proves, and writing it as a sequence would tie the
             // test to their spelling.
             Assert.Equal(2, claimed.Count);
-            Assert.Single(claimed, job => job.AccountId?.Value == SecondOwnerAccount);
+            Assert.Single(claimed, job => job.AccountId?.Value == SecondUserAccount);
 
-            // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether an
-            // owner's work is handed out in the order it was queued.
+            // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether a
+            // user's work is handed out in the order it was queued.
             Assert.Equal(
                 backlog[0],
                 Assert.Single(claimed, job => job.AccountId?.Value == SyntheticMailAccount.AccountId.Value).JobId);
@@ -623,48 +623,48 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         finally
         {
             await services.CommitProducingAsync(
-                (_, session, token) => OwnerAccountErasure.EraseAsync(session, secondOwnerId, token),
+                (_, session, token) => UserAccountErasure.EraseAsync(session, secondUserId, token),
                 CancellationToken.None);
         }
     }
 
-    /// <summary>Writes a second owner and one mailbox of theirs, which is the least a claim can be judged fair over.</summary>
+    /// <summary>Writes a second user and one mailbox of theirs, which is the least a claim can be judged fair over.</summary>
     /// <remarks>
     /// Written straight into the model rather than through folder resolution, because resolution attributes an account
-    /// to the deployment's single owner — which is the very thing a second owner has to be arranged around.
+    /// to the deployment's single user — which is the very thing a second user has to be arranged around.
     /// </remarks>
-    private static Task<PersistenceCommitResult> SeedSecondOwnerAsync(
+    private static Task<PersistenceCommitResult> SeedSecondUserAsync(
         OrchestratedMailFathomServices services,
-        Guid ownerId,
+        Guid userId,
         CancellationToken cancellationToken) => services.CommitAsync(
         async (_, session, token) =>
         {
             var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-            context.OwnerAccounts.Add(new OwnerAccountEntity
+            context.UserAccounts.Add(new UserAccountEntity
             {
-                Id = ownerId,
-                DisplayName = $"owner-{ownerId:N}",
+                Id = userId,
+                DisplayName = $"user-{userId:N}",
                 Document = "{}",
                 Version = 1,
                 CreatedAt = DateTimeOffset.UnixEpoch,
                 UpdatedAt = DateTimeOffset.UnixEpoch,
             });
-            context.MailboxAccounts.Add(new MailboxAccountEntity { Id = SecondOwnerAccount, OwnerId = ownerId });
+            context.MailboxAccounts.Add(new MailboxAccountEntity { Id = SecondUserAccount, UserId = userId });
         },
         cancellationToken);
 
-    /// <summary>Composes the second owner's one execution, against their own account rather than this class's.</summary>
-    private static JobEnqueueRequest SecondOwnerRequest(Guid secondOwnerId)
+    /// <summary>Composes the second user's one execution, against their own account rather than this class's.</summary>
+    private static JobEnqueueRequest SecondUserRequest(Guid secondUserId)
     {
         var account = MailAccountIdentity.Create(
-            MailOwnerId.Create(secondOwnerId),
-            MailAccountId.Create(SecondOwnerAccount));
+            MailUserId.Create(secondUserId),
+            MailAccountId.Create(SecondUserAccount));
 
         return JobEnqueueRequest.CreateAvailableAt(
-            JobIdempotencyKey.Create($"{SecondOwnerAccount}/1"),
+            JobIdempotencyKey.Create($"{SecondUserAccount}/1"),
             ClassifyEmailSpamJobPayload.For(
-                account.Owner,
+                account.User,
                 EmailOccurrenceId.Create(
                     account.Id,
                     new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
@@ -742,7 +742,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var payload = ClassifyEmailSpamJobPayload.For(
-            SyntheticMailAccount.Owner,
+            SyntheticMailAccount.User,
             EmailOccurrenceId.Create(
                 SyntheticMailAccount.AccountId,
                 binding.Id,
@@ -770,26 +770,26 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     private static Task<bool> CompleteAsync(
         OrchestratedMailFathomServices services,
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IJobStore>().CompleteAsync(jobId, owner, token),
+            (scope, token) => scope.GetRequiredService<IJobStore>().CompleteAsync(jobId, user, token),
             cancellationToken);
 
     private static Task<bool> DeadLetterAsync(
         OrchestratedMailFathomServices services,
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         JobFailureRecord failure,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IJobStore>().DeadLetterAsync(jobId, owner, failure, token),
+            (scope, token) => scope.GetRequiredService<IJobStore>().DeadLetterAsync(jobId, user, failure, token),
             cancellationToken);
 
     private static Task<bool> ReleaseAsync(
         OrchestratedMailFathomServices services,
         JobId jobId,
-        JobLeaseOwner owner,
+        JobLeaseOwner user,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IJobStore>().ReleaseAsync(jobId, owner, token),
+            (scope, token) => scope.GetRequiredService<IJobStore>().ReleaseAsync(jobId, user, token),
             cancellationToken);
 
     /// <summary>Takes everything claimable and completes it, so a test acts on a queue holding only its own work.</summary>
@@ -810,7 +810,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
             foreach (var job in claimed)
             {
-                await CompleteAsync(services, job.JobId, job.Lease.Owner, cancellationToken);
+                await CompleteAsync(services, job.JobId, job.Lease.User, cancellationToken);
             }
         }
     }

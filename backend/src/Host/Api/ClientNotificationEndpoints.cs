@@ -25,7 +25,7 @@ namespace MailFathom.Host.Api;
 /// the most expensive thing on a polling client's schedule.
 /// </para>
 /// <para>
-/// <b>No route names an owner.</b> The person is the one the credential authenticated, resolved exactly as the record
+/// <b>No route names a user.</b> The person is the one the credential authenticated, resolved exactly as the record
 /// and preferences routes resolve it, so a reading of somebody else's centre cannot be composed. The one route that
 /// does name a record names it by identifier, and a notification another person holds answers <c>404</c> exactly as one
 /// nobody holds — so nothing here reports whether such a notification exists.
