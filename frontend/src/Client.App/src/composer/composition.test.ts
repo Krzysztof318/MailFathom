@@ -96,7 +96,7 @@ describe('answerTo', () => {
 
         expect(composed.answering).toEqual({ storedEmailId: 'e1', answers: 'everyone' });
         expect(composed.account).toBe('work');
-        expect(composed.words).toBe('');
+        expect(composed.words).toEqual([]);
     });
 });
 
@@ -123,7 +123,7 @@ describe('whatWouldBeMissing', () => {
                 ...nothingWrittenYet('work'),
                 to: ['ada@example.invalid'],
                 subject: 'Invoice',
-                words: 'Here it is.',
+                words: [{ text: 'Here it is.' }],
             }),
         ).toEqual([]);
     });
@@ -140,7 +140,7 @@ describe('whatWouldBeMissing', () => {
     });
 
     it('reads whitespace as nothing written', () => {
-        expect(whatWouldBeMissing({ ...nothingWrittenYet('work'), subject: '   ', words: '\n' })).toContain(
+        expect(whatWouldBeMissing({ ...nothingWrittenYet('work'), subject: '   ', words: [{ text: '\n' }] })).toContain(
             'noSubject',
         );
     });
@@ -152,7 +152,7 @@ describe('anythingWritten', () => {
     });
 
     it('is something once anybody is addressed or anything is written', () => {
-        expect(anythingWritten({ ...nothingWrittenYet('work'), words: 'Hello' })).toBe(true);
+        expect(anythingWritten({ ...nothingWrittenYet('work'), words: [{ text: 'Hello' }] })).toBe(true);
         expect(anythingWritten({ ...nothingWrittenYet('work'), cc: ['ada@example.invalid'] })).toBe(true);
     });
 
@@ -169,6 +169,7 @@ describe('wireComposition', () => {
             account: 'work',
             subject: 'Invoice',
             plainTextBody: '',
+            htmlBody: null,
             to: ['ada@example.invalid'],
             cc: [],
             bcc: [],
@@ -180,13 +181,14 @@ describe('wireComposition', () => {
             ...nothingWrittenYet('work'),
             answering: { storedEmailId: 'e1', answers: 'senderOnly' },
             subject: 'Re: Invoice',
-            words: 'Thank you.',
+            words: [{ text: 'Thank you.' }],
         });
 
         expect(wire).toEqual({
             answeredEmailId: 'e1',
             answers: 'senderOnly',
             plainTextBody: 'Thank you.',
+            htmlBody: 'Thank you.',
             to: [],
             cc: [],
             bcc: [],

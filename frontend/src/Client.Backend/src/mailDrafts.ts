@@ -88,6 +88,15 @@ export interface MailDraft {
  */
 export type MailDraftComposition = {
     readonly plainTextBody: string;
+
+    /**
+     * The HTML alternative the author wrote, or <code>null</code> where they wrote none.
+     *
+     * It is stated beside the plain text rather than instead of it: a message carrying only markup is one a reader
+     * whose client shows the text part reads nothing of, which is why the deployment refuses a body with no plain
+     * text at all.
+     */
+    readonly htmlBody: string | null;
     readonly to: readonly string[];
     readonly cc: readonly string[];
     readonly bcc: readonly string[];
@@ -339,6 +348,7 @@ export function stageMailDraftAttachment(
 function stated(composition: MailDraftComposition): Readonly<Record<string, unknown>> {
     const written = {
         plainTextBody: composition.plainTextBody,
+        htmlBody: composition.htmlBody,
         to: composition.to,
         cc: composition.cc,
         bcc: composition.bcc,

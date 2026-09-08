@@ -10,6 +10,10 @@ import { looksLikeAnAddress, mostRecipientsInOneHeader } from './composition';
 // One header of a message being written, as the design project draws it: the header's name, a chip per address with a
 // way to take each one back off, and a field to write the next one in.
 //
+// **The name stands in the composer's own label column.** The design draws the whole header as one grid — a fixed
+// column of names and a column of what is written under each — so this row and the subject row below it state the same
+// width rather than each measuring its own name, and the chips and the subject share a left edge.
+//
 // **Completion is the platform's own.** A `datalist` gives the field a list to complete from with the keyboard path,
 // the announcement, and the filtering already written — and what it costs is nothing, which is the whole argument
 // against a listbox this client would have to build and test. What it completes from is handed in: today that is the
@@ -79,7 +83,7 @@ export function RecipientField({
 
     return (
         <div className="flex flex-wrap items-center gap-2.5 border-b border-line-soft px-3.75 py-2.25">
-            <label htmlFor={fieldId} className="w-11 shrink-0 text-sm text-muted">
+            <label htmlFor={fieldId} className="w-22 shrink-0 text-sm text-muted">
                 {label}
             </label>
 

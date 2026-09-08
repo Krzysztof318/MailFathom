@@ -180,6 +180,18 @@ function write(label: string, text: string): void {
     fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
 }
 
+/** The words of the message, which are an editable region rather than a field and are typed into as one. */
+function writeWords(text: string): void {
+    const words = screen.getByRole('textbox', { name: 'Message' });
+
+    words.textContent = text;
+    fireEvent.input(words);
+}
+
+function wordsWritten(): string {
+    return screen.getByRole('textbox', { name: 'Message' }).textContent;
+}
+
 function address(text: string): void {
     fireEvent.change(screen.getByLabelText('To'), { target: { value: text } });
     fireEvent.keyDown(screen.getByLabelText('To'), { key: 'Enter' });
@@ -198,7 +210,7 @@ describe('Composer, a message of its own', () => {
         drawComposer();
 
         expect(composerFrame()).toBeDefined();
-        expect(screen.getByLabelText('Message')).toHaveProperty('value', '');
+        expect(wordsWritten()).toBe('');
     });
 
     it('offers no account to send from where there is one, that being the only answer', () => {
@@ -216,10 +228,10 @@ describe('Composer, a message of its own', () => {
     it('keeps what is being written on this device, so a reload returns to it', async () => {
         drawComposer();
 
-        write('Message', 'Here it is.');
+        writeWords('Here it is.');
 
         await waitFor(() => {
-            expect(rememberedComposition()?.words).toBe('Here it is.');
+            expect(rememberedComposition()?.words).toEqual([{ text: 'Here it is.' }]);
         });
     });
 
@@ -231,13 +243,47 @@ describe('Composer, a message of its own', () => {
             to: ['ada@example.invalid'],
             cc: [],
             bcc: [],
-            words: 'Half a sentence',
+            words: [{ text: 'Half a sentence' }],
         });
 
         drawComposer();
 
-        expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Half a sentence');
+        expect(wordsWritten()).toBe('Half a sentence');
         expect(screen.getByRole('button', { name: 'Remove ada@example.invalid from To' })).toBeDefined();
+    });
+
+    it('draws every header on one grid, each field named in the column beside what is written in it', () => {
+        drawComposer({ kind: 'new' }, {}, [work, home]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Write a copy or a blind copy as well' }));
+
+        // Every row is a name bound to the one thing written under it, which is what makes the header a grid rather
+        // than four rows each starting somewhere of its own. Where each column falls is decided by looking at the
+        // screen against the design; what a test can hold is that no row states its name any other way.
+        for (const header of ['From', 'To', 'Cc', 'Bcc', 'Subject']) {
+            expect(screen.getByLabelText(header)).toBeDefined();
+        }
+    });
+
+    it('sends both parts of one message: the markup its author gave it and the reading every client has', async () => {
+        const { asked } = drawComposer();
+
+        address('ada@example.invalid');
+        write('Subject', 'The quarterly figures');
+        writeWords('They are attached.');
+        confirmSend();
+
+        await waitFor(() => {
+            expect(asked.some((request) => request.path.endsWith('/send'))).toBe(true);
+        });
+
+        const written = JSON.parse(asked.find((request) => request.method === 'POST')?.body ?? '{}') as Record<
+            string,
+            unknown
+        >;
+
+        expect(written['plainTextBody']).toBe('They are attached.');
+        expect(written['htmlBody']).toBe('They are attached.');
     });
 
     it('offers the copy headers only once they are asked for, the design drawing one row', () => {
@@ -255,7 +301,7 @@ describe('Composer, a message of its own', () => {
         const { asked } = drawComposer();
 
         address('ada@example.invalid');
-        fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true });
 
         expect(sendQuestion().textContent).toContain('Send this message?');
         expect(asked).toHaveLength(0);
@@ -423,7 +469,7 @@ describe('Composer, a message of its own', () => {
 
         address('ada@example.invalid');
         write('Subject', 'The quarterly figures');
-        write('Message', 'They are attached.');
+        writeWords('They are attached.');
         confirmSend();
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
@@ -431,7 +477,7 @@ describe('Composer, a message of its own', () => {
         // The message has gone as far as this screen can send it, so neither way of asking may start a second one.
         expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
 
-        fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true });
 
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
@@ -441,7 +487,7 @@ describe('Composer, a message of its own', () => {
 
         address('ada@example.invalid');
         write('Subject', 'The quarterly figures');
-        write('Message', 'They are attached.');
+        writeWords('They are attached.');
         confirmSend();
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
@@ -456,7 +502,7 @@ describe('Composer, a message of its own', () => {
     it('stays open and says so where the deployment would not give the draft up', async () => {
         const { closed } = drawComposer({ kind: 'new' }, { discard: { status: 503, body: '' } });
 
-        write('Message', 'Something worth keeping.');
+        writeWords('Something worth keeping.');
         fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
         expect(await screen.findByText('Draft filed in your own drafts.')).toBeDefined();
@@ -475,7 +521,7 @@ describe('Composer, a message of its own', () => {
     it('files one draft for two saves asked for before the first has answered', async () => {
         const { asked } = drawComposer();
 
-        write('Message', 'Something worth keeping.');
+        writeWords('Something worth keeping.');
 
         await act(() => {
             fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
@@ -492,7 +538,7 @@ describe('Composer, a message of its own', () => {
     it('refuses the shortcut wherever it refuses the control, so neither asks what the other would not', () => {
         drawComposer({ kind: 'new' }, {}, [work], false);
 
-        fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
+        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true });
 
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
@@ -729,7 +775,7 @@ describe('Composer, a message of its own', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
         expect(await screen.findByText('Draft filed in your own drafts.')).toBeDefined();
 
-        write('Message', 'Never mind.');
+        writeWords('Never mind.');
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
 
@@ -743,7 +789,7 @@ describe('Composer, a message of its own', () => {
     it('stays open where the draft it was asked to keep could not be filed', async () => {
         const { closed } = drawComposer({ kind: 'new' }, { save: { status: 503, body: '' } });
 
-        write('Message', 'Keep this.');
+        writeWords('Keep this.');
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
         fireEvent.click(
             within(screen.getByRole('dialog', { name: 'Discard this message?' })).getByRole('button', {
@@ -857,11 +903,11 @@ describe('Composer, an answer', () => {
             to: ['billing@example.invalid'],
             cc: [],
             bcc: [],
-            words: 'Half an answer',
+            words: [{ text: 'Half an answer' }],
         });
 
         drawComposer(replying);
 
-        expect(screen.getByLabelText('Message')).toHaveProperty('value', 'Half an answer');
+        expect(wordsWritten()).toBe('Half an answer');
     });
 });

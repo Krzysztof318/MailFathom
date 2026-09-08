@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailDraftAnswer, MailDraftComposition, MailMessage, MailParticipant } from '@mailfathom/client-backend';
+import { htmlOf, plainTextOf, type WrittenNode } from './writtenText';
 
 // What somebody is writing, as values rather than as anything on the screen. The composer draws it, the confirmation
 // reads it, and everything below is the arithmetic between: what an answer opens addressed to, what a subject reads as,
@@ -31,8 +32,15 @@ export interface Composition {
     readonly cc: readonly string[];
     readonly bcc: readonly string[];
 
-    /** The words themselves, which is the one thing here nothing but the author writes. */
-    readonly words: string;
+    /**
+     * The words themselves, which is the one thing here nothing but the author writes.
+     *
+     * They are a tree rather than a string because the composer writes rich text, and one tree rather than a pair
+     * because the two parts a message goes out with are both read from it: a plain-text alternative kept beside the
+     * markup would be a second copy of the same message, and a pair that can disagree is two readers being told
+     * different things.
+     */
+    readonly words: readonly WrittenNode[];
 }
 
 /**
@@ -48,7 +56,7 @@ export const mostRecipientsInOneHeader = 256;
 
 /** A message of its own, addressed to nobody and about nothing yet. */
 export function nothingWrittenYet(account: string): Composition {
-    return { answering: null, account, subject: '', to: [], cc: [], bcc: [], words: '' };
+    return { answering: null, account, subject: '', to: [], cc: [], bcc: [], words: [] };
 }
 
 /**
@@ -72,7 +80,7 @@ export function answerTo(message: MailMessage, answers: MailDraftAnswer): Compos
         to: answers === 'forward' ? [] : to,
         cc: answers === 'everyone' ? everybody.filter((address) => !to.includes(address)) : [],
         bcc: [],
-        words: '',
+        words: [],
     };
 }
 
@@ -103,7 +111,7 @@ export function whatWouldBeMissing(composition: Composition): readonly SendCauti
         missing.push('noSubject');
     }
 
-    if (composition.words.trim() === '') {
+    if (plainTextOf(composition.words).trim() === '') {
         missing.push('noWords');
     }
 
@@ -113,7 +121,7 @@ export function whatWouldBeMissing(composition: Composition): readonly SendCauti
 /** Whether anything has been written that closing the composer would throw away. */
 export function anythingWritten(composition: Composition): boolean {
     return (
-        composition.words.trim() !== '' ||
+        plainTextOf(composition.words).trim() !== '' ||
         composition.to.length > 0 ||
         composition.cc.length > 0 ||
         composition.bcc.length > 0
@@ -127,8 +135,14 @@ export function anythingWritten(composition: Composition): boolean {
  * derive — which is what keeps an edited reply a reply rather than a new message with a similar subject.
  */
 export function wireComposition(composition: Composition): MailDraftComposition {
+    const plainText = plainTextOf(composition.words);
+
     const written = {
-        plainTextBody: composition.words,
+        plainTextBody: plainText,
+
+        // Both parts, or neither: a message with nothing written in it states no HTML alternative to nothing, and one
+        // with words in it carries the markup its author gave them beside the reading every mail client has.
+        htmlBody: plainText === '' ? null : htmlOf(composition.words),
         to: composition.to,
         cc: composition.cc,
         bcc: composition.bcc,

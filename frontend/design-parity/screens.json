@@ -251,6 +251,27 @@
         }
       ],
       "compositions": ["tablet", "desktop"]
+    },
+    {
+      "id": "composer",
+      "route": "/#/mail",
+      "signIn": true,
+      "steps": [
+        {
+          "click": {
+            "role": "button",
+            "name": "Nowa wiadomość",
+            "exact": true
+          }
+        },
+        {
+          "expect": {
+            "role": "textbox",
+            "name": "Treść"
+          }
+        }
+      ],
+      "compositions": ["telefon", "desktop"]
     }
   ]
 }

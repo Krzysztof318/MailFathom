@@ -13,7 +13,7 @@ const written: Composition = {
     subject: 'Invoice',
     to: ['ada@example.invalid'],
     cc: ['bo@example.invalid'],
-    words: 'Here it is.',
+    words: [{ text: 'Here it is.' }],
 };
 
 afterEach(() => {
