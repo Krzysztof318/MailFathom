@@ -1200,6 +1200,19 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
+One class of changed file never reaches any of that. `design/files/` is the design
+project's screen sources and its generated runtime copied byte for byte, and
+`scripts/design-mirror.sh record` checks each of them against the size the project
+states — so nobody here writes a line of them, an edit to one is caught by that
+check rather than by a reader's judgement, and a single artboard is more added
+lines than a large change. They are dropped where the collection is frozen, once,
+ahead of the anchors, the head content, the obligations index and the groups, and
+the count joins the truncation notes so a reader of the review can tell a file
+nobody looked at from a file nobody was meant to. It is that one directory rather
+than the tree above it: `design/manifest.json`, `design/state-inventory.md`,
+`design/parity.json` and `design/README.md` are written in this repository and are
+read like anything else.
+
 The collection then splits the change into groups and the run starts one reader per
 group, concurrently — the fan-out described under **How a review is spread over
 readers** below.

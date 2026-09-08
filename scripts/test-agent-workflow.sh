@@ -2532,10 +2532,20 @@ case "$endpoint" in
     # contract about it is a pull request wide enough to cross it.
     response="$(
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
+        --argjson mirrored "${FAKE_MIRRORED_DESIGN_FILE_COUNT:-0}" \
         '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
-         | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end'
+         | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end
+         | . + [range($mirrored)
+                | {filename: "design/files/Artboard\(.).dc.html", previous_filename: null,
+                   status: "modified", additions: 6000, deletions: 5000,
+                   patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | . + (if $mirrored > 0 then
+                  [{filename: "design/state-inventory.md", previous_filename: null,
+                    status: "modified", additions: 4, deletions: 2,
+                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+                else [] end)'
     )"
     ;;
   */pulls/*/reviews*)
@@ -2644,6 +2654,9 @@ run_fathom_review_collect() {
   # what moved since the previous one. A push is the ordinary case, and the narrowing contracts are
   # the ones that name the other.
   local explicit="${5:-false}"
+  # How many mirrored design sources the pull request carries beside the changed files above. The
+  # ordinary case is none, so every other contract here measures a collection the drop never touched.
+  local mirrored_design_file_count="${6:-0}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2668,6 +2681,7 @@ run_fathom_review_collect() {
     export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
     export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
+    export FAKE_MIRRORED_DESIGN_FILE_COUNT="$mirrored_design_file_count"
     export_api_retry_environment
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
     export EXPLICIT="$explicit"
@@ -2718,6 +2732,32 @@ fathom_review_stops_reading_head_content_when_its_window_is_gone() {
     "$collect_review_directory/truncation.txt"
   assert_contains '0 of them have content here' "$collect_review_directory/truncation.txt"
   [[ ! -e "$collect_review_directory/head/backend/src/Sample.cs" ]]
+}
+
+# The design mirror is the design project's own screen sources copied byte for byte, and a review has
+# nothing to say about them: nobody here writes a line of them, and one artboard is more added lines
+# than a large change. Left in, they would take groups of the reader matrix and spend the coverage
+# ledger on files it cannot mean anything about — so they are dropped where the collection is frozen,
+# once, ahead of the anchors, the head content and the groups that all read it. The note is what keeps
+# a reader of the review able to tell a file nobody looked at from one nobody was meant to.
+#
+# The drop is one directory rather than the tree above it, which the same collection proves: the state
+# inventory beside the mirror is written in this repository, as the manifest, the pairing and the page
+# are, and a prefix match on `design/` would take all four with it and leave a refresh nobody read.
+fathom_review_never_reads_the_mirrored_design() {
+  local output_file="$test_directory/fathom-review-collect-design-output"
+
+  run_fathom_review_collect "$output_file" 120 120 1 false 2
+
+  assert_json '["backend/src/Sample.cs","design/state-inventory.md"]' \
+    '[.[].filename] | sort' "$collect_review_directory/files.json"
+  assert_json '["backend/src/Sample.cs","design/state-inventory.md"]' \
+    '[.[].filename] | sort' "$collect_review_directory/lines.json"
+  assert_contains '2 mirrored design sources under design/files/ are not reviewed' \
+    "$collect_review_directory/truncation.txt"
+  # The drop is not the file ceiling, and saying so twice would report a truncation that never
+  # happened on every pull request that refreshes the mirror.
+  assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
 }
 
 # The window is a ceiling like every other one in the step, so an ordinary collection never reaches
@@ -9623,6 +9663,7 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
+run_test fathom_review_never_reads_the_mirrored_design
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone
