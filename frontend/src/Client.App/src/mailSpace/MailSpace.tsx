@@ -169,13 +169,18 @@ export function MailSpace({
 
     // Focus is placed on the shape changing what it shows, and not on the width changing the shape: both are recorded
     // and only the first moves anything. A ref rather than state, because what it holds is what was last drawn.
-    const shown = useRef({ twoPanes, readingInFront, listGivenUp });
+    //
+    // Both breakpoints are recorded rather than only the one that swaps the panes, because the list also comes and
+    // goes on the desktop boundary while the panels are hidden — a window dragged from a desktop width to a tablet
+    // one would otherwise take focus off whatever the reader was on, on the strength of a resize they asked nothing
+    // of this screen by.
+    const shown = useRef({ twoPanes, desktop, readingInFront, listGivenUp });
 
     useEffect(() => {
         const before = shown.current;
-        shown.current = { twoPanes, readingInFront, listGivenUp };
+        shown.current = { twoPanes, desktop, readingInFront, listGivenUp };
 
-        if (before.twoPanes !== twoPanes) {
+        if (before.twoPanes !== twoPanes || before.desktop !== desktop) {
             return;
         }
 
@@ -188,7 +193,7 @@ export function MailSpace({
             // keyboard and screen-reader use stops silently.
             (listGivenUp ? readingColumn : listColumn).current?.focus();
         }
-    }, [twoPanes, readingInFront, listGivenUp]);
+    }, [twoPanes, desktop, readingInFront, listGivenUp]);
 
     // The drawer is a way to point at a mailbox, so pointing at one closes it: a reader who chose a folder wants the
     // folder's mail, which is behind the drawer they chose it in. The dialog is the platform's own, so closing it puts

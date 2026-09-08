@@ -589,6 +589,21 @@ describe('MailSpace, in the four compositions', () => {
         expect(screen.getByText(handedTheList)).toBeDefined();
     });
 
+    // The list comes and goes on the desktop boundary as well as under the control, and only one of those is a view
+    // change somebody asked for. A window dragged narrower is the reader's own act on the window rather than on this
+    // screen, so it leaves focus where they put it — which is the rule the file states for every width.
+    it('moves focus nowhere when a window dragged narrower is what takes the list away', () => {
+        renderSpace(desktop, { selection: 'stored-1', panelsHidden: true });
+
+        const elsewhere = screen.getByRole('button', { name: "Show the thread's panels" });
+        elsewhere.focus();
+
+        theWindowBecomes(tablet);
+
+        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(document.activeElement).toBe(elsewhere);
+    });
+
     it('takes the list away from the toolbar control itself, and puts focus where the list stood', () => {
         renderSpace(tablet, { selection: 'stored-1' });
 
