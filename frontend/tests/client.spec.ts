@@ -1452,6 +1452,50 @@ test('puts a reader back where they were reading, across a reload', async ({ pag
     expect(await after.getByRole('option').first().textContent()).toBe(before);
 });
 
+/** The notification centre opened, which is the panel the client's own motion is stated on. */
+async function openNotifications(page: Page): Promise<Locator> {
+    await page.getByRole('button', { name: 'Notifications' }).click();
+
+    const panel = page.getByRole('dialog', { name: 'Notifications' });
+    await expect(panel).toBeVisible();
+
+    return panel;
+}
+
+/**
+ * Every duration the panel's own transition runs at, deduplicated.
+ *
+ * A transition over four properties reports four durations, so what is read is the set of them: a rule that removed
+ * the motion from three of them and left the fourth would be a screen that still moves.
+ */
+async function motionDurations(panel: Locator): Promise<string[]> {
+    // Written as an expression for the reason the two document-level ones above are: this file compiles without the
+    // DOM library, so a typed callback naming a browser global would not build.
+    const stated = await panel.evaluate('element => getComputedStyle(element).transitionDuration');
+
+    return typeof stated === 'string' ? [...new Set(stated.split(', '))] : [];
+}
+
+// Only a browser resolves a media query against a real preference and computes a duration from a stylesheet, so this
+// is one of the claims `pnpm test` structurally cannot make: jsdom computes no styles and would pass for a client
+// carrying no such rule at all.
+test('moves the notification centre onto the screen over a duration of its own', async ({ page }) => {
+    await openSignedIn(page);
+
+    expect(await motionDurations(await openNotifications(page))).not.toEqual(['0s']);
+});
+
+test('takes that motion away for a reader who asked for less of it, rather than shortening it', async ({ browser }) => {
+    const context = await browser.newContext({ reducedMotion: 'reduce' });
+    const page = await context.newPage();
+
+    await openSignedIn(page);
+
+    // Removed rather than shortened, which is the accessibility obligation: the panel still arrives where it belongs,
+    // and what is gone is the travel. A duration merely made small would read as motion to somebody who asked for none.
+    expect(await motionDurations(await openNotifications(page))).toEqual(['0s']);
+});
+
 test('carries no example mail and no fixture deployment in what it publishes', async () => {
     // `pnpm dev:fixtures` serves this same client out of the corpus above, so the one thing that has to be proved
     // about that convenience is that it is a convenience: a production build folds away the condition

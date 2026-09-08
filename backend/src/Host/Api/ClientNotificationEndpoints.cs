@@ -232,21 +232,28 @@ internal sealed record ClientNotificationPageResponse(
 /// <param name="Kind">What part of MailFathom it is about, which is what a row is drawn and grouped by.</param>
 /// <param name="Title">The headline the row is drawn with.</param>
 /// <param name="Body">The second line the row is drawn with.</param>
+/// <param name="Statement">What the notification says as a condition and its numbers, or <see langword="null" /> where the record names no condition.</param>
 /// <param name="Source">What the source line names beyond the kind, or <see langword="null" /> where the kind is the whole of it.</param>
 /// <param name="Target">Where opening it leads.</param>
 /// <param name="OccurredAt">When the thing it describes happened.</param>
 /// <param name="Read">Whether the person has read it.</param>
 /// <remarks>
-/// It carries what a row draws and stops there. The title and the second line were derived when the notification was
-/// produced, so nothing here re-reads mail to draw a list — and no mail body, no address, and no attachment reaches
-/// this answer at any size. The condition the notification was raised for is deliberately absent as well: it is the
-/// deduplication rule's own name for a thing rather than anything a screen has to render.
+/// It carries what a row draws and stops there. Nothing here re-reads mail to draw a list, and no mail body, no
+/// address, and no attachment reaches this answer at any size.
+/// <para>
+/// The statement is what a client draws the row from, because a sentence has a language and the service takes no view
+/// of which one the reader has. The title and the second line beside it are that same statement written out in
+/// English, which is what a reader with no client gets and what a record written before conditions were kept has
+/// instead of one. The deduplication key is still absent: it is the rule's own name for a condition rather than
+/// anything a screen renders.
+/// </para>
 /// </remarks>
 internal sealed record ClientNotificationResponse(
     Guid Id,
     string Kind,
     string Title,
     string Body,
+    ClientNotificationStatementResponse? Statement,
     string? Source,
     ClientNotificationTargetResponse Target,
     DateTimeOffset OccurredAt,
@@ -265,11 +272,34 @@ internal sealed record ClientNotificationResponse(
             notification.Kind.ToString(),
             notification.Title,
             notification.Body,
+            ClientNotificationStatementResponse.For(notification.Statement),
             notification.Source,
             ClientNotificationTargetResponse.For(notification.Target),
             notification.OccurredAt,
             notification.IsRead);
     }
+}
+
+/// <summary>What a notification says, as the condition it was raised for and the numbers it is stated with.</summary>
+/// <param name="Cause">The condition, which a client has a sentence of its own for.</param>
+/// <param name="Counted">How many the cause counts, or <see langword="null" /> where it counts nothing.</param>
+/// <param name="OutOf">How many the count is out of, or <see langword="null" /> where the cause counts against nothing.</param>
+/// <remarks>
+/// What each number means is the cause's to say, which is why they travel together and are never read apart from it.
+/// Numbers are the widest thing a cause is stated with, so nothing a message carried can reach a client this way.
+/// </remarks>
+internal sealed record ClientNotificationStatementResponse(string Cause, int? Counted, int? OutOf)
+{
+    /// <summary>Describes one statement on the wire.</summary>
+    /// <param name="statement">The statement, or <see langword="null" /> where the record names no condition.</param>
+    /// <returns>The response body, or <see langword="null" /> where there was no statement to describe.</returns>
+    internal static ClientNotificationStatementResponse? For(NotificationStatement? statement) =>
+        statement is null
+            ? null
+            : new ClientNotificationStatementResponse(
+                statement.Cause.ToString(),
+                statement.Counted,
+                statement.OutOf);
 }
 
 /// <summary>Where opening a notification leads.</summary>

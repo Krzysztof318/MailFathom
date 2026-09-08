@@ -21,6 +21,7 @@ import {
 } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
@@ -640,7 +641,17 @@ export function MessageList({
     }
 
     if (rowCount === 0 && wanted !== null) {
-        return <Note announced>{translate('list.reading')}</Note>;
+        return (
+            <>
+                {/* Said out of sight rather than not said: the shapes below are what a reader looking at the column
+                    sees, and this is the same statement for somebody who is not. */}
+                <p className="sr-only" role="status">
+                    {translate('list.reading')}
+                </p>
+
+                <ListWaiting />
+            </>
+        );
     }
 
     return (
@@ -816,6 +827,39 @@ function ArrivingRow({ position }: { readonly position: number }) {
         >
             {translate('list.rowArriving')}
         </li>
+    );
+}
+
+// How long each waiting row's two lines are, as the design project's own raggedness: the pair a row draws is the
+// shorter line above the longer one, so a column of them reads as a folder rather than as a striped block.
+const waitingRowLengths: readonly number[] = [74, 58, 68, 50, 71, 61, 66, 54];
+
+// The folder's rows before the folder has answered, in the shape the rows themselves take: the same height token, the
+// same three lines, the same avatar. Drawn from the row's own measurements rather than from a placeholder shape of its
+// own, because what a skeleton is for is that nothing moves when the answer lands.
+function ListWaiting() {
+    return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {waitingRowLengths.map((length) => (
+                <div
+                    key={length}
+                    className="h-message-row-narrow shrink-0 border-b border-b-sunken workspace:h-message-row"
+                >
+                    <div className="flex h-full flex-col justify-center gap-0.75 border-s-4 border-s-transparent ps-2.5 pe-3.5">
+                        <div className="flex items-center gap-2">
+                            <Skeleton className="size-8.5 shrink-0 rounded-full workspace:size-5.5" />
+                            <Skeleton className="h-2.25" fills={Math.max(28, length - 26)} />
+                        </div>
+
+                        <Skeleton className="h-2.25" fills={length} />
+
+                        {/* The line every row reserves whether it says anything or not, kept empty here for the same
+                            reason it is reserved there: the row is this tall either way. */}
+                        <div aria-hidden="true" className="h-4" />
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }
 

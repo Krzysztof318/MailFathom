@@ -112,6 +112,7 @@ public sealed class ClientSignalPayloadTests
             NotificationKind.Mail,
             title: "Mail arrived",
             body: "Four messages arrived in work.",
+            NotificationStatement.MailArrived(4),
             source: "work",
             NotificationTarget.Nothing,
             NotificationDeduplicationKey.Create($"work:{Subject}:{Address}:{BodyFragment}:{AttachmentName}"),

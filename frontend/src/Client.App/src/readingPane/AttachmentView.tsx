@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { readMailAttachment, type ClientSession } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import { SurfaceControl } from '../controls/SurfaceControl';
+import { SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import {
@@ -56,6 +57,26 @@ const notShownMessages: Readonly<Record<NotShown, MessageKey>> = {
     kindNotShown: 'attachment.notShownKind',
     largerThanShown: 'attachment.notShownSize',
 };
+
+// What an opened file stands as while its octets are on their way, which is the design project's own shape for a
+// document: a label, a title, and three paragraphs under them. Longer than a message's because a file is what somebody
+// opened this surface to read, and a block ending after four lines would say the file was nearly empty.
+const waitingFileLines: readonly SkeletonLine[] = [
+    { fills: 34, height: 'h-2.5' },
+    { fills: 72, height: 'h-4.25' },
+    { fills: 0, height: 'h-2' },
+    { fills: 97, height: 'h-2.75' },
+    { fills: 93, height: 'h-2.75' },
+    { fills: 99, height: 'h-2.75' },
+    { fills: 58, height: 'h-2.75' },
+    { fills: 0, height: 'h-2' },
+    { fills: 96, height: 'h-2.75' },
+    { fills: 90, height: 'h-2.75' },
+    { fills: 44, height: 'h-2.75' },
+    { fills: 0, height: 'h-2' },
+    { fills: 99, height: 'h-2.75' },
+    { fills: 66, height: 'h-2.75' },
+];
 
 /**
  * What is being read, held as state rather than derived.
@@ -203,7 +224,22 @@ function Inside({
     }
 
     if (answer === null) {
-        return <Said message="attachment.reading" name={named} />;
+        return (
+            <>
+                {/* Said out of sight rather than not said: the page below is what a reader looking at the surface
+                    sees, and this is the same statement for somebody who is not. */}
+                <p className="sr-only" role="status">
+                    {translate('attachment.reading', { name: named })}
+                </p>
+
+                {/* Drawn where the file itself is drawn and at the same measure, so opening one does not move the
+                    surface under whoever opened it. */}
+                <SkeletonLines
+                    lines={waitingFileLines}
+                    className="w-full max-w-reading gap-3.75 rounded-md bg-panel p-4"
+                />
+            </>
+        );
     }
 
     if (answer.outcome === 'refused') {

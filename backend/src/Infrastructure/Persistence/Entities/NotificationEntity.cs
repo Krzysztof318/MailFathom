@@ -30,6 +30,20 @@ internal sealed class NotificationEntity
     /// <summary>Gets or sets the second line the row is drawn with, derived when the notification was produced.</summary>
     public required string Body { get; set; }
 
+    /// <summary>Gets or sets the condition the row was raised for, and <see langword="null" /> where it was written before one was kept.</summary>
+    /// <remarks>
+    /// It is what lets a client draw the row in its own language, the two lines above being that same condition
+    /// written out in English. Nullable because the column was added to a table that already held rows, and a
+    /// deployment is upgraded over its own data rather than onto an empty one.
+    /// </remarks>
+    public NotificationCause? Cause { get; set; }
+
+    /// <summary>Gets or sets how many the cause counts, and <see langword="null" /> where it counts nothing.</summary>
+    public int? Counted { get; set; }
+
+    /// <summary>Gets or sets how many the count is out of, and <see langword="null" /> where the cause counts against nothing.</summary>
+    public int? OutOf { get; set; }
+
     /// <summary>Gets or sets what the source line names beyond the kind, and <see langword="null" /> where the kind is the whole of it.</summary>
     public string? Source { get; set; }
 

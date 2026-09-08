@@ -18,6 +18,7 @@ import {
 import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import { SurfaceControl } from '../controls/SurfaceControl';
+import { SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
@@ -59,6 +60,23 @@ const truncationNotes: Readonly<Record<MailBodyTruncation, MessageKey | null>> =
     SensitiveContentScanCeiling: 'fullHtml.truncated',
     InlineImageOctetLimit: 'fullHtml.picturesTruncated',
 };
+
+// What the sender's own markup stands as while it is being read, which is the design project's own shape for this
+// surface rather than the message column's: a heading and its line, a paragraph, the block a picture occupies, and
+// the two lines after it. A document is what a reader opened this surface for, so the wait is drawn as one.
+const waitingMarkupLines: readonly SkeletonLine[] = [
+    { fills: 46, height: 'h-3.75' },
+    { fills: 28, height: 'h-2.5' },
+    { fills: 0, height: 'h-1.5' },
+    { fills: 98, height: 'h-2.75' },
+    { fills: 94, height: 'h-2.75' },
+    { fills: 99, height: 'h-2.75' },
+    { fills: 62, height: 'h-2.75' },
+    { fills: 0, height: 'h-1.5' },
+    { fills: 100, height: 'h-22.5' },
+    { fills: 88, height: 'h-2.75' },
+    { fills: 51, height: 'h-2.75' },
+];
 
 /** What is being read: which message, under which ask, and which attempt at it. A change to any of the three reads. */
 interface Read {
@@ -292,12 +310,11 @@ function Markup({
         );
     }
 
+    // The shape the markup will take, drawn where it will be. It is said in words by the head above rather than here:
+    // the head already carries that sentence from the moment the surface opens, and this surface takes focus into it,
+    // so a second copy out of sight would have a reader told the same thing twice.
     if (drawn?.outcome !== 'read') {
-        return (
-            <p className="px-4 py-3 text-sm text-muted" role="status">
-                {translate('fullHtml.reading')}
-            </p>
-        );
+        return <SkeletonLines lines={waitingMarkupLines} className="gap-3.5 px-7.5 py-6.5" />;
     }
 
     const markup = drawn.value.selfContainedHtml;

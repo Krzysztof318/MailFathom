@@ -42,6 +42,7 @@ function recording(response: Answer): { transport: MailFathomTransport; requests
 const arrived = {
     id: 'n-1',
     kind: 'Mail',
+    statement: { cause: 'MailArrived', counted: 2, outOf: null },
     title: 'Ada Lovelace wrote',
     body: 'About the engine',
     source: 'Inbox',
@@ -91,6 +92,7 @@ describe('readNotifications', () => {
                     {
                         id: 'n-1',
                         kind: 'Mail',
+                        statement: { cause: 'MailArrived', counted: 2, outOf: null },
                         title: 'Ada Lovelace wrote',
                         body: 'About the engine',
                         source: 'Inbox',
@@ -111,6 +113,43 @@ describe('readNotifications', () => {
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: { nextCursor: null, notifications: [expect.objectContaining({ source: null })] },
+        });
+    });
+
+    it('reads an unfinished run as the condition it was and both of the numbers it is counted with', async () => {
+        const statement = { cause: 'SynchronizationIncomplete', counted: 2, outOf: 5 };
+        const answer = await readNotifications(
+            session,
+            answering({ status: 200, body: page([{ ...arrived, statement }]) }),
+            25,
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: { nextCursor: null, notifications: [expect.objectContaining({ statement })] },
+        });
+    });
+
+    // A deployment ahead of this client is the ordinary case rather than a defect, and so is one behind it: neither
+    // is a row worth losing, so the condition is what falls away and the service's own two lines are what is left.
+    it.each([
+        ['a condition this client does not name', { cause: 'SomethingElseHappened', counted: 1, outOf: null }],
+        ['a count no producer could have written', { cause: 'MailArrived', counted: -1, outOf: null }],
+        ['a count that is not a whole number', { cause: 'MailArrived', counted: 1.5, outOf: null }],
+        ['no condition at all', undefined],
+    ])('reads a notification stating %s as one with no statement, keeping the row', async (_named, statement) => {
+        const answer = await readNotifications(
+            session,
+            answering({ status: 200, body: page([{ ...arrived, statement }]) }),
+            25,
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: {
+                nextCursor: null,
+                notifications: [expect.objectContaining({ statement: null, title: 'Ada Lovelace wrote' })],
+            },
         });
     });
 

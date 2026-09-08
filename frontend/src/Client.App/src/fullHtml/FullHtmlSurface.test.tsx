@@ -150,6 +150,17 @@ describe('FullHtmlSurface', () => {
         });
     });
 
+    // Hidden from the accessibility tree, because it stands for markup nobody can read yet and the surface already
+    // says in words that it is reading. That leaves the class the token layer draws it with as what holds it here.
+    it('reserves the shape the markup will take, and gives that space to the markup itself', async () => {
+        const { transport } = deploymentAnsweringNothing();
+
+        await drawing(transport);
+
+        expect(document.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
+        expect(screen.getByText("Reading the sender's own version…")).toBeDefined();
+    });
+
     it('names the message it is showing, and who sent it and when', async () => {
         const { transport } = deploymentServing();
 

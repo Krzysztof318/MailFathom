@@ -291,6 +291,7 @@ public sealed class OwnNotificationsTests
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",
+            statement: null,
             source: "work",
             NotificationTarget.Nothing,
             NotificationDeduplicationKey.Create(deduplicationKey),

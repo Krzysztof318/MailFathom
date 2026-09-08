@@ -145,6 +145,14 @@ describe('AttachmentView', () => {
         expect(screen.getByText('Reading harbour.png…')).toBeDefined();
     });
 
+    // Hidden from the accessibility tree, the sentence above being what a reader is told, so the class the token
+    // layer draws it with is what a test can hold the shape to.
+    it('reserves the shape the file will take rather than leaving the surface empty', () => {
+        drawing(photograph, reading().exchange);
+
+        expect(document.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
+    });
+
     it('asks for the file at the position the message described it at, under the size it stated', () => {
         const held = reading();
         drawing(photograph, held.exchange);

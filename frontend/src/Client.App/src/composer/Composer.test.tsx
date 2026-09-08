@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
 import { LocalizationProvider } from '../localization/Localization';
+import { ToastsProvider } from '../toasts/Toasts';
 import { Composer } from './Composer';
 import type { ComposerOpening } from './composition';
 import { rememberComposition, rememberedComposition } from './keptComposition';
@@ -149,16 +150,18 @@ function drawComposer(
 
     render(
         <LocalizationProvider>
-            <AttachmentUploadContext value={upload}>
-                <Composer
-                    session={session}
-                    transport={transport}
-                    accounts={accounts}
-                    opening={opening}
-                    online={online}
-                    onClosed={closed}
-                />
-            </AttachmentUploadContext>
+            <ToastsProvider>
+                <AttachmentUploadContext value={upload}>
+                    <Composer
+                        session={session}
+                        transport={transport}
+                        accounts={accounts}
+                        opening={opening}
+                        online={online}
+                        onClosed={closed}
+                    />
+                </AttachmentUploadContext>
+            </ToastsProvider>
         </LocalizationProvider>,
     );
 
@@ -482,6 +485,36 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
 
+    // The send is the one act whose outcome has to reach somebody who has already turned to something else, so it is
+    // said in a toast standing over whatever they turned to rather than at the foot of a window they are done with.
+    // The toast that follows the send becomes the outcome in place, which is why both are read from one surface.
+    it('says a send is on its way where somebody who looked away would still read it, and then what it came to', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        write('Subject', 'The quarterly figures');
+        write('Message', 'They are attached.');
+        confirmSend();
+
+        expect(await screen.findByText('Sending your message…')).toBeDefined();
+        expect(await screen.findByText('Message sent')).toBeDefined();
+        expect(screen.queryByText('Sending your message…')).toBeNull();
+    });
+
+    // A refusal is titled there and said at the foot of the composer, where the words the deployment refused still
+    // are: a toast stands for a few seconds, and what somebody has to act on cannot be the thing that goes away.
+    it('titles a refused send in the toast and leaves what would change it beside what was written', async () => {
+        drawComposer({ kind: 'new' }, { send: { status: 409, body: JSON.stringify({ errorCode: 56_003 }) } });
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        expect(await screen.findByText('Message not sent')).toBeDefined();
+        expect(
+            screen.getByText('This deployment does not send mail. Whoever runs it can turn sending on.'),
+        ).toBeDefined();
+    });
+
     it('leaves nothing that would write over a queued send and take the way to withdraw with it', async () => {
         drawComposer();
 
@@ -682,16 +715,18 @@ describe('Composer, a message of its own', () => {
 
         render(
             <LocalizationProvider>
-                <AttachmentUploadContext value={uploadsOneFile}>
-                    <Composer
-                        session={session}
-                        transport={transport}
-                        accounts={[work]}
-                        opening={{ kind: 'new' }}
-                        online
-                        onClosed={vi.fn()}
-                    />
-                </AttachmentUploadContext>
+                <ToastsProvider>
+                    <AttachmentUploadContext value={uploadsOneFile}>
+                        <Composer
+                            session={session}
+                            transport={transport}
+                            accounts={[work]}
+                            opening={{ kind: 'new' }}
+                            online
+                            onClosed={vi.fn()}
+                        />
+                    </AttachmentUploadContext>
+                </ToastsProvider>
             </LocalizationProvider>,
         );
 

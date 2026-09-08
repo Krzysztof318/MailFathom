@@ -14,6 +14,7 @@ function arrived(kind: ClientNotification['kind'], id: string): ClientNotificati
     return {
         id,
         kind,
+        statement: null,
         title: 'Ada Lovelace wrote about the engine',
         body: 'The note carried the whole of her answer.',
         source: 'Inbox',

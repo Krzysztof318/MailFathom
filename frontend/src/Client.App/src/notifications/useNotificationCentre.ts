@@ -20,6 +20,7 @@ import { useSystemNotifier } from '../shellOperations/systemNotifier';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { arrivalCounts } from './arrivalCounts';
 import { notificationToastKinds, systemNotificationCounts } from './notificationKinds';
+import { wordNotification } from './notificationWords';
 import { useToasts } from '../toasts/useToasts';
 
 // What the client knows about the person's notification centre, and everything that changes it. It is one hook rather
@@ -301,10 +302,12 @@ export function useNotificationCentre(
             raiseWithTheSystem(arrived);
 
             for (const notification of arrived.slice(0, mostArrivalsAnnounced).reverse()) {
+                const said = wordNotification(notification, locale, translate);
+
                 toasts.raise({
                     kind: notificationToastKinds[notification.kind],
-                    title: notification.title,
-                    body: notification.body,
+                    title: said.title,
+                    body: said.body,
                     action: {
                         label: translate('notifications.show'),
                         take: () => {
@@ -314,7 +317,7 @@ export function useNotificationCentre(
                 });
             }
         },
-        [toasts, translate, follow, raiseWithTheSystem],
+        [toasts, locale, translate, follow, raiseWithTheSystem],
     );
 
     // What an arrival is said with is held rather than depended on. The read below must be decided by the credential,

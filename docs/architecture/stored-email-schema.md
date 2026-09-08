@@ -326,7 +326,9 @@ service.
 | `Id` | What addresses the notification, a UUIDv7 minted from the instant it describes |
 | `UserId` | The user it happened to. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way |
 | `Kind` | Which part of MailFathom it is about — `Mail`, `Calendar`, `Case`, `Task`, or `System` — stored as text |
-| `Title`, `Body` | The two lines a row is drawn with, derived when the notification was produced rather than by re-reading mail when it is displayed |
+| `Title`, `Body` | The two lines a row is drawn with in English, derived when the notification was produced rather than by re-reading mail when it is displayed |
+| `Cause` | The condition the row was raised for — `MailArrived`, `SynchronizationIncomplete`, or `CredentialRefused` — stored as text. It is what lets a client say the row in its reader's own language, the two lines above being that same condition written out. Absent on a row written before the column existed, which is what an upgrade over existing data leaves until retention has taken those rows |
+| `Counted`, `OutOf` | The numbers the cause is stated with, whose meaning is the cause's: mail counts the messages that arrived, an unfinished run counts the folders that did not finish out of the folders it scheduled, and a refused credential counts neither |
 | `Source` | What the source line names beyond the kind, which is an account identifier today, and absent where the kind is the whole of it |
 | `TargetKind` | Which of the three shapes opening it leads to — `Nothing`, `Message`, or `Screen` — stored as text |
 | `TargetStoredEmailId` | The message a `Message` target names, and the foreign key onto `stored_emails` with `ON DELETE CASCADE`. Absent for every other shape |
@@ -336,6 +338,7 @@ service.
 | `IsRead` | Whether the person has read it, which is also what frees the condition to be said again |
 
 **A row carries no mail.** The title and the body are MailFathom's own sentences about a count or a condition, the
+cause and its two numbers are that same condition as a name and two counts, the
 source is an account identifier, and the key is a condition's name — so no subject, address, body fragment, filename,
 or credential material reaches the table. What still makes it derived personal data is that it says something reached
 this person's mailbox and when, which is what the two cascades and the retention bound answer for.

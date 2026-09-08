@@ -209,8 +209,9 @@ is enforced. Arrived mail is one of those conditions, so a standing unread arriv
 raised it: a later run bringing more mail adds no second row and does not restate the first one's number. What the row
 says is that mail arrived rather than how much is waiting, which the mailbox itself answers when the row is opened.
 
-**Nothing in a notification is read from mail.** A count, an account identifier, and a fixed sentence are what a row
-carries, so no subject, address, body fragment, filename, or credential material can reach it. What makes it derived
+**Nothing in a notification is read from mail.** The condition it was raised for, the counts stating it, an account
+identifier, and the service's own English sentence are what a row carries, so no subject, address, body fragment,
+filename, or credential material can reach it. What makes it derived
 personal data anyway is that it says something reached this person's mailbox and when, which the thirty-day retention
 bound and the two cascades answer for; the bound is swept on each account's own run beside the audit-trail retention
 passes.

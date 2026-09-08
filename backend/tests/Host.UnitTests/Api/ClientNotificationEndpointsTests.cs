@@ -40,7 +40,7 @@ public sealed class ClientNotificationEndpointsTests
             NotificationCursor.FingerprintOf(User));
         var notifications = Substitute.For<INotificationStore>();
         notifications.ReadPageAsync(User, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(_ => [MailNotification()]);
+            .Returns(_ => [MailNotification(NotificationStatement.MailArrived(2))]);
 
         // Act
         var result = await ClientNotificationEndpoints.ReadPageAsync(
@@ -59,6 +59,34 @@ public sealed class ClientNotificationEndpointsTests
         Assert.Equal(OccurredAt, row.OccurredAt);
         Assert.False(row.Read);
         Assert.Equal(cursor.Encode(), page.NextCursor);
+
+        // The condition and its numbers rather than a sentence, because what language the row is read in is the
+        // client's to decide and this answer serves both of them.
+        Assert.Equal("MailArrived", row.Statement?.Cause);
+        Assert.Equal(2, row.Statement?.Counted);
+        Assert.Null(row.Statement?.OutOf);
+    }
+
+    /// <summary>A row written before conditions were kept names none, and the answer says so rather than inventing one.</summary>
+    [Fact]
+    public async Task ReadPageAsync_ARowNamingNoCondition_DescribesItWithNoStatementAtAll()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.ReadPageAsync(User, null, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => [MailNotification(statement: null)]);
+
+        // Act
+        var result = await ClientNotificationEndpoints.ReadPageAsync(
+            pageSize: 1,
+            cursor: null,
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var page = Assert.IsType<Ok<ClientNotificationPageResponse>>(result.Result).Value!;
+
+        Assert.Null(Assert.Single(page.Notifications).Statement);
     }
 
     /// <summary>A boundary this deployment never issued names no page, and the newest one would be a panel silently jumping to the top.</summary>
@@ -242,12 +270,13 @@ public sealed class ClientNotificationEndpointsTests
         AccessAuthorizations.ForUserGranted(User, MailFathomPermission.MailRead),
         store);
 
-    private static Notification MailNotification() => Notification.Compose(
+    private static Notification MailNotification(NotificationStatement? statement) => Notification.Compose(
         NotificationId.Create(NotificationIdentifier),
         User,
         NotificationKind.Mail,
         title: "New mail arrived",
         body: "Two messages arrived in your inbox.",
+        statement,
         source: "work",
         NotificationTarget.ToMessage(StoredEmailId.Create(new Guid("8a1b2c3d-4e5f-4061-8273-849506a7b8c9"))),
         NotificationDeduplicationKey.Create("mail-arrived"),

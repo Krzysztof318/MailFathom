@@ -67,11 +67,24 @@ export interface DraftAtDeployment {
     /** Takes one staged file back off. */
     readonly unstage: (attachmentId: string) => Promise<void>;
 
-    /** Queues the message, saving what has been written since first. */
-    readonly send: (composition: Composition) => Promise<void>;
+    /**
+     * Queues the message, saving what has been written since first, and answers what it came to.
+     *
+     * The standing is answered as well as held because the surface says what became of a send where the design project
+     * says it — in a toast, which stands over whatever the person moved on to rather than at the foot of the composer.
+     * A toast is raised at the moment of the outcome rather than watched for, so what is owed to the caller is the
+     * outcome itself; reading it back out of state afterwards would raise a second toast on every later render.
+     */
+    readonly send: (composition: Composition) => Promise<DraftStanding>;
 
-    /** Takes a queued send back while it has not begun transmitting. */
-    readonly withdraw: () => Promise<void>;
+    /**
+     * Takes a queued send back while it has not begun transmitting, and answers what that came to.
+     *
+     * Asked before the deployment has answered the send, it withdraws the message the moment there is one to withdraw
+     * rather than doing nothing: somebody who said stop while it was still going out said it about this message, and
+     * asking them to say it again once a round trip has landed is a stop the client quietly dropped.
+     */
+    readonly withdraw: () => Promise<DraftStanding>;
 
     /** Gives the draft up, taking its copies back out of the user's drafts folder. */
     readonly discard: () => Promise<boolean>;
@@ -98,6 +111,23 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     const saving = useRef<Promise<string | null> | null>(null);
     const queued = useRef<string | null>(null);
     const uploading = useRef<AbortController | null>(null);
+
+    // Whether somebody has asked to stop the send while the deployment had not yet answered it. A ref rather than
+    // state because nothing draws it: what reads it is the send itself, one turn later, and a value read out of a
+    // render would be the one from before they asked.
+    const stopping = useRef(false);
+
+    // What the standing already is, beside the state that draws it. An act answers what it came to, and two acts in
+    // one turn — a stop landing on a send, a refusal met while writing the draft a send needed — have to read what the
+    // one before them settled on rather than the value this render was given.
+    const settledAs = useRef<DraftStanding>({ kind: 'held' });
+
+    function hold(next: DraftStanding): DraftStanding {
+        settledAs.current = next;
+        setStanding(next);
+
+        return next;
+    }
 
     // An upload whose composer has gone is an upload nobody is waiting for, and letting it finish would stage a file
     // against a draft the author has closed.
@@ -135,7 +165,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
                 : await reviseMailDraft(session, transport, held, wire);
 
         if (answer.outcome === 'failed') {
-            setStanding({ kind: 'failed', reason: answer.failure.reason });
+            hold({ kind: 'failed', reason: answer.failure.reason });
 
             return null;
         }
@@ -146,7 +176,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         // before it posts it, so the refusal it meets here is the one it would have met at the send itself, and is
         // worded as the send's.
         if (!answer.value.written) {
-            setStanding(
+            hold(
                 asked === 'send'
                     ? { kind: 'refused', refusal: answer.value.refusal }
                     : { kind: 'refusedSave', refusal: answer.value.refusal },
@@ -168,10 +198,56 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
     // Every act ends by saying what happened, and a failure says which of the four it was rather than that something
     // went wrong. Stated once here because five acts would otherwise each carry their own copy of the same three lines.
-    function settled<TValue>(answer: ClientResult<TValue>, whenRead: (value: TValue) => DraftStanding): void {
-        setStanding(
+    function settled<TValue>(answer: ClientResult<TValue>, whenRead: (value: TValue) => DraftStanding): DraftStanding {
+        return hold(
             answer.outcome === 'failed' ? { kind: 'failed', reason: answer.failure.reason } : whenRead(answer.value),
         );
+    }
+
+    async function send(composition: Composition): Promise<DraftStanding> {
+        hold({ kind: 'sending' });
+
+        const held = await saved(composition, 'send');
+
+        if (held === null) {
+            // The write said what stopped it and in the words of the send, so what this answers is that same
+            // statement rather than a second, vaguer one made here.
+            return settledAs.current;
+        }
+
+        const outcome = settled(await sendMailDraft(session, transport, held), (sent) => {
+            if (!sent.queued) {
+                return { kind: 'refused', refusal: sent.refusal };
+            }
+
+            queued.current = sent.outgoingEmailId;
+
+            return { kind: 'queued', outgoingEmailId: sent.outgoingEmailId };
+        });
+
+        // Somebody asked to stop while the deployment had not yet answered, so this is where their stop lands.
+        if (outcome.kind === 'queued' && stopping.current) {
+            stopping.current = false;
+
+            return withdraw();
+        }
+
+        return outcome;
+    }
+
+    async function withdraw(): Promise<DraftStanding> {
+        const sent = queued.current;
+
+        if (sent === null) {
+            stopping.current = true;
+
+            return settledAs.current;
+        }
+
+        return settled(await withdrawOutgoingMail(session, transport, sent), (withdrawal) => ({
+            kind: 'withdrawn',
+            withdrawal,
+        }));
     }
 
     return {
@@ -179,19 +255,19 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         staged,
 
         save: async (composition) => {
-            setStanding({ kind: 'saving' });
+            hold({ kind: 'saving' });
 
             if ((await saved(composition, 'save')) === null) {
                 return false;
             }
 
-            setStanding({ kind: 'saved' });
+            hold({ kind: 'saved' });
 
             return true;
         },
 
         attach: async (composition, file) => {
-            setStanding({ kind: 'attaching', fileName: file.name });
+            hold({ kind: 'attaching', fileName: file.name });
 
             const held = await saved(composition, 'save');
 
@@ -240,38 +316,8 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             });
         },
 
-        send: async (composition) => {
-            setStanding({ kind: 'sending' });
-
-            const held = await saved(composition, 'send');
-
-            if (held === null) {
-                return;
-            }
-
-            settled(await sendMailDraft(session, transport, held), (outcome) => {
-                if (!outcome.queued) {
-                    return { kind: 'refused', refusal: outcome.refusal };
-                }
-
-                queued.current = outcome.outgoingEmailId;
-
-                return { kind: 'queued', outgoingEmailId: outcome.outgoingEmailId };
-            });
-        },
-
-        withdraw: async () => {
-            const sent = queued.current;
-
-            if (sent === null) {
-                return;
-            }
-
-            settled(await withdrawOutgoingMail(session, transport, sent), (withdrawal) => ({
-                kind: 'withdrawn',
-                withdrawal,
-            }));
-        },
+        send,
+        withdraw,
 
         discard: async () => {
             // Whatever save is in flight first, so a draft written a moment ago is one this knows about rather than
@@ -289,7 +335,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             if (answer.outcome === 'failed') {
                 // Said rather than swallowed: closing on a refused delete would tell somebody their words are gone
                 // while the deployment is still holding them, with nothing on this screen to go back to.
-                setStanding({ kind: 'failed', reason: answer.failure.reason });
+                hold({ kind: 'failed', reason: answer.failure.reason });
 
                 return false;
             }

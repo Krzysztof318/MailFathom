@@ -8,6 +8,11 @@
 // The three targets are all stated, because which one a producer chose is what a row is drawn by: a notification
 // leading to a message, one leading to a screen, and one leading nowhere are three different rows rather than one row
 // with a field that is sometimes absent.
+//
+// So are the shapes a row is *said* in. Each condition a deployment raises is here with the numbers it is stated
+// with, because the sentence is the client's to compose and a corpus stating only one of them would leave the others
+// undrawn; and one row names no condition at all, which is what a deployment upgraded over its own rows answers with
+// and what a client draws the service's own two lines for.
 
 import { newsletterId } from './messages';
 
@@ -20,18 +25,20 @@ export const notificationPage = {
         {
             id: notificationId,
             kind: 'Mail',
-            title: 'Nordwind wrote about the racking quote',
-            body: 'Booked for the ninth. The crew will need the yard for a morning.',
+            statement: { cause: 'MailArrived', counted: 4, outOf: null },
+            title: 'New mail',
+            body: '4 new messages arrived.',
             source: 'Work',
-            target: { kind: 'Message', messageId: newsletterId },
+            target: { kind: 'Screen', screen: 'Mail' },
             occurredAt: '2026-08-31T08:03:00+00:00',
             read: false,
         },
         {
             id: '00000000-0000-4000-8000-0000000000f1',
             kind: 'System',
-            title: 'The Club mailbox is refusing its credential',
-            body: 'Nothing has been read from it since Sunday evening.',
+            statement: { cause: 'CredentialRefused', counted: null, outOf: null },
+            title: 'This account needs signing in again',
+            body: 'The mail server refused the credential MailFathom holds, so this account is no longer being fetched.',
             source: 'Club',
             target: { kind: 'Screen', screen: 'Settings' },
             occurredAt: '2026-08-30T18:12:00+00:00',
@@ -39,12 +46,24 @@ export const notificationPage = {
         },
         {
             id: '00000000-0000-4000-8000-0000000000f2',
-            kind: 'Task',
-            title: 'Four messages were filed into Receipts',
-            body: '',
+            kind: 'System',
+            statement: { cause: 'SynchronizationIncomplete', counted: 2, outOf: 5 },
+            title: 'Some mail could not be fetched',
+            body: '2 of 5 folders did not finish. MailFathom will try again.',
             source: null,
             target: { kind: 'Nothing' },
             occurredAt: '2026-08-29T11:00:00+00:00',
+            read: true,
+        },
+        {
+            id: '00000000-0000-4000-8000-0000000000f3',
+            kind: 'Task',
+            statement: null,
+            title: 'Four messages were filed into Receipts',
+            body: 'The rule that files them ran while nobody was looking.',
+            source: null,
+            target: { kind: 'Message', messageId: newsletterId },
+            occurredAt: '2026-08-28T07:40:00+00:00',
             read: true,
         },
     ],

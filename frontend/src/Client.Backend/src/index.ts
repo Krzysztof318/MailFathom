@@ -181,10 +181,12 @@ export {
     unreadNotificationCountRoute,
     type ClientNotification,
     type MarkedNotifications,
+    type NotificationCause,
     type NotificationKind,
     type NotificationPage,
     type NotificationReadState,
     type NotificationScreen,
+    type NotificationStatement,
     type NotificationTarget,
 } from './notifications';
 export {

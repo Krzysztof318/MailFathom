@@ -195,6 +195,19 @@ describe('ReadingPane', () => {
         expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
     });
 
+    // The skeleton stands for what nobody can read yet, so it is hidden from the accessibility tree and the sentence
+    // above is what a reader is told instead. That leaves it with no role and no name of its own, and the class the
+    // token layer draws it with is what a test can hold it to.
+    it('reserves the shape the message will take, and gives that space to the message itself', async () => {
+        drawing(deploymentDescribing());
+
+        expect(document.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
+
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        expect(document.querySelectorAll('.shimmering').length).toBe(0);
+    });
+
     it('says the machine is offline rather than reporting the deployment as unreachable', () => {
         drawing(answersNothing, messageId, false);
 

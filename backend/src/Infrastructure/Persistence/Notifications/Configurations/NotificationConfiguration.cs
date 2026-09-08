@@ -20,9 +20,10 @@ namespace MailFathom.Infrastructure.Persistence.Notifications.Configurations;
 /// </para>
 /// <para>
 /// Nothing here is mail content. A title and a body are derived when the notification is produced and are MailFathom's
-/// own sentences about a count or a condition; the source is an account identifier; and the deduplication key is a
-/// condition's name. What makes the row personal data is that it says something reached this person's mailbox and
-/// when, which is what the retention bound and both cascades answer for.
+/// own sentences about a count or a condition; the cause and its two counts are that same condition as a name and two
+/// numbers, which is what a client says in its own language; the source is an account identifier; and the
+/// deduplication key is a condition's name. What makes the row personal data is that it says something reached this
+/// person's mailbox and when, which is what the retention bound and both cascades answer for.
 /// </para>
 /// </remarks>
 internal sealed class NotificationConfiguration : IEntityTypeConfiguration<NotificationEntity>
@@ -39,6 +40,10 @@ internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notif
         entity.Property(notification => notification.Kind).HasConversion<string>().HasMaxLength(64).IsRequired();
         entity.Property(notification => notification.TargetKind).HasConversion<string>().HasMaxLength(64).IsRequired();
         entity.Property(notification => notification.TargetScreen).HasConversion<string>().HasMaxLength(64);
+
+        // Optional for the reason the entity states: the column was added to a table that already held rows, and
+        // nothing can say afterwards what condition one of those was raised for.
+        entity.Property(notification => notification.Cause).HasConversion<string>().HasMaxLength(64);
 
         entity.Property(notification => notification.Title)
             .HasMaxLength(Notification.MaximumTitleLength)
