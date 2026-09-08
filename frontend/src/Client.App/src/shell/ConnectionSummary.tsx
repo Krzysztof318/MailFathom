@@ -139,11 +139,12 @@ function Freshness({ connection }: { readonly connection: Connection }) {
             <Line tone="attention">
                 {translate('accounts.failed', { reason: translate(failureLabels[accounts.failure.reason]) })}
 
-                {/* Reading again is the way out of exactly one of the four failures. A refused credential, a missing
-                    grant, and an answer this client cannot parse each repeat identically on a second attempt, so
-                    offering the button there hands somebody an action that cannot work and says nothing about why.
-                    Their next steps — signing in again, saying the grant is missing, reporting a defect — are actions
-                    this frame has nowhere to send anybody to yet, and each arrives with the screen that can. */}
+                {/* Reading again is the way out of exactly one of the five failures. A refused credential, a missing
+                    grant, an answer this client cannot parse, and something the deployment no longer holds each repeat
+                    identically on a second attempt, so offering the button there hands somebody an action that cannot
+                    work and says nothing about why. Their next steps — signing in again, saying the grant is missing,
+                    reporting a defect, letting go of what is gone — are actions this frame has nowhere to send anybody
+                    to yet, and each arrives with the screen that can. */}
                 {accounts.failure.reason === 'unavailable' && (
                     <SecondaryButton label={translate('connection.retry')} onActivate={reread} />
                 )}

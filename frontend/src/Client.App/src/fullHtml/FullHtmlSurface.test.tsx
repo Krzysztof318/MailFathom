@@ -291,6 +291,23 @@ describe('FullHtmlSurface', () => {
         expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
     });
 
+    // A message the deployment no longer holds reaches this surface too, and it is not the reading pane's case. The
+    // pane holds what is open, so it lets go and lands on the empty state; this surface is drawn *about* that message,
+    // and closing itself would put somebody back on a pane still drawing it with nothing having said why the surface
+    // went. So it says the message is gone, offers no retry that could not answer, and waits for the control it was
+    // opened with.
+    it('says the message is no longer there, offering no retry and closing nothing by itself', async () => {
+        const closed = vi.fn();
+        const gone: MailFathomTransport = () => Promise.resolve({ status: 404, body: '', headers: {} });
+
+        await drawing(gone, { onClose: closed });
+
+        expect(await screen.findByText(/could not be read: no longer there/u)).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(closed).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Close this view' })).toBeDefined();
+    });
+
     it('reads both the head and the markup again when the reader tries again', async () => {
         let refusals = 2;
 

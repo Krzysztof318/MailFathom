@@ -1287,9 +1287,9 @@ Both carry `mailfathom.client.request`, which is the method and the **route temp
 `GET /folders`, `GET /messages/{storedEmailId}/body` — never a composed path, so a message identifier is not a
 dimension value. The span takes the same string as its name. Beside it sits `mailfathom.client.outcome`, whose values
 are the client's own contract rather than words invented here — `read` and `failed` — and, on a failure,
-`mailfathom.client.failure`, carrying which of `unauthenticated`, `unauthorized`, `unavailable`, or `unreadable` the
-client mapped the answer to. A failed request's span status is an error carrying no message: what failed is already the
-dimension beside it.
+`mailfathom.client.failure`, carrying which of `unauthenticated`, `unauthorized`, `unavailable`, `unreadable`, or
+`missing` the client mapped the answer to. A failed request's span status is an error carrying no message: what failed
+is already the dimension beside it.
 
 **Every request the client makes is one of them, including the four it does not put on the wire itself.** A file a
 message carries, and the picture the signed-in person is drawn by, arrive as octets rather than as a document, so those
@@ -1301,8 +1301,12 @@ other request's and the request carries the trace context exactly as one this cl
 **The outcome says whether an answer arrived, not whether the answer was yes.** A route that deliberately refuses — a
 name this deployment will not record, a person it holds no portrait for — has answered something a screen acts on, so
 it is `read`; so is a download the person waiting on it stopped, that being their own act rather than the deployment
-failing to answer. What `failed` names is the four an operator can act on, and a file larger than the message described
-is `unreadable` among them, the body having been refused rather than absent.
+failing to answer. What `failed` names is the five an operator can act on, and a file larger than the message described
+is `unreadable` among them, the body having been refused rather than absent. `missing` is the one of the five that is
+not a fault to chase: only `GET /messages/{storedEmailId}` produces it, and it says the deployment answered that it no
+longer holds that message — a reader who had it open is told it is gone rather than offered a retry. A rate of it that
+tracks how much mail is being deleted is the deployment working, and it is worth separating from `unavailable` on a
+dashboard for exactly that reason.
 
 **Moving between screens is the client's alone to report.** Every screen after the first is rendered rather than
 fetched, so the wait a person actually has is invisible from the deployment.

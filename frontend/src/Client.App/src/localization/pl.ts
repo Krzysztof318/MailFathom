@@ -418,7 +418,7 @@ export const pl: Catalogue = {
     'compose.failedUnreadable':
         'Twoje wdrożenie odpowiedziało, ale klient nie potrafił nic z tą odpowiedzią zrobić. To usterka warta zgłoszenia.',
     'compose.failedMissing':
-        'Twoje wdrożenie nie ma już tego, czego to dotyczyło. To, co zostało napisane, nadal tu jest i można je zapisać jako coś nowego.',
+        'Twoje wdrożenie nie ma już wiadomości, na którą to miała być odpowiedź, więc nie ma tu na co odpowiadać.',
 
     'tabs.strip': 'Co jest otwarte',
     'tabs.close': 'Zamknij: {title}',

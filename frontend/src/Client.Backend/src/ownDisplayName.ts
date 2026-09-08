@@ -106,7 +106,7 @@ export function changeOwnDisplayName(
         // `reported` rather than `spanned` because this answers an outcome of its own, and a refused name is recorded
         // as a read: the deployment answered, and what a person does about it is to type another name. Recording it as
         // a failure would put a typing mistake in the dimension an operator reads for a deployment that is not
-        // answering, and none of the four reasons is true of it either.
+        // answering, and none of the five reasons is true of it either.
         (change) => (change.outcome === 'failed' ? change.failure.reason : null),
     );
 }

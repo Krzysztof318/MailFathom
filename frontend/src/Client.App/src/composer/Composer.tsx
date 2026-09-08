@@ -45,8 +45,12 @@ import { WrittenMessage } from './WrittenMessage';
 /** What the composer is doing before there is anything to write in, which is a state of its own rather than a blank. */
 type Reading = { readonly kind: 'reading' } | { readonly kind: 'unread'; readonly reason: ClientFailureReason };
 
-// What each of the four failures means for somebody trying to write mail, said as what they do next. The reading
-// failure and the deployment's own are worded the same way because they are the same four answers.
+// What each of the five failures means for somebody trying to write mail, said as what they do next. The reading
+// failure and the deployment's own are worded from one table because four of the five are the same answer to either.
+// `missing` reaches only the read: the message route is the one that reads a `404` as something the deployment no
+// longer holds, so the sentence is about the message being answered rather than about a draft. The composer says it
+// and stays open: a surface somebody opened is left by the control they opened it with, and closing itself under them
+// would report a message that is gone by taking away the one place that said so.
 const failureSaid: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'compose.failedUnauthenticated',
     unauthorized: 'compose.failedUnauthorized',

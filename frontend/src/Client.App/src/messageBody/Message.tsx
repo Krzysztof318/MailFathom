@@ -120,8 +120,8 @@ export function Message({ body, storedEmailId, quotedHistoryOnRequest = false, o
                     {translate('body.failed', { reason: translate(failureLabels[failure.reason]) })}
                 </p>
 
-                {/* Reading again is the way out of exactly one of the four failures, for the reason
-                    `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. */}
+                {/* Reading again is the way out of exactly one of the five failures, for the reason
+                    `shell/ConnectionSummary.tsx` gives: the other four repeat identically on a second attempt. */}
                 {failure.reason === 'unavailable' ? (
                     <SecondaryButton label={translate('connection.retry')} onActivate={body.readAgain} />
                 ) : null}

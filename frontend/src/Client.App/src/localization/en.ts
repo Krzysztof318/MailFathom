@@ -413,7 +413,7 @@ export const en = {
     'compose.failedUnreadable':
         'Your deployment answered, but this client could not act on the answer. That is a defect worth reporting.',
     'compose.failedMissing':
-        'Your deployment no longer holds what this was about. What you wrote is still here, and it can be filed as something new.',
+        'Your deployment no longer holds the message this was answering, so there is nothing here to answer.',
 
     'tabs.strip': 'Open tabs',
     'tabs.close': 'Close {title}',

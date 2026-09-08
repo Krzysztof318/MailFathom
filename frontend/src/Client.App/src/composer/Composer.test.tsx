@@ -930,6 +930,17 @@ describe('Composer, an answer', () => {
         });
     });
 
+    // The reading pane lets go of a message the deployment no longer holds, because the pane is what holds what is
+    // open. The composer is drawn *about* that message rather than holding it, so it says the message is gone and
+    // waits: closing itself would take away the only thing that said so, and it is a surface somebody opened.
+    it('says the message it was answering is gone, and stays open on it', async () => {
+        const { closed } = drawComposer(replying, { message: { status: 404, body: '' } });
+
+        expect(await screen.findByText(/nothing here to answer/u)).toBeDefined();
+        expect(closed).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Close the message' })).toBeDefined();
+    });
+
     it('reads nothing where this tab was already writing that answer', () => {
         rememberComposition({
             answering: { storedEmailId: messageId, answers: 'everyone' },

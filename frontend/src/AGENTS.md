@@ -279,8 +279,11 @@ not a preference about polish.
   A screen that looks finished while a read is in flight is a screen a person acts on twice.
 - **Every failure says what failed and offers the way out.** Each failure reason is its own sentence and its own next
   step: signing in again, saying the grant is missing, retrying, reporting a defect, and — for something the deployment
-  no longer holds — letting go of it and landing on the empty state, which is the one whose way out is that no way out
-  is needed. "Something went wrong" is none of them, and neither is a status code on a screen.
+  no longer holds — letting go of it. The surface that lets go is the one _holding_ it, which is the reading pane: what
+  was open is dropped from the workspace, and the empty state is what is left. A surface merely drawn _about_ that
+  message says so and keeps the control it was opened with, because closing itself would put somebody back on a screen
+  still drawing the message with nothing having said why the surface went. "Something went wrong" is none of them, and
+  neither is a status code on a screen.
 - **No state is reachable that a person cannot leave.** Every dialog closes, every flow can be abandoned, and every
   error state offers something other than reloading the page.
 - **Every screen has its five states, and each is designed rather than defaulted**: loading, empty, partial (some of it
