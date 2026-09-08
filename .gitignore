@@ -28,9 +28,12 @@ frontend/src/Client.App/dist/
 # What driving a browser writes, and neither of them is ever committed: a trace, a screenshot, a video, or a console
 # log of a signed-in client shows somebody's mail, so the rule is that it stays on the machine that captured it.
 # `frontend/.playwright/` is where the committed browser suite retains a failure, named in `frontend/playwright.config.ts`;
+# `frontend/.playwright-end-to-end/` is the same for the end-to-end suite, whose run keeps what it captured because
+# every message in it is fabricated — the workflow uploads that directory rather than committing it;
 # `.playwright-cli/` is what `@playwright/cli` writes into whichever directory a session started it from, which is why
 # that one is matched at any depth rather than at a path.
 frontend/.playwright/
+frontend/.playwright-end-to-end/
 .playwright-cli/
 
 # What the native shell's build writes. `frontend/src-tauri/target/` holds the compiled crate graph and the bundles

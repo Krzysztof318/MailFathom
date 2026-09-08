@@ -17,6 +17,22 @@ var builder = DistributedApplication.CreateBuilder(args);
 // ephemeral database and leave its volume under the prefix the test script deletes.
 var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(args);
 
+// The third shape, and the smallest: the two servers a deployment cannot be stood up without, and nothing else. The
+// end-to-end client run drives a real browser against a real service, and it puts that service together the way an
+// operator does — the schema artifact applied to this database, the host started against these servers, the credential
+// provisioned through the administrative API — so what the app model owes it is the orchestration rather than the
+// arrangement. Declaring the servers here rather than in the pipeline is the whole point of it: the run exercises the
+// PostgreSQL and the mail server every other run of this repository exercises, at the same images and the same pins.
+//
+// Selected by an argument for the reason above, and exclusive with the integration-test topology because each names
+// what the other does not: this one starts no MailFathom at all.
+var runsEndToEndClient = OrchestrationContract.RunsEndToEndClient(args);
+
+// Both ephemeral topologies name their containers and volumes under the run prefix, keep nothing across runs, and are
+// removed by whatever started them. Everything below that distinguishes them is about MailFathom rather than about the
+// servers underneath it.
+var runsEphemeralServers = runsIntegrationTests || runsEndToEndClient;
+
 // The port this checkout pinned for a socket, or null where it pinned none — which is what leaves the number to be
 // found per run and lets a second checkout start while the first is running. Read from the app host's own
 // configuration, so `dotnet user-secrets --project backend/src/AppHost/AppHost.csproj` is where a developer states one; unlike
@@ -27,7 +43,7 @@ int? PinnedPort(string configurationKey) =>
 // One identifier per run, so two suites started on one machine name different containers and volumes instead of racing
 // for one name — and so the caller that started a run can remove exactly what it created. The ordinary topology names
 // nothing with it and leaves it empty.
-var ephemeralResourceNamePrefix = runsIntegrationTests
+var ephemeralResourceNamePrefix = runsEphemeralServers
     ? OrchestrationContract.ResolveEphemeralResourceNamePrefix(
         builder.Configuration[OrchestrationContract.EphemeralRunIdentifierVariable])
     : string.Empty;
@@ -54,7 +70,7 @@ var postgres = builder
 // than kept by the volume that was asked for.
 const string postgresDataDirectory = "/var/lib/postgresql";
 
-if (runsIntegrationTests)
+if (runsEphemeralServers)
 {
     // Named rather than left to Aspire's random postfix, and given a volume rather than none, so that both survive a
     // killed run as something the prefix identifies. A container the test topology left behind would otherwise be
@@ -64,9 +80,14 @@ if (runsIntegrationTests)
     // The run identifier inside that name is what keeps two suites on one machine apart. It also makes the volume new
     // on every run, which is what the baseline migration has to apply to for a run to prove it applies cleanly at all;
     // a volume reused across runs would quietly turn every later run into an upgrade of the first one's database.
+    //
+    // The host port is stated only for the end-to-end client run, which reaches this server from outside the app model
+    // to apply the schema artifact — the operator's own path, and one that needs an address written down rather than
+    // allocated. The integration suite reads its connection string out of the orchestration it started and needs none.
     postgres
         .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
-        .WithVolume($"{ephemeralResourceNamePrefix}-postgres-data", postgresDataDirectory);
+        .WithVolume($"{ephemeralResourceNamePrefix}-postgres-data", postgresDataDirectory)
+        .WithHostPort(runsEndToEndClient ? OrchestrationContract.EndToEndClientPostgresPort : null);
 }
 else
 {
@@ -112,7 +133,7 @@ else
         provider.GetRequiredService<ILogger<PersistentContainerStopper>>()));
 }
 
-if (runsIntegrationTests)
+if (runsEphemeralServers)
 {
     // A real IMAP server, because the claim the suite exists to prove — that synchronization never marks mail as read —
     // is about what MailKit puts on the wire, and a substituted port cannot observe a server's flag state. GreenMail is
@@ -123,6 +144,11 @@ if (runsIntegrationTests)
     //
     // Only the two protocols the suite speaks are started, plus the API server, whose readiness endpoint is what makes
     // this resource reach Healthy instead of merely Running. Without it a test would race the server's first listener.
+    //
+    // The end-to-end client run reaches the same server, and for the same reason: what fills its mailbox is a corpus
+    // submitted over SMTP and read back over IMAP, so the mail MailFathom then synchronizes arrived the way mail
+    // arrives. Its two published ports are stated for the reason the database's is — that run reaches them from
+    // outside the app model.
     builder.AddContainer(OrchestrationContract.MailServerResourceName, "greenmail/standalone", "2.1.11")
         .WithContainerName($"{ephemeralResourceNamePrefix}-mailserver")
         .WithEnvironment(
@@ -139,11 +165,37 @@ if (runsIntegrationTests)
                 // logging stays off on purpose: it transcribes the IMAP conversation, password included, into the
                 // orchestration log.
                 $"-Dgreenmail.users={OrchestrationContract.MailServerAccountUserName}:{OrchestrationContract.MailServerAccountPassword}@mailfathom.test"))
-        .WithEndpoint(targetPort: 3143, scheme: "tcp", name: OrchestrationContract.MailServerImapEndpointName)
-        .WithEndpoint(targetPort: 3025, scheme: "tcp", name: OrchestrationContract.MailServerSmtpEndpointName)
-        .WithHttpEndpoint(targetPort: 8080, name: OrchestrationContract.MailServerApiEndpointName)
+        .WithEndpoint(
+            targetPort: 3143,
+            port: runsEndToEndClient ? OrchestrationContract.EndToEndClientImapPort : null,
+            scheme: "tcp",
+            name: OrchestrationContract.MailServerImapEndpointName)
+        .WithEndpoint(
+            targetPort: 3025,
+            port: runsEndToEndClient ? OrchestrationContract.EndToEndClientSmtpPort : null,
+            scheme: "tcp",
+            name: OrchestrationContract.MailServerSmtpEndpointName)
+        .WithHttpEndpoint(
+            targetPort: 8080,
+            port: runsEndToEndClient ? OrchestrationContract.EndToEndClientMailServerApiPort : null,
+            name: OrchestrationContract.MailServerApiEndpointName)
         .WithHttpHealthCheck("/api/service/readiness", endpointName: OrchestrationContract.MailServerApiEndpointName);
+}
 
+if (runsEndToEndClient)
+{
+    // Where the end-to-end client run's app model ends. What stands above is the database and the mail server; what
+    // would stand below is a MailFathom this topology deliberately does not start, because that run starts one the way
+    // a deployment does — against a schema applied from the released artifact rather than migrated on startup, and
+    // serving the bundle the published image serves rather than a development server. Everything after this point is
+    // about a MailFathom the app model composes, so the run that composes its own stops here.
+    builder.Build().Run();
+
+    return;
+}
+
+if (runsIntegrationTests)
+{
     // A real Presidio analyzer, because the claim the suite exists to prove about the personal-data scanner is that the
     // image an operator pulls answers the request MailFathom builds with the entities MailFathom expects, at the offsets
     // it expects them: a scripted handler proves the mapping works on the payload somebody hand-wrote. An ordinary

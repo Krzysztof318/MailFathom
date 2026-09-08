@@ -19,14 +19,17 @@ question is answered again rather than reworded.
   could reach one only through a relative path out of the package, which is the one thing that boundary exists to
   refuse. A test inside the package inherits it instead: a `Client.Backend` test cannot import React, exactly as its
   source cannot, and nothing has to check that it did not.
-- `frontend/tests/` therefore holds this file, the browser suite beside it, and [the corpus](#the-corpus) both suites
-  read — and nothing else. A unit test written here would resolve neither package, which is the whole of the argument
-  above; the browser suite is what can live here precisely because it imports neither — it drives a built bundle over
-  HTTP rather than importing a module out of one, and the corpus is data rather than a test.
-- **The two suites are told apart by the name.** A unit test is `*.test.ts` or `*.test.tsx` beside its source; a browser
-  spec is `*.spec.ts` under this directory. Each runner's default finds its own and neither finds the other's, so a file
-  named for the wrong one silently joins the wrong suite — and a browser spec run by Vitest would fail on an import
-  Playwright supplies.
+- `frontend/tests/` therefore holds this file, the browser suite beside it, [the end-to-end suite](#the-end-to-end-suite)
+  under `end-to-end/`, and [the corpus](#the-corpus) the first two read — and nothing else. A unit test written here
+  would resolve neither package, which is the whole of the argument above; both browser suites are what can live here
+  precisely because they import neither — each drives a built bundle over HTTP rather than importing a module out of
+  one, and the corpus is data rather than a test.
+- **The suites are told apart by the name, and the last two by the directory.** A unit test is `*.test.ts` or
+  `*.test.tsx` beside its source; a browser spec is `*.spec.ts` under this directory. Each runner's default finds its
+  own and neither finds the other's, so a file named for the wrong one silently joins the wrong suite — and a browser
+  spec run by Vitest would fail on an import Playwright supplies. The two browser suites share that extension and are
+  separated by where they sit: `end-to-end/` is the third one, and `playwright.config.ts` ignores that path so a spec
+  needing a deployment cannot be picked up by the suite that has none.
 - Neither runner is given an `include` glob, so what makes a file part of a suite is its name and nothing else. A helper
   either suite imports is an ordinary module and carries neither marker in its name.
 - **A subject too large for one file is split by the concern each group of tests exercises**, into files named
@@ -319,6 +322,38 @@ between them, reloads one, and moves back and forward through the client's own h
 address is a fragment, and which nothing but a real document with a history can answer. Where the composition changes
 is here as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a
 narrow one, asked of two viewport widths rather than of two heads.
+
+## The end-to-end suite
+
+`frontend/tests/end-to-end/` is the third suite, and the only one that reaches a service. Both suites above answer
+every request themselves — one with a transport a test handed over, the other with the browser's own routing — so
+between them they establish that the client and the corpus agree with each other, and neither can say a word about
+whether either agrees with a deployment. This one drives the same built bundle against a MailFathom that was stood up
+the way an operator stands one up, with mail that arrived at a mail server and was synchronized out of it.
+
+- **It runs on request and nowhere else.** `scripts/run-end-to-end-client.sh` is what runs it, `End-to-end client` is
+  the manual-dispatch workflow that calls that script, and neither verification gate nor any pull-request check reaches
+  it. [Agent workflow](../../docs/operations/agent-workflow.md) and
+  [the end-to-end client run](../../docs/operations/end-to-end-client-run.md) hold what the run costs and what it gates,
+  which is nothing.
+- **It has a configuration of its own**, `frontend/playwright.end-to-end.config.ts`, and the pull-request suite's
+  configuration ignores this directory so that it cannot pick it up. Two configurations rather than two projects,
+  because the two disagree about everything a configuration decides: this one starts no server, is handed an origin it
+  did not choose, and fakes no route at all. Folding them together would put the pull-request suite one mistake away
+  from reaching a deployment.
+- **Nothing here routes a request, and that is the whole point.** A `page.route` in this directory would make the suite
+  a slower copy of the one above. A check earns its place here by needing a service to answer it: that mail
+  synchronized out of an IMAP server reaches a list, that a body derived from real MIME is drawn, that the service
+  threaded a conversation, and that its own index finds a message somebody searched for.
+- **It asserts what the client says rather than what the corpus says.** The mail is generated, so no subject, sender,
+  or sentence in it is a value to write down: what is written is the roles and the words the client itself draws, and
+  what the deployment must have produced for them to mean anything. A spec restating a subject would be asserting
+  against the archive rather than against the service.
+- **It keeps its traces and its screenshots**, which is the one place this directory's privacy rule reads the other
+  way. Every message a run reads is fabricated, delivered into a container that is destroyed with the run, so a capture
+  shows nobody's mailbox and a trace carries a credential that exists for the length of one run. The pull-request suite
+  keeps its output on the machine that produced it for the opposite reason, and that rule is unchanged: the moment a
+  capture could show real mail it is personal data whatever produced it.
 
 ## Coverage
 

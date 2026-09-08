@@ -284,6 +284,41 @@ public sealed class OrchestrationContractTests
     }
 
     [Fact]
+    public void RunsEndToEndClient_EndToEndArgumentIsPresent_SelectsTheServersOnlyTopology()
+    {
+        // Act
+        var runsEndToEndClient = OrchestrationContract.RunsEndToEndClient(
+            ["unrelated=value", OrchestrationContract.EndToEndClientArgument]);
+
+        // Assert
+        Assert.True(runsEndToEndClient);
+    }
+
+    [Fact]
+    public void RunsEndToEndClient_EndToEndArgumentIsAbsent_SelectsTheDevelopmentTopology()
+    {
+        // Act
+        var runsEndToEndClient = OrchestrationContract.RunsEndToEndClient(["EndToEndClient=false"]);
+
+        // Assert
+        Assert.False(runsEndToEndClient);
+    }
+
+    [Fact]
+    public void RunsEndToEndClient_IntegrationArgumentIsPresent_SelectsNeitherTopologyForTheOther()
+    {
+        // Act
+        var runsEndToEndClient = OrchestrationContract.RunsEndToEndClient(
+            [OrchestrationContract.IntegrationTestingArgument]);
+        var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(
+            [OrchestrationContract.EndToEndClientArgument]);
+
+        // Assert
+        Assert.False(runsEndToEndClient);
+        Assert.False(runsIntegrationTests);
+    }
+
+    [Fact]
     public void ResolveOpenSslConfigurationPath_NormalTopologyWithNoOverride_UsesTheShippedDevelopmentPolicy()
     {
         // Arrange

@@ -1456,11 +1456,13 @@ docker volume ls --filter name=mailfathom-integrationtests
 
 A developer's own orchestration is untouched by any of this: its container name and its volume name are derived from the AppHost project path and never carry the test prefix.
 
+**A second run selects two of the same containers.** `EndToEndClient=true` is a third topology in the same app model, and it declares the PostgreSQL and the mail server above under the same prefix and the same run identifier — and nothing else, no MailFathom included, because the run that selects it stands its own service up the way an operator does. It publishes those two servers on stated ports rather than allocated ones, since what reaches them is a shell script standing outside the orchestration with nothing to ask. [The end-to-end client run](end-to-end-client-run.md) is the whole of it, and `scripts/run-end-to-end-client.sh` cleans up by this run's identifier exactly as the integration script does, so the two never destroy each other's containers.
+
 ### The mail server
 
 The `mailserver` resource is `greenmail/standalone:2.1.11`, configured through `GREENMAIL_OPTS` to start only SMTP on 3025, IMAP on 3143, and the API server on 8080. The API server is what the resource's health check polls — `/api/service/readiness` — so the suite waits for a server that is accepting rather than for a container that has started; without it the first test would race the listener and fail as a connection refusal that says nothing about the behavior under test.
 
-It serves one throwaway mailbox, `mailfathom` / `mailfathom@mailfathom.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the ephemeral topology, unlock nothing outside the container, and are declared once so the app model that configures the server and the suite that logs into it cannot drift apart. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
+It serves one throwaway mailbox, `mailfathom` / `mailfathom@mailfathom.test`, whose credentials are constants in `OrchestrationContract`. They exist only in the two ephemeral topologies, unlock nothing outside the container, and are declared once so the app model that configures the server and whatever logs into it cannot drift apart. The login is the bare local part and the address is the whole string: authenticating as the address has GreenMail auto-create a second mailbox and drop the connection, which is why the two are separate constants rather than one value used twice. GreenMail's own verbose logging stays off, because it transcribes the whole IMAP conversation — password included — into the orchestration log.
 
 Two behaviors of this server are worth knowing when reading a failure:
 

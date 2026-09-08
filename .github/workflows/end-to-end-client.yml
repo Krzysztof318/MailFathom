@@ -1,0 +1,129 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: End-to-end client
+
+# Manual dispatch and nothing else. It is not a pull-request check, it is not on a schedule, `Nightly` does not call it,
+# and `Release` does not either — so nothing in this repository is gated on it and no merge waits for it. That is the
+# decision rather than an omission: the question it answers is whether the whole thing still holds together, which is a
+# question the owner asks when they want to and not one every change should pay for.
+#
+# What it costs, on a GitHub-hosted runner and stated plainly because a manual dispatch is somebody choosing to spend
+# it: roughly fifteen to twenty minutes of runner time. Two container images are pulled, the client bundle and the
+# service are both built, the schema artifact is generated through `aspire publish`, a mailbox is filled over SMTP one
+# message at a time, and a real browser then drives the result. Nothing here calls an AI provider, so it spends no
+# provider credit at all.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to run against'
+        required: false
+        type: string
+
+concurrency:
+  # One run at a time per ref, for the reason the integration suite serializes: the app model publishes this run's two
+  # servers on stated ports, so a second run on the same runner could not bind them.
+  group: ${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  end-to-end-client:
+    name: End-to-end client
+    runs-on: ubuntu-latest
+
+    # Well above what a run takes and well below the six hours a job is otherwise given. Every wait inside the pipeline
+    # is bounded already, so what this bounds is the case none of them cover: a build or an image pull that never
+    # finishes, holding a runner for an afternoon on a run nothing is waiting for.
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Both read out of the client's manifest rather than restated here, exactly as `Build and test the client` reads
+      # them: `engines.node` decides the Node version and `packageManager` decides which pnpm wrote the lock file.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      - name: Install pnpm
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      # The schema artifact comes from `aspire publish`, so the run needs the CLI at the generation the app model's
+      # hosting packages are pinned to. `scripts/build-schema-artifact.sh` reads that pin and says so when the CLI is
+      # missing; installing it here is what keeps the script from being the thing that fails.
+      - name: Install the Aspire CLI
+        run: |
+          pinned="$(sed -n 's:.*<PackageVersion Include="Aspire.Hosting.AppHost" Version="\([^"]*\)".*:\1:p' backend/Directory.Packages.props | head -n 1)"
+          dotnet tool install --global Aspire.Cli --version "$pinned"
+
+      # Ahead of the browser install, which runs out of the workspace's own `node_modules`. The pipeline restores the
+      # workspace again as its first step and finds nothing left to do.
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      # The browser the end-to-end configuration names, and only that one. `--with-deps` is what a runner needs and a
+      # developer machine usually does not.
+      - name: Install Chromium
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+
+      # The same script a person runs, so this pipeline has one way to be started rather than two that can drift. It
+      # builds the bundle and the schema, starts the app model's two servers, applies the artifact, publishes and starts
+      # MailFathom, provisions the credential, replays the corpus, waits for the account to synchronize, and then drives
+      # the client. A failure names the step it happened in.
+      - name: Run the end-to-end client pipeline
+        run: bash scripts/run-end-to-end-client.sh
+
+      # Kept, unlike the pull-request browser suite's, and for the reason that suite's configuration records: every
+      # message in this run is fabricated and its mailbox is destroyed with the run, so a trace carries no personal data
+      # and a screenshot shows nobody's mail. They are the whole diagnosis of a failure that cannot be reproduced by
+      # reading a log.
+      - name: Upload the browser trace and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: end-to-end-client-browser
+          path: 'frontend/.playwright-end-to-end/**'
+          if-no-files-found: ignore
+
+      # What each step of standing the deployment up printed, which is where a failure before the browser is read.
+      - name: Upload the service and orchestration logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: end-to-end-client-logs
+          path: 'artifacts/end-to-end-client/**'
+          if-no-files-found: ignore

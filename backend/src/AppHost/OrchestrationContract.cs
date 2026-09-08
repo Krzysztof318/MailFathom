@@ -368,11 +368,11 @@ public static class OrchestrationContract
     /// </remarks>
     public const string DeveloperLoopbackAddress = "127.0.0.1";
 
-    /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
+    /// <summary>The IMAP and SMTP server the ephemeral topologies synchronize against.</summary>
     /// <remarks>
-    /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration synchronizes the
-    /// accounts that developer configured, and starting a mail server beside them would advertise a mailbox nothing
-    /// points at.
+    /// Present under <see cref="IntegrationTestingArgument" /> and <see cref="EndToEndClientArgument" />, and absent
+    /// from a developer's orchestration: that one synchronizes the accounts the developer configured, and starting a
+    /// mail server beside them would advertise a mailbox nothing points at.
     /// </remarks>
     public const string MailServerResourceName = "mailserver";
 
@@ -385,7 +385,13 @@ public static class OrchestrationContract
     /// <summary>The mail server endpoint that answers whether the server is accepting mail yet.</summary>
     public const string MailServerApiEndpointName = "api";
 
-    /// <summary>The IMAP and SMTP login of the one synthetic mailbox the integration-test topology serves.</summary>
+    /// <summary>The IMAP and SMTP login of the one synthetic mailbox the ephemeral topologies serve.</summary>
+    /// <remarks>
+    /// GreenMail is configured with <c>&lt;login&gt;:&lt;password&gt;@&lt;domain&gt;</c>, which makes the login the bare
+    /// local part while <see cref="MailServerAccountEmailAddress" /> is what mail is addressed to. Authenticating with
+    /// the address instead has the server auto-create a second mailbox and drop the connection, so the two are separate
+    /// constants rather than one value used twice.
+    /// </remarks>
     public const string MailServerAccountUserName = "mailfathom";
 
     /// <summary>The address mail is addressed to in order to reach <see cref="MailServerAccountUserName" />.</summary>
@@ -615,6 +621,37 @@ public static class OrchestrationContract
     /// </remarks>
     public const string IntegrationTestingArgument = "IntegrationTesting=true";
 
+    /// <summary>The whole app host argument that selects the end-to-end client topology.</summary>
+    /// <remarks>
+    /// Matched against the argument list for the reason <see cref="IntegrationTestingArgument" /> is, and exclusive
+    /// with it: this topology starts the database and the mail server and no MailFathom at all, because the run that
+    /// selects it stands its own service up the way an operator does. <c>scripts/run-end-to-end-client.sh</c> is the
+    /// only caller.
+    /// </remarks>
+    public const string EndToEndClientArgument = "EndToEndClient=true";
+
+    /// <summary>The host port the end-to-end client run reaches PostgreSQL on.</summary>
+    /// <remarks>
+    /// Stated rather than allocated, unlike every other port in this file, and the difference is who reads it. Every
+    /// allocated port is read back out of the orchestration by something inside it; these four are read by a shell
+    /// script standing outside the app model, which has no orchestration to ask. They sit below 32768 so that nothing
+    /// on the machine can have been handed one as an ephemeral outbound port between two runs, and two end-to-end runs
+    /// on one machine therefore collide — which is a bound on a pipeline dispatched by hand rather than a cost.
+    /// </remarks>
+    public const int EndToEndClientPostgresPort = 24432;
+
+    /// <summary>The host port the end-to-end client run reads the synthetic mailbox on.</summary>
+    /// <remarks>Stated for the reason <see cref="EndToEndClientPostgresPort" /> is.</remarks>
+    public const int EndToEndClientImapPort = 24143;
+
+    /// <summary>The host port the end-to-end client run submits the corpus to.</summary>
+    /// <remarks>Stated for the reason <see cref="EndToEndClientPostgresPort" /> is.</remarks>
+    public const int EndToEndClientSmtpPort = 24025;
+
+    /// <summary>The host port the end-to-end client run reads the mail server's readiness on.</summary>
+    /// <remarks>Stated for the reason <see cref="EndToEndClientPostgresPort" /> is.</remarks>
+    public const int EndToEndClientMailServerApiPort = 24080;
+
     /// <summary>The prefix every container and volume the integration-test topology creates is named with.</summary>
     /// <remarks>
     /// Test containers and volumes are ephemeral, and a run that is killed rather than shut down leaves both behind.
@@ -788,6 +825,16 @@ public static class OrchestrationContract
         ArgumentNullException.ThrowIfNull(arguments);
 
         return arguments.Contains(IntegrationTestingArgument, StringComparer.Ordinal);
+    }
+
+    /// <summary>Reports whether the argument list selects the end-to-end client topology.</summary>
+    /// <param name="arguments">The app host arguments exactly as its caller supplied them.</param>
+    /// <returns><see langword="true" /> only when the explicit end-to-end client switch is present.</returns>
+    public static bool RunsEndToEndClient(IReadOnlyList<string> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        return arguments.Contains(EndToEndClientArgument, StringComparer.Ordinal);
     }
 
     /// <summary>Resolves the OpenSSL policy the MailFathom host receives from this topology.</summary>
