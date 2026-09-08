@@ -79,7 +79,7 @@ export function spanned<TValue>(
  * @param request The route template this asks for, method first, which is the dimension every record here is grouped
  * by. It is a template rather than the composed path: a message identifier in a span name is one name per message.
  * @param ask The operation, which answers a value rather than throwing for anything it expected.
- * @param failureOf Which of the four failure reasons the answer amounts to, or `null` where the client got an answer it
+ * @param failureOf Which of the five failure reasons the answer amounts to, or `null` where the client got an answer it
  * acts on. It is the operation's reading rather than a status, and the distinction it draws is whether an answer
  * arrived rather than whether the answer was yes: a name this deployment will not record, a person with no portrait
  * stored, and a download somebody stopped are each answered and acted on, so each is a `read`.

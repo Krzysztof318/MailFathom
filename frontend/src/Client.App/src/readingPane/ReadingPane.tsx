@@ -58,6 +58,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 // The most of a selected passage the workspace carries. A question is asked about a fragment somebody pointed at, so a
@@ -218,12 +219,27 @@ function OpenMessage({
             }
 
             setAnswer({ read, result: answered });
+
+            // A message the deployment no longer holds is let go of rather than drawn as a failure to press through.
+            // What is open outlives the message across a reload, so somebody returning to a client whose message has
+            // since been deleted or moved lands on the empty state they would have had if nothing had been open — and
+            // somebody whose open message is deleted elsewhere while they read it lands there too, which is the same
+            // fact arriving a moment later.
+            //
+            // It is only ever `missing` that does this, and that is the whole reason the reason exists: every other
+            // failure may answer differently on the next attempt, and closing what a reader had open because their
+            // deployment blinked would lose their place for a fault that is about to pass. The read that answered is
+            // the message that is open — a message changed under this component ends this attempt above rather than
+            // reaching here — so nothing has to be compared against what is selected now.
+            if (answered.outcome === 'failed' && answered.failure.reason === 'missing') {
+                revise({ selection: null });
+            }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, read, online]);
+    }, [session, transport, read, online, revise]);
 
     // A search result cited a file rather than the message, and a description of the message is what turns that
     // coordinate into something openable: the citation carries a position, and only the description says how large the
@@ -365,8 +381,8 @@ function OpenMessage({
                     {translate('message.failed', { reason: translate(failureLabels[held.result.failure.reason]) })}
                 </p>
 
-                {/* Reading again is the way out of exactly one of the four failures, for the reason
-                    `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. */}
+                {/* Reading again is the way out of exactly one of the five failures, for the reason
+                    `shell/ConnectionSummary.tsx` gives: the other four repeat identically on a second attempt. */}
                 {held.result.failure.reason === 'unavailable' ? (
                     <SecondaryButton
                         label={translate('connection.retry')}

@@ -412,6 +412,8 @@ export const en = {
     'compose.failedUnavailable': 'Your deployment did not answer. What you wrote is kept here; try again.',
     'compose.failedUnreadable':
         'Your deployment answered, but this client could not act on the answer. That is a defect worth reporting.',
+    'compose.failedMissing':
+        'Your deployment no longer holds the message this was answering, so there is nothing here to answer.',
 
     'tabs.strip': 'Open tabs',
     'tabs.close': 'Close {title}',
@@ -579,6 +581,7 @@ export const en = {
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',
     'failure.unreadable': 'unreadable',
+    'failure.missing': 'no longer there',
 
     'body.reading': 'Reading the message…',
     'body.failed': 'The message could not be read: {reason}.',

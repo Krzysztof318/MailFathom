@@ -5,6 +5,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
+import { emptyWorkspace, type Workspace } from './workspace/useWorkspace';
 import { mostReconnectionAttempts } from './shell/useConnection';
 import {
     asked,
@@ -193,6 +194,33 @@ describe('App session', () => {
         await screen.findByText(/This machine is offline\./);
 
         expect(within(screen.getByRole('navigation', { name: 'Spaces' })).queryAllByRole('link')).toEqual([]);
+    });
+
+    // What somebody was reading and where they were reading it goes with the credential, and the store is where that
+    // has to be true rather than only the screen: the next start reads the store, so a folder or a message left in it
+    // would be the last person's place handed to whoever signs in next on this machine.
+    it('keeps neither the folder nor the message somebody was on once they have signed out', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping());
+        signIn();
+        await framed();
+
+        window.sessionStorage.setItem(
+            'mailfathom.workspace',
+            JSON.stringify({
+                ...emptyWorkspace,
+                scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
+                selection: 'AAMkAD-42',
+            }),
+        );
+
+        await signOut();
+
+        await waitFor(() => {
+            const kept = JSON.parse(window.sessionStorage.getItem('mailfathom.workspace') ?? 'null') as Workspace;
+
+            expect(kept.scope).toEqual({ kind: 'everything' });
+            expect(kept.selection).toBeNull();
+        });
     });
 
     it('reports the deployment it is reading from beside the client it is running, on the settings screen', async () => {

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
+import type { MailFolderDirectory } from '@mailfathom/client-backend';
 import {
     accountInScope,
     everything,
@@ -12,10 +13,38 @@ import {
     scopeKey,
     scopeOfAccount,
     scopeReaches,
+    scopeStillOffered,
     type MailScope,
 } from './mailScope';
 
 const workInbox: MailScope = { kind: 'folder', accountId: 'work', alias: 'INBOX' };
+
+const offered: MailFolderDirectory = {
+    synchronizationEnabled: true,
+    accounts: [
+        {
+            account: {
+                id: 'work',
+                displayName: 'Work',
+                synchronizationState: 'Synchronized',
+                lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+                behind: false,
+            },
+            folders: [
+                {
+                    alias: 'INBOX',
+                    role: 'Inbox',
+                    path: ['INBOX'],
+                    storedEmailCount: 4213,
+                    unreadEmailCount: 12,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+                    behind: false,
+                },
+            ],
+        },
+    ],
+};
 
 describe('scopeKey', () => {
     it.each<{ scope: MailScope; key: string }>([
@@ -109,5 +138,26 @@ describe('scopeReaches', () => {
 
     it('reaches a folder scope with a change named against the account alone', () => {
         expect(scopeReaches(workInbox, 'work', null)).toBe(true);
+    });
+});
+
+describe('scopeStillOffered', () => {
+    it.each<{ scope: MailScope; still: boolean }>([
+        { scope: everything, still: true },
+        { scope: { kind: 'role', role: 'Inbox' }, still: true },
+        { scope: { kind: 'role', role: 'Junk' }, still: false },
+        { scope: { kind: 'account', accountId: 'work' }, still: true },
+        { scope: { kind: 'account', accountId: 'personal' }, still: false },
+        { scope: workInbox, still: true },
+        { scope: { kind: 'folder', accountId: 'work', alias: 'ARCHIVE-2024' }, still: false },
+        { scope: { kind: 'folder', accountId: 'personal', alias: 'INBOX' }, still: false },
+    ])('answers $still for a scope the deployment does or does not still offer', ({ scope, still }) => {
+        expect(scopeStillOffered(scope, offered)).toBe(still);
+    });
+
+    // Somebody holding no mailbox at all is told so by the tree drawing the sentence for it, and taking the widest
+    // scope away from them would answer that with something nobody can act on instead.
+    it('offers everything even where the deployment answered with no account at all', () => {
+        expect(scopeStillOffered(everything, { synchronizationEnabled: true, accounts: [] })).toBe(true);
     });
 });

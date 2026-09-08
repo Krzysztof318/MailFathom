@@ -169,6 +169,20 @@ describe('readMailMessage', () => {
         },
     );
 
+    // The one status on this route that says something a screen can act on rather than retry. It is separated because
+    // a client that could not tell it from a deployment that is down would either offer a retry that cannot answer, or
+    // close what a reader had open every time their deployment blinked.
+    it.each<{ status: number; reason: string }>([
+        { status: 404, reason: 'missing' },
+        { status: 401, reason: 'unauthenticated' },
+        { status: 403, reason: 'unauthorized' },
+        { status: 503, reason: 'unavailable' },
+    ])('reports a status of $status as $reason', async ({ status, reason }) => {
+        const result = await readMailMessage(session, answering({ status, body: '' }), messageId);
+
+        expect(result).toEqual({ outcome: 'failed', failure: { reason, status } });
+    });
+
     it('reports a deployment that answered nothing at all as unavailable', async () => {
         const result = await readMailMessage(
             session,

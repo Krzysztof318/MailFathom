@@ -417,6 +417,8 @@ export const pl: Catalogue = {
         'Twoje wdrożenie nie odpowiedziało. To, co zostało napisane, zostaje tutaj; spróbuj ponownie.',
     'compose.failedUnreadable':
         'Twoje wdrożenie odpowiedziało, ale klient nie potrafił nic z tą odpowiedzią zrobić. To usterka warta zgłoszenia.',
+    'compose.failedMissing':
+        'Twoje wdrożenie nie ma już wiadomości, na którą to miała być odpowiedź, więc nie ma tu na co odpowiadać.',
 
     'tabs.strip': 'Co jest otwarte',
     'tabs.close': 'Zamknij: {title}',
@@ -583,6 +585,7 @@ export const pl: Catalogue = {
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',
     'failure.unreadable': 'odpowiedź nie do odczytania',
+    'failure.missing': 'już nie istnieje',
 
     'body.reading': 'Odczytywanie wiadomości…',
     'body.failed': 'Nie udało się odczytać wiadomości: {reason}.',

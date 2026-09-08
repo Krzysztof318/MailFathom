@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { act, fireEvent, render, screen, type RenderResult } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientSession, ClientSignal, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -15,7 +15,7 @@ import {
     type SignalledChanges,
 } from '../signals/signalledChanges';
 import { WorkspaceProvider } from '../workspace/Workspace';
-import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { emptyWorkspace, useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { FolderTree } from './FolderTree';
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
@@ -351,6 +351,37 @@ describe('FolderTree', () => {
         fireEvent.click(row(/^Inbox12 unread/));
 
         expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
+    });
+
+    // What is scoped to outlives the answer it was chosen from, so the answer is also what says whether it is still
+    // there. Seeded through the store rather than clicked, because a folder a reader could click is by definition one
+    // the tree is still drawing.
+    it.each<{ gone: string; gap: Workspace['scope'] }>([
+        { gone: 'a folder', gap: { kind: 'folder', accountId: 'work', alias: 'ARCHIVE-2019' } },
+        { gone: 'a mailbox', gap: { kind: 'account', accountId: 'retired' } },
+        { gone: 'the last folder playing a role', gap: { kind: 'role', role: 'Junk' } },
+    ])('opens on every mailbox where what was scoped to is $gone the deployment no longer offers', async ({ gap }) => {
+        window.sessionStorage.setItem('mailfathom.workspace', JSON.stringify({ ...emptyWorkspace, scope: gap }));
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        // Awaited rather than asserted outright: the tree is drawn from the answer and the scope is corrected against
+        // that same answer, so the correction lands on the render after the one that first drew a row.
+        await waitFor(() => {
+            expect(carried().scope).toEqual({ kind: 'everything' });
+        });
+    });
+
+    it('leaves a scope the deployment still offers exactly where it was', async () => {
+        const kept: Workspace['scope'] = { kind: 'folder', accountId: 'work', alias: 'ARCHIVE' };
+
+        window.sessionStorage.setItem('mailfathom.workspace', JSON.stringify({ ...emptyWorkspace, scope: kept }));
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        expect(carried().scope).toEqual(kept);
     });
 
     it('says which folder is behind and which one nothing could reach, rather than showing either as waiting', async () => {

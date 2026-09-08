@@ -74,6 +74,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 // How long after scrolling stops before where the reader is is written down. Long enough that a flick through a folder
@@ -631,8 +632,8 @@ export function MessageList({
                     {translate('list.failed', { reason: translate(failureLabels[failure.reason]) })}
                 </p>
 
-                {/* Reading again is the way out of exactly one of the four failures, for the reason
-                    `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. */}
+                {/* Reading again is the way out of exactly one of the five failures, for the reason
+                    `shell/ConnectionSummary.tsx` gives: the other four repeat identically on a second attempt. */}
                 {failure.reason === 'unavailable' ? (
                     <SecondaryButton label={translate('connection.retry')} onActivate={tryAgain} />
                 ) : null}
