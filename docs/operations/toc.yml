@@ -107,6 +107,9 @@
     - name: The HTTP API document
       href: http-api-documentation.md
       description: Where a development instance publishes the OpenAPI document and the API explorer, what the document contains, and why neither exists anywhere else.
+    - name: The end-to-end client run
+      href: end-to-end-client-run.md
+      description: The pipeline that stands a throwaway deployment up and drives the real client against it, what each of its steps produces, and why it gates nothing.
     - name: The agent workflow
       href: agent-workflow.md
       description: The scripts and skills a repository change passes through, what each one asserts, and how a review runs on a pull request.

@@ -4,9 +4,9 @@ These instructions apply under `frontend/` in addition to the repository root in
 `frontend/src/` and `frontend/tests/` alike, which is why they sit here rather than in either of those: a rule stated in
 one of them would be silently absent from the other.
 
-`frontend/src/AGENTS.md` adds what governs the application source, and `frontend/tests/AGENTS.md` what governs the two
-suites — a directory holding that contract and the browser suite, because a unit test sits beside the source it covers
-and only the browser suite belongs to neither package.
+`frontend/src/AGENTS.md` adds what governs the application source, and `frontend/tests/AGENTS.md` what governs the three
+suites — a directory holding that contract and the two browser suites, because a unit test sits beside the source it
+covers and only a suite driving a built bundle belongs to neither package.
 Nothing here is restated in either, and nothing here restates [`frontend/README.md`](README.md), which is the workspace's page: the commands, the
 package boundary and the three mechanisms that hold it, the strict compiler settings, the styling, and what the build
 produces. [ADR 0021](../docs/decisions/0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) is the decision

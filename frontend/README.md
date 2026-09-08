@@ -316,7 +316,7 @@ pipeline costs that document is the two interface packages in front of it — `@
 `@opentelemetry/api-logs`, the registries every recording call reaches whether or not a pipeline was registered behind
 them: 15 kB, 5 kB compressed.
 
-## The two suites
+## The three suites
 
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested
 differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is components rendered into jsdom
@@ -325,7 +325,7 @@ That one command also collects the suite's coverage, over both packages' `src/` 
 file, and prints a summary beside the results; the HTML report goes to `artifacts/coverage/client/` at the repository
 root. No threshold is enforced on the figure.
 
-`pnpm test:browser` is the other one. It runs `pnpm build`, serves `src/Client.App/dist/` with Vite's preview server,
+`pnpm test:browser` is the second one. It runs `pnpm build`, serves `src/Client.App/dist/` with Vite's preview server,
 and drives it with Playwright, so what it proves is the bundle a deployment publishes rather than the source: the
 application loading, the version the build stamped, the screen rendering through roles and accessible names, each space
 reloading at its own address and the back gesture moving through the client's own history, which composition a width
@@ -333,7 +333,16 @@ produces, and the requests the page actually issued. It needs a browser of its o
 `pnpm exec playwright install chromium` — which is why neither verification gate runs it and the pipeline does, on every
 pull request that reaches this stack. Its configuration is `playwright.config.ts` and its specs are under `tests/`.
 
-`tests/fixtures/` beside them is one corpus of example mail — the session, the accounts and folders, the mail, the
+`pnpm test:end-to-end` is the third one, and it is the only one that reaches a service. Its specs are under
+`tests/end-to-end/`, its configuration is `playwright.end-to-end.config.ts`, and it fakes no route at all: it drives
+the same built bundle against a MailFathom that was stood up the way an operator stands one up, with mail that arrived
+at a mail server and was synchronized out of it. It is never run on its own, because it needs that deployment —
+`scripts/run-end-to-end-client.sh` is what builds one and hands it over, the `End-to-end client` workflow is how it is
+started in the pipeline, and
+[the end-to-end client run](../docs/operations/end-to-end-client-run.md) is the page. It runs on request and gates
+nothing.
+
+`tests/fixtures/` beside the first two is one corpus of example mail — the session, the accounts and folders, the mail, the
 conversations, the drafts, the notifications, and what a change answers with — imported by whatever needs a populated
 screen rather than written out again per check. It is data and no consumer of it is assumed: the browser suite reaches
 it with `page.route`, a unit test hands it to a transport function, and the development server below answers from it.
@@ -369,8 +378,8 @@ drawn by, the octets of a file a message carries, and the signal channel, each o
 `deployment/` or opens a connection of its own — so they answer as a deployment that is not there, which every screen
 drawing one already has a state for. What the client's own telemetry export reports in the console is the same thing.
 
-[`tests/AGENTS.md`](tests/AGENTS.md) is where both suites' policy is decided, including which check belongs to which,
-and where the corpus's own rules are.
+[`tests/AGENTS.md`](tests/AGENTS.md) is where all three suites' policy is decided, including which check belongs to
+which, and where the corpus's own rules are.
 
 ## Whitespace is decided in `.editorconfig`
 
