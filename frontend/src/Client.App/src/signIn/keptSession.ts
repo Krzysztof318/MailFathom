@@ -15,7 +15,7 @@
 // the credential: a Basic header carried it and a token does not, and the client needs it to say who is signed in and
 // to key what this machine remembers per person. It is not a secret, and it is not the credential's other half.
 
-import { longestCredentialPart } from './credentialEntry';
+import { isPresentableSessionCredential, longestCredentialPart } from './credentialEntry';
 
 /** The finished header value, the instant it stops working, and who it belongs to. */
 export interface KeptSession {
@@ -51,8 +51,10 @@ export function writeKeptSession(session: KeptSession): string {
  *
  * A store that answers with something unreadable is a store holding nothing usable, so it is answered as nothing kept
  * and the person signs in again. That covers a value written by a release whose shape differed, a keychain entry
- * somebody edited, and storage that returned a truncated string — none of which is a credential worth presenting to a
- * deployment.
+ * somebody edited, storage that returned a truncated string, and a header value a script on the origin wrote — none
+ * of which is a credential worth presenting to a deployment. The credential is checked for the header it becomes
+ * rather than for being a string, because that is what this read shares with the exchange: both are entry points into
+ * a value the transport hands to `Headers` verbatim, and only one of them was written by this client.
  *
  * A session whose instant has passed is nothing kept either, and that is the ordinary case rather than a damaged
  * store: a twelve-hour session opened the next morning is over, and answering it as something kept would mount the
@@ -86,7 +88,7 @@ export function readKeptSession(stored: string | null, readAt: number = Date.now
     const expiresAt = kept['expiresAt'];
     const person = kept['person'];
 
-    if (typeof authorization !== 'string' || authorization.length === 0) {
+    if (typeof authorization !== 'string' || !isPresentableSessionCredential(authorization)) {
         return null;
     }
 

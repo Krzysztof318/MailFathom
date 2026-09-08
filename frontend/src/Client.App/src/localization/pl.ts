@@ -89,7 +89,7 @@ export const pl: Catalogue = {
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
     'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane logowanie. Zaloguj się ponownie.',
     'signIn.notRemoved':
-        'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. Przestaje ono działać samo, a MailFathom już je zakończył. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
+        'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. MailFathom został poproszony o zakończenie sesji, a ona i tak przestaje działać sama. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
     'signIn.notKept':
         'Nie udało się zapisać tego logowania na tej maszynie, więc zapytamy o hasło ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
     'signIn.keptUntilSignedOut':

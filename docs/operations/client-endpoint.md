@@ -204,6 +204,11 @@ Authorization: Bearer mfs_…
 Answers `204` and the token stops working on the next request rather than at its expiry. The client's sign-out asks for
 this and does not wait on the answer: a deployment that never heard still expires the token on its own.
 
+**A token this process is not holding is answered `401`, and a process already holding as many sessions as it will hold
+answers `503`.** They are two different things for a client to do: the first is signed in for again, and the second is
+tried again in a moment. The first is the ordinary case rather than a rare one — sessions live in this process's memory,
+so a restart is what a client meets when its scheduled renewal presents what it kept.
+
 **The lifetime is twelve hours** and it is not configurable. It is a working day, so a client reopened the same day is
 already signed in, and no longer, so a token abandoned on a machine is not a credential nobody remembers issuing. What
 bounds the case a person is actually in is renewal rather than the number.
@@ -213,6 +218,13 @@ bounds the case a person is actually in is renewal rather than the number.
 next request each of them makes. Rotating a credential's material does not: rotation changes what may be presented at
 the exchange and says nothing about sessions already exchanged, so an operator ending somebody's sessions disables the
 credential rather than rotating it.
+
+Ending a credential's sessions also refuses a sign-in naming it for the next thirty seconds, and an erasure refuses one
+naming that user for the same window. That is what makes ending them an act rather than a race: an exchange presenting
+a password authenticates against a row that is still enabled, spends around half a second deriving it, and would
+otherwise write its session after the sweep meant to have ended it — a live session the operator was told was gone, and
+one that renews from what the process holds rather than from the row. A credential enabled again inside that window is
+answered `401` until it passes.
 
 **Sessions live in the process's memory**, which has three consequences an operator sees. A restart signs every client
 out, and each of them meets that as a refused credential and asks for a password again — no mail and no preference is

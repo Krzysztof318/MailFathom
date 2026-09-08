@@ -65,6 +65,17 @@ internal sealed class ClientSessionTokens
     /// <remarks>A bound at a boundary, for the reason <see cref="Signals.ClientSignalTickets.MostOutstandingTickets" /> carries one: minting is behind this surface's authentication and its rate limiter, and this is what keeps a credential that is nonetheless spending both from growing the process's memory. Reaching it refuses rather than evicting, because evicting somebody else's live session would sign a stranger out.</remarks>
     internal const int MostLiveSessions = 10_000;
 
+    /// <summary>How long after an operator ends somebody's sessions a mint naming them is refused.</summary>
+    /// <remarks>
+    /// The window an exchange can be in flight for, which is what makes ending a session an act rather than a race: a
+    /// request authenticates against a row that is still enabled, spends half a second deriving the password, and
+    /// would mint after the sweep that was supposed to have ended it — leaving a live session the operator was told
+    /// was gone, and one that renews from what this store holds rather than from the row. Long enough to cover a
+    /// derivation and the request around it, and short enough that a credential enabled again is signed in with
+    /// rather than refused for a minute.
+    /// </remarks>
+    internal static readonly TimeSpan MintBarrier = TimeSpan.FromSeconds(30);
+
     /// <summary>How many bytes of the token name it, and how many prove it.</summary>
     private const int IdentifierByteCount = 16;
     private const int SecretByteCount = 32;
@@ -77,6 +88,8 @@ internal sealed class ClientSessionTokens
     private const int LongestPresentedToken = 256;
 
     private readonly Dictionary<string, LiveSession> live = new(StringComparer.Ordinal);
+    private readonly Dictionary<Guid, DateTimeOffset> endedCredentials = [];
+    private readonly Dictionary<MailUserId, DateTimeOffset> endedUsers = [];
     private readonly Lock gate = new();
     private readonly TimeProvider timeProvider;
 
@@ -90,17 +103,38 @@ internal sealed class ClientSessionTokens
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Mints a token for what a credential admitted, or reports that too many sessions are live.</summary>
+    /// <summary>Mints a token for what a credential admitted, or refuses where the bound is reached or the credential was just ended.</summary>
     /// <param name="admitted">The credential the exchange authenticated, the user it resolved, and what it grants.</param>
-    /// <returns>The minted token and when it expires, or <see langword="null" /> when the bound is reached.</returns>
+    /// <returns>The minted token and when it expires, or <see langword="null" /> where this store will not hold another session for it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="admitted" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The barrier is read here rather than by the caller, because the caller cannot hold the gate: an exchange
+    /// authenticates outside it, and a check made before this call would be a check the sweep can run between. Which
+    /// of the two refusals it was is asked afterwards through <see cref="WasEndedRecently" />, which answers for as
+    /// long as the barrier stands and therefore reports the same thing this refusal did.
+    /// </remarks>
     internal MintedClientSessionToken? Mint(AdmittedUserCredential admitted)
     {
         ArgumentNullException.ThrowIfNull(admitted);
 
         lock (this.gate)
         {
-            return this.MintReplacing(admitted, replacing: null);
+            return this.Barred(admitted) ? null : this.MintReplacing(admitted, replacing: null);
+        }
+    }
+
+    /// <summary>Whether an operator has just ended what this credential admits, which is why a mint for it was refused.</summary>
+    /// <param name="admitted">What the exchange authenticated.</param>
+    /// <returns><see langword="true" /> while the barrier over that credential or that user stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="admitted" /> is <see langword="null" />.</exception>
+    /// <remarks>What it separates is an authentication failure from a transient one: a credential an operator ended is answered by asking for a sign-in, and a store already holding as many sessions as it will hold is answered by asking again in a moment.</remarks>
+    internal bool WasEndedRecently(AdmittedUserCredential admitted)
+    {
+        ArgumentNullException.ThrowIfNull(admitted);
+
+        lock (this.gate)
+        {
+            return this.Barred(admitted);
         }
     }
 
@@ -175,8 +209,15 @@ internal sealed class ClientSessionTokens
     /// same trade that makes verifying cheap. Walking the store is what closes that, and it is walked only when an
     /// operator acts on a credential rather than on any request path.
     /// </remarks>
-    internal int RevokeEverythingMintedBy(Guid credentialId) =>
-        this.RevokeEverything(session => session.Admitted.CredentialId == credentialId);
+    internal int RevokeEverythingMintedBy(Guid credentialId)
+    {
+        lock (this.gate)
+        {
+            this.endedCredentials[credentialId] = this.timeProvider.GetUtcNow() + MintBarrier;
+
+            return this.RevokeEverything(session => session.Admitted.CredentialId == credentialId);
+        }
+    }
 
     /// <summary>Ends every session held for one user, which is what erasing that user means here.</summary>
     /// <param name="user">The user this deployment no longer holds.</param>
@@ -186,8 +227,15 @@ internal sealed class ClientSessionTokens
     /// them: a caller that walked the credentials it was about to delete would be reading a list the database is in
     /// the middle of removing. A session names the user it acts for, which is the fact that outlived the rows.
     /// </remarks>
-    internal int RevokeEverythingMintedFor(MailUserId user) =>
-        this.RevokeEverything(session => session.Admitted.User == user);
+    internal int RevokeEverythingMintedFor(MailUserId user)
+    {
+        lock (this.gate)
+        {
+            this.endedUsers[user] = this.timeProvider.GetUtcNow() + MintBarrier;
+
+            return this.RevokeEverything(session => session.Admitted.User == user);
+        }
+    }
 
     /// <summary>Ends every session an operator's act invalidated.</summary>
     /// <remarks>Walked only when an operator acts on a credential or a user, never on a request path — which is what keeps the cost of holding sessions in a dictionary off the requests that read one.</remarks>
@@ -207,6 +255,17 @@ internal sealed class ClientSessionTokens
 
             return ended.Length;
         }
+    }
+
+    /// <summary>Whether a barrier over this credential or this user still stands, which is what refuses a mint across an operator's act.</summary>
+    /// <remarks>Called under <c>gate</c>, so that reading the barrier and minting against it are one step rather than two a sweep can run between.</remarks>
+    private bool Barred(AdmittedUserCredential admitted)
+    {
+        var now = this.timeProvider.GetUtcNow();
+
+        return (this.endedCredentials.TryGetValue(admitted.CredentialId, out var credentialBarrier)
+                && now <= credentialBarrier)
+            || (this.endedUsers.TryGetValue(admitted.User, out var userBarrier) && now <= userBarrier);
     }
 
     /// <summary>The session a presented token names and proves, or <see langword="null" /> where it names none.</summary>
@@ -314,6 +373,25 @@ internal sealed class ClientSessionTokens
         foreach (var identifier in expired)
         {
             this.live.Remove(identifier);
+        }
+
+        SweepBarriers(this.endedCredentials, now);
+        SweepBarriers(this.endedUsers, now);
+    }
+
+    /// <summary>Removes the barriers an exchange can no longer have been in flight across.</summary>
+    /// <remarks>Swept beside the sessions rather than on a timer of its own, because a barrier holds one entry per act an operator performed and outlives none of them by more than <see cref="MintBarrier" />.</remarks>
+    private static void SweepBarriers<TKey>(Dictionary<TKey, DateTimeOffset> barriers, DateTimeOffset now)
+        where TKey : notnull
+    {
+        var stood = barriers
+            .Where(barrier => barrier.Value < now)
+            .Select(static barrier => barrier.Key)
+            .ToArray();
+
+        foreach (var key in stood)
+        {
+            barriers.Remove(key);
         }
     }
 

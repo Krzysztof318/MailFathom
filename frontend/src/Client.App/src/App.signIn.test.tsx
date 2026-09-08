@@ -217,7 +217,7 @@ describe('App sign-in', () => {
         ).toBeDefined();
         expect(
             await screen.findByText(
-                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
+                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
             ),
         ).toBeDefined();
     });
@@ -287,7 +287,7 @@ describe('App sign-in', () => {
         // the next start read it back while they believe it is gone.
         expect(
             await screen.findByText(
-                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
+                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
             ),
         ).toBeDefined();
     });

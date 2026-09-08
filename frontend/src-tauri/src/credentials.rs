@@ -6,7 +6,7 @@
 // equivalent of at all. ADR 0023 decided the question for a desktop keychain and a browser page, and ADR 0027 amended
 // it for the Android head: the mechanism there is the Android Keystore rather than the `keyring` crate, which has no
 // Android backend, and the fallback is the opposite of the desktop's — a device whose protected storage cannot be
-// reached keeps nothing rather than writing the password into the page, because a phone kills the client all day and
+// reached keeps nothing rather than writing the credential into the page, because a phone kills the client all day and
 // the page is where a script that reached the origin would read it.
 //
 // That second half is why this module answers with an *arrangement* rather than with a fact about the machine. The
@@ -19,7 +19,7 @@
 // a key from, and an Android one never offers the page as a fallback.
 //
 // The two implementations below are selected by target and are the whole of the difference between the heads. Neither
-// reports why anything failed: everything they could report is about a password, and a client told nothing simply asks
+// reports why anything failed: everything they could report is about a credential, and a client told nothing simply asks
 // for it again.
 
 /// The shell keeps it in the operating system's own protected store, and only signing out removes it.

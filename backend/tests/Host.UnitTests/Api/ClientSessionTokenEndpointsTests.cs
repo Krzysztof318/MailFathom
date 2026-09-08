@@ -198,6 +198,48 @@ public sealed class ClientSessionTokenEndpointsTests
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, refused.StatusCode);
     }
 
+    /// <summary>A token this process is not holding is an authentication failure rather than a deployment that is busy.</summary>
+    /// <remarks>
+    /// The ordinary case rather than the rare one: a restart empties the store, and the client's scheduled renewal
+    /// then presents what it kept. Answered as the bound instead, the client would read it as a deployment to try
+    /// again in a moment and would go on presenting a token nothing will ever accept until it expired.
+    /// </remarks>
+    [Fact]
+    public void Exchange_ARenewalPresentingATokenThisProcessDoesNotHold_AnswersUnauthorizedRatherThanUnavailable()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+
+        // Act
+        var result = ClientSessionTokenEndpoints.Exchange(
+            RequestCarrying(headerValue: "Bearer mfs_thisprocessneverheldit.bm90LWEtc2Vzc2lvbg"),
+            AuthorizationFor(SyntheticMailUser.Deployment),
+            sessions);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.StatusCode);
+    }
+
+    /// <summary>A credential an operator ended while this exchange was in flight is refused rather than answered a session nothing ends.</summary>
+    [Fact]
+    public void Exchange_ForACredentialWhoseSessionsWereJustEnded_AnswersUnauthorizedRatherThanAToken()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        sessions.RevokeEverythingMintedBy(CredentialId);
+
+        // Act
+        var result = ClientSessionTokenEndpoints.Exchange(
+            RequestCarrying(headerValue: "Basic dXNlcjpwYXNzd29yZA=="),
+            AuthorizationFor(SyntheticMailUser.Deployment),
+            sessions);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.StatusCode);
+    }
+
     /// <summary>Signing out ends the session on the spot, so the token stops authenticating before it expires.</summary>
     [Fact]
     public void Revoke_ARequestCarryingALiveSession_EndsItAndAnswersWithNoBody()

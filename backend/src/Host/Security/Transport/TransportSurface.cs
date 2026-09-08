@@ -189,7 +189,7 @@ internal readonly record struct TransportSurface
 
     /// <summary>Gets the scheme judging a session token this process minted when a credential was exchanged for one.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
-    /// <remarks>Composed from the surface's name like the others, and it keeps more apart here than a name usually does: a session is held in this process against one surface's exchange route, so a token minted where a password was read authenticates nowhere a second surface would have had to mint its own.</remarks>
+    /// <remarks>Composed from the surface's name like the others, and what it keeps apart is the registration rather than the sessions: one process-wide store holds those, keyed by the token alone, so a token authenticates wherever this scheme is registered. One surface asks for the exchange today, which is what makes that the same thing.</remarks>
     internal string SessionTokenSchemeName => $"MailFathom:{this.Name}:SessionToken";
 
     /// <summary>Gets the scheme verifying a signed assertion, against this surface's configured client public keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>

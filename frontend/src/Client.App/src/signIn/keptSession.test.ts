@@ -59,6 +59,20 @@ describe('keptSession', () => {
         expect(readKeptSession(held, readAt)).toBeNull();
     });
 
+    // The second entry point into the credential, and the one nothing composed: the store is a place any script on the
+    // origin can write to, and what is read back becomes an `Authorization` header verbatim. A value the `Headers`
+    // constructor refuses would turn every later read into a deployment that cannot be reached, with the unusable
+    // session persisted across reloads and no way out but signing out again.
+    it.each([
+        ['a header break', 'Bearer mfs_abc.def\r\nX-Injected: yes'],
+        ['a second space', 'Bearer mfs_abc def'],
+        ['a character outside the bearer alphabet', 'Bearer mfs_abc.déf'],
+        ['a scheme this client never composes', 'Basic YWJjOmRlZg=='],
+        ['no scheme at all', 'mfs_abcdefghijklmnop.cXVpY2stYnJvd24tZm94'],
+    ])('answers nothing kept for a stored credential carrying %s', (_, authorization) => {
+        expect(readKeptSession(stored({ authorization }), readAt)).toBeNull();
+    });
+
     // A store answering with something this size is a store that has been tampered with or has failed, and either way
     // it is refused before it is expanded rather than after.
     it('refuses a stored value too long to be one this client wrote', () => {

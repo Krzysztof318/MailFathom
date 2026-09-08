@@ -51,19 +51,6 @@ export interface Connection {
 }
 
 /**
- * What one attempt answered, tagged with the attempt and the identity it answered for.
- *
- * The tag is what makes "still waiting" a thing this hook works out during a render rather than a second piece of state
- * set beside the first: an answer that is not the current attempt's is a stale answer, and clearing it in the effect
- * that starts the next read would be a render spent saying what the tag already says.
- *
- * The identity is half of that tag rather than the attempt alone, and it is the half that matters most: signing out and
- * back in as somebody else changes the credential without changing the attempt, so an answer tagged by attempt alone
- * would put the previous user's accounts and the previous user's grants in front of the next person for as long as
- * their own read takes. It holds the credential the frame is already holding rather than a second copy of anything, it
- * is compared and never read, and nothing renders it.
- */
-/**
  * Who this client is signed in as, and what it presents for them right now.
  *
  * The two are separate because only one of them lasts. A session token is replaced while somebody is reading — the
@@ -78,6 +65,20 @@ export interface SignedInCaller {
     readonly authorization: string;
 }
 
+/**
+ * What one attempt answered, tagged with the attempt and the identity it answered for.
+ *
+ * The tag is what makes "still waiting" a thing this hook works out during a render rather than a second piece of state
+ * set beside the first: an answer that is not the current attempt's is a stale answer, and clearing it in the effect
+ * that starts the next read would be a render spent saying what the tag already says.
+ *
+ * The identity is half of that tag rather than the attempt alone, and it is the half that matters most: signing out and
+ * back in as somebody else changes who is signed in without changing the attempt, so an answer tagged by attempt alone
+ * would put the previous user's accounts and the previous user's grants in front of the next person for as long as
+ * their own read takes. What it holds is the identity rather than the credential — the credential is deliberately the
+ * thing not compared, a renewal replacing it while nothing about the deployment changed — and it is compared, never
+ * read, and never rendered.
+ */
 interface Answered {
     readonly session: ClientResult<DeploymentSession> | null;
     readonly accounts: ClientResult<MailAccountDirectory> | null;

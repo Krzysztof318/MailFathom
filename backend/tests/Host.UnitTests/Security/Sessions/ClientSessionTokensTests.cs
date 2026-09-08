@@ -18,6 +18,9 @@ public sealed class ClientSessionTokensTests
 
     private static readonly Guid CredentialId = new("2a5f8f2e-6c1d-4c0a-9c2f-2f3b6a1d4e77");
 
+    /// <summary>A second credential the same user holds, which is what an erasure has to reach and a disabled credential must not.</summary>
+    private static readonly Guid SecondCredentialId = new("5d1c7b40-9e33-4a6b-8f21-7c9a0e5b3d12");
+
     /// <summary>A token names the user and the grant the exchange resolved, which is what lets a request be served without resolving either again.</summary>
     [Fact]
     public void Verify_AFreshlyMintedToken_AdmitsWhatTheExchangeResolved()
@@ -288,6 +291,91 @@ public sealed class ClientSessionTokensTests
 
         // Assert
         Assert.NotNull(sessions.Mint(Admitted()));
+    }
+
+    /// <summary>A replacement never meets the bound, so a full process renews the clients it already signed in rather than expiring them.</summary>
+    /// <remarks>
+    /// The guarantee the store publishes and the one nothing else would report: a renewal refused for capacity would
+    /// end every live session at its own expiry for as long as the process stayed full, with no way back in until the
+    /// store drained. It is computed before the presented session is removed, which is exactly the step that could
+    /// stop being true without anything failing.
+    /// </remarks>
+    [Fact]
+    public void Renew_AtTheCeilingWithEverySessionLive_StillAnswersAFreshToken()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var held = sessions.Mint(Admitted())!;
+
+        for (var minted = 1; minted < ClientSessionTokens.MostLiveSessions; minted += 1)
+        {
+            Assert.NotNull(sessions.Mint(Admitted()));
+        }
+
+        // Act
+        var renewed = sessions.Renew(held.Value);
+
+        // Assert
+        Assert.NotNull(renewed);
+        Assert.NotNull(sessions.Verify(renewed.Value));
+        Assert.Null(sessions.Verify(held.Value));
+    }
+
+    /// <summary>A credential an operator has just ended mints nothing, so an exchange in flight across the act does not survive it.</summary>
+    /// <remarks>
+    /// The window is the derivation: a request authenticates against a row that is still enabled, spends half a second
+    /// in PBKDF2, and would write its session after the sweep meant to have ended it. Without the barrier the operator
+    /// is told the sessions are gone while one is live and renewing from what this store holds.
+    /// </remarks>
+    [Fact]
+    public void Mint_ForACredentialWhoseSessionsWereJustEnded_RefusesRatherThanSurvivingTheAct()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        sessions.Mint(Admitted());
+
+        // Act
+        sessions.RevokeEverythingMintedBy(CredentialId);
+
+        // Assert
+        Assert.Null(sessions.Mint(Admitted()));
+        Assert.True(sessions.WasEndedRecently(Admitted()));
+    }
+
+    /// <summary>The barrier is a window rather than a state, so a credential an operator enabled again signs in.</summary>
+    [Fact]
+    public void Mint_ForACredentialWhoseBarrierHasPassed_AdmitsTheSignInAgain()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Instant);
+        var sessions = new ClientSessionTokens(clock);
+        sessions.RevokeEverythingMintedBy(CredentialId);
+
+        // Act
+        clock.Advance(ClientSessionTokens.MintBarrier + TimeSpan.FromSeconds(1));
+
+        // Assert
+        Assert.NotNull(sessions.Mint(Admitted()));
+        Assert.False(sessions.WasEndedRecently(Admitted()));
+    }
+
+    /// <summary>An erasure bars the user rather than the credential, because the rows it removes are the ones it never names.</summary>
+    [Fact]
+    public void Mint_ForAUserWhoWasJustErased_RefusesEveryCredentialTheyHeld()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var second = new AdmittedUserCredential(
+            SecondCredentialId,
+            SyntheticMailUser.Deployment,
+            [MailFathomPermission.MailRead]);
+
+        // Act
+        sessions.RevokeEverythingMintedFor(SyntheticMailUser.Deployment);
+
+        // Assert
+        Assert.Null(sessions.Mint(second));
+        Assert.NotNull(sessions.Mint(Admitted(SyntheticMailUser.Another)));
     }
 
     private static AdmittedUserCredential Admitted(params MailFathomPermission[] permissions) =>

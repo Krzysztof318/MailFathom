@@ -3,16 +3,19 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -27,6 +30,14 @@ namespace MailFathom.Host.UnitTests.Api;
 public sealed class UserRecordEndpointsTests
 {
     private const string EmptyRecord = "{}";
+
+    private static readonly DateTimeOffset Instant = new(2026, 9, 8, 9, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A session held for the user these tests erase, minted by a credential the erasure removes by cascade and never names.</summary>
+    private static AdmittedUserCredential SessionHeldForTheUser() => new(
+        new Guid("8b2e91c4-0a77-4f35-9d18-6e4c2a70b5f9"),
+        SyntheticMailUser.Deployment,
+        [MailFathomPermission.MailRead]);
 
     [Fact]
     public async Task ReadRosterAsync_ADeploymentHoldingUsers_ReportsEachOneWithTheLabelAnAdministratorSelectsBy()
@@ -127,6 +138,53 @@ public sealed class UserRecordEndpointsTests
 
         Assert.True(erasure.Erased);
         Assert.True(erasure.WasServed);
+    }
+
+    /// <summary>Erasing a person ends the client sessions their credentials minted, which the cascade that removes those rows never reaches.</summary>
+    /// <remarks>
+    /// A session is verified against the process's own store rather than against the row it came from, and a renewal
+    /// re-mints from what that store holds — so an erased person's client would go on authenticating, and renewing,
+    /// for as long as the process ran.
+    /// </remarks>
+    [Fact]
+    public async Task EraseAsync_AUserThisDeploymentHolds_EndsTheSessionsTheirCredentialsMinted()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var held = sessions.Mint(SessionHeldForTheUser())!;
+
+        deployment.Erasure.EraseAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>()).Returns(true);
+
+        // Act
+        await UserRecordEndpoints.EraseAsync(
+            SyntheticMailUser.Deployment.Value,
+            deployment.Roster,
+            sessions,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(sessions.Verify(held.Value));
+    }
+
+    /// <summary>A refused erasure ends nothing, so a caller that could not erase has not signed anybody out either.</summary>
+    [Fact]
+    public async Task EraseAsync_ARequestNamingNoUser_LeavesTheSessionsThatUserHoldsLive()
+    {
+        // Arrange
+        var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var held = sessions.Mint(SessionHeldForTheUser())!;
+
+        // Act
+        await UserRecordEndpoints.EraseAsync(
+            Guid.Empty,
+            deployment.Roster,
+            sessions,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(sessions.Verify(held.Value));
     }
 
     [Fact]

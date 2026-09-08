@@ -89,7 +89,7 @@ export const en = {
     'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
     'signIn.notRemoved':
-        'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
+        'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
     'signIn.notKept':
         'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
     'signIn.keptUntilSignedOut':

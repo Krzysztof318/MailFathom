@@ -123,10 +123,8 @@ describe('useConnection', () => {
 
         const readSoFar = presented.length;
 
-        // Act
         rerender({ signedIn: { ...firstPerson, authorization: 'Bearer mfs_renewed.c2Vzc2lvbg' } });
 
-        // Assert
         expect(result.current.accounts?.outcome).toBe('read');
         expect(result.current.session?.outcome).toBe('read');
         expect(presented.length).toBe(readSoFar);

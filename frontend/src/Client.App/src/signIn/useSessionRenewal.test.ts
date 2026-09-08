@@ -184,7 +184,6 @@ describe('useSessionRenewal', () => {
             { initialProps: { online: true } },
         );
 
-        // Act
         rerender({ online: false });
         rerender({ online: true });
 
@@ -193,7 +192,6 @@ describe('useSessionRenewal', () => {
             await vi.advanceTimersByTimeAsync(0);
         });
 
-        // Assert
         expect(renewed.map((session) => session.authorization)).toEqual([`Bearer ${renewedToken}`]);
     });
 

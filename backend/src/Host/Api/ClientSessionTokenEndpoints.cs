@@ -49,6 +49,18 @@ internal static class ClientSessionTokenEndpoints
     /// <summary>The route a session is ended on, relative to the client prefix.</summary>
     internal const string RevocationRoute = "/session/token/revocation";
 
+    /// <summary>What a caller is told where this deployment will hold no session for what the request presented.</summary>
+    /// <remarks>
+    /// Sorted apart from the bound rather than collapsed into it, because a client does two different things with
+    /// them: this one signs in again, and the bound is tried again in a moment. Both cases reach it — a presented
+    /// token this process is not holding, which a restart makes the ordinary case rather than the rare one and which
+    /// nothing refuses at authentication on an endpoint requiring no credential, and a credential an operator ended
+    /// while the exchange authenticating against it was in flight.
+    /// </remarks>
+    private static ProblemHttpResult SessionNoLongerAccepted() => TypedResults.Problem(
+        "This deployment will hold no session for what this request presented. Sign in again.",
+        statusCode: StatusCodes.Status401Unauthorized);
+
     /// <summary>Maps the exchange and the revocation into the client group, so both inherit its requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
@@ -67,7 +79,7 @@ internal static class ClientSessionTokenEndpoints
     /// <param name="context">The request, whose <c>Authorization</c> header says whether this is a sign-in or a renewal.</param>
     /// <param name="authorization">Reports the user the credential named and what it grants.</param>
     /// <param name="sessions">Mints the token and holds the session until it is revoked or expires.</param>
-    /// <returns><c>200</c> with the token, <c>403</c> where an access token is what admitted the request, or <c>503</c> where this process is already holding as many sessions as it will hold.</returns>
+    /// <returns><c>200</c> with the token, <c>401</c> where this deployment will hold no session for what was presented, <c>403</c> where an access token is what admitted the request, or <c>503</c> where this process is already holding as many sessions as it will hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
     /// <remarks>
     /// Renewal is recognized from the credential rather than from a second route or a body: a request already
@@ -94,18 +106,28 @@ internal static class ClientSessionTokenEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
-        var minted = presented is not null
-            ? sessions.Renew(presented)
-            : sessions.Mint(new AdmittedUserCredential(
-                CredentialBehind(context),
-                authorization.RequireUser(),
-                [.. MailFathomPermission.All.Where(authorization.Permits)]));
+        if (presented is not null)
+        {
+            return sessions.Renew(presented) is { } renewed
+                ? TypedResults.Ok(new ClientSessionTokenResponse(renewed.Value, renewed.ExpiresAt))
+                : SessionNoLongerAccepted();
+        }
 
-        return minted is null
-            ? TypedResults.Problem(
+        var admitted = new AdmittedUserCredential(
+            CredentialBehind(context),
+            authorization.RequireUser(),
+            [.. MailFathomPermission.All.Where(authorization.Permits)]);
+
+        if (sessions.Mint(admitted) is { } minted)
+        {
+            return TypedResults.Ok(new ClientSessionTokenResponse(minted.Value, minted.ExpiresAt));
+        }
+
+        return sessions.WasEndedRecently(admitted)
+            ? SessionNoLongerAccepted()
+            : TypedResults.Problem(
                 "This deployment is holding as many client sessions as it will hold; try again in a moment.",
-                statusCode: StatusCodes.Status503ServiceUnavailable)
-            : TypedResults.Ok(new ClientSessionTokenResponse(minted.Value, minted.ExpiresAt));
+                statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 
     /// <summary>Ends the session the request presented, so the token is refused on the next request rather than at expiry.</summary>

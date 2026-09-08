@@ -1382,6 +1382,9 @@ unremovable through the tool that exists to remove it.
 own expiry, so closing a way into somebody's mail closes the clients already signed in through it. A rotation does not:
 it changes what may be presented at [the exchange](client-endpoint.md#the-session-token-routes) and says nothing about
 sessions already exchanged, so an operator ending somebody's sessions disables the credential rather than rotating it.
+Ending them also refuses a sign-in naming that credential for the next thirty seconds, which is how long an exchange
+that authenticated just before the act can still be deriving the password it presented; erasing a user refuses one
+naming that user for the same window. A credential enabled again inside it is answered `401` until it passes.
 
 **A rotation is one statement.** There is no moment at which both credentials work and none at which neither does, so a
 client still presenting the previous material meets a refusal rather than a half-written record. The credential keeps its

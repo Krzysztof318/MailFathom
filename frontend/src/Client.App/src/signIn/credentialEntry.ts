@@ -26,6 +26,12 @@ export type CredentialEntryRefusal = 'incomplete' | 'userNameHasColon' | 'tooLon
  */
 export const longestCredentialPart = 256;
 
+/** The most a finished header value this client presents may be, which is far past the eighty characters a minted session is. */
+const longestPresentedCredential = 512;
+
+/** The shape a session credential this client composed has: the scheme, one space, and the `token68` alphabet RFC 6750 gives a bearer credential. */
+const presentableSession = /^Bearer [A-Za-z0-9\-._~+/]+=*$/;
+
 /** The finished header value for what somebody typed, or why there is none. */
 export type CredentialEntryResult =
     | { readonly outcome: 'resolved'; readonly authorization: string }
@@ -73,6 +79,22 @@ export function resolveCredentialEntry(userName: string, password: string): Cred
  */
 export function resolveSessionCredential(token: string): string {
     return `Bearer ${token}`;
+}
+
+/**
+ * Whether a value read back out of a store is one this client will present as a header.
+ *
+ * The second entry point into the credential, and the one nothing composed: the exchange checks what a deployment
+ * answered before it is kept, and this checks what a store answered before it is presented. Both are needed because
+ * what is between them is a store any script on the origin can write to, and what is after them is the `Headers`
+ * constructor — which refuses a value carrying a break or a space and turns every later read into a deployment that
+ * cannot be reached, with the unusable session persisted across reloads.
+ *
+ * @param authorization What the store answered with.
+ * @returns Whether it is a session credential this client composed.
+ */
+export function isPresentableSessionCredential(authorization: string): boolean {
+    return authorization.length <= longestPresentedCredential && presentableSession.test(authorization);
 }
 
 /** What `btoa` needs: one octet of the UTF-8 encoding per character, rather than the string's own code points. */

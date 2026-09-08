@@ -328,7 +328,13 @@ export function App({
     useEffect(() => {
         const stop = telemetry.exportFor(session, telemetryPermitted);
 
-        if (session !== null && telemetryPermitted && sessionReported.current !== signedInAs) {
+        // Forgotten on the way out as well as written on the way in, because this frame is not unmounted by signing
+        // out — it renders the sign-in screen instead. A value left behind would make signing back in as the same
+        // person at the same deployment record nothing, and the commonest way to reach that is the path this event is
+        // most about: the deployment refuses the kept session and somebody signs straight back in.
+        if (session === null) {
+            sessionReported.current = null;
+        } else if (telemetryPermitted && sessionReported.current !== signedInAs) {
             sessionReported.current = signedInAs;
             telemetry.happened('session_started');
         }
@@ -699,7 +705,7 @@ export function App({
                                                         ) : (
                                                             <Space
                                                                 space={space}
-                                                                // Who is signed in, taken apart in the one module that composes a credential and never here.
+                                                                // Who is signed in, which is what was kept beside the session rather than anything read out of a credential.
                                                                 // A screen never sees the credential; what it is handed is the name the deployment knows the
                                                                 // person by, which is what a preference kept per person on this machine is written under.
                                                                 person={person}

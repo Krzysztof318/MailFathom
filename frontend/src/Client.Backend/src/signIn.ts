@@ -9,10 +9,10 @@ import { parseMintedSession, sessionExchangeRoute, type MintedSession } from './
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
-// Signing in against a deployment, in two steps and deliberately not one. The route that reports what a caller may do
-// answers a caller carrying nothing as well as one carrying a credential, and asking it twice is what keeps a password
-// from being handed to whatever is at an address somebody mistyped: the first request establishes that MailFathom is
-// there and that it takes passwords at all, and only then does the second present one.
+// Signing in against a deployment, in two steps and deliberately not one, and the two reach two different routes. The
+// session route answers a caller carrying nothing as well as one carrying a credential, so the first request is what
+// establishes that MailFathom is there and that it takes passwords at all — and only then does the second present one,
+// to the exchange, which answers the session everything afterwards is held under.
 //
 // It buys nothing against an address somebody typed deliberately — anything can answer as MailFathom — and it is not
 // there for that. What it is there for is the ordinary typo, which lands on a real host that would otherwise be sent a

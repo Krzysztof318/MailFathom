@@ -48,10 +48,10 @@ export interface MintedSession {
     /**
      * When presenting it stops working, as the deployment wrote it.
      *
-     * Kept as the instant the deployment stated rather than as a duration this client measured, because a client's own
-     * clock may be wrong by more than the difference matters — what a renewal is scheduled against is this value read
-     * back against the same clock that will read it, and a client whose clock is far out renews too eagerly rather
-     * than too late.
+     * Kept as the instant the deployment stated rather than as a duration this client measured, because the deployment
+     * is what decides when a session ends and nothing here can recompute it. What that costs is a clock: a renewal is
+     * this value read against the client's own, so a client running behind the deployment by more than the renewal
+     * margin renews after the session is already over, is refused, and asks for a password again.
      */
     readonly expiresAt: string;
 }

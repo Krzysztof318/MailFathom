@@ -529,7 +529,7 @@ describe('SignIn', () => {
         renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['sessionNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
-            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
+            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
         );
     });
 
@@ -543,7 +543,7 @@ describe('SignIn', () => {
         // for another, and hearing only the first would leave them believing the machine holds nothing.
         expect(screen.getAllByRole('status').map((shown) => shown.textContent)).toEqual([
             'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
-            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
+            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
         ]);
     });
 

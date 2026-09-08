@@ -103,9 +103,11 @@ export function fixtureDeploymentState(): FixtureDeploymentState {
 /**
  * What the fixture deployment answers one request with, or `null` where it answered nothing at all.
  *
- * It is a function of the request, the options and one drawn value rather than of a clock or a generator, so the whole
- * of the option handling is provable without either. `null` is what {@link fixtureDeployment} turns into a rejected
- * promise, which is what `send` reads as a deployment that could not be reached.
+ * It is a function of the request, the options and one drawn value rather than of a generator, so the whole of the
+ * option handling is provable without one. The exchange route is the exception and states it: minting a session reads
+ * the clock for the instant it ends and the corpus's own record of what it has already minted, neither of which a
+ * caller decides. `null` is what {@link fixtureDeployment} turns into a rejected promise, which is what `send` reads
+ * as a deployment that could not be reached.
  *
  * @param draw A value in `[0, 1)` the caller decided, which is what `failureRate` is compared against.
  */

@@ -45,9 +45,10 @@ internal static partial class TransportSecurityExtensions
     /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
     /// <remarks>
     /// The exchange is a surface's own decision rather than something read off the methods it accepts, which is why it
-    /// is a parameter here. A session is minted by a route, held in this process against the surface that minted it,
-    /// and presented back to the same one — so a surface that maps no exchange route registers nothing to judge, and a
-    /// token minted for the surface that does authenticates on that surface alone.
+    /// is a parameter here: a surface that maps no exchange route registers nothing to judge. What the surface name
+    /// keeps apart is the scheme registration rather than the sessions, which one process-wide store holds keyed by
+    /// the token alone — so a token authenticates wherever the session scheme is registered, and it authenticates on
+    /// one surface today because one surface asks for the exchange.
     /// </remarks>
     internal static AuthenticationBuilder AddUserFacingTransportAuthentication(
         this IServiceCollection services,
