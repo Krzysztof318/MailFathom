@@ -18,6 +18,7 @@ import type { Locale } from '../localization/locale';
 import { sizeOf } from '../localization/octets';
 import { useLocalization } from '../localization/useLocalization';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
+import { useToasts, type Toast } from '../toasts/useToasts';
 import { anythingWritten, answerTo, nothingWrittenYet, type ComposerOpening, type Composition } from './composition';
 import { DiscardConfirmation } from './DiscardConfirmation';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
@@ -91,6 +92,15 @@ const withdrawalSaid = {
     noSuchSend: 'compose.noSuchSend',
 } as const satisfies Readonly<Record<string, MessageKey>>;
 
+// The same four as the headline a toast carries. A toast is read at a glance and its first line is what somebody
+// takes from it, so what became of the message is said there and why is said under it.
+const withdrawalTitle = {
+    withdrawn: 'compose.withdrawnTitle',
+    alreadyBeingSent: 'compose.notWithdrawnTitle',
+    pastRecall: 'compose.notWithdrawnTitle',
+    noSuchSend: 'compose.notWithdrawnTitle',
+} as const satisfies Readonly<Record<string, MessageKey>>;
+
 // Everything a keyboard may land on, as the platform decides it rather than as a list of the composer's own
 // controls: a control added later is caught by this without anybody remembering to name it here.
 const reachableControls =
@@ -123,7 +133,11 @@ export function Composer({
 }) {
     const { locale, translate } = useLocalization();
     const wide = useWideWorkspace();
+    const toasts = useToasts();
     const draft = useDraftAtDeployment(session, transport);
+
+    // Who the message is for, joined the way the active language joins a list rather than with a comma written here.
+    const addresses = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
     const [composition, setComposition] = useState(() => opened(opening, accounts));
 
     // Whether anybody has written in this message, which is not the same question as whether it has anything in it:
@@ -241,6 +255,69 @@ export function Composer({
     function close(): void {
         forgetComposition();
         onClosed();
+    }
+
+    // Sending, said where the design project says it: a toast standing over whatever the person turned to next rather
+    // than a line at the foot of a window they are done with. It stands for as long as the send does, becomes what the
+    // send came to, and carries the way to take a queued message back — which is the one act that has to outlive
+    // reading the outcome.
+    //
+    // Closing that standing toast is asking to stop the send, which is what taking the message back is: the composer
+    // stays open underneath either way, so nothing written is lost by a refusal and nothing is asked for twice.
+    function sendAndReport(sending: Composition): void {
+        const settled = toasts.raiseOperation({
+            title: translate('compose.sendingTitle'),
+            body: translate('compose.confirmTo', { addresses: addresses.format(sending.to) }),
+            stoppingLeavesBehind: translate('compose.stoppingSendLeavesBehind'),
+            stop: () => {
+                withdrawAndReport();
+            },
+        });
+
+        void draft.send(sending).then((outcome) => {
+            settled(sendReport(outcome));
+        });
+    }
+
+    function withdrawAndReport(): void {
+        void draft.withdraw().then((outcome) => {
+            if (outcome.kind === 'withdrawn') {
+                toasts.raise({
+                    kind: outcome.withdrawal === 'withdrawn' ? 'success' : 'warning',
+                    title: translate(withdrawalTitle[outcome.withdrawal]),
+                    body: translate(withdrawalSaid[outcome.withdrawal]),
+                });
+            }
+        });
+    }
+
+    // What the standing toast becomes once the deployment has answered.
+    //
+    // A toast stands for a few seconds and then goes, so it carries what somebody who had looked away has to know and
+    // never the sentence they have to act on: a refusal names what would change it and belongs beside the words they
+    // would change, which is the foot of the composer, where it stays until they have. So a send that did not happen
+    // is titled here and said there — one sentence in one place, rather than the same paragraph twice with only one
+    // of the two copies still on the screen a moment later.
+    function sendReport(outcome: DraftStanding): Toast {
+        switch (outcome.kind) {
+            case 'queued':
+                return {
+                    kind: 'success',
+                    title: translate('compose.sentTitle'),
+                    body: translate('compose.queued'),
+                    action: { label: translate('compose.withdraw'), take: withdrawAndReport },
+                };
+            case 'withdrawn':
+                return {
+                    kind: outcome.withdrawal === 'withdrawn' ? 'success' : 'warning',
+                    title: translate(withdrawalTitle[outcome.withdrawal]),
+                    body: translate(withdrawalSaid[outcome.withdrawal]),
+                };
+            default:
+                // Every way a send does not happen — refused, failed, or stopped by a refused save met on the way —
+                // is one title here and its own sentence at the foot of the composer, for the reason above.
+                return { kind: 'error', title: translate('compose.notSentTitle') };
+        }
     }
 
     // Whether this message may still be acted on, read by every control that writes to the draft: the send itself,
@@ -423,7 +500,7 @@ export function Composer({
                         }}
                     />
 
-                    <WhatIsHappening standing={draft.standing} online={online} onWithdraw={draft.withdraw} />
+                    <WhatIsHappening standing={draft.standing} online={online} />
 
                     <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-4.25 py-3">
                         <SendConfirmation
@@ -431,7 +508,7 @@ export function Composer({
                             composition={composition}
                             disabled={!sendable}
                             onSend={() => {
-                                void draft.send(composition);
+                                sendAndReport(composition);
                             }}
                         />
 
@@ -563,18 +640,14 @@ function StagedFiles({
     );
 }
 
-// What the deployment is doing about the message, said where it happens rather than as a banner over the whole client:
-// saving, attaching, queueing, what refused it, and what became of one taken back. Nothing waits in silence, and every
-// refusal names what would change it.
-function WhatIsHappening({
-    standing,
-    online,
-    onWithdraw,
-}: {
-    readonly standing: DraftStanding;
-    readonly online: boolean;
-    readonly onWithdraw: () => Promise<void>;
-}) {
+// What the deployment is doing about the draft, said where it happens rather than as a banner over the whole client:
+// saving, attaching, and what refused either. Nothing waits in silence, and every refusal names what would change it.
+//
+// **The send is not among them.** What became of a message somebody sent is said in a toast, which is where the design
+// project says it: it stands over whatever they turned to next rather than at the foot of a window they are finished
+// with. A refusal is the one the toast and this line both carry, and deliberately — the toast is what reaches somebody
+// who has looked away, and the line is what is still there when they come back to the words the deployment refused.
+function WhatIsHappening({ standing, online }: { readonly standing: DraftStanding; readonly online: boolean }) {
     const { translate } = useLocalization();
 
     if (!online) {
@@ -583,6 +656,9 @@ function WhatIsHappening({
 
     switch (standing.kind) {
         case 'held':
+        case 'sending':
+        case 'queued':
+        case 'withdrawn':
             return null;
         case 'saving':
             return <Said text={translate('compose.saving')} />;
@@ -590,30 +666,12 @@ function WhatIsHappening({
             return <Said text={translate('compose.saved')} />;
         case 'attaching':
             return <Said text={translate('compose.attaching', { name: standing.fileName })} />;
-        case 'sending':
-            return <Said text={translate('compose.sending')} />;
         case 'refused':
             return <Said text={translate(refusalSaid[standing.refusal])} warning />;
         case 'refusedSave':
             return <Said text={translate(saveRefusalSaid[standing.refusal])} warning />;
         case 'failed':
             return <Said text={translate(failureSaid[standing.reason])} warning />;
-        case 'withdrawn':
-            return <Said text={translate(withdrawalSaid[standing.withdrawal])} />;
-        case 'queued':
-            return (
-                <Said text={translate('compose.queued')}>
-                    <button
-                        type="button"
-                        className="rounded-md px-2 py-1 text-sm font-semibold text-accent-deep underline transition hover:bg-hover"
-                        onClick={() => {
-                            void onWithdraw();
-                        }}
-                    >
-                        {translate('compose.withdraw')}
-                    </button>
-                </Said>
-            );
     }
 }
 

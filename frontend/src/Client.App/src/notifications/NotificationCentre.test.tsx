@@ -20,6 +20,7 @@ const now = new Date('2026-09-04T12:00:00Z');
 const mail: ClientNotification = {
     id: 'n-mail',
     kind: 'Mail',
+    statement: null,
     title: 'Ada Lovelace wrote',
     body: 'About the engine',
     source: 'Inbox',
@@ -31,6 +32,7 @@ const mail: ClientNotification = {
 const meeting: ClientNotification = {
     id: 'n-meeting',
     kind: 'Calendar',
+    statement: null,
     title: 'Standing meeting moved',
     body: 'It is an hour later',
     source: null,

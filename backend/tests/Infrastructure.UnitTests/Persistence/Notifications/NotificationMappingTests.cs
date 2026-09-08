@@ -176,13 +176,54 @@ public sealed class NotificationMappingTests
         Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));
     }
 
-    private static Notification Compose(NotificationTarget target, string? source = "work") =>
+    /// <summary>The condition is what a client draws the row from, so it survives the round trip with its numbers.</summary>
+    /// <remarks>
+    /// Read back through the mapping rather than off the entity, because what a stored row costs is the columns being
+    /// flattened out of one value and read into it again — a cause kept beside a count that was dropped would draw a
+    /// sentence with a hole in it.
+    /// </remarks>
+    [Fact]
+    public void ToNotification_ARowNamingACondition_KeepsThatConditionAndItsCounts()
+    {
+        // Arrange
+        var notification = Compose(
+            NotificationTarget.Nothing,
+            statement: NotificationStatement.SynchronizationIncomplete(2, 5));
+
+        // Act
+        var restored = NotificationMapping.ToNotification(NotificationMapping.ToEntity(notification));
+
+        // Assert
+        Assert.Equal(notification.Statement, restored.Statement);
+    }
+
+    /// <summary>A row written before conditions were kept names none, and is drawn from what it does carry.</summary>
+    [Fact]
+    public void ToNotification_ARowWrittenBeforeConditionsWereKept_NamesNoneAndKeepsItsTwoLines()
+    {
+        // Arrange
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.Nothing));
+
+        // Act
+        var restored = NotificationMapping.ToNotification(entity);
+
+        // Assert
+        Assert.Null(entity.Cause);
+        Assert.Null(restored.Statement);
+        Assert.Equal("Something happened", restored.Title);
+    }
+
+    private static Notification Compose(
+        NotificationTarget target,
+        string? source = "work",
+        NotificationStatement? statement = null) =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(OccurredAt)),
             User,
             NotificationKind.System,
             title: "Something happened",
             body: "Something happened that nobody was at the screen for.",
+            statement,
             source,
             target,
             NotificationDeduplicationKey.Create("something-happened:work"),

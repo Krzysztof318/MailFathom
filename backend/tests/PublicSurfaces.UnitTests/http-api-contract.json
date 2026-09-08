@@ -2410,6 +2410,16 @@
               "string"
             ]
           },
+          "statement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientNotificationStatementResponse"
+              }
+            ]
+          },
           "target": {
             "$ref": "#/components/schemas/ClientNotificationTargetResponse"
           },
@@ -2422,10 +2432,42 @@
           "kind",
           "title",
           "body",
+          "statement",
           "source",
           "target",
           "occurredAt",
           "read"
+        ],
+        "type": "object"
+      },
+      "ClientNotificationStatementResponse": {
+        "properties": {
+          "cause": {
+            "type": "string"
+          },
+          "counted": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "outOf": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "cause",
+          "counted",
+          "outOf"
         ],
         "type": "object"
       },

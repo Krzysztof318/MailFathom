@@ -28,6 +28,13 @@ namespace MailFathom.Application.Notifications;
 /// through this path.
 /// </para>
 /// <para>
+/// Every raise states its condition twice, in the two forms a notification is read in. The statement is the condition
+/// itself and the numbers it is made with, which is what a client turns into a sentence in whatever language the
+/// person reading it has; the title and the body beside it are that same condition written out in English, for a
+/// reader with no client to say it in their own. Both are composed here from the same values, so the two cannot come
+/// to describe different runs.
+/// </para>
+/// <para>
 /// A row that was kept is also announced to whatever the user has open, because this is the place that already
 /// observes it: the signal carries the row's own already-derived text and the count that follows from writing it, and a
 /// client draws the bell from that rather than from the next interval. A row the deduplication rule folded into a
@@ -87,6 +94,7 @@ public sealed class SynchronizationNotifications
             body: newMessageCount == 1
                 ? "1 new message arrived."
                 : string.Create(CultureInfo.InvariantCulture, $"{newMessageCount} new messages arrived."),
+            NotificationStatement.MailArrived(newMessageCount),
             NotificationTarget.ToScreen(NotificationScreen.Mail),
             condition: "mail-arrived",
             cancellationToken);
@@ -124,6 +132,7 @@ public sealed class SynchronizationNotifications
             body: string.Create(
                 CultureInfo.InvariantCulture,
                 $"{failedFolderCount} of {scheduledFolderCount} folders did not finish. MailFathom will try again."),
+            NotificationStatement.SynchronizationIncomplete(failedFolderCount, scheduledFolderCount),
             NotificationTarget.Nothing,
             condition: "synchronization-incomplete",
             cancellationToken);
@@ -145,6 +154,7 @@ public sealed class SynchronizationNotifications
             NotificationKind.System,
             title: "This account needs signing in again",
             body: "The mail server refused the credential MailFathom holds, so this account is no longer being fetched.",
+            NotificationStatement.CredentialRefused(),
             NotificationTarget.ToScreen(NotificationScreen.Settings),
             condition: "credential-refused",
             cancellationToken);
@@ -154,6 +164,7 @@ public sealed class SynchronizationNotifications
         NotificationKind kind,
         string title,
         string body,
+        NotificationStatement statement,
         NotificationTarget target,
         string condition,
         CancellationToken cancellationToken)
@@ -173,6 +184,7 @@ public sealed class SynchronizationNotifications
             kind,
             title,
             body,
+            statement,
             source,
             target,
             NotificationDeduplicationKey.For(condition, account.Id.Value),

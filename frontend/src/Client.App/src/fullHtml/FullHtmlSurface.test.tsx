@@ -150,6 +150,17 @@ describe('FullHtmlSurface', () => {
         });
     });
 
+    // What stands in that space while the markup travels is held against the design as images: it is `aria-hidden` by
+    // construction and jsdom computes no layout, so what this suite says is that the surface says it is reading for
+    // exactly as long as it is.
+    it('says it is reading while the deployment has answered nothing', async () => {
+        const { transport } = deploymentAnsweringNothing();
+
+        await drawing(transport);
+
+        expect(screen.getByText("Reading the sender's own version…")).toBeDefined();
+    });
+
     it('names the message it is showing, and who sent it and when', async () => {
         const { transport } = deploymentServing();
 

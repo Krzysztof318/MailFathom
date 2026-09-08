@@ -237,6 +237,19 @@ describe('MessageList', () => {
         expect(screen.getByText('Reading your mail…')).toBeDefined();
     });
 
+    // What the skeleton standing in that space looks like is held against the design as images rather than asserted
+    // here: it is `aria-hidden` by construction, and jsdom computes no layout, so what this suite can say about the
+    // wait is what a person meets — the sentence while it lasts, the mail once it lands, and neither of them twice.
+    it('says it is reading until the mail is there, and says nothing of the sort once it is', async () => {
+        renderList(answering(wholeFolder));
+
+        expect(screen.getByText('Reading your mail…')).toBeDefined();
+        expect(screen.queryByRole('listbox', { name: 'Messages' })).toBeNull();
+
+        expect(await rows()).not.toHaveLength(0);
+        expect(screen.queryByText('Reading your mail…')).toBeNull();
+    });
+
     it('draws a row carrying who wrote, what about, and when, and not the opening the design leaves off', async () => {
         renderList(answering(wholeFolder));
 

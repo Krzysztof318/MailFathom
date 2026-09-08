@@ -43,6 +43,7 @@ public sealed record Notification
         NotificationKind kind,
         string title,
         string body,
+        NotificationStatement? statement,
         string? source,
         NotificationTarget target,
         NotificationDeduplicationKey deduplicationKey,
@@ -54,6 +55,7 @@ public sealed record Notification
         this.Kind = kind;
         this.Title = title;
         this.Body = body;
+        this.Statement = statement;
         this.Source = source;
         this.Target = target;
         this.DeduplicationKey = deduplicationKey;
@@ -75,6 +77,16 @@ public sealed record Notification
 
     /// <summary>Gets the second line the row is drawn with.</summary>
     public string Body { get; }
+
+    /// <summary>Gets what the notification says as a condition and its numbers, and <see langword="null" /> where the row names no condition.</summary>
+    /// <remarks>
+    /// It is what a client draws the row from, because a sentence has a language and this does not. The two lines
+    /// above are the same statement written out in English, for a reader with no client to say it in their own —
+    /// a model reading the record over MCP, or an operator reading the table. A row is <see langword="null" /> here
+    /// only where it was written by a build that kept no condition, which is what a deployment upgraded over its own
+    /// data has until retention has taken those rows.
+    /// </remarks>
+    public NotificationStatement? Statement { get; }
 
     /// <summary>Gets what the source line names beyond the kind, and <see langword="null" /> where the kind is the whole of it.</summary>
     /// <remarks>
@@ -101,6 +113,7 @@ public sealed record Notification
     /// <param name="kind">What part of MailFathom it is about.</param>
     /// <param name="title">The headline the row is drawn with.</param>
     /// <param name="body">The second line the row is drawn with.</param>
+    /// <param name="statement">What the notification says as a condition and its numbers, or <see langword="null" /> where the row names no condition.</param>
     /// <param name="source">What the source line names beyond the kind, or <see langword="null" /> where the kind is the whole of it.</param>
     /// <param name="target">Where opening it leads.</param>
     /// <param name="deduplicationKey">The condition it was raised for.</param>
@@ -119,6 +132,7 @@ public sealed record Notification
         NotificationKind kind,
         string title,
         string body,
+        NotificationStatement? statement,
         string? source,
         NotificationTarget target,
         NotificationDeduplicationKey deduplicationKey,
@@ -132,6 +146,7 @@ public sealed record Notification
             kind,
             Bounded(title, MaximumTitleLength, nameof(title)),
             Bounded(body, MaximumBodyLength, nameof(body)),
+            statement,
             source is null ? null : Bounded(source, MaximumSourceLength, nameof(source)),
             target,
             deduplicationKey,
@@ -145,6 +160,7 @@ public sealed record Notification
     /// <param name="kind">What part of MailFathom it is about.</param>
     /// <param name="title">The headline the row is drawn with.</param>
     /// <param name="body">The second line the row is drawn with.</param>
+    /// <param name="statement">What the notification says as a condition and its numbers, or <see langword="null" /> where the row names no condition.</param>
     /// <param name="source">What the source line names beyond the kind, or <see langword="null" /> where the kind is the whole of it.</param>
     /// <param name="target">Where opening it leads.</param>
     /// <param name="deduplicationKey">The condition it was raised for.</param>
@@ -166,6 +182,7 @@ public sealed record Notification
         NotificationKind kind,
         string title,
         string body,
+        NotificationStatement? statement,
         string? source,
         NotificationTarget target,
         NotificationDeduplicationKey deduplicationKey,
@@ -180,6 +197,7 @@ public sealed record Notification
             kind,
             Bounded(title, MaximumTitleLength, nameof(title)),
             Bounded(body, MaximumBodyLength, nameof(body)),
+            statement,
             source is null ? null : Bounded(source, MaximumSourceLength, nameof(source)),
             target,
             deduplicationKey,

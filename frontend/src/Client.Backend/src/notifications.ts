@@ -68,12 +68,46 @@ export type NotificationTarget =
     | { readonly kind: 'Message'; readonly storedEmailId: string }
     | { readonly kind: 'Screen'; readonly screen: NotificationScreen };
 
+/**
+ * What a notification was raised for, as a closed set rather than as the sentence it is said in.
+ *
+ * It is what lets a row read in the language its reader has: the service says which condition occurred and the
+ * numbers it is stated with, and the application says it in words. A cause this build does not name reaches
+ * `parseNotification` as no statement at all rather than as a value nothing can draw.
+ */
+export type NotificationCause = 'MailArrived' | 'SynchronizationIncomplete' | 'CredentialRefused';
+
+/**
+ * What a notification says, as the condition it was raised for and the numbers it is stated with.
+ *
+ * What each number means is the cause's to say, which is why they are read together and never apart. Numbers are the
+ * widest thing a cause carries, so nothing a message held reaches a screen through one.
+ */
+export interface NotificationStatement {
+    readonly cause: NotificationCause;
+
+    /** How many the cause counts, or `null` where it counts nothing. */
+    readonly counted: number | null;
+
+    /** How many the count is out of, or `null` where the cause counts against nothing. */
+    readonly outOf: number | null;
+}
+
 /** One thing that happened to a person, as a row draws it. */
 export interface ClientNotification {
     /** What addresses the notification, and what the read-state route names it by. */
     readonly id: string;
 
     readonly kind: NotificationKind;
+
+    /**
+     * What the notification says, or `null` where the deployment named no condition this build knows.
+     *
+     * A screen draws this rather than the two lines below, which are the service's own English and are what a record
+     * written before conditions were kept has instead of one.
+     */
+    readonly statement: NotificationStatement | null;
+
     readonly title: string;
     readonly body: string;
 
@@ -110,6 +144,7 @@ export interface MarkedNotifications {
 }
 
 const kinds: readonly NotificationKind[] = ['Mail', 'Calendar', 'Case', 'Task', 'System'];
+const causes: readonly NotificationCause[] = ['MailArrived', 'SynchronizationIncomplete', 'CredentialRefused'];
 const screens: readonly NotificationScreen[] = ['Mail', 'Settings'];
 
 /** Reads one page of the signed-in person's notifications, newest first. */
@@ -294,7 +329,58 @@ function parseNotification(value: unknown): ClientNotification | null {
 
     const target = parseTarget(record['target']);
 
-    return target === null ? null : { id, kind, title, body, source, target, occurredAt, read: isRead };
+    return target === null
+        ? null
+        : {
+              id,
+              kind,
+              statement: parseStatement(record['statement']),
+              title,
+              body,
+              source,
+              target,
+              occurredAt,
+              read: isRead,
+          };
+}
+
+/** Which of the two numbers each cause is stated with, so a statement missing one of its own is refused below. */
+const countsPerCause: Readonly<Record<NotificationCause, readonly ('counted' | 'outOf')[]>> = {
+    MailArrived: ['counted'],
+    SynchronizationIncomplete: ['counted', 'outOf'],
+    CredentialRefused: [],
+};
+
+/**
+ * Reads what a notification says, and answers nothing where the deployment says nothing this build can draw.
+ *
+ * A cause is refused rather than carried through, because a screen has no sentence for one it does not name — and a
+ * deployment ahead of this client is the ordinary case rather than a defect, so the row falls back to the English the
+ * service sent instead of failing to parse.
+ *
+ * A cause missing a number it is stated with is refused on the same terms, and the numbers are checked against the
+ * cause rather than each on its own: what a hole in a sentence means is the cause's to say, so a statement naming an
+ * unfinished run without the count it ran against would otherwise reach a screen and be drawn with a blank where a
+ * number belongs. The fallback is the whole point — the service's own English says the same thing and says it whole.
+ */
+function parseStatement(value: unknown): NotificationStatement | null {
+    const record = asRecord(value);
+
+    if (record === null) {
+        return null;
+    }
+
+    const cause = record['cause'];
+    const counted = record['counted'] ?? null;
+    const outOf = record['outOf'] ?? null;
+
+    if (!isCause(cause) || !isCount(counted) || !isCount(outOf)) {
+        return null;
+    }
+
+    const stated = { cause, counted, outOf };
+
+    return countsPerCause[cause].every((number) => stated[number] !== null) ? stated : null;
 }
 
 function parseTarget(value: unknown): NotificationTarget | null {
@@ -371,6 +457,14 @@ function isNotificationText(value: unknown): value is string {
 
 function isKind(value: unknown): value is NotificationKind {
     return typeof value === 'string' && kinds.includes(value as NotificationKind);
+}
+
+function isCause(value: unknown): value is NotificationCause {
+    return typeof value === 'string' && causes.includes(value as NotificationCause);
+}
+
+function isCount(value: unknown): value is number | null {
+    return value === null || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
 }
 
 function isScreen(value: unknown): value is NotificationScreen {

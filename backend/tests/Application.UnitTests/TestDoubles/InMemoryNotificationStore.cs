@@ -126,6 +126,7 @@ internal sealed class InMemoryNotificationStore : INotificationStore
         notification.Kind,
         notification.Title,
         notification.Body,
+        notification.Statement,
         notification.Source,
         notification.Target,
         notification.DeduplicationKey,

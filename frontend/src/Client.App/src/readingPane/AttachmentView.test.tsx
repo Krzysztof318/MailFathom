@@ -145,6 +145,22 @@ describe('AttachmentView', () => {
         expect(screen.getByText('Reading harbour.png…')).toBeDefined();
     });
 
+    // What stands in that space while the octets travel is held against the design as images: it is `aria-hidden` by
+    // construction and jsdom computes no layout, so the claim this suite can make is that the sentence lasts exactly
+    // as long as the wait does and the file takes the surface afterwards.
+    it('says it is reading until the file is drawn, and stops saying it once the file is', async () => {
+        drawing(
+            photograph,
+            reading({ outcome: 'shown', content: 'data:application/octet-stream;base64,AQID' }).exchange,
+        );
+
+        expect(screen.getByText('Reading harbour.png…')).toBeDefined();
+
+        await screen.findByRole('img', { name: 'harbour.png' });
+
+        expect(screen.queryByText('Reading harbour.png…')).toBeNull();
+    });
+
     it('asks for the file at the position the message described it at, under the size it stated', () => {
         const held = reading();
         drawing(photograph, held.exchange);

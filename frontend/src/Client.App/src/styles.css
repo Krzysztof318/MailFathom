@@ -466,6 +466,30 @@
     animation: progress-unknown 1.4s ease-in-out infinite;
 }
 
+/* What a surface waiting on something draws in the space that answer will occupy: a block of the panel's own lines with
+   a lighter band travelling across it. It is one utility rather than a component's utilities for the reason the block
+   above is one — the gradient, how wide it is against the block, and how fast it travels are values, and a screen
+   writing any of them is the drift a colour written into a component is. Every skeleton in the client is this utility
+   sized by the shape it stands in, so the four the design project draws are one decision rather than four.
+   `prefers-reduced-motion` removes the travel by the rule at the foot of this file, which leaves a block of the line
+   colour standing in the space — still reserving it, which is the half of this that carries the meaning. */
+@utility shimmering {
+    border-radius: var(--radius-sm);
+    background-image: linear-gradient(90deg, var(--color-line) 0%, var(--color-line-soft) 42%, var(--color-line) 78%);
+    background-size: 260% 100%;
+    animation: shimmering 1.05s linear infinite;
+}
+
+@keyframes shimmering {
+    from {
+        background-position: 130% 0;
+    }
+
+    to {
+        background-position: -130% 0;
+    }
+}
+
 /* How the notification centre travels, in the three motions the design project gives it: a sheet rising from the foot
    of a narrow window, a panel entering from the side of a wide one, and the return a gesture released short of its
    threshold makes. Each is a duration and a curve together rather than two utilities on the element, for the reason

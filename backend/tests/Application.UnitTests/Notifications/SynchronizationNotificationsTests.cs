@@ -147,6 +147,35 @@ public sealed class SynchronizationNotificationsTests
         Assert.Equal(NotificationScreen.Settings, notification.Target.Screen);
     }
 
+    /// <summary>The condition and its numbers are what a client says the row in its own language, so every raise carries them.</summary>
+    /// <remarks>
+    /// Stated as one test over the three producers rather than three, because the claim is about the set: a condition
+    /// added later that composed a sentence and no statement would leave a client with English it cannot translate,
+    /// and only reading them together says so.
+    /// </remarks>
+    [Fact]
+    public async Task Reporting_EachConditionARunObserves_StatesItAsACauseAndItsCounts()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var notifications = CreateNotifications(store);
+
+        // Act
+        await notifications.ReportArrivedMailAsync(Account, 40, TestContext.Current.CancellationToken);
+        await notifications.ReportIncompleteRunAsync(Account, 2, 5, TestContext.Current.CancellationToken);
+        await notifications.ReportRefusedCredentialAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                (NotificationCause.MailArrived, (int?)40, (int?)null),
+                (NotificationCause.SynchronizationIncomplete, 2, 5),
+                (NotificationCause.CredentialRefused, null, null),
+            ],
+            store.Recorded.Select(notification =>
+                (notification.Statement?.Cause, notification.Statement?.Counted, notification.Statement?.OutOf)));
+    }
+
     /// <summary>An incomplete run and a refused credential are different conditions, so one never suppresses the other.</summary>
     [Fact]
     public async Task ReportIncompleteRunAsync_AccountAlreadyReportedAsRefused_RecordsItsOwnCondition()

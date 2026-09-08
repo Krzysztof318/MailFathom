@@ -195,6 +195,19 @@ describe('ReadingPane', () => {
         expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
     });
 
+    // What the skeleton standing in that space looks like is held against the design as images rather than asserted
+    // here: it is `aria-hidden` by construction and jsdom computes no layout, so what this suite says about the wait
+    // is what a person meets — the sentence until the message is there, and the message with no sentence after it.
+    it('says it is reading until the message is there, and stops saying it once the message is', async () => {
+        drawing(deploymentDescribing());
+
+        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
+
+        await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
+
+        expect(screen.queryByText('Reading this message…')).toBeNull();
+    });
+
     it('says the machine is offline rather than reporting the deployment as unreachable', () => {
         drawing(answersNothing, messageId, false);
 

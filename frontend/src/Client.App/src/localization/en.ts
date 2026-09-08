@@ -366,9 +366,15 @@ export const en = {
     'compose.saving': 'Filing the draft…',
     'compose.saved': 'Draft filed in your own drafts.',
     'compose.attaching': 'Attaching {name}…',
-    'compose.sending': 'Sending…',
+    'compose.sendingTitle': 'Sending your message…',
+    'compose.stoppingSendLeavesBehind':
+        'The message is on its way. Stopping it takes it back and leaves it in your own drafts.',
+    'compose.sentTitle': 'Message sent',
+    'compose.notSentTitle': 'Message not sent',
     'compose.queued': 'Queued to go out.',
     'compose.withdraw': 'Take it back',
+    'compose.withdrawnTitle': 'Message taken back',
+    'compose.notWithdrawnTitle': 'Message not taken back',
     'compose.withdrawn': 'Taken back before it went out.',
     'compose.alreadyBeingSent': 'It is already being sent, so it could not be taken back.',
     'compose.pastRecall': 'It has gone out, so it cannot be taken back.',
@@ -815,6 +821,23 @@ export const en = {
     'notifications.show': 'Show',
     'notifications.readStateNotChanged': 'That notification could not be marked. It stands as it did.',
     'notifications.notAllMarkedRead': 'Your notifications could not be marked read. They stand as they did.',
+    'notifications.said.mailArrived.title': 'New mail',
+    'notifications.said.mailArrived.body.one': '{count} new message arrived.',
+    'notifications.said.mailArrived.body.few': '{count} new messages arrived.',
+    'notifications.said.mailArrived.body.many': '{count} new messages arrived.',
+    'notifications.said.mailArrived.body.other': '{count} new messages arrived.',
+    'notifications.said.synchronizationIncomplete.title': 'Some mail could not be fetched',
+    'notifications.said.synchronizationIncomplete.body.one':
+        '{count} of {outOf} folder did not finish. MailFathom will try again.',
+    'notifications.said.synchronizationIncomplete.body.few':
+        '{count} of {outOf} folders did not finish. MailFathom will try again.',
+    'notifications.said.synchronizationIncomplete.body.many':
+        '{count} of {outOf} folders did not finish. MailFathom will try again.',
+    'notifications.said.synchronizationIncomplete.body.other':
+        '{count} of {outOf} folders did not finish. MailFathom will try again.',
+    'notifications.said.credentialRefused.title': 'This account needs signing in again',
+    'notifications.said.credentialRefused.body':
+        'The mail server refused the credential MailFathom holds, so this account is no longer being fetched.',
     'notifications.arrived.mail.one': '{count} new message',
     'notifications.arrived.mail.few': '{count} new messages',
     'notifications.arrived.mail.many': '{count} new messages',

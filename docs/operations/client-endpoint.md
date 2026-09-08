@@ -1784,11 +1784,22 @@ comes back short.
 names a record names it by identifier, and **a notification another person holds answers `404` exactly as one nobody
 holds** — so nothing here reports whether such a notification exists.
 
-**A row carries what a list draws and stops there**: the kind, a headline, a second line, what the source line names
-beyond the kind, where opening it leads, when the thing it describes happened, and whether it has been read. The title
-and the second line were derived when the notification was produced, so drawing the centre re-reads no mail — and no
-mail body, no address, and no attachment reaches these answers at any size. The condition the notification was raised
-for is absent as well: it is the deduplication rule's own name for a thing rather than anything a screen renders.
+**A row carries what a list draws and stops there**: the kind, what the notification says, a headline, a second line,
+what the source line names beyond the kind, where opening it leads, when the thing it describes happened, and whether
+it has been read. Everything a row draws was derived when the notification was produced, so drawing the centre
+re-reads no mail — and no mail body, no address, and no attachment reaches these answers at any size. The
+deduplication key is absent: it is the rule's own name for a condition rather than anything a screen renders.
+
+**What a notification says is a condition and its numbers, and the sentence is the client's.** `statement` carries a
+`cause` — `MailArrived`, `SynchronizationIncomplete`, or `CredentialRefused` — beside `counted` and `outOf`, whose
+meaning is the cause's to give: mail counts the messages that arrived, an unfinished run counts the folders that did
+not finish out of the folders it scheduled, and a refused credential counts nothing. A client turns that into a
+sentence in whatever language its reader has, which is why the service sends no sentence of its own for it to
+translate. `title` and `body` beside it are that same statement written out in English, for a reader with no client
+to say it in their own; a client that recognizes the cause draws the statement and ignores them. `statement` is
+`null` on a row a deployment wrote before it kept conditions, which is what an upgrade over existing data leaves
+until retention has taken those rows, and a cause a client does not recognize is read the same way — the English is
+what both of them draw.
 
 **Marking one unread can be refused, and only in that direction.** One unread notification stands per condition, so a
 condition said again after this one was read already stands unread in its place; asking for the older one back is

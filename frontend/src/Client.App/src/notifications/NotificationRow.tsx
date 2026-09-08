@@ -11,6 +11,7 @@ import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 import { wordNotificationAge } from './notificationAge';
 import { notificationKindLabels, notificationTones } from './notificationKinds';
+import { wordNotification } from './notificationWords';
 
 // One thing that happened, as the design project draws it: the kind's own symbol and tint, the headline — heavier and
 // darker while it is unread — how long ago it was, what it says, where it came from, the unread mark, and the control
@@ -56,6 +57,7 @@ export function NotificationRow({
     const tone = notificationTones[notification.kind];
     const age = wordNotificationAge(notification.occurredAt, locale, now);
     const at = wordInstant(notification.occurredAt, locale, 'full');
+    const said = wordNotification(notification, locale, translate);
 
     // A modifier held under a pointer is what picks a row out where there is no selection yet, which is the one
     // gesture a finger has no equivalent of — the row's own menu is how it reaches the same thing.
@@ -130,7 +132,7 @@ export function NotificationRow({
                                 notification.read ? 'font-medium text-text-soft' : 'font-semibold text-text'
                             }`}
                         >
-                            {notification.title}
+                            {said.title}
                         </span>
 
                         <time
@@ -142,7 +144,7 @@ export function NotificationRow({
                         </time>
                     </span>
 
-                    <span className="text-base text-pretty text-text-soft">{notification.body}</span>
+                    <span className="text-base text-pretty text-text-soft">{said.body}</span>
 
                     {/* The kind is what the source line falls back to, because a row says where it came from either
                         way — and the kind is the one thing every notification has. */}
