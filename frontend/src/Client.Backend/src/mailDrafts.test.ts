@@ -31,6 +31,7 @@ const composition: MailDraftComposition = {
     account: 'work',
     subject: 'Renewal terms',
     plainTextBody: 'The figure in the third column is the one to check.',
+    htmlBody: '<div>The figure in the <b>third</b> column is the one to check.</div>',
     to: ['anna@example.invalid'],
     cc: [],
     bcc: [],
@@ -89,6 +90,7 @@ describe('writeMailDraft', () => {
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
         expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
             plainTextBody: 'The figure in the third column is the one to check.',
+            htmlBody: '<div>The figure in the <b>third</b> column is the one to check.</div>',
             to: ['anna@example.invalid'],
             cc: [],
             bcc: [],
@@ -104,6 +106,7 @@ describe('writeMailDraft', () => {
             answeredEmailId: 'c0ffee00-0000-4000-8000-000000000001',
             answers: 'everyone',
             plainTextBody: 'Agreed.',
+            htmlBody: null,
             to: ['anna@example.invalid'],
             cc: ['piotr@example.invalid'],
             bcc: [],
@@ -111,6 +114,7 @@ describe('writeMailDraft', () => {
 
         expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
             plainTextBody: 'Agreed.',
+            htmlBody: null,
             to: ['anna@example.invalid'],
             cc: ['piotr@example.invalid'],
             bcc: [],

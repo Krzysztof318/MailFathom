@@ -15,7 +15,7 @@ const addressed: Composition = {
     to: ['ada@example.invalid'],
     cc: ['bo@example.invalid'],
     bcc: ['auditor@example.invalid'],
-    words: 'Here it is.',
+    words: [{ text: 'Here it is.' }],
 };
 
 function drawConfirmation(composition: Composition = addressed, disabled = false): { sent: ReturnType<typeof vi.fn> } {
@@ -78,7 +78,7 @@ describe('SendConfirmation', () => {
     });
 
     it('says the message is addressed to nobody rather than showing three empty headers', () => {
-        drawConfirmation({ ...nothingWrittenYet('work'), subject: 'Invoice', words: 'Here it is.' });
+        drawConfirmation({ ...nothingWrittenYet('work'), subject: 'Invoice', words: [{ text: 'Here it is.' }] });
         ask();
 
         const asked = screen.getByRole('dialog').textContent;

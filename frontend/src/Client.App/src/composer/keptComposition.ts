@@ -4,6 +4,7 @@
 
 import type { MailDraftAnswer } from '@mailfathom/client-backend';
 import { mostRecipientsInOneHeader, type Composition } from './composition';
+import { writtenTextIn } from './writtenText';
 
 // Where what somebody is typing survives a reload, which a single-page application makes a cold start rather than a
 // way out. It is the local draft the composer keeps continuously, and it is a different thing from the draft in the
@@ -21,11 +22,12 @@ import { mostRecipientsInOneHeader, type Composition } from './composition';
 const storageKey = 'mailfathom.composition';
 
 // What a kept composition may carry before it is read as somebody's edit rather than as this client's own writing. The
-// address is the longest one the mail standards allow, the subject is a header line, and the words are held to the size
-// the client surface accepts a whole draft at — each far above anything the composer itself writes there.
+// address is the longest one the mail standards allow and the subject is a header line, each far above anything the
+// composer itself writes there. What the words are held to is `writtenText.ts`'s own, that being where the shape they
+// are kept in is stated — and for them the shape is the bound that matters, a written message being the one thing here
+// that goes back on the screen as elements rather than as text.
 const longestAddress = 320;
 const longestSubject = 998;
-const longestWords = 2 * 1024 * 1024;
 const longestIdentifier = 256;
 
 const answers: readonly MailDraftAnswer[] = ['senderOnly', 'everyone', 'forward'];
@@ -81,7 +83,7 @@ function compositionIn(value: unknown): Composition | null {
     const record = value as Record<string, unknown>;
     const account = record['account'];
     const subject = record['subject'];
-    const words = record['words'];
+    const words = writtenTextIn(record['words']);
     const answering = answeringIn(record['answering'] ?? null);
     const to = addressesIn(record['to']);
     const cc = addressesIn(record['cc']);
@@ -99,7 +101,7 @@ function compositionIn(value: unknown): Composition | null {
         return null;
     }
 
-    if (typeof words !== 'string' || words.length > longestWords) {
+    if (words === null) {
         return null;
     }
 

@@ -536,6 +536,20 @@
         outline-offset: 2px;
     }
 
+    /* What an editable region says while nothing has been written in it. A `placeholder` attribute is the platform's
+       answer for a field and there is none for a region a browser edits, so the word is drawn rather than announced —
+       it is decoration beside the region's own accessible name and never part of it, which is why it is written here
+       as generated content rather than as an element somebody could land on.
+
+       The second selector is the state a browser leaves behind: an engine editing a region writes a lone `br` into it
+       to keep the caret somewhere, so a region somebody emptied is no longer `:empty` while still holding nothing. */
+    [data-placeholder]:empty::before,
+    [data-placeholder]:has(> br:only-child)::before {
+        content: attr(data-placeholder);
+        color: var(--color-faint);
+        pointer-events: none;
+    }
+
     /* What a control measures under a finger, decided once here for the same reason the ring above is: a floor met by
        seven control shapes and forty hand-written buttons is a floor most of them eventually stop meeting, and the one
        that stops is invisible in the diff that stopped it.

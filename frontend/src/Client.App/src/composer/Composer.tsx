@@ -24,6 +24,7 @@ import { forgetComposition, rememberComposition, rememberedComposition } from '.
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
 import { useDraftAtDeployment, type DraftStanding } from './useDraftAtDeployment';
+import { WrittenMessage } from './WrittenMessage';
 
 // Writing a message, as the design project composes it: one model in two shapes, decided by the width the client has
 // rather than by which head it runs on. Wide, it is the reading column — what is being written stands where what is
@@ -31,10 +32,10 @@ import { useDraftAtDeployment, type DraftStanding } from './useDraftAtDeployment
 // press away rather than behind a window. Narrow, it is the screen, because a column that has to hold a header, four
 // fields, and a footer has nothing left over to show a message underneath.
 //
-// **The body is plain text, and this is where that decision shows.** What the client surface takes is a plain-text
-// draft with an optional HTML alternative, and rich authoring is out of this stage's scope, so what is drawn is the
-// platform's own multi-line field rather than an editable region and a row of formatting controls. The design draws
-// that row, and the block of AI actions above it; both belong to the stage that adds them.
+// **The body is rich text, and `WrittenMessage` is the whole of it**: the editable region, the formatting bar the
+// design draws over it, and the toggle that stands in for the bar where a finger drives the screen. What reaches the
+// deployment is both parts of one message — the markup and the plain-text alternative read out of the same tree. The
+// block of AI actions the design draws above the bar belongs to the stage that adds them.
 //
 // **An answer's subject is read-only, and that is the platform rather than a choice.** A save either names an account
 // and a subject, or names the message it answers and lets the deployment derive both — so an edited subject on a reply
@@ -137,7 +138,6 @@ export function Composer({
     const asked = useRef<HTMLDialogElement>(null);
     const frame = useRef<HTMLElement>(null);
     const subjectId = useId();
-    const wordsId = useId();
 
     // An answer opens addressed to the people in the conversation, which means reading the message it answers. A
     // request going out is what an effect is for; the answer is discarded where the composer stopped listening for it,
@@ -186,7 +186,9 @@ export function Composer({
 
     useEffect(() => {
         if (written) {
-            frame.current?.querySelector<HTMLElement>(opening.kind === 'answer' ? 'textarea' : 'input')?.focus();
+            frame.current
+                ?.querySelector<HTMLElement>(opening.kind === 'answer' ? '[contenteditable="true"]' : 'input')
+                ?.focus();
         }
     }, [written, opening.kind]);
 
@@ -299,7 +301,7 @@ export function Composer({
             ) : (
                 <>
                     {accounts.length > 1 && composition.answering === null ? (
-                        <div className="flex items-center gap-2.5 border-b border-line-soft px-4.25 py-2.25">
+                        <div className="flex items-center gap-2.5 border-b border-line-soft px-3.75 py-2.25">
                             <label htmlFor={`${subjectId}-from`} className="w-22 shrink-0 text-sm text-muted">
                                 {translate('compose.from')}
                             </label>
@@ -366,7 +368,7 @@ export function Composer({
                         </>
                     ) : null}
 
-                    <div className="flex items-center gap-2.5 border-b border-line px-4.25 py-2.75">
+                    <div className="flex items-center gap-2.5 border-b border-line px-3.75 py-2.25">
                         {/* Two elements rather than one, because only one of the two things the row holds is labelable:
                             an answer's subject is text the deployment writes, and `for` on a paragraph names nothing a
                             screen reader would follow. So the field takes a label and the paragraph is named by the
@@ -401,23 +403,13 @@ export function Composer({
                         )}
                     </div>
 
-                    <label htmlFor={wordsId} className="sr-only">
-                        {translate('compose.words')}
-                    </label>
-
-                    <textarea
-                        id={wordsId}
-                        value={composition.words}
-                        placeholder={translate('compose.wordsPlaceholder')}
-                        className="min-h-40 flex-1 resize-none border-none bg-transparent px-4.25 py-4 text-lg text-text-soft outline-none placeholder:text-faint"
-                        onChange={(event) => {
-                            revise({ words: event.target.value });
+                    <WrittenMessage
+                        opened={composition.words}
+                        onWritten={(words) => {
+                            revise({ words });
                         }}
-                        onKeyDown={(event) => {
-                            // The design's own shortcut, and it opens the confirmation rather than sending: what a
-                            // keyboard saves is reaching for the control, never the reading of who the message is for.
-                            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && sendable) {
-                                event.preventDefault();
+                        onSendAsked={() => {
+                            if (sendable) {
                                 asked.current?.showModal();
                             }
                         }}

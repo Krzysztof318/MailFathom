@@ -591,6 +591,15 @@ drafts folder is a separate thing that somebody asks for, because every revision
 server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
 author asked for.
 
+**The body is rich text, and what leaves carries both readings of one message.** `writtenText.ts` holds what somebody
+wrote as a closed tree of the elements the formatting controls produce, never as markup: nothing on this path turns a
+string into nodes, which is what lets an editor exist at all under the rule that governs a message being read, and what
+bounds a poisoned session store to what the type can express rather than to what a filter remembered to strip. The HTML
+part is written by escaping that tree and the plain-text alternative is read off the same tree, so the two halves of one
+message cannot come to disagree. `WrittenMessage.tsx` draws the region and the formatting controls above it, replaced by
+a toggle where a finger drives the screen and the message needs the room a bar would take; what arrives from somewhere
+else arrives as text, so nothing this client did not write reaches the tree at all.
+
 **Nothing is sent without an explicit confirmation, and the confirmation names every address**, the blind copies
 included — those being the ones a header row never shows back. It also names what the message would go out without: no
 recipient, no subject, no words. None of the three refuses the send, because a message meant to go out that way is a
@@ -607,9 +616,7 @@ completed from the conversation being answered rather than from the contact dire
 served to the client yet — `src/Client.Backend` names no contacts operation, and the field is a `datalist` so it gains
 one by being handed a longer list. And **the subject of an answer is read-only**: a save either names an account and a
 subject or names the message it answers and lets the deployment derive both, so an edited reply subject is a value the
-client surface has nowhere to put, and offering the field would be offering an edit that is discarded. The body is
-plain text for the same kind of reason — what the surface takes is a plain-text draft with an optional HTML
-alternative, and rich authoring is a stage of its own.
+client surface has nowhere to put, and offering the field would be offering an edit that is discarded.
 
 ## Confirming what leaves the deployment
 
