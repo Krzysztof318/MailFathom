@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Common.ClientAssertions;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.Security.Passwords;
 
@@ -17,11 +18,12 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// Every other credential arrives as an HTTP bearer credential, so the endpoint has to tell those apart before any of
-/// them can be checked. The shape does it, in the order the credentials are self-describing. A client assertion declares
-/// its own media type in its header, which nothing else this endpoint accepts does, so it is recognized next and
-/// exactly. An access token is a compact-serialized JSON Web Token naming its issuer, so a request carrying one from a
-/// configured authorization server reaches that server's validator. An API key is an opaque string that is neither, and
-/// everything left reaches the key comparison.
+/// them can be checked. The shape does it, in the order the credentials are self-describing. A session token this
+/// process minted opens with a prefix this deployment writes and nothing else does, so it is recognized first among
+/// them and by an exact comparison. A client assertion declares its own media type in its header, which nothing else
+/// this endpoint accepts does, so it is recognized next and exactly. An access token is a compact-serialized JSON Web
+/// Token naming its issuer, so a request carrying one from a configured authorization server reaches that server's
+/// validator. An API key is an opaque string that is none of those, and everything left reaches the key comparison.
 /// </para>
 /// <para>
 /// The declared type and the issuer are both read unverified, and choosing a handler is the only thing either decides.
@@ -48,6 +50,7 @@ internal sealed class CredentialSchemeSelector
     private readonly string? apiKeySchemeName;
     private readonly string? clientAssertionSchemeName;
     private readonly string? basicSchemeName;
+    private readonly string? sessionTokenSchemeName;
     private readonly string unmatchedSchemeName;
 
     /// <summary>Initializes a new selector.</summary>
@@ -55,6 +58,7 @@ internal sealed class CredentialSchemeSelector
     /// <param name="apiKeySchemeName">The scheme comparing API keys, or <see langword="null" /> when API keys are not accepted.</param>
     /// <param name="clientAssertionSchemeName">The scheme verifying client assertions, or <see langword="null" /> when assertions are not accepted.</param>
     /// <param name="basicSchemeName">The scheme judging a user's username and password, or <see langword="null" /> when passwords are not accepted.</param>
+    /// <param name="sessionTokenSchemeName">The scheme judging a session token this process minted, or <see langword="null" /> where the surface exchanges no credential for one.</param>
     /// <param name="unmatchedSchemeName">The scheme a request reaches when no credential it presented selects one.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthSchemesByIssuer" /> or <paramref name="unmatchedSchemeName" /> is <see langword="null" />.</exception>
     internal CredentialSchemeSelector(
@@ -62,6 +66,7 @@ internal sealed class CredentialSchemeSelector
         string? apiKeySchemeName,
         string? clientAssertionSchemeName,
         string? basicSchemeName,
+        string? sessionTokenSchemeName,
         string unmatchedSchemeName)
     {
         ArgumentNullException.ThrowIfNull(oauthSchemesByIssuer);
@@ -71,6 +76,7 @@ internal sealed class CredentialSchemeSelector
         this.apiKeySchemeName = apiKeySchemeName;
         this.clientAssertionSchemeName = clientAssertionSchemeName;
         this.basicSchemeName = basicSchemeName;
+        this.sessionTokenSchemeName = sessionTokenSchemeName;
         this.unmatchedSchemeName = unmatchedSchemeName;
     }
 
@@ -90,6 +96,15 @@ internal sealed class CredentialSchemeSelector
         if (!BearerCredentialHeader.TryRead(authorizationHeaderValue, out var credential))
         {
             return this.apiKeySchemeName ?? this.unmatchedSchemeName;
+        }
+
+        // The prefix rather than the length or the shape, and before every other bearer credential, because it is the
+        // one value here this deployment wrote itself: a token minted a moment ago is recognized exactly, and anything
+        // merely resembling one reaches the handler that refuses it rather than the key comparison.
+        if (this.sessionTokenSchemeName is { } sessionSchemeName
+            && credential.StartsWith(ClientSessionTokens.TokenPrefix, StringComparison.Ordinal))
+        {
+            return sessionSchemeName;
         }
 
         if (this.clientAssertionSchemeName is { } assertionSchemeName

@@ -87,21 +87,21 @@ export const pl: Catalogue = {
         'To wdrożenie nie przyjmuje loginu i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
     'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
-    'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane hasło. Zaloguj się ponownie.',
+    'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane logowanie. Zaloguj się ponownie.',
     'signIn.notRemoved':
-        'Wylogowanie nie usunęło hasła z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. Usuń je w samym magazynie albo zaloguj się i wyloguj ponownie.',
+        'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. Przestaje ono działać samo, a MailFathom już je zakończył. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
     'signIn.notKept':
-        'Nie udało się zapisać Twojego hasła na tej maszynie, więc zapytamy o nie ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
+        'Nie udało się zapisać tego logowania na tej maszynie, więc zapytamy o hasło ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
     'signIn.keptUntilSignedOut':
-        'Twoje hasło jest przechowywane w pęku kluczy tego komputera, dopóki się nie wylogujesz. Wylogowanie jest tym, co je usuwa.',
+        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane w pęku kluczy tego komputera, dopóki się nie wylogujesz, i po pewnym czasie przestaje działać samo.',
     'signIn.keptUntilTheTabCloses':
-        'Twoje hasło jest przechowywane do zamknięcia tej karty i zapytamy o nie ponownie — hasło pozostawione w przeglądarce może odczytać wszystko, co ma dostęp do tej strony.',
+        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia tej karty i zapytamy wtedy o hasło ponownie — to, co przeglądarka przechowuje, może odczytać wszystko, co ma dostęp do tej strony.',
     'signIn.keptUntilTheClientCloses':
-        'Twoje hasło jest przechowywane do zamknięcia MailFathom i zapytamy o nie ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
+        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia MailFathom i zapytamy wtedy o hasło ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
     'signIn.notKeptStorageUnreachable':
-        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi hasła w mniej bezpiecznym miejscu.',
+        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom — nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi poświadczenia w mniej bezpiecznym miejscu.',
     'signIn.notKeptKeyInvalidated':
-        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
+        'Twoje hasło nie jest nigdzie przechowywane, a tego logowania też nie zapamiętamy, więc zapytamy o hasło ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
 
     'connect.address': 'Serwer',
     'connect.addressExample': 'mailfathom.example.com:8443',

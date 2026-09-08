@@ -78,7 +78,7 @@ internal class DeploymentArgument {
 @InvokeArg
 internal class CredentialArgument {
     lateinit var deployment: String
-    lateinit var authorization: String
+    lateinit var credential: String
 }
 
 @TauriPlugin
@@ -92,7 +92,7 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
     fun keep(invoke: Invoke) {
         val argument = invoke.parseArgs(CredentialArgument::class.java)
 
-        invoke.resolveObject(keep(argument.deployment, argument.authorization))
+        invoke.resolveObject(keep(argument.deployment, argument.credential))
     }
 
     @Command
@@ -153,10 +153,10 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /** Keeps the finished header value for one deployment, answering whether it is stored. */
-    private fun keep(deployment: String, authorization: String): Boolean =
+    private fun keep(deployment: String, credential: String): Boolean =
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, credentialKey()) }
-            val sealed = cipher.iv + cipher.doFinal(authorization.toByteArray(Charsets.UTF_8))
+            val sealed = cipher.iv + cipher.doFinal(credential.toByteArray(Charsets.UTF_8))
 
             preferences().edit().putString(deployment, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
         } catch (refused: Exception) {

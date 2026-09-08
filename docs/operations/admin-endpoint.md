@@ -1378,6 +1378,11 @@ separately granted, so a token holding `mailfathom.admin.credentials.write` and 
 the listing, and the command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be
 unremovable through the tool that exists to remove it.
 
+**Both also end the client sessions that credential minted**, on the next request each of them makes rather than at its
+own expiry, so closing a way into somebody's mail closes the clients already signed in through it. A rotation does not:
+it changes what may be presented at [the exchange](client-endpoint.md#the-session-token-routes) and says nothing about
+sessions already exchanged, so an operator ending somebody's sessions disables the credential rather than rotating it.
+
 **A rotation is one statement.** There is no moment at which both credentials work and none at which neither does, so a
 client still presenting the previous material meets a refusal rather than a half-written record. The credential keeps its
 identifier, so nothing an operator wrote down about it goes stale. Where an overlap is wanted instead — a client that

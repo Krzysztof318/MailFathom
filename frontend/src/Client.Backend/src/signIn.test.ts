@@ -22,33 +22,53 @@ function sessionBody(service: unknown, version: unknown): string {
     return JSON.stringify({ service, version, permissions: [] });
 }
 
+// What the exchange answers a credential it took. The token is opaque to this package: it is presented back verbatim
+// and nothing here composes any part of it.
+const mintedToken = 'mfs_abcdefghijklmnop.cXVpY2stYnJvd24tZm94LWp1bXBz';
+const mintedExpiry = '2026-09-09T09:00:00+00:00';
+
+function mintedBody(): string {
+    return JSON.stringify({ token: mintedToken, expiresAt: mintedExpiry });
+}
+
 function refusedWith(challenge: string): MailFathomTransport {
     return answering({ status: 401, headers: { 'www-authenticate': challenge } });
 }
 
 describe('signIn', () => {
-    it('presents the credential to the session route, which is where a deployment reports what a caller may do', async () => {
+    it('presents the credential to the route that exchanges it, which is the one request that carries a password', async () => {
         const asked: ClientRequest[] = [];
 
         await signIn(session, (request) => {
             asked.push(request);
 
-            return Promise.resolve({ status: 200, body: sessionBody('MailFathom', '0.8.0'), headers: {} });
+            return Promise.resolve({ status: 200, body: mintedBody(), headers: {} });
         });
 
         expect(asked).toEqual([
             {
-                method: 'GET',
-                path: 'https://mail.example.invalid/api/client/session',
+                method: 'POST',
+                path: 'https://mail.example.invalid/api/client/session/token',
                 headers: { Accept: 'application/json', Authorization: session.authorization },
             },
         ]);
     });
 
-    it('reads a deployment answering in full as the credential having been signed in', async () => {
+    it('reads the session a deployment minted as the credential having been signed in', async () => {
+        const result = await signIn(session, answering({ body: mintedBody() }));
+
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { signedIn: true, session: { token: mintedToken, expiresAt: mintedExpiry } },
+        });
+    });
+
+    // The exchange is the whole reason this request exists, so an answer that carried no session is not a sign-in that
+    // half worked: a client with nothing to present is signed in to nothing.
+    it('reads an answer carrying no session as unreadable rather than as a sign-in', async () => {
         const result = await signIn(session, answering({ body: sessionBody('MailFathom', '0.8.0') }));
 
-        expect(result).toEqual({ outcome: 'read', value: { signedIn: true } });
+        expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
     it('reads a refusal that still offers passwords as this credential being the thing refused', async () => {
@@ -132,7 +152,7 @@ describe('signIn', () => {
             return Promise.reject(new TypeError('Failed to fetch'));
         });
 
-        expect(asked).toEqual(['https://mail.example.invalid/api/client/session']);
+        expect(asked).toEqual(['https://mail.example.invalid/api/client/session/token']);
     });
 });
 

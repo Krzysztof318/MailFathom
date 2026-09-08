@@ -5,6 +5,8 @@
 import {
     clientRoutePrefix,
     mailPermissions,
+    sessionExchangeRoute,
+    sessionRevocationRoute,
     type ClientRequest,
     type ClientResponse,
 } from '@mailfathom/client-backend';
@@ -129,6 +131,21 @@ export function fixtureAnswer(
     // the corpus states a credential narrowed to reading and asking, which is a state worth looking at and is the
     // wrong one to be stuck in on a machine where the point is to look at every screen, so a development run is given
     // everything the client acts on and reaches the composer, the filing controls and the flags with it.
+    // The exchange, which is the one request in a run that carries a password. The corpus mints a token per
+    // credential rather than one token, so signing in as somebody else on the same run is a session of its own exactly
+    // as it is against a deployment — and the client presents that token on everything afterwards.
+    if (route === sessionExchangeRoute) {
+        return options.expiredSession || request.headers['Authorization'] === undefined
+            ? { status: 401, body: '', headers: { 'www-authenticate': 'Bearer, Basic realm="MailFathom"' } }
+            : answering(fixtureSession(request.headers['Authorization']));
+    }
+
+    // Ending a session is answered and nothing is remembered: what a revoked token would be refused on is state this
+    // deployment does not keep, and a run that signed out has already forgotten what it held.
+    if (route === sessionRevocationRoute) {
+        return { status: 204, body: '', headers: {} };
+    }
+
     if (route === '/session') {
         return options.expiredSession || request.headers['Authorization'] === undefined
             ? { status: 401, body: '', headers: { 'www-authenticate': 'Bearer, Basic realm="MailFathom"' } }
@@ -145,6 +162,22 @@ export function fixtureAnswer(
 
     return answerFor(route, new URLSearchParams(query), request, options, state);
 }
+
+/**
+ * The session the corpus mints for a credential, which lives as long as a deployment's own does.
+ *
+ * The token is derived from the credential rather than drawn at random, so a run is repeatable and a parity capture
+ * signs in to the same value every time.
+ */
+function fixtureSession(credential: string): { token: string; expiresAt: string } {
+    return {
+        token: `mfs_${credential.replace(/[^A-Za-z0-9]/g, '')}.Zml4dHVyZS1zZXNzaW9u`,
+        expiresAt: new Date(Date.now() + sessionLifetime).toISOString(),
+    };
+}
+
+/** How long a session the corpus mints lasts, which is what the service's own is. */
+const sessionLifetime = 43_200_000;
 
 /**
  * The transport a run against the corpus reaches its deployment through, in the shape the composition root supplies.

@@ -85,8 +85,8 @@ async fn credential_arrangement() -> &'static str {
 
 /// Keeps the finished header value for one deployment, answering whether it was kept.
 #[tauri::command]
-async fn keep_credential(deployment: String, authorization: String) -> bool {
-    credentials::keep(deployment, authorization).await
+async fn keep_credential(deployment: String, credential: String) -> bool {
+    credentials::keep(deployment, credential).await
 }
 
 /// The header value kept for one deployment, or nothing where none was kept or the store would not answer.

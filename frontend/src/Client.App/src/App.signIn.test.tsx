@@ -4,6 +4,7 @@
 
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { sessionExchangeRoute } from '@mailfathom/client-backend';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import {
     accepted,
@@ -14,6 +15,9 @@ import {
     deploymentRefusing,
     directory,
     framed,
+    mintedCredential,
+    mintedKeptSession,
+    mintedSession,
     renderApp,
     resetsBetweenTests,
     servedFrom,
@@ -24,9 +28,11 @@ import {
     storeRefusingToForget,
     storeRefusingToKeep,
     typedCredential,
+    typedSession,
     workAccount,
     type Answer,
 } from './App.harness';
+import { writeKeptSession } from './signIn/keptSession';
 
 // Signing in, signing out, and everything the credential store does or refuses to do along the way. The arrangement
 // is `App.harness`, which the rest of this family shares.
@@ -57,16 +63,21 @@ describe('App sign-in', () => {
         expect(screen.getByRole('navigation', { name: 'Spaces' })).toBeDefined();
     });
 
-    it('presents the credential it composed rather than anything it was handed', async () => {
+    it('presents the credential it composed once, and the session it was given for it on everything after', async () => {
         renderApp(servedFrom, null);
 
         signIn();
         await framed();
 
-        expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([typedCredential]);
+        // The password reaches the exchange and nothing else. That is the property the exchange exists for: every
+        // later request carries a token the deployment looks up, rather than one it derives a key from.
+        expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([
+            typedCredential,
+            mintedCredential,
+        ]);
     });
 
-    it('keeps the credential it signed in with, so a later start opens already signed in', async () => {
+    it('keeps the session it was given rather than the credential it typed, so a later start opens already signed in', async () => {
         const credentials = storeKeeping();
 
         renderApp(servedFrom, null, deploymentAnswering(), credentials);
@@ -76,7 +87,7 @@ describe('App sign-in', () => {
         // Waited for rather than read once the screen above has settled: what the store was asked to do is a
         // promise the frame started, and the commit that put that screen up is not the one it resolves in.
         await waitFor(() => {
-            expect([...credentials.kept]).toEqual([[servingAddress.baseAddress, typedCredential]]);
+            expect([...credentials.kept]).toEqual([[servingAddress.baseAddress, writeKeptSession(mintedKeptSession)]]);
         });
     });
 
@@ -85,7 +96,7 @@ describe('App sign-in', () => {
 
         expect(
             screen.getByText(
-                'Your password is kept in this machine’s keychain until you sign out. Signing out is what removes it.',
+                'Your password is not stored anywhere. This sign-in is kept in this machine’s keychain until you sign out, and it stops working on its own after a while.',
             ),
         ).toBeDefined();
     });
@@ -95,7 +106,7 @@ describe('App sign-in', () => {
 
         expect(
             screen.getByText(
-                'Your password is kept until you close MailFathom, and you will be asked for it again — this machine offers no keychain to keep it in safely.',
+                'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again — this machine offers no keychain to keep it in safely.',
             ),
         ).toBeDefined();
     });
@@ -135,12 +146,12 @@ describe('App sign-in', () => {
 
     it('puts somebody in front of the sign-in when the deployment stops accepting what was kept', async () => {
         const credentials = storeKeeping();
-        await credentials.keep(servingAddress, typedCredential);
+        await credentials.keep(servingAddress, writeKeptSession(typedSession));
 
-        renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), credentials);
+        renderApp(servedFrom, typedSession, deploymentAnswering({ status: 401, body: '' }), credentials);
 
         expect(
-            await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.'),
+            await screen.findByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.'),
         ).toBeDefined();
         // Waited for rather than read once the screen above has settled: what the store was asked to do is a
         // promise the frame started, and the commit that put that screen up is not the one it resolves in.
@@ -156,6 +167,10 @@ describe('App sign-in', () => {
         const send: DeploymentTransport = () => (request) => {
             asked.push(request);
 
+            if (request.path.endsWith(sessionExchangeRoute)) {
+                return Promise.resolve(complete(mintedSession(request)));
+            }
+
             return Promise.resolve(complete(request.path.endsWith('/session') ? accepted : accounts));
         };
 
@@ -169,7 +184,7 @@ describe('App sign-in', () => {
 
         accounts = { status: 401, body: '' };
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
+        await screen.findByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.');
 
         // Being turned away mid-session returns this person to the sign-in exactly as signing out does, so what they
         // were carrying goes with the credential there too rather than waiting for the next person to read.
@@ -181,16 +196,16 @@ describe('App sign-in', () => {
     });
 
     it('says the password is still on the machine when the deployment stops accepting it and the store will not', async () => {
-        renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), storeRefusingToForget());
+        renderApp(servedFrom, typedSession, deploymentAnswering({ status: 401, body: '' }), storeRefusingToForget());
 
         // Two things went wrong at once and both are the person's to act on: the deployment no longer accepts what was
         // kept, and the store would not give it up — so it is read back on every later start until they remove it.
         expect(
-            await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.'),
+            await screen.findByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.'),
         ).toBeDefined();
         expect(
             await screen.findByText(
-                'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
             ),
         ).toBeDefined();
     });
@@ -244,7 +259,7 @@ describe('App sign-in', () => {
         // says so — inside the frame, because signing in worked and only the keeping did not.
         expect(
             screen.getByText(
-                'Your password could not be stored on this machine, so you will be asked for it again the next time you open MailFathom. You are signed in either way.',
+                'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
             ),
         ).toBeDefined();
     });
@@ -260,16 +275,16 @@ describe('App sign-in', () => {
         // the next start read it back while they believe it is gone.
         expect(
             await screen.findByText(
-                'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+                'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. It stops working on its own, and MailFathom has already ended it. Remove the entry in the store itself if you would rather it were gone now.',
             ),
         ).toBeDefined();
     });
 
     it('places focus on what it has to say about the credential, rather than on the field below it', async () => {
-        renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), storeKeeping());
+        renderApp(servedFrom, typedSession, deploymentAnswering({ status: 401, body: '' }), storeKeeping());
 
         const notice = await screen.findByText(
-            'This deployment has stopped accepting the password that was kept. Sign in again.',
+            'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
         );
 
         // Each of these sentences is inserted in the same commit as its own text, which a live region does not

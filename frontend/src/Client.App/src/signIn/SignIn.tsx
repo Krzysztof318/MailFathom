@@ -22,7 +22,8 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AdvancedConnection } from './AdvancedConnection';
 import { defaultPortOf, portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
-import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
+import { resolveCredentialEntry, resolveSessionCredential, type CredentialEntryRefusal } from './credentialEntry';
+import type { KeptSession } from './keptSession';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
 
@@ -141,7 +142,7 @@ export function SignIn({
     readonly lifetime: CredentialLifetime;
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
-    readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
+    readonly onSignedIn: (deployment: DeploymentAddress, session: KeptSession) => void;
 
     /** Pointing away from an address somebody named themselves, which this screen offers inside its disclosure. */
     readonly onPointSomewhereElse: () => void;
@@ -323,7 +324,15 @@ export function SignIn({
 
         attempt.current = null;
         setPresenting(false);
-        onSignedIn(reached.deployment, credential.authorization);
+
+        // The password is not handed on and is not kept anywhere: what the exchange answered with is a session, and
+        // that is the whole of what this client holds from here. The name travels beside it because a token does not
+        // carry one and the screens above ask who is signed in.
+        onSignedIn(reached.deployment, {
+            authorization: resolveSessionCredential(answer.value.session.token),
+            expiresAt: answer.value.session.expiresAt,
+            person: userName,
+        });
     }
 
     // A deployment that accepts the connection and never answers would otherwise hold the screen on `signIn.presenting`

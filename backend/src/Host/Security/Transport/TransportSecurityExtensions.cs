@@ -95,6 +95,10 @@ internal static partial class TransportSecurityExtensions
             // entry that would have selected the method is refused by that section's own validation instead of
             // reaching a registration here.
             basicSchemeName: null,
+
+            // And no session token either, which follows: a session is what a password is exchanged for, so a surface
+            // that reads no password has nothing to exchange and mints nothing to judge.
+            sessionTokenSchemeName: null,
             challengeSchemeName);
 
         if (publicKeys.Count > 0)
@@ -278,6 +282,7 @@ internal static partial class TransportSecurityExtensions
         string? apiKeySchemeName,
         string? clientAssertionSchemeName,
         string? basicSchemeName,
+        string? sessionTokenSchemeName,
         string challengeSchemeName)
     {
         var schemeSelector = new CredentialSchemeSelector(
@@ -285,6 +290,7 @@ internal static partial class TransportSecurityExtensions
             apiKeySchemeName,
             clientAssertionSchemeName,
             basicSchemeName,
+            sessionTokenSchemeName,
             challengeSchemeName);
 
         authentication.AddPolicyScheme(

@@ -5,13 +5,15 @@
 import { StrictMode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import type {
-    ClientRequest,
-    ClientResponse,
-    ClientSession,
-    DeploymentAddress,
-    MailFathomSignalChannel,
-    SignalStreamSchedule,
+import {
+    sessionExchangeRoute,
+    sessionRevocationRoute,
+    type ClientRequest,
+    type ClientResponse,
+    type ClientSession,
+    type DeploymentAddress,
+    type MailFathomSignalChannel,
+    type SignalStreamSchedule,
 } from '@mailfathom/client-backend';
 import { App } from './App';
 import { Containment } from './containment/Containment';
@@ -22,6 +24,7 @@ import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
+import type { KeptSession } from './signIn/keptSession';
 import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { ToastsProvider } from './toasts/Toasts';
@@ -66,14 +69,71 @@ export const workAccount = {
     behind: false,
 };
 
-/** What a run opens already holding, where something was kept for it. */
-export const heldCredential = 'Basic dGVzdDpzZWNyZXQ=';
+// Far enough out that nothing in a test renews a session on its own: renewal is its own file, and a fixture that
+// expired mid-run would put a second request in every test that is not about one.
+const sessionExpiry = '2126-08-31T21:41:00+00:00';
 
-/** Who `heldCredential` names, which is what the device's remembered telemetry answer is kept under. */
+/** Who a run opens already signed in as, which is what the device's remembered telemetry answer is kept under. */
 export const heldPerson = 'test';
 
-/** What the screen composes out of what `signIn` below types, which is what a test asserts was kept and presented. */
+/** What a run opens already holding, where something was kept for it: a session rather than a password. */
+export const heldSession: KeptSession = {
+    authorization: 'Bearer mfs_heldsession.aGVsZC1zZXNzaW9uLXByb29m',
+    expiresAt: sessionExpiry,
+    person: heldPerson,
+};
+
+/** What the screen composes out of what `signIn` below types, which is the one request that presents a password. */
 export const typedCredential = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
+
+/** Who `typedCredential` names. */
+export const typedPerson = 'user';
+
+/** The session kept for the person `typedCredential` names, where a test seeds one rather than typing the password. */
+export const typedSession: KeptSession = {
+    authorization: 'Bearer mfs_typedsession.dHlwZWQtc2Vzc2lvbi1wcm9vZg',
+    expiresAt: sessionExpiry,
+    person: typedPerson,
+};
+
+/** A session belonging to somebody else on this machine, which is what a per-person preference is read under. */
+export const anotherPersonsSession: KeptSession = {
+    authorization: 'Bearer mfs_anothersession.YW5vdGhlci1zZXNzaW9uLXByb29m',
+    expiresAt: sessionExpiry,
+    person: 'another',
+};
+
+/**
+ * What a deployment double mints for a credential it accepts.
+ *
+ * A token per credential rather than one token, because that is the property the client depends on: a second person
+ * signing in on the same machine gets a different session, and a fixture that minted one value for everybody would let
+ * the frame carry the last person's grant into the next one without a test noticing.
+ */
+export function mintedTokenFor(credential: string): string {
+    return `mfs_${credential.replace(/[^A-Za-z0-9]/g, '')}.bWludGVkLXNlc3Npb24`;
+}
+
+/** The header value the session minted for `typedCredential` is presented under. */
+export const mintedCredential = `Bearer ${mintedTokenFor(typedCredential)}`;
+
+/** What the client keeps once a deployment double took `typedCredential`: the session it was given, under who typed it. */
+export const mintedKeptSession: KeptSession = {
+    authorization: mintedCredential,
+    expiresAt: sessionExpiry,
+    person: typedPerson,
+};
+
+/** The exchange answer a deployment double gives the credential that reached it. */
+export function mintedSession(request: ClientRequest): Answer {
+    return {
+        status: 200,
+        body: JSON.stringify({
+            token: mintedTokenFor(request.headers['Authorization'] ?? ''),
+            expiresAt: sessionExpiry,
+        }),
+    };
+}
 
 export function directory(synchronizationEnabled: boolean, accounts: readonly unknown[]): Answer {
     return { status: 200, body: JSON.stringify({ synchronizationEnabled, accounts }) };
@@ -116,6 +176,14 @@ export function deploymentAnswering(
 
         if (request.path.includes('/emails')) {
             return Promise.resolve(complete(emptyFolder));
+        }
+
+        if (request.path.endsWith(sessionExchangeRoute)) {
+            return Promise.resolve(complete(mintedSession(request)));
+        }
+
+        if (request.path.endsWith(sessionRevocationRoute)) {
+            return Promise.resolve(complete({ status: 204, body: '' }));
         }
 
         if (preferences !== null && request.path.endsWith('/preferences')) {
@@ -509,7 +577,7 @@ const neverReopens: SignalStreamSchedule = {
 
 export function renderApp(
     deployment: ClientDeployment = servedFrom,
-    signedInWith: string | null = heldCredential,
+    signedInWith: KeptSession | null = heldSession,
     send: DeploymentTransport = deploymentAnswering(),
     credentials: CredentialStore = storeKeeping(),
     telemetry: ClientTelemetry = noTelemetry,

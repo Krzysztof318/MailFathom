@@ -7,7 +7,12 @@ import { credentialStore } from './credentialStore';
 
 const deployment = { baseAddress: 'https://mail.example.invalid' };
 const elsewhere = { baseAddress: 'https://elsewhere.example.invalid' };
-const authorization = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
+// One kept session as the store sees it: an opaque string it writes and reads back without looking inside.
+const credential = JSON.stringify({
+    authorization: 'Bearer mfs_abcdef.ghijkl',
+    expiresAt: '2026-09-09T09:00:00+00:00',
+    person: 'karolina',
+});
 
 /** One command the shell was asked, so a test reads what crossed into it rather than what a store meant to send. */
 interface Asked {
@@ -81,7 +86,7 @@ describe('credentialStore', () => {
         shellAnswering({ credential_arrangement: 'keptSomewhereNewer' });
         const store = await credentialStore();
 
-        expect(await store.keep(deployment, authorization)).toBe(false);
+        expect(await store.keep(deployment, credential)).toBe(false);
         expect(window.sessionStorage.length).toBe(0);
         expect(window.localStorage.length).toBe(0);
     });
@@ -108,7 +113,7 @@ describe('a credential kept nowhere', () => {
             shellAnswering({ credential_arrangement: arrangement });
             const store = await credentialStore();
 
-            expect(await store.keep(deployment, authorization)).toBe(false);
+            expect(await store.keep(deployment, credential)).toBe(false);
             expect(await store.read(deployment)).toBeNull();
             expect(window.sessionStorage.length).toBe(0);
             expect(window.localStorage.length).toBe(0);
@@ -142,7 +147,7 @@ describe('a credential kept nowhere', () => {
         const asked = shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated' });
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
         await store.read(deployment);
 
         expect(asked).toEqual([{ command: 'credential_arrangement', argument: undefined }]);
@@ -153,15 +158,15 @@ describe('a credential kept for the run', () => {
     it('reads back what was kept for the deployment it was given for', async () => {
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
 
-        expect(await store.read(deployment)).toBe(authorization);
+        expect(await store.read(deployment)).toBe(credential);
     });
 
     it('reads back nothing for a deployment the credential was not given for', async () => {
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
 
         expect(await store.read(elsewhere)).toBeNull();
     });
@@ -169,7 +174,7 @@ describe('a credential kept for the run', () => {
     it('reads back nothing once the credential has been forgotten', async () => {
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
 
         expect(await store.forget(deployment)).toBe(true);
         expect(await store.read(deployment)).toBeNull();
@@ -178,7 +183,7 @@ describe('a credential kept for the run', () => {
     it('leaves nothing behind that outlives the tab', async () => {
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
 
         expect(window.localStorage.length).toBe(0);
     });
@@ -194,16 +199,16 @@ describe('a credential kept for the run', () => {
 
         // Signing in worked and only the keeping failed, so this answers rather than throws — and it answers `false`,
         // because the screen has already said how long the password would last.
-        await expect(store.keep(deployment, authorization)).resolves.toBe(false);
+        await expect(store.keep(deployment, credential)).resolves.toBe(false);
     });
 });
 
 describe('a credential kept in the shell’s protected store', () => {
     it('asks the shell for what it kept, naming the deployment the credential was given for', async () => {
-        const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', read_credential: authorization });
+        const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', read_credential: credential });
         const store = await credentialStore();
 
-        expect(await store.read(deployment)).toBe(authorization);
+        expect(await store.read(deployment)).toBe(credential);
         expect(asked.at(-1)).toEqual({
             command: 'read_credential',
             argument: { deployment: deployment.baseAddress },
@@ -221,11 +226,11 @@ describe('a credential kept in the shell’s protected store', () => {
         const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', keep_credential: true });
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
 
         expect(asked.at(-1)).toEqual({
             command: 'keep_credential',
-            argument: { deployment: deployment.baseAddress, authorization },
+            argument: { deployment: deployment.baseAddress, credential },
         });
     });
 
@@ -239,7 +244,7 @@ describe('a credential kept in the shell’s protected store', () => {
         // A keychain found at startup can be locked by the time it is written to, and the screen has already said the
         // password will last until sign-out — so a refused write is answered rather than left to be discovered at the
         // next start.
-        expect(await store.keep(deployment, authorization)).toBe(false);
+        expect(await store.keep(deployment, credential)).toBe(false);
     });
 
     it('asks the shell to delete the entry when the credential is forgotten', async () => {
@@ -288,7 +293,7 @@ describe('a credential kept in the shell’s protected store', () => {
         });
         const store = await credentialStore();
 
-        await store.keep(deployment, authorization);
+        await store.keep(deployment, credential);
         await store.read(deployment);
 
         expect(written).toEqual([]);

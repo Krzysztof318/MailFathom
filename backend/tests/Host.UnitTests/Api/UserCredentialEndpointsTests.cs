@@ -757,6 +757,7 @@ public sealed class UserCredentialEndpointsTests
             CredentialId,
             new UserCredentialEnablementRequest(enabled),
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -781,6 +782,7 @@ public sealed class UserCredentialEndpointsTests
             CredentialId,
             new UserCredentialEnablementRequest(null),
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -800,6 +802,7 @@ public sealed class UserCredentialEndpointsTests
             SyntheticMailUser.Deployment.Value,
             CredentialId,
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -822,6 +825,7 @@ public sealed class UserCredentialEndpointsTests
             SyntheticMailUser.Deployment.Value,
             CredentialId,
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken));
     }
 

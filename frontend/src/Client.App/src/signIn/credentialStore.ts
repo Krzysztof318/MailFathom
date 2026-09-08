@@ -14,7 +14,7 @@ import type { DeploymentAddress } from '@mailfathom/client-backend';
 //
 // A shell states that arrangement rather than a fact about its machine, because ADR 0027 decided that the same fact —
 // protected storage this client cannot reach — resolves one way where the page is the only other place to keep a
-// password and the other way where the platform kills the client constantly. Only the shell knows which of those it is,
+// credential and the other way where the platform kills the client constantly. Only the shell knows which of those it is,
 // so it answers with the arrangement itself and nothing here has to learn a platform's name to render the right
 // sentence.
 
@@ -22,7 +22,7 @@ import type { DeploymentAddress } from '@mailfathom/client-backend';
  * How long what a store keeps outlives the client, which is a sentence the sign-in screen renders before anybody types.
  *
  * The last two are not durations so much as the absence of one, and they carry their reason because that is the half a
- * person can act on: a store that would have kept the password and could not be reached is a different sentence from
+ * person can act on: a store that would have kept the sign-in and could not be reached is a different sentence from
  * one whose key the operating system threw away, and neither is the desktop's "this machine offers no keychain".
  */
 export type CredentialLifetime =
@@ -48,14 +48,14 @@ export interface CredentialStore {
      * refused write that reported nothing would leave them asked for the password again at the next start with
      * nothing having said why.
      */
-    keep(deployment: DeploymentAddress, authorization: string): Promise<boolean>;
+    keep(deployment: DeploymentAddress, credential: string): Promise<boolean>;
 
     /**
      * Removes what was kept for this deployment, answering whether it is gone.
      *
      * `false` is a store that would not delete — a locked keychain, a Secret Service that stopped answering — and it
      * has to be answered rather than swallowed: the screen has already promised that signing out is what removes the
-     * password, so a refused deletion that reported nothing would leave the credential in the store for the next start
+     * sign-in, so a refused deletion that reported nothing would leave the credential in the store for the next start
      * to read back while the person believes they signed out.
      */
     forget(deployment: DeploymentAddress): Promise<boolean>;
@@ -67,11 +67,11 @@ export interface CredentialStore {
  * There is no shell on the web head, and the page's own storage is what is left. A shell answers with the arrangement
  * it offers: the operating system's protected store where it has one, the run where it has none and the page is the
  * safer of the two remaining answers, and neither where it has one it could not reach — which keeps nothing rather
- * than writing a password to a page on a device that is killed and restarted all day.
+ * than writing a credential to a page on a device that is killed and restarted all day.
  *
  * A shell that answers with something this client cannot read — an arrangement it does not know, or a command that
  * refused — keeps nothing, which is the only answer that is safe on both heads. Reading it as the run instead would
- * put the password in the page's own storage, and the client cannot tell whether the device it is on is one ADR 0027
+ * put the credential in the page's own storage, and the client cannot tell whether the device it is on is one ADR 0027
  * refuses that for; where the answer is unreadable, so is the head.
  */
 export async function credentialStore(): Promise<CredentialStore> {
@@ -104,8 +104,9 @@ function entryFor(deployment: DeploymentAddress): string {
  * The credential kept for as long as the client is open, in storage the document owns.
  *
  * `sessionStorage` rather than `localStorage`: both are readable by any script that reaches the origin, and only the
- * second outlives the tab and the browser — which would leave a password a script injected long afterwards could read,
- * with no expiry to limit it. What this buys over holding the value in memory is the reload, which a single-page
+ * second outlives the tab and the browser — which would leave a credential a script injected long afterwards could read.
+ * That the session expires does not bound it: renewing one is presenting it, so a script that reads a token holds a
+ * live session for as long as it keeps reading. What this buys over holding the value in memory is the reload, which a single-page
  * application meets far more often than a person expects to sign in.
  */
 function keptForTheRun(lifetime: 'untilTheTabCloses' | 'untilTheClientCloses'): CredentialStore {
@@ -114,7 +115,7 @@ function keptForTheRun(lifetime: 'untilTheTabCloses' | 'untilTheClientCloses'): 
 
         read: (deployment) => Promise.resolve(readStorage(entryFor(deployment))),
 
-        keep: (deployment, authorization) => Promise.resolve(writeStorage(entryFor(deployment), authorization)),
+        keep: (deployment, credential) => Promise.resolve(writeStorage(entryFor(deployment), credential)),
 
         forget: (deployment) => Promise.resolve(removeStorage(entryFor(deployment))),
     };
@@ -129,7 +130,7 @@ function keptForTheRun(lifetime: 'untilTheTabCloses' | 'untilTheClientCloses'): 
  * `forget` still asks the shell, which is the half that is not symmetrical with the other two. This arrangement says
  * the store could not be reached *this run*, never that it holds nothing: a run whose store opened normally may have
  * written a credential that is still there, and removing it needs no key on any head — so answering `true` here would
- * report a sign-out that removed nothing and leave the password to be read back by the next run that can open the
+ * report a sign-out that removed nothing and leave the credential to be read back by the next run that can open the
  * store.
  */
 function keptNowhere(lifetime: 'notKeptStorageUnreachable' | 'notKeptKeyInvalidated'): CredentialStore {
@@ -156,17 +157,17 @@ function keptInTheProtectedStore(): CredentialStore {
             return typeof kept === 'string' ? kept : null;
         },
 
-        keep: async (deployment, authorization) => {
+        keep: async (deployment, credential) => {
             return (
                 (await shellAnswers('keep_credential', {
                     deployment: deployment.baseAddress,
-                    authorization,
+                    credential,
                 })) === true
             );
         },
 
         forget: async (deployment) => {
-            // The shell's own answer, because a deletion nobody performed is a password left on the device: the entry
+            // The shell's own answer, because a deletion nobody performed is a credential left on the device: the entry
             // outlives uninstalling the application.
             return (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true;
         },

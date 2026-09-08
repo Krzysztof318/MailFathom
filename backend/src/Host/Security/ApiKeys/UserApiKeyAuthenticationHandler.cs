@@ -78,8 +78,10 @@ internal sealed class UserApiKeyAuthenticationHandler : AuthenticationHandler<Us
             admitted.Permissions);
 
         // The user is what the credential resolved, so the principal carries them rather than leaving the surface to
-        // answer for whose mail the request acts on.
+        // answer for whose mail the request acts on. The credential travels beside them because a session minted from
+        // this request outlives it, and disabling the credential is what ends that session.
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
+        identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));

@@ -9207,6 +9207,7 @@ changes.ts mutationRecords GET /api/client/mutations
 changes.ts signalTicket POST /api/client/signals/ticket
 changes.ts signals - -
 deployment.ts sessionAnswer GET /api/client/session
+deployment.ts mintedSession POST /api/client/session/token
 deployment.ts ownDisplayName GET /api/client/display-name
 deployment.ts clientPreferences GET /api/client/preferences
 deployment.ts workAccount GET /api/client/accounts

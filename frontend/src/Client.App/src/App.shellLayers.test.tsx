@@ -8,7 +8,7 @@ import {
     deploymentDrawingAMessage,
     framed,
     goTo,
-    heldCredential,
+    heldSession,
     openSettings,
     renderApp,
     resetsBetweenTests,
@@ -52,7 +52,7 @@ describe('App shell layers', () => {
     // The reading column goes with them, and for a second reason as well: what stands in it is a step the back gesture
     // has to unwind, so a message left open under another space is a press spent on something nobody can see.
     it('takes the message being read off the screen when the navigation goes to another destination', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
         await goTo('Mail');
 

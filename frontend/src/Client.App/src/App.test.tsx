@@ -9,6 +9,7 @@ import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { startingListWidth, storeListWidth } from './mailSpace/listWidth';
 import {
     accepted,
+    anotherPersonsSession,
     asked,
     complete,
     deploymentAnswering,
@@ -18,14 +19,14 @@ import {
     directory,
     framed,
     goTo,
-    heldCredential,
+    heldSession,
     openingAt,
     renderApp,
     resetsBetweenTests,
     routesAsked,
     servedFrom,
     sessionAnswering,
-    typedCredential,
+    typedSession,
     workAccount,
     type Answer,
 } from './App.harness';
@@ -40,7 +41,7 @@ resetsBetweenTests();
 
 describe('App', () => {
     it('says it is reaching the deployment while nothing has answered', () => {
-        renderApp(servedFrom, heldCredential, () => () => new Promise<ClientResponse>(() => undefined));
+        renderApp(servedFrom, heldSession, () => () => new Promise<ClientResponse>(() => undefined));
 
         expect(screen.getByText('Reaching your deployment…')).toBeDefined();
     });
@@ -51,7 +52,7 @@ describe('App', () => {
                 ? Promise.resolve(complete(accepted))
                 : new Promise<ClientResponse>(() => undefined);
 
-        renderApp(servedFrom, heldCredential, send);
+        renderApp(servedFrom, heldSession, send);
 
         expect(await screen.findByText('Reading accounts…')).toBeDefined();
     });
@@ -90,7 +91,7 @@ describe('App', () => {
     });
 
     it('draws the message a row of the list opened, which is what the frame wires the two together for', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
@@ -102,7 +103,7 @@ describe('App', () => {
     });
 
     it('names what a person working in tabs has opened, in a strip above the mail', async () => {
-        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        renderApp(servedFrom, heldSession, deploymentWorkingInTabs());
         await framed();
 
         await goTo('Mail');
@@ -115,7 +116,7 @@ describe('App', () => {
     });
 
     it('says nothing is open to a person working in tabs who has opened none', async () => {
-        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        renderApp(servedFrom, heldSession, deploymentWorkingInTabs());
         await framed();
 
         await goTo('Mail');
@@ -125,7 +126,7 @@ describe('App', () => {
     });
 
     it('opens mail in the reading column, and draws no strip, for somebody who has not asked for tabs', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
@@ -156,7 +157,7 @@ describe('App', () => {
     it('divides it where it starts for somebody else signing in on the same machine', async () => {
         storeListWidth('test', 468);
 
-        renderApp(servedFrom, 'Basic YW5vdGhlcjpzZWNyZXQ=');
+        renderApp(servedFrom, anotherPersonsSession);
         await framed();
 
         await goTo('Mail');
@@ -167,7 +168,7 @@ describe('App', () => {
     });
 
     it('opens the conversation a message belongs to, and returns to that message when it is closed', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAConversation());
+        renderApp(servedFrom, heldSession, deploymentDrawingAConversation());
         await framed();
 
         await goTo('Mail');
@@ -195,7 +196,7 @@ describe('App', () => {
     // sender's own view is drawn in, and a threaded message would draw the way into the conversation beside it — a
     // second surface for every query here to walk past, in the heaviest test this suite has.
     it('draws the sender own markup in a window over the message where the person does not work in tabs', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
@@ -226,7 +227,7 @@ describe('App', () => {
     });
 
     it('draws the sender own markup in the reading column where the person works in tabs', async () => {
-        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        renderApp(servedFrom, heldSession, deploymentWorkingInTabs());
         await framed();
 
         await goTo('Mail');
@@ -250,7 +251,7 @@ describe('App', () => {
     it('marks read a message a row opened, where the credential may write a flag', async () => {
         renderApp(
             servedFrom,
-            heldCredential,
+            heldSession,
             deploymentDrawingAMessage(
                 sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.flags.write']),
             ),
@@ -275,7 +276,7 @@ describe('App', () => {
     });
 
     it('marks nothing where the credential was never granted a flag write, and says so rather than failing', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
@@ -296,7 +297,7 @@ describe('App', () => {
     });
 
     it('draws no message until a row of the list opens one', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
@@ -307,7 +308,7 @@ describe('App', () => {
     });
 
     it('reads no message while the space on the screen is not Mail', async () => {
-        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        renderApp(servedFrom, heldSession, deploymentDrawingAMessage());
         await framed();
 
         expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
@@ -343,7 +344,7 @@ describe('App', () => {
     it('offers every mailbox the user holds as a scope, beside all of them at once', async () => {
         const twoMailboxes = directory(true, [workAccount, { ...workAccount, id: 'archive', displayName: 'Archive' }]);
 
-        renderApp(servedFrom, heldCredential, deploymentAnswering(twoMailboxes));
+        renderApp(servedFrom, heldSession, deploymentAnswering(twoMailboxes));
 
         const scope = await screen.findByRole('combobox', { name: 'Mailbox in scope' });
         await waitFor(() => {
@@ -356,7 +357,7 @@ describe('App', () => {
     });
 
     it('says the deployment is not refreshing these accounts when it is not, as its setting rather than a grant', async () => {
-        renderApp(servedFrom, heldCredential, deploymentAnswering(directory(false, [workAccount])));
+        renderApp(servedFrom, heldSession, deploymentAnswering(directory(false, [workAccount])));
 
         expect(
             await screen.findByText(
@@ -366,7 +367,7 @@ describe('App', () => {
     });
 
     it('reports why the accounts could not be read instead of saying nothing about them', async () => {
-        renderApp(servedFrom, heldCredential, deploymentAnswering({ status: 403, body: '' }));
+        renderApp(servedFrom, heldSession, deploymentAnswering({ status: 403, body: '' }));
 
         expect(await screen.findByText('The accounts could not be read: unauthorized.')).toBeDefined();
     });
@@ -376,7 +377,7 @@ describe('App', () => {
         const deployment: DeploymentTransport = () => (request) =>
             Promise.resolve(complete(request.path.endsWith('/session') ? accepted : accounts));
 
-        renderApp(servedFrom, heldCredential, deployment);
+        renderApp(servedFrom, heldSession, deployment);
         const retry = await screen.findByRole('button', { name: 'Try again' });
 
         accounts = directory(true, [workAccount]);
@@ -386,9 +387,11 @@ describe('App', () => {
     });
 
     it('reads its mail with the credential it holds rather than with one written into the client', async () => {
-        renderApp(servedFrom, typedCredential);
+        renderApp(servedFrom, typedSession);
         await framed();
 
-        expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([typedCredential]);
+        expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([
+            typedSession.authorization,
+        ]);
     });
 });

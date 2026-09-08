@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -60,6 +60,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | Route | Grant it needs |
 | --- | --- |
 | `GET /api/client/session` | none |
+| `POST /api/client/session/token` | none |
+| `POST /api/client/session/token/revocation` | none |
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
@@ -154,6 +156,67 @@ distinguishable from one that no longer works.
 It is the one route on this surface published under no permission, for the reason the administrative session route is:
 it reports the credential the caller already presented and the version this deployment already publishes, so putting it
 behind a permission would make that permission a component of every client grant.
+
+### The session token routes
+
+A client presents its password once, here, and presents a token everywhere else.
+
+```http
+POST /api/client/session/token
+Authorization: Basic ...
+```
+
+```json
+{ "token": "mfs_QUJDREVGR0hJSktMTU5PUA.q1u3…", "expiresAt": "2026-09-08T21:41:00+00:00" }
+```
+
+The token is presented as a bearer credential — `Authorization: Bearer mfs_…` — on every other route on this surface,
+including this one. **That is what the exchange is for.** A password is verified by deriving a PBKDF2 record sized for
+authenticating a person, which is around half a second of the deployment's own processor; a client opens several
+requests to draw one screen, and a surface authenticating each of them that way spends that cost per request rather
+than per sign-in. Verifying a token is a lookup and one fixed-time comparison: no derivation, and no database read.
+
+**Every method this endpoint accepts is accepted here**, so a deployment offering passwords, API keys, signed
+assertions or access tokens exchanges any of them. Nothing else changes about them: the bound on guessing a password is
+the same bound, counted the same way per source and per user name, because the exchange is where a password is
+presented and is therefore where that bound applies. The rest of the surface still refuses a request carrying no
+credential at all.
+
+**A live token presented here renews it.** The answer is a fresh token, and the presented one stops working — one
+sign-in to one live credential, with no separate renewal credential and no second route. The client renews an hour
+before the expiry it was given, so a client left open stays signed in and nobody types a password again.
+
+```http
+POST /api/client/session/token/revocation
+Authorization: Bearer mfs_…
+```
+
+Answers `204` and the token stops working on the next request rather than at its expiry. The client's sign-out asks for
+this and does not wait on the answer: a deployment that never heard still expires the token on its own.
+
+**The lifetime is twelve hours** and it is not configurable. It is a working day, so a client reopened the same day is
+already signed in, and no longer, so a token abandoned on a machine is not a credential nobody remembers issuing. What
+bounds the case a person is actually in is renewal rather than the number.
+
+**An operator revokes sessions by revoking the credential behind them.** Disabling or deleting a user credential over
+[the administrative endpoint](admin-endpoint.md#user-credentials) ends every session that credential minted, on the
+next request each of them makes. Rotating a credential's material does not: rotation changes what may be presented at
+the exchange and says nothing about sessions already exchanged, so an operator ending somebody's sessions disables the
+credential rather than rotating it.
+
+**Sessions live in the process's memory**, which has three consequences an operator sees. A restart signs every client
+out, and each of them meets that as a refused credential and asks for a password again — no mail and no preference is
+lost, because none of it is in the session. A deployment running more than one replica would not share them, which is
+one of the reasons [the chart runs one](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/helm/mailfathom/README.md).
+And the process holds at most ten thousand live sessions: reaching that refuses a new sign-in with `503` rather than
+signing somebody else out, which is a bound on memory behind an authenticated, rate-limited route.
+
+**The token is unguessable and it is not a password.** It is a sixteen-byte identifier and a thirty-two-byte secret,
+both from the platform's cryptographically secure generator, written together after an `mfs_` prefix — the same shape a
+minted API key carries, so a secret scanner recognises one and an operator who finds an unexpected value can tell which
+of the two it is. Only the identifier is looked up; the secret is compared in fixed time.
+[ADR 0023](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+is where what each head keeps, and the threat model that follows, is recorded.
 
 ### The accounts route
 
@@ -1936,6 +1999,9 @@ surface.
 
 Two of the four methods sign a person in rather than a client, and which of them a deployment offers is what it
 configures.
+
+Whichever it is, it is presented once — to [the exchange](#the-session-token-routes) — and the client presents the
+session it was given afterwards.
 
 **A username and password** is what the client's own sign-in screen asks for. A deployment that runs no authorization
 server reaches for it; the entry names the method and the credentials are provisioned over

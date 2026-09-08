@@ -2,10 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// The one place in the client that turns a user name and a password into a credential, and nothing outside this module
-// composes, inspects, or takes apart the value it produces. `Client.Backend` receives it finished and sends it; a
-// screen holds it only long enough to hand it on. Both of those are the rule rather than this module's own choice —
-// what is this module's is that there is exactly one implementation of RFC 7617 in the client to review.
+// The one place in the client that turns what somebody typed, or what a deployment minted, into a credential, and
+// nothing outside this module composes, inspects, or takes apart the value it produces. `Client.Backend` receives it
+// finished and sends it; a screen holds it only long enough to hand it on. Both of those are the rule rather than this
+// module's own choice — what is this module's is that there is exactly one implementation of RFC 7617 in the client to
+// review, and now one place where a minted session becomes a header value beside it.
+//
+// The two are used at different moments and only one of them is ever kept. A password is composed once, presented to
+// the route that exchanges it, and dropped; the session that comes back is what the client holds and what every later
+// request carries.
 
 /** Why what somebody typed is not a credential this client will present. */
 export type CredentialEntryRefusal = 'incomplete' | 'userNameHasColon' | 'tooLong';
@@ -57,43 +62,17 @@ export function resolveCredentialEntry(userName: string, password: string): Cred
 }
 
 /**
- * The user name inside a credential this client composed, or `null` where the value is not one it would have composed.
+ * The header value a minted session is presented as.
  *
- * It is here rather than at the caller for the reason the module opens with: this is the one implementation of
- * RFC 7617 in the client, and a second place taking the value apart is a second place that can get the encoding wrong
- * — with the password sitting beside the name in what it is taking apart. Nothing this answers is a secret; what the
- * name is for is telling one person on a machine from another.
+ * It is here rather than beside the exchange for the reason the module opens with: a credential is composed in one
+ * place in this client, so a header written anywhere else is a second spelling of a scheme name to get wrong. What the
+ * deployment answers with is the token alone, and RFC 6750 is what says how one travels.
  *
- * @param authorization The finished header value, as {@link resolveCredentialEntry} produced it.
- * @returns The name, or `null` for a value that is not a Basic credential this client could have written.
+ * @param token The token the deployment minted, which this client neither reads nor takes apart.
+ * @returns The finished header value.
  */
-export function userNameIn(authorization: string | null): string | null {
-    if (authorization?.startsWith('Basic ') !== true) {
-        return null;
-    }
-
-    let decoded: string;
-
-    try {
-        decoded = new TextDecoder().decode(octetsOf(atob(authorization.slice('Basic '.length))));
-    } catch {
-        return null;
-    }
-
-    const separator = decoded.indexOf(':');
-
-    return separator > 0 ? decoded.slice(0, separator) : null;
-}
-
-/** What `atob` answers, read back as the UTF-8 octets {@link base64} encoded rather than as code points. */
-function octetsOf(binary: string): Uint8Array {
-    const octets = new Uint8Array(binary.length);
-
-    for (let index = 0; index < binary.length; index += 1) {
-        octets[index] = binary.charCodeAt(index);
-    }
-
-    return octets;
+export function resolveSessionCredential(token: string): string {
+    return `Bearer ${token}`;
 }
 
 /** What `btoa` needs: one octet of the UTF-8 encoding per character, rather than the string's own code points. */

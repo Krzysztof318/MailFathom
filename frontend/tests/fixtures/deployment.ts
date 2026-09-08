@@ -17,8 +17,22 @@ export const userName = 'user';
 /** @see userName */
 export const password = 'open sesame';
 
-/** The RFC 7617 value a client composes out of the two above, which is what a request on this surface presents. */
+/** The RFC 7617 value a client composes out of the two above, which is what the exchange and nothing else presents. */
 export const expectedAuthorization = 'Basic dXNlcjpvcGVuIHNlc2FtZQ==';
+
+/**
+ * The session a deployment answers that exchange with, and the header value every later request presents.
+ *
+ * It ends far enough out that nothing in a run renews it: renewal reads the clock against this instant, and a fixture
+ * inside the margin would put a second request into every check that is not about one.
+ */
+export const mintedSession = {
+    token: 'mfs_browsersuitesession.YnJvd3Nlci1zdWl0ZS1zZXNzaW9u',
+    expiresAt: '2126-08-31T21:41:00+00:00',
+};
+
+/** @see mintedSession */
+export const expectedSessionAuthorization = `Bearer ${mintedSession.token}`;
 
 /**
  * What the session route answers, which is what decides how much of the client is offered at all.

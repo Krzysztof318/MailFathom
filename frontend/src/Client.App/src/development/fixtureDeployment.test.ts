@@ -167,6 +167,29 @@ describe('fixtureAnswer', () => {
         expect(answered('/session', { expiredSession: true }).status).toBe(401);
     });
 
+    it('exchanges a credential for a session, which is what a run against the corpus signs in with', () => {
+        const minted = stated(answered('/session/token', {}, 1, 'POST'));
+
+        expect(minted['token']).toMatch(/^mfs_/);
+        expect(Number.isNaN(Date.parse(String(minted['expiresAt'])))).toBe(false);
+    });
+
+    it('challenges the exchange where nothing carried a credential, so a password may be typed', () => {
+        const request: ClientRequest = {
+            method: 'POST',
+            path: `${deploymentAddress}/api/client/session/token`,
+            headers: {},
+        };
+        const answer = fixtureAnswer(request, fixtureDeploymentDefaults, 1, fixtureDeploymentState());
+
+        expect(answer?.status).toBe(401);
+        expect(answer?.headers['www-authenticate']).toContain('realm="MailFathom"');
+    });
+
+    it('ends a session it is asked to end, so signing out reaches something that answers', () => {
+        expect(answered('/session/token/revocation', {}, 1, 'POST').status).toBe(204);
+    });
+
     it('fails a request whose drawn value falls under the failure rate', () => {
         expect(answered('/accounts', { failureRate: 0.5 }, 0.49).status).toBe(503);
     });

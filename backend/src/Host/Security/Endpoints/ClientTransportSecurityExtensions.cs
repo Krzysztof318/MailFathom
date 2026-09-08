@@ -80,7 +80,13 @@ internal static class ClientTransportSecurityExtensions
         services.AddUserFacingTransportAuthentication(
             TransportSurface.Client,
             [.. endpointSettings.Authentication],
-            ChallengeSchemeFor(endpointSettings));
+            ChallengeSchemeFor(endpointSettings),
+
+            // The exchange is served here whichever methods the endpoint accepts, because what it saves is paid on
+            // every request rather than only by a password: a client that signed in with a key or a token holds one
+            // credential for the deployment's whole life, and a session it can end is the better thing to leave in a
+            // browser. What it saves most is still the password, which is the only method that derives.
+            exchangesCredentialsForSessions: true);
 
         return services;
     }

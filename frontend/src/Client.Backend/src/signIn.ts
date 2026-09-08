@@ -5,6 +5,7 @@
 import { deploymentSessionRoute, parseDeploymentSession } from './deploymentSession';
 import { failed, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
+import { parseMintedSession, sessionExchangeRoute, type MintedSession } from './sessionToken';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
@@ -85,11 +86,21 @@ export function reachDeployment(
  *
  * A refusal is a value rather than a failure because the deployment answered: it read the credential and would not take
  * it, or it does not take passwords at all. What never reached an answer is a `ClientFailure` around this.
+ *
+ * A success carries the session the deployment minted, which is what the client holds from then on. The credential
+ * itself is not carried anywhere: it was presented once, to the route that exchanges it, and the caller has no reason
+ * to keep it afterwards.
  */
-export type SignInOutcome = { readonly signedIn: true } | { readonly signedIn: false; readonly refusal: SignInRefusal };
+export type SignInOutcome =
+    | { readonly signedIn: true; readonly session: MintedSession }
+    | { readonly signedIn: false; readonly refusal: SignInRefusal };
 
 /**
  * Presents a credential to a deployment and reports what it decided.
+ *
+ * The credential goes to the route that exchanges it rather than to the one that reports a caller's grant, and that is
+ * the whole shape of signing in: what comes back is a session token, so this is the one request in the client's life
+ * that costs the deployment a key derivation. Every request after it presents the token instead.
  *
  * There is one request and no retry: a deployment that refused a TLS connection, answered as something other than
  * MailFathom, or turned the credential away is reported as it answered rather than tried again another way. Where the
@@ -97,13 +108,13 @@ export type SignInOutcome = { readonly signedIn: true } | { readonly signedIn: f
  *
  * @param session The address to reach and the finished header value to present, which this package composes no part of.
  * @param transport How the request goes out.
- * @returns Whether the deployment signed the credential in, or why the answer never arrived.
+ * @returns The session the deployment minted, why it refused the credential, or why the answer never arrived.
  */
 export function signIn(session: ClientSession, transport: MailFathomTransport): Promise<ClientResult<SignInOutcome>> {
-    return spanned(`GET ${deploymentSessionRoute}`, async () => {
+    return spanned(`POST ${sessionExchangeRoute}`, async () => {
         const response = await send(transport, {
-            method: 'GET',
-            path: routeFor(session, deploymentSessionRoute),
+            method: 'POST',
+            path: routeFor(session, sessionExchangeRoute),
             headers: headersFor(session),
         });
 
@@ -112,9 +123,9 @@ export function signIn(session: ClientSession, transport: MailFathomTransport): 
         }
 
         if (response.status === 200) {
-            return answersAsMailFathom(response.body)
-                ? read({ signedIn: true })
-                : failed('unreadable', response.status);
+            const minted = parseMintedSession(response.body);
+
+            return minted === null ? failed('unreadable', response.status) : read({ signedIn: true, session: minted });
         }
 
         // A refusal is read only where the challenge proves MailFathom produced it, for the reason the challenge is read at

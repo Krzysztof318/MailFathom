@@ -59,8 +59,8 @@ mod platform {
     }
 
     /// Keeps the finished header value for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, authorization: String) -> bool {
-        entry(&deployment).is_some_and(|entry| entry.set_password(&authorization).is_ok())
+    pub async fn keep(deployment: String, credential: String) -> bool {
+        entry(&deployment).is_some_and(|entry| entry.set_password(&credential).is_ok())
     }
 
     /// The header value kept for one deployment, or nothing where none was kept or the store would not answer.
@@ -137,7 +137,7 @@ mod platform {
     }
 
     /// Keeps the finished header value for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, authorization: String) -> bool {
+    pub async fn keep(deployment: String, credential: String) -> bool {
         let Some(store) = PROTECTED_STORE.get() else {
             return false;
         };
@@ -145,7 +145,7 @@ mod platform {
         store
             .run_mobile_plugin_async::<bool>(
                 "keep",
-                HashMap::from([("deployment", deployment), ("authorization", authorization)]),
+                HashMap::from([("deployment", deployment), ("credential", credential)]),
             )
             .await
             .unwrap_or(false)

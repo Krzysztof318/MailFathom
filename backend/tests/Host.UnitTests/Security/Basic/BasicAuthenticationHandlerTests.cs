@@ -111,6 +111,23 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Equal(CredentialUser, TransportCallerUser.CarriedBy(result.Principal!));
     }
 
+    /// <summary>The credential itself travels beside the user, so a session this request exchanges it for is one disabling that credential ends.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AProvisionedCredential_CarriesTheCredentialThatAdmittedTheRequest()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        harness.HoldsTheUsersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("user", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal(CredentialId, TransportCallerCredential.CarriedBy(result.Principal!));
+    }
+
     /// <summary>The grant is the row's rather than the endpoint's, so what a request may do travels with the credential.</summary>
     [Fact]
     public async Task AuthenticateAsync_AProvisionedCredential_CarriesTheGrantOnItsOwnRowRatherThanTheEndpoints()
