@@ -344,12 +344,24 @@ function parseNotification(value: unknown): ClientNotification | null {
           };
 }
 
+/** Which of the two numbers each cause is stated with, so a statement missing one of its own is refused below. */
+const countsPerCause: Readonly<Record<NotificationCause, readonly ('counted' | 'outOf')[]>> = {
+    MailArrived: ['counted'],
+    SynchronizationIncomplete: ['counted', 'outOf'],
+    CredentialRefused: [],
+};
+
 /**
  * Reads what a notification says, and answers nothing where the deployment says nothing this build can draw.
  *
  * A cause is refused rather than carried through, because a screen has no sentence for one it does not name — and a
  * deployment ahead of this client is the ordinary case rather than a defect, so the row falls back to the English the
  * service sent instead of failing to parse.
+ *
+ * A cause missing a number it is stated with is refused on the same terms, and the numbers are checked against the
+ * cause rather than each on its own: what a hole in a sentence means is the cause's to say, so a statement naming an
+ * unfinished run without the count it ran against would otherwise reach a screen and be drawn with a blank where a
+ * number belongs. The fallback is the whole point — the service's own English says the same thing and says it whole.
  */
 function parseStatement(value: unknown): NotificationStatement | null {
     const record = asRecord(value);
@@ -366,7 +378,9 @@ function parseStatement(value: unknown): NotificationStatement | null {
         return null;
     }
 
-    return { cause, counted, outOf };
+    const stated = { cause, counted, outOf };
+
+    return countsPerCause[cause].every((number) => stated[number] !== null) ? stated : null;
 }
 
 function parseTarget(value: unknown): NotificationTarget | null {

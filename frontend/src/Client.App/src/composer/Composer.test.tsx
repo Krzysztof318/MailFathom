@@ -493,7 +493,7 @@ describe('Composer, a message of its own', () => {
 
         address('ada@example.invalid');
         write('Subject', 'The quarterly figures');
-        write('Message', 'They are attached.');
+        writeWords('They are attached.');
         confirmSend();
 
         expect(await screen.findByText('Sending your message…')).toBeDefined();

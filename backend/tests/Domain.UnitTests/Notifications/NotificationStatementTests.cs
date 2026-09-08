@@ -90,6 +90,27 @@ public sealed class NotificationStatementTests
     }
 
     /// <summary>A restored row keeps the numbers it was stored with, whichever of them the cause left absent.</summary>
+    /// <summary>
+    /// A restored row is held to being a declared cause and to counting nothing negative, and to nothing else. The
+    /// remarks on <see cref="NotificationStatement.Restore" /> say why, and this is what would fail if a later change
+    /// made it apply the per-cause shape its factories enforce: a deployment upgraded over rows an older build wrote
+    /// would stop being able to read them, which loses a notification rather than a number.
+    /// </summary>
+    [Fact]
+    public void Restore_ARowCountingMoreThanItCountsAgainst_KeepsBothRatherThanRefusingTheRow()
+    {
+        // Act
+        var statement = NotificationStatement.Restore(
+            NotificationCause.SynchronizationIncomplete,
+            counted: 6,
+            outOf: 5);
+
+        // Assert
+        Assert.Equal(NotificationCause.SynchronizationIncomplete, statement?.Cause);
+        Assert.Equal(6, statement?.Counted);
+        Assert.Equal(5, statement?.OutOf);
+    }
+
     [Fact]
     public void Restore_ARowNamingACauseAndItsCounts_KeepsBoth()
     {

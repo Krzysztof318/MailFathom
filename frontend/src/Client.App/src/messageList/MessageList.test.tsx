@@ -237,17 +237,16 @@ describe('MessageList', () => {
         expect(screen.getByText('Reading your mail…')).toBeDefined();
     });
 
-    // The skeleton is decorative by construction — it is hidden from the accessibility tree, the sentence above being
-    // what a reader is told — so it is the one thing here with no role and no name to be found by, and the class the
-    // token layer draws it with is what a test can hold it to.
-    it('draws the rows it is about to fill rather than an empty pane, and replaces them with the mail', async () => {
-        const { container } = renderList(answering(wholeFolder));
+    // What the skeleton standing in that space looks like is held against the design as images rather than asserted
+    // here: it is `aria-hidden` by construction, and jsdom computes no layout, so what this suite can say about the
+    // wait is what a person meets — the sentence while it lasts, the mail once it lands, and neither of them twice.
+    it('says it is reading until the mail is there, and says nothing of the sort once it is', async () => {
+        renderList(answering(wholeFolder));
 
-        expect(container.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
+        expect(screen.getByText('Reading your mail…')).toBeDefined();
+        expect(screen.queryByRole('listbox', { name: 'Messages' })).toBeNull();
 
-        await rows();
-
-        expect(container.querySelectorAll('.shimmering').length).toBe(0);
+        expect(await rows()).not.toHaveLength(0);
         expect(screen.queryByText('Reading your mail…')).toBeNull();
     });
 

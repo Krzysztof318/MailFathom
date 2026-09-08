@@ -211,7 +211,10 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
         if (held === null) {
             // The write said what stopped it and in the words of the send, so what this answers is that same
-            // statement rather than a second, vaguer one made here.
+            // statement rather than a second, vaguer one made here. A stop asked while it was in flight goes with it:
+            // it was asked about a message that never left.
+            stopping.current = false;
+
             return settledAs.current;
         }
 
@@ -225,10 +228,14 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return { kind: 'queued', outgoingEmailId: sent.outgoingEmailId };
         });
 
-        // Somebody asked to stop while the deployment had not yet answered, so this is where their stop lands.
-        if (outcome.kind === 'queued' && stopping.current) {
-            stopping.current = false;
+        // A stop belongs to the send it was asked about, so it is read once here and cleared whatever became of that
+        // send. Left standing over a send that was refused or failed, it would take back the *next* message somebody
+        // deliberately sent — which is a message discarded on state nobody was acting on any more.
+        const stopWasAsked = stopping.current;
+        stopping.current = false;
 
+        // Somebody asked to stop while the deployment had not yet answered, so this is where their stop lands.
+        if (outcome.kind === 'queued' && stopWasAsked) {
             return withdraw();
         }
 

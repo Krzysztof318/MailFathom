@@ -195,17 +195,17 @@ describe('ReadingPane', () => {
         expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
     });
 
-    // The skeleton stands for what nobody can read yet, so it is hidden from the accessibility tree and the sentence
-    // above is what a reader is told instead. That leaves it with no role and no name of its own, and the class the
-    // token layer draws it with is what a test can hold it to.
-    it('reserves the shape the message will take, and gives that space to the message itself', async () => {
+    // What the skeleton standing in that space looks like is held against the design as images rather than asserted
+    // here: it is `aria-hidden` by construction and jsdom computes no layout, so what this suite says about the wait
+    // is what a person meets — the sentence until the message is there, and the message with no sentence after it.
+    it('says it is reading until the message is there, and stops saying it once the message is', async () => {
         drawing(deploymentDescribing());
 
-        expect(document.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
+        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
 
         await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
 
-        expect(document.querySelectorAll('.shimmering').length).toBe(0);
+        expect(screen.queryByText('Reading this message…')).toBeNull();
     });
 
     it('says the machine is offline rather than reporting the deployment as unreachable', () => {

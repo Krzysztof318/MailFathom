@@ -150,14 +150,14 @@ describe('FullHtmlSurface', () => {
         });
     });
 
-    // Hidden from the accessibility tree, because it stands for markup nobody can read yet and the surface already
-    // says in words that it is reading. That leaves the class the token layer draws it with as what holds it here.
-    it('reserves the shape the markup will take, and gives that space to the markup itself', async () => {
+    // What stands in that space while the markup travels is held against the design as images: it is `aria-hidden` by
+    // construction and jsdom computes no layout, so what this suite says is that the surface says it is reading for
+    // exactly as long as it is.
+    it('says it is reading while the deployment has answered nothing', async () => {
         const { transport } = deploymentAnsweringNothing();
 
         await drawing(transport);
 
-        expect(document.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
         expect(screen.getByText("Reading the sender's own version…")).toBeDefined();
     });
 
