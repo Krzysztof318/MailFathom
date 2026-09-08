@@ -9228,6 +9228,7 @@ drafts.ts queuedSend POST /api/client/drafts/{draftId}/send
 drafts.ts refusedSend - -
 mail.ts timelineRow GET /api/client/emails
 mail.ts timelinePage GET /api/client/emails
+mail.ts conversationTimelineRow GET /api/client/emails
 mail.ts emptyFolderPage GET /api/client/emails
 mail.ts rackingQuote GET /api/client/emails
 mail.ts searchResults GET /api/client/emails/search

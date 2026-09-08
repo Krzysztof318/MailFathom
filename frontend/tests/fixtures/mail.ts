@@ -46,6 +46,31 @@ function timelineRow(at: number) {
         attachmentCount: at % 5 === 0 ? 1 : 0,
         sizeOctets: 4_096,
         preview: `The opening of message ${String(at)}.`,
+        threadMessageCount: null,
+    };
+}
+
+/**
+ * Where in the folder the one row standing for a correspondence sits.
+ *
+ * A folder whose every row is a single message draws none of the count the design puts on a row that stands for an
+ * exchange, so a corpus without one cannot show that state at all. It is far enough down that the rows a check reaches
+ * by position are the plain ones they were, and near enough the top to be on the first screen of every composition.
+ */
+const conversationRowPosition = 3;
+
+// The row that opens the conversation below, drawn in the folder it arrived in. It is composed here rather than held
+// as a constant because what it is built from is declared further down this file.
+function conversationTimelineRow() {
+    return {
+        ...timelineRow(conversationRowPosition),
+        id: rackingQuote.id,
+        threadId: conversationId,
+        threadMessageCount: conversationRows.length,
+        subject: rackingQuote.subject,
+        senderAddress: 'sales@nordwind.example',
+        senderDisplayName: 'Nordwind',
+        preview: rackingQuote.preview,
     };
 }
 
@@ -62,7 +87,9 @@ export function timelinePage(from: number) {
     const rows = Math.max(Math.min(rowsPerPage, mailboxSize - start), 0);
 
     return {
-        emails: Array.from({ length: rows }, (_, at) => timelineRow(start + at)),
+        emails: Array.from({ length: rows }, (_, at) =>
+            start + at === conversationRowPosition ? conversationTimelineRow() : timelineRow(start + at),
+        ),
         nextCursor: start + rows >= mailboxSize ? null : String(start + rows),
         previousCursor: start === 0 ? null : String(start),
         pageSize: rowsPerPage,
@@ -250,6 +277,7 @@ export const conversation = {
             attachmentCount: 0,
             sizeOctets: 3_120,
             preview: row.preview,
+            threadMessageCount: conversationRows.length,
         },
     })),
     participants: [

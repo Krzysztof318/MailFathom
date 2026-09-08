@@ -40,6 +40,7 @@ internal static class SyntheticEmailSummaries
     /// <param name="senderVerification">What was established about the displayed author, or the stored default.</param>
     /// <param name="senderAuthenticationEvidence">What that conclusion was reached from, or the stored default.</param>
     /// <param name="machineAuthorship">How much the message's own text read as machine written, or the stored default.</param>
+    /// <param name="threadId">The conversation the message belongs to, or <see langword="null" /> where threading has placed it in none.</param>
     /// <returns>The summary.</returns>
     public static EmailSummary Create(
         DateTimeOffset? receivedAt = null,
@@ -55,11 +56,13 @@ internal static class SyntheticEmailSummaries
         int inlineResourceCount = 0,
         SenderVerification? senderVerification = null,
         SenderAuthenticationEvidence? senderAuthenticationEvidence = null,
-        MachineAuthorshipAssessment? machineAuthorship = null) => new()
+        MachineAuthorshipAssessment? machineAuthorship = null,
+        Guid? threadId = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             Account = MailAccountIdentity.Create(SyntheticMailUser.Deployment, MailAccountId.Create(accountId)),
             FolderAlias = MailFolderAlias.Create(folderAlias),
+            ThreadId = threadId is { } conversation ? EmailThreadId.Create(conversation) : null,
             InternetMessageId = null,
             Subject = subject,
             SentAt = receivedAt,

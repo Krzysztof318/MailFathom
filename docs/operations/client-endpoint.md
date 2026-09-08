@@ -452,6 +452,7 @@ continues the list at each end:
       "attachmentCount": 2,
       "sizeOctets": 48213,
       "preview": "The release went out this morning and the notes are attached.",
+      "threadMessageCount": 4,
       "enrichment": {
         "derivedAt": "2026-08-15T10:02:44+00:00",
         "marks": [
@@ -485,6 +486,14 @@ text as extraction trimmed it, without quoted history or a signature block, whic
 being the message it was answering. It is `null` for mail this deployment has stored but not yet extracted, which is
 not the same as a message whose text is empty. The bound is fixed: no request may raise it and no deployment may
 change it.
+
+**`threadMessageCount` is how long the correspondence is**, counted over the whole conversation rather than over the
+page — a correspondence spans a page boundary as readily as it sits inside one, so a client counting the rows it holds
+would answer a different number depending on where the page was cut. It is counted across every folder the user may
+read with the junk folder included, which is the same membership `GET /api/client/threads/{threadId}` publishes, so a
+row and the conversation it opens cannot disagree about how long the exchange is. It is `null` for a message threading
+has placed in no conversation, and `1` for one whose conversation holds only it. The count comes out of the same read
+the page comes from rather than a request per row.
 
 **`enrichment` is what a derivation concluded about the message**, and it is on every row of every response, whether or
 not the deployment turned [message enrichment](../features/message-enrichment.md) on. It carries at most
@@ -615,7 +624,8 @@ ranks both ways wherever it can, and the answer says which happened.
 **A result is a list row with two fields added**, so one layout draws both and a result can be opened, filtered, and
 acted on without a second request. `snippets` are the extracts around what matched, each marking the matched words with
 `**` — text cut from untrusted mail rather than markup to render — and `preview` is the same bounded opening the list
-route publishes.
+route publishes. The one list field a result does not carry is `threadMessageCount`: a search ranks messages rather
+than correspondences, and counting the conversation behind every result would be a query this route does not owe.
 
 **`matchedBy` is why the row is there**: `LexicalRanking` for a message carrying the query's words, `SemanticRanking`
 for one matching by meaning, and `BothRankings` for one both rankings found. It is the field a screen needs most for
@@ -788,8 +798,10 @@ across this surface, and its `preview` is what that message added with the quote
 trimmed off — which is what keeps the eighth reply from redrawing the seven above it. Field for field includes
 `enrichment`, which carries here exactly what it carries on a list row and means exactly the same thing: a message a
 derivation reached shows its marks whichever screen draws it, and a conversation that answered `null` for a message the
-list shows marks for would be stating that no derivation has reached it. There is no body here either: the whole of a
-message is a request of its own, named by the `id` that row already carries.
+list shows marks for would be stating that no derivation has reached it. `threadMessageCount` on each of these rows is
+this conversation's own `messageCount`, because that is what the field means and every message here is in this
+conversation — so a row drawn from a thread reads the same number as the header above it. There is no body here
+either: the whole of a message is a request of its own, named by the `id` that row already carries.
 
 **`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's
 own order and continues across pages, so a client that has paged twice still knows what it is holding. `answeredId`

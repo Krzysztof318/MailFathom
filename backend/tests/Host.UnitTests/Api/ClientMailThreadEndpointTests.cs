@@ -202,13 +202,14 @@ public sealed class ClientMailThreadEndpointTests
         var message = new BrowsedThreadEmail(SyntheticListedEmail(), Position: 2, answered, "what I added", Enrichment: null);
 
         // Act
-        var response = ClientMailThreadEmailResponse.For(message);
+        var response = ClientMailThreadEmailResponse.For(message, threadMessageCount: 4);
 
         // Assert
         Assert.Equal(2, response.Position);
         Assert.Equal(answered.Value, response.AnsweredId);
         Assert.Equal("what I added", response.Email.Preview);
         Assert.Equal(message.Email.StoredEmailId.Value, response.Email.Id);
+        Assert.Equal(4, response.Email.ThreadMessageCount);
     }
 
     /// <summary>A root of what the caller is shown names no ancestor, which is also the answer for a withheld parent.</summary>
@@ -224,7 +225,7 @@ public sealed class ClientMailThreadEndpointTests
             Enrichment: null);
 
         // Act
-        var response = ClientMailThreadEmailResponse.For(message);
+        var response = ClientMailThreadEmailResponse.For(message, threadMessageCount: 1);
 
         // Assert
         Assert.Null(response.AnsweredId);

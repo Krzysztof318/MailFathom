@@ -32,6 +32,7 @@ const email = {
     attachmentCount: 0,
     sizeOctets: 84_213,
     preview: 'The figures you asked for are attached.',
+    threadMessageCount: 2,
 };
 
 const participant = { address: 'auditor@example.invalid', displayName: 'The auditor', messageCount: 2 };

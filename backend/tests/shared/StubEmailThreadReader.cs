@@ -33,6 +33,9 @@ internal sealed class StubEmailThreadReader(
     /// <summary>Gets how many times a thread was read, which is what proves one read assembles a conversation once.</summary>
     public int ReadCount { get; private set; }
 
+    /// <summary>Gets how many times conversations were counted, which is what proves a page costs one count.</summary>
+    public int CountReadCount { get; private set; }
+
     /// <summary>Records one conversation as folded into another, the way a merge leaves the table.</summary>
     /// <param name="merged">The conversation that was folded away, whose identifier a tool may already have published.</param>
     /// <param name="survivor">The conversation it was folded into.</param>
@@ -76,6 +79,28 @@ internal sealed class StubEmailThreadReader(
                 .OrderBy(email => email.StoredEmailId.Value)
                 .Take(IEmailThreadReader.MaximumAssembledEmails + 1),
         ]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// No merge is followed and no bound is applied, exactly as the real reader does neither: the counted rows carry the
+    /// surviving identifier already, and a count of a conversation cut at the assembly bound would be a smaller number
+    /// than the conversation holds.
+    /// </remarks>
+    public Task<IReadOnlyDictionary<EmailThreadId, int>> ReadMessageCountsAsync(
+        IReadOnlyList<EmailThreadId> threadIds,
+        MailboxScope scope,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(threadIds);
+
+        this.CountReadCount++;
+
+        return Task.FromResult<IReadOnlyDictionary<EmailThreadId, int>>(
+            emails
+                .Where(held => threadIds.Contains(held.ThreadId) && Admits(scope, held.Email))
+                .GroupBy(static held => held.ThreadId)
+                .ToDictionary(static counted => counted.Key, static counted => counted.Count()));
     }
 
     /// <summary>Follows the merges recorded here to the conversation that survived them.</summary>

@@ -58,4 +58,34 @@ public interface IEmailThreadReader
         EmailThreadId threadId,
         MailboxScope scope,
         CancellationToken cancellationToken);
+
+    /// <summary>Counts how many messages the caller may see in each of the named conversations.</summary>
+    /// <param name="threadIds">The conversations to count, as the rows of one page named them.</param>
+    /// <param name="scope">The accounts and folders configuration admits, which the query is narrowed by.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>
+    /// The number of messages in each conversation that holds any, keyed by identifier. A conversation the scope admits
+    /// nothing of is absent rather than present as zero.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="threadIds" /> or <paramref name="scope" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// One query for the whole page rather than one per row, which is the same arrangement the preview and the
+    /// enrichment of a page are read under: a list of fifty rows costs one count instead of fifty.
+    /// </para>
+    /// <para>
+    /// It counts by membership and applies no bound, unlike the assembly above. A count is what a row draws to say the
+    /// message stands for an exchange rather than a single message, so cutting it at
+    /// <see cref="MaximumAssembledEmails" /> would report a long conversation as shorter than it is — and counting is
+    /// what a database does without carrying any of the rows.
+    /// </para>
+    /// <para>
+    /// No merge is followed, because none has to be: a merge repoints every message of the folded conversation at the
+    /// survivor, and the identifiers handed here are the ones the counted rows carry.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyDictionary<EmailThreadId, int>> ReadMessageCountsAsync(
+        IReadOnlyList<EmailThreadId> threadIds,
+        MailboxScope scope,
+        CancellationToken cancellationToken);
 }

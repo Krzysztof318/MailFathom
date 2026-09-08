@@ -45,6 +45,7 @@ const message = {
     attachmentCount: 2,
     sizeOctets: 84_213,
     preview: 'The figures you asked for are attached.',
+    threadMessageCount: null,
 };
 
 function bodyOf(emails: readonly unknown[], cursors: Readonly<Record<string, unknown>> = {}): string {
@@ -234,6 +235,8 @@ describe('readMailTimeline', () => {
         ['a flagged state that is not a boolean', bodyOf([{ ...message, flagged: null }])],
         ['an attachment count that is not whole', bodyOf([{ ...message, attachmentCount: 1.5 }])],
         ['a negative size', bodyOf([{ ...message, sizeOctets: -1 }])],
+        ['a conversation holding no message at all', bodyOf([{ ...message, threadMessageCount: 0 }])],
+        ['a conversation size that is not whole', bodyOf([{ ...message, threadMessageCount: 2.5 }])],
     ])('refuses %s rather than reading a page with a hole in it', async (_, body) => {
         const result = await readMailTimeline(session, answering({ status: 200, body }), leadingPage);
 
@@ -258,5 +261,26 @@ describe('readMailTimeline', () => {
         const result = await readMailTimeline(session, transport, leadingPage);
 
         expect(result.outcome === 'read' && result.value.emails[0]?.threadId).toBeNull();
+    });
+
+    // How long the correspondence is is the deployment's count over the whole of it, so it is read as it arrived and
+    // never recomputed here — and a route that states none leaves the row saying nothing rather than saying one.
+    it('reads how many messages the row’s correspondence holds', async () => {
+        const transport = answering({ status: 200, body: bodyOf([{ ...message, threadMessageCount: 6 }]) });
+
+        const result = await readMailTimeline(session, transport, leadingPage);
+
+        expect(result.outcome === 'read' && result.value.emails[0]?.threadMessageCount).toBe(6);
+    });
+
+    it('reads a row whose route states no conversation size as one that says nothing about it', async () => {
+        const transport = answering({
+            status: 200,
+            body: bodyOf([{ ...message, threadMessageCount: undefined }]),
+        });
+
+        const result = await readMailTimeline(session, transport, leadingPage);
+
+        expect(result.outcome === 'read' && result.value.emails[0]?.threadMessageCount).toBeNull();
     });
 });

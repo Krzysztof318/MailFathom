@@ -492,6 +492,7 @@ export const pl: Catalogue = {
     'list.attachments': 'Załączniki: {count}',
     'list.noSubject': 'Bez tematu',
     'list.senderUnknown': 'Brak nadawcy',
+    'list.threadMessages': 'Wiadomości w tym wątku: {count}',
 
     'search.label': 'Znajdź wiadomość',
     'search.placeholder': 'Słowa z wiadomości, której szukasz',
