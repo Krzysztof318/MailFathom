@@ -88,8 +88,22 @@
 # reading the messages inside it rather than the container around them. The directory rather than the files in it,
 # because a second corpus is committed by whoever needs different mail and would otherwise fail a check nobody
 # expected. `docs/operations/local-development.md` says how one is read.
+#
+# `/design/` is the mirror of the design project, and it is the fourth kind twice over: the screen sources are Polish
+# throughout, being what a person reads in the application, and they are not this repository's prose at all — they are
+# another document copied byte for byte, which `scripts/design-mirror.sh record` checks against the size the project
+# states. A correction to one of them would be a correction to a file nobody here writes, and it would fail that check
+# the moment it landed. The state inventory and the pairing beside them quote the same Polish, which is why the
+# directory is excluded whole rather than its `files/` subdirectory alone.
+#
+# It is the one entry written with a leading slash, and the slash is what makes it a path rather than a name. A
+# gitignore pattern carrying no `/` except a trailing one matches at any depth, so `design/` would exempt a directory
+# of that name anywhere in either stack — and the workflow above, which has to apply this list to a list of changed
+# files, refuses such an entry by widening to the whole checkout rather than guessing. Anchoring it says what is meant:
+# this one directory at the root.
 extend-exclude = [
   'backend/tools/SyntheticMail/corpora/',
+  '/design/',
   'frontend/pnpm-lock.yaml',
   'frontend/src/Client.App/src/localization/pl.ts',
   'frontend/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.jar',

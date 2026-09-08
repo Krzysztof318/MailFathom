@@ -86,10 +86,10 @@ if [[ "$theme" != 'light' && "$theme" != 'dark' ]]; then
   exit 1
 fi
 
-# Where a capture may be written, and the reason it is checked rather than trusted. Both sides of a pair are design or
-# client material: the design side is the source of truth for a product that has not shipped its screens, and the
-# client side shows whatever mail the run was answering with. Neither belongs in a public tree, so the repository is
-# refused outright and the two places that are not it are named.
+# Where a capture may be written, and the reason it is checked rather than trusted. A capture is generated rather than
+# authored — the design side rasterises files the tree already holds, and the client side shows whatever mail the run
+# was answering with, which is the half that must never be committed. So the repository is refused outright and the two
+# places that are not it are named.
 scratch_root="$(realpath -m -- "${TMPDIR:-/tmp}")"
 artifacts_root="$(realpath -m -- "$repository_root/artifacts")"
 

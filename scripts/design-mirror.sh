@@ -30,8 +30,8 @@ Usage: bash scripts/design-mirror.sh <command> [<argument>...]
                                then write the manifest and print the stamp the inventory names.
   stamp                        Print the stamp of the recorded manifest without changing anything.
 
-The mirror is `artifacts/design/files/`, the manifest is `artifacts/design/manifest.json`, and
-both are ignored by `.gitignore`: a design is not repository content.
+The mirror is `design/files/` and the manifest is `design/manifest.json`. Both are tracked, so a
+refresh that moves either of them is a change to commit rather than a local file nobody else sees.
 USAGE
 }
 
@@ -45,14 +45,14 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-design_directory="$repository_root/artifacts/design"
+design_directory="$repository_root/design"
 manifest="$design_directory/manifest.json"
 mirror="$(realpath -m -- "$design_directory/files")"
 
 # A screen source is an HTML file, and everything else the project holds is an asset, a copied
 # slide-deck starter or a thumbnail. Mirroring is therefore one rule rather than a list nobody
 # updates: the manifest still covers every file, so an asset appearing or disappearing stays visible
-# without several megabytes of it being carried into every worktree.
+# without several megabytes of it being committed and re-committed at every refresh.
 is_screen_source='(.path | endswith(".html"))'
 
 # The generated runtime is mirrored beside them, and it is the one file that is not a screen source
@@ -148,7 +148,7 @@ case "$command" in
     fi
 
     printf 'The design moved:\n%s\n\n' "$moved"
-    printf 'Read these and rewrite them under artifacts/design/files/:\n'
+    printf 'Read these and rewrite them under design/files/:\n'
     jq -n --argjson was "$(cat "$manifest")" --argjson now "$listing" "
       (\$was | INDEX(.path)) as \$before
       | \$now
