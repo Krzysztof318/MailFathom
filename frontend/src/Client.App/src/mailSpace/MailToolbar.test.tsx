@@ -4,7 +4,7 @@
 
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Composing } from '../composer/useComposing';
 import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
@@ -14,6 +14,8 @@ import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { MailToolbar } from './MailToolbar';
 import type { StripFit } from './useStripFit';
+
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
 const messageId = '00000000-0000-4000-8000-000000000000';
 
@@ -59,6 +61,27 @@ function drawToolbar(
 function actsOffering(performed: MailboxActs['perform']): MailboxActs {
     return { ...nothingActed, refusalOf: () => null, perform: performed };
 }
+
+// jsdom evaluates no media query, so the setup answers every one of them with `false` and this strip is drawn in the
+// single-pane composition unless a test says otherwise. Stating a width is stating what `useTwoPanes` reads, which is
+// a `min-width` query built from the token — so what is answered here is that query and nothing else.
+function theCompositionHasTwoPanes(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: query.includes('min-width'),
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
+afterEach(() => {
+    if (declaredMatchMedia !== undefined) {
+        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
+});
 
 describe('MailToolbar', () => {
     it('opens a message of its own from the control the design puts first', () => {
@@ -151,14 +174,34 @@ describe('MailToolbar', () => {
     });
 
     it('keeps hiding the panels apart at the far edge as a symbol alone, whatever fits the strip', () => {
+        theCompositionHasTwoPanes();
         drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
 
         const hiding = screen.getByRole('button', {
-            name: 'Hide the panels — the correspondence alone — not built yet',
+            name: 'Hide the panels — the correspondence alone',
         });
 
         expect(hiding.textContent).toBe('');
         expect(hiding.className).toContain('ms-auto');
+    });
+
+    it('hides the panels when pressed and says so, so the state is readable rather than only visible', () => {
+        theCompositionHasTwoPanes();
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
+
+        const hiding = screen.getByRole('button', { name: 'Hide the panels — the correspondence alone' });
+        expect(hiding.getAttribute('aria-pressed')).toBe('false');
+
+        fireEvent.click(hiding);
+
+        const showing = screen.getByRole('button', { name: "Show the thread's panels" });
+        expect(showing.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('leaves the panel control out of a single-pane composition, which the design gives it nothing to do in', () => {
+        drawToolbar(true, messageId, actsOffering(vi.fn()), 'labelled');
+
+        expect(screen.queryByRole('button', { name: 'Hide the panels — the correspondence alone' })).toBeNull();
     });
 
     it('gives composing up to the floating control first, keeping the other names in words', () => {

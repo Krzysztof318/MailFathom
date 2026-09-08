@@ -72,8 +72,9 @@ export function Thread({
     readonly expandWholeThread: boolean;
 }) {
     const { locale, translate } = useLocalization();
-    const { revise } = useWorkspace();
+    const { workspace, revise } = useWorkspace();
     const twoPanes = useTwoPanes();
+    const panelsHidden = workspace.panelsHidden;
 
     const [pages, setPages] = useState<readonly MailThreadPage[]>([]);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -296,46 +297,51 @@ export function Thread({
         <Conversation
             onClose={close}
             header={
-                <header className="flex flex-col gap-1.75 border-b border-line px-5.5 py-4">
-                    {/* The acts the design draws beside a conversation's subject, the same four the head of a
-                        message carries: a conversation is what they are about in the design, whichever message
-                        of it is on the screen — which is why none of them is handed a message here, and why each
-                        stands as what it is. `mailSpace/HeadActs.tsx` holds what a conversation would need first. */}
-                    <div className="flex min-w-0 items-center gap-2.25">
-                        <h2 className="min-w-0 flex-1 text-3xl font-semibold text-balance">
-                            {held[0]?.email.subject ?? translate('message.noSubject')}
-                        </h2>
+                // The head goes with the panels where the composition has two of them, which is the design's own
+                // arithmetic: `showThreadHead` is off under the *fullscreen* control except in a single pane, where
+                // the head is also what carries the way back to the list.
+                panelsHidden && twoPanes ? undefined : (
+                    <header className="flex flex-col gap-1.75 border-b border-line px-5.5 py-4">
+                        {/* The acts the design draws beside a conversation's subject, the same four the head of a
+                            message carries: a conversation is what they are about in the design, whichever message
+                            of it is on the screen — which is why none of them is handed a message here, and why each
+                            stands as what it is. `mailSpace/HeadActs.tsx` holds what a conversation would need first. */}
+                        <div className="flex min-w-0 items-center gap-2.25">
+                            <h2 className="min-w-0 flex-1 text-3xl font-semibold text-balance">
+                                {held[0]?.email.subject ?? translate('message.noSubject')}
+                            </h2>
 
-                        <HeadActs compact={!twoPanes} message={null} />
-                    </div>
+                            <HeadActs compact={!twoPanes} message={null} />
+                        </div>
 
-                    {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are
-                        the conversation's authors, so a screen deriving them would be paging a conversation to draw
-                        its header. The list is worded by `Intl` under the active locale rather than joined here. */}
-                    {latest.participants.length === 0 ? null : (
+                        {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are
+                            the conversation's authors, so a screen deriving them would be paging a conversation to draw
+                            its header. The list is worded by `Intl` under the active locale rather than joined here. */}
+                        {latest.participants.length === 0 ? null : (
+                            <p className="text-base text-muted">
+                                {translate('thread.wroteHere', {
+                                    names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
+                                        latest.participants.map((one) => one.displayName ?? one.address),
+                                    ),
+                                })}
+                            </p>
+                        )}
+
+                        {latest.moreParticipantsNotNamed ? (
+                            <p className="text-base text-muted">{translate('thread.moreParticipants')}</p>
+                        ) : null}
+
                         <p className="text-base text-muted">
-                            {translate('thread.wroteHere', {
-                                names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
-                                    latest.participants.map((one) => one.displayName ?? one.address),
-                                ),
+                            {translate('thread.messages', {
+                                count: new Intl.NumberFormat(locale).format(latest.messageCount),
                             })}
                         </p>
-                    )}
 
-                    {latest.moreParticipantsNotNamed ? (
-                        <p className="text-base text-muted">{translate('thread.moreParticipants')}</p>
-                    ) : null}
-
-                    <p className="text-base text-muted">
-                        {translate('thread.messages', {
-                            count: new Intl.NumberFormat(locale).format(latest.messageCount),
-                        })}
-                    </p>
-
-                    {latest.moreMessagesNotAssembled ? (
-                        <p className="text-base text-warning">{translate('thread.moreNotAssembled')}</p>
-                    ) : null}
-                </header>
+                        {latest.moreMessagesNotAssembled ? (
+                            <p className="text-base text-warning">{translate('thread.moreNotAssembled')}</p>
+                        ) : null}
+                    </header>
+                )
             }
         >
             {/* A read that failed with messages already drawn is the partial state: what is on the screen stays, and

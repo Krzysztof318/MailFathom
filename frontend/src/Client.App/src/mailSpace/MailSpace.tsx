@@ -122,8 +122,14 @@ export function MailSpace({
 
     // What is being written stands where what is being read stands, so the narrow shape brings the reading column
     // in front of the list for a message somebody is writing exactly as it does for one they opened.
-    const readingInFront =
-        !twoPanes && (workspace.selection !== null || workspace.conversation !== null || composing.opening !== null);
+    const readingOpen = workspace.selection !== null || workspace.conversation !== null || composing.opening !== null;
+    const readingInFront = !twoPanes && readingOpen;
+
+    // The list is the last thing the *fullscreen* control takes away, and only at a tablet-class width: the design's
+    // `showThreadList` is off where a tablet has both panes and something open under that control, and on at every
+    // desktop width, where there is room for the correspondence to stand alone without the list going with it. The
+    // toolbar stays either way, which is what leaves the control there to turn it back off.
+    const listGivenUp = workspace.panelsHidden && twoPanes && !desktop && readingOpen;
 
     // Read from the workspace rather than held here, because the column is not the only thing that draws differently
     // once it is folded: the tree inside it draws a symbol where it drew a name, and the tree is a region handed in
@@ -163,16 +169,31 @@ export function MailSpace({
 
     // Focus is placed on the shape changing what it shows, and not on the width changing the shape: both are recorded
     // and only the first moves anything. A ref rather than state, because what it holds is what was last drawn.
-    const shown = useRef({ twoPanes, readingInFront });
+    //
+    // Both breakpoints are recorded rather than only the one that swaps the panes, because the list also comes and
+    // goes on the desktop boundary while the panels are hidden — a window dragged from a desktop width to a tablet
+    // one would otherwise take focus off whatever the reader was on, on the strength of a resize they asked nothing
+    // of this screen by.
+    const shown = useRef({ twoPanes, desktop, readingInFront, listGivenUp });
 
     useEffect(() => {
         const before = shown.current;
-        shown.current = { twoPanes, readingInFront };
+        shown.current = { twoPanes, desktop, readingInFront, listGivenUp };
 
-        if (before.twoPanes === twoPanes && before.readingInFront !== readingInFront) {
-            (readingInFront ? readingColumn : listColumn).current?.focus();
+        if (before.twoPanes !== twoPanes || before.desktop !== desktop) {
+            return;
         }
-    }, [twoPanes, readingInFront]);
+
+        if (before.readingInFront !== readingInFront) {
+            (readingInFront ? readingColumn : listColumn).current?.focus();
+        } else if (before.listGivenUp !== listGivenUp) {
+            // The *fullscreen* control takes the list away and gives it back without the shape changing, so focus is
+            // placed the same way the narrow shape places it when the two columns swap: on whichever one is drawn now.
+            // Without this a reader whose focus was inside the list is left on a removed element, which is where
+            // keyboard and screen-reader use stops silently.
+            (listGivenUp ? readingColumn : listColumn).current?.focus();
+        }
+    }, [twoPanes, desktop, readingInFront, listGivenUp]);
 
     // The drawer is a way to point at a mailbox, so pointing at one closes it: a reader who chose a folder wants the
     // folder's mail, which is behind the drawer they chose it in. The dialog is the platform's own, so closing it puts
@@ -276,7 +297,7 @@ export function MailSpace({
                     </dialog>
                 )}
 
-                {twoPanes || !readingInFront ? (
+                {(twoPanes || !readingInFront) && !listGivenUp ? (
                     <section
                         ref={listColumn}
                         tabIndex={-1}

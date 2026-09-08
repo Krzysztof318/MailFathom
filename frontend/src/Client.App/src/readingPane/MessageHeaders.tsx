@@ -11,6 +11,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { BackToList } from '../mailSpace/BackToList';
 import { HeadActs, type HeadMessage } from '../mailSpace/HeadActs';
 import { useTwoPanes } from '../shell/useWideWorkspace';
+import { useWorkspace } from '../workspace/useWorkspace';
 
 // What a message displays above its body: what it is called, who wrote it and when on one line under it, and everybody
 // else it names behind a disclosure the platform already has an element for — a message addressed to two hundred
@@ -59,6 +60,7 @@ export function MessageHeaders({
 }) {
     const { locale, translate } = useLocalization();
     const twoPanes = useTwoPanes();
+    const panelsHidden = useWorkspace().workspace.panelsHidden;
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
@@ -78,6 +80,13 @@ export function MessageHeaders({
             )}
         </>
     );
+
+    // The head is one of the panels the *fullscreen* control takes away, which is the design's own arithmetic:
+    // `showThreadHead` is off under it except in a single pane, where this head is also what carries the way back to
+    // the list and so stays whatever the control says.
+    if (panelsHidden && twoPanes) {
+        return null;
+    }
 
     return (
         <header

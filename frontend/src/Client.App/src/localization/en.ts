@@ -248,6 +248,7 @@ export const en = {
     'menu.move': 'Move…',
     'mail.backToList': 'Back to the list',
     'mail.hidePanels': 'Hide the panels — the correspondence alone',
+    'mail.showPanels': "Show the thread's panels",
     'mail.listColumn': 'Message list',
     'mail.readingColumn': 'What is open',
     'mail.listWidth': 'Message list width',

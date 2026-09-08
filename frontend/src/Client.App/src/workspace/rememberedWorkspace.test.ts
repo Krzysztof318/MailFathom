@@ -12,6 +12,7 @@ const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
     collapsed: ['account:personal'],
     mailboxesFolded: true,
+    panelsHidden: true,
     selection: 'AAMkAD-42',
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fullHtml: null,
@@ -154,6 +155,24 @@ describe('rememberedWorkspace', () => {
 
     it('refuses a folded column that is not one, a store being a place a person can write', () => {
         stored({ ...emptyWorkspace, mailboxesFolded: 'yes' });
+
+        expect(rememberedWorkspace()).toEqual(emptyWorkspace);
+    });
+
+    // The same pair for the panels, which is the other thing this client keeps about how the space is laid out: a
+    // workspace kept before the control existed is one this client wrote, and opens with the panels where every
+    // workspace before it was drawn with them.
+    it('reads a workspace kept before the panels could be hidden as one drawn with them', () => {
+        const { panelsHidden, ...before } = kept;
+
+        stored(before);
+
+        expect(rememberedWorkspace()).toEqual({ ...kept, panelsHidden: false });
+        expect(panelsHidden).toBe(true);
+    });
+
+    it('refuses hidden panels that are not hidden, for the reason a folded column that is not one is refused', () => {
+        stored({ ...emptyWorkspace, panelsHidden: 'yes' });
 
         expect(rememberedWorkspace()).toEqual(emptyWorkspace);
     });

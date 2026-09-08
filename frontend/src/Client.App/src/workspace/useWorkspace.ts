@@ -36,6 +36,20 @@ export interface Workspace {
      */
     readonly mailboxesFolded: boolean;
 
+    /**
+     * Whether the panels the design draws around a conversation are hidden, leaving the correspondence alone.
+     *
+     * The design's *fullscreen* toolbar control is the only thing that sets it, and it is a setting for the Mail space
+     * rather than for one message — so it holds as the reader moves from one thread to the next, which is what makes
+     * it worth a control at all. It is here beside the folded column for the same reason that one is: several things
+     * read it, and none of them owns it.
+     *
+     * What is hidden depends on the composition, which is the reader's rather than this value's: the head of the
+     * thread goes on the desktop and the tablet, and a single-pane composition keeps it whatever this says, because
+     * there the head carries the way back to the list.
+     */
+    readonly panelsHidden: boolean;
+
     /** What the person has open, once a space offers something to open. */
     readonly selection: string | null;
 
@@ -122,6 +136,7 @@ export const emptyWorkspace: Workspace = {
     scope: everything,
     collapsed: [],
     mailboxesFolded: false,
+    panelsHidden: false,
     selection: null,
     conversation: null,
     fullHtml: null,

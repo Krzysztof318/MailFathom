@@ -238,4 +238,26 @@ describe('useBackNavigation', () => {
         expect(travelled).toEqual([]);
         expect(replaced).toEqual([{ 'mailfathom.back': 0 }]);
     });
+
+    // Issue 1758's spontaneous reload. A reload that came back with a surface already standing used to find the
+    // surviving mark agreeing with the screen and leave it, so the entries it believed were behind it belonged to the
+    // document that had just been thrown away — and closing that surface traversed into one of them, which is a full
+    // document load rather than a step back. Everything the client held went with it.
+    it('pushes its own entries after a reload rather than adopting the ones the discarded document left', () => {
+        theEntryShowing({ 'mailfathom.back': 1 });
+
+        const { rerender } = renderHook(
+            ({ steps }) => {
+                useBackNavigation(steps, () => undefined);
+            },
+            { initialProps: { steps: 1 } },
+        );
+
+        expect(replaced).toEqual([{ 'mailfathom.back': 0 }]);
+        expect(pushed).toEqual([{ 'mailfathom.back': 1 }]);
+
+        rerender({ steps: 0 });
+
+        expect(travelled).toEqual([-1]);
+    });
 });

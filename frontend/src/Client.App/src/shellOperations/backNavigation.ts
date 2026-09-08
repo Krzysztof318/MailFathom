@@ -37,6 +37,11 @@ import { useEffect, useRef } from 'react';
 // the spare entry back. Nothing else in the client writes history state, and `routing/useSpace.ts` carries a mark
 // across the one address it rewrites rather than replacing it with nothing.
 //
+// **An entry is only ever given back to the document that pushed it.** A mark survives a reload, on an entry whose
+// document does not, and traversing to such an entry is a full document load — the client reloads with nothing having
+// asked it to, which is exactly what #1758 reported. So the first reconciliation of a load re-marks the entry showing
+// as the bottom of the stack rather than believing what it says.
+//
 // **Giving an entry back is itself a traversal**, so it arrives as the very event a press of the gesture arrives as,
 // and the two cannot be told apart from what the history says — both leave an entry marked with fewer steps than the
 // screen holds. So the traversals asked for here are counted, and one of them is answered by finishing the
@@ -73,24 +78,29 @@ function markedSteps(): number {
  * @param standingSteps How many things stand between the reader and the screen underneath.
  * @param arrivedOnAReload Whether this is the first reading, which is the one time the entry showing describes a
  *   screen that no longer exists: its mark was written by the client that was thrown away, while the one that came
- *   back has nothing standing over it. Giving those entries up would walk the reader backwards out of the client on a
- *   reload, so the entry is re-marked for the screen actually being drawn and the ones behind it are left alone.
+ *   back is drawing whatever it was given.
  */
 function reconcileHistory(standingSteps: number, arrivedOnAReload: boolean): boolean {
-    const marked = markedSteps();
+    // **A document that has just loaded owns none of the entries behind the one showing.** Every mark back there was
+    // written by a client this load threw away, and traversing to an entry of a discarded document is a full document
+    // load rather than a step back through the screen — the client reloads, having asked for nothing, and loses
+    // everything it held. That is what makes arrival give the entry showing up as the bottom of this client's own
+    // stack: it is re-marked as nothing standing over it, and whatever the screen actually holds is pushed afresh on
+    // top. Reading the surviving mark instead is what let a reader close one surface and reload the whole client.
+    const marked = arrivedOnAReload ? 0 : markedSteps();
+
+    if (arrivedOnAReload) {
+        window.history.replaceState({ ...asState(window.history.state), [stepsTaken]: marked }, '');
+    }
 
     if (standingSteps > marked) {
         for (let step = marked + 1; step <= standingSteps; step += 1) {
             window.history.pushState({ [stepsTaken]: step }, '');
         }
     } else if (standingSteps < marked) {
-        if (arrivedOnAReload) {
-            window.history.replaceState({ ...asState(window.history.state), [stepsTaken]: standingSteps }, '');
-        } else {
-            window.history.go(standingSteps - marked);
+        window.history.go(standingSteps - marked);
 
-            return true;
-        }
+        return true;
     }
 
     return false;

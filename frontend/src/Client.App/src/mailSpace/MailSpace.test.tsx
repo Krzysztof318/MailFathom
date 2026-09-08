@@ -563,4 +563,53 @@ describe('MailSpace, in the four compositions', () => {
 
         expect(screen.queryByText(handedTheTabs)).toBeNull();
     });
+
+    // The last thing the *fullscreen* control takes away, and the one it takes away at some widths and not others:
+    // the design gives the tablet's list up to the correspondence and keeps the desktop's, which has room for both.
+    it.each([
+        ['the fold', fold],
+        ['a tablet width', tablet],
+    ])('gives the list up to the correspondence at %s while the panels are hidden', (_name, pixels) => {
+        renderSpace(pixels, { selection: 'stored-1', panelsHidden: true });
+
+        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(screen.getByText(handedToMail)).toBeDefined();
+    });
+
+    it('keeps the list at a desktop width while the panels are hidden, there being room for both', () => {
+        renderSpace(desktop, { selection: 'stored-1', panelsHidden: true });
+
+        expect(screen.getByText(handedTheList)).toBeDefined();
+        expect(screen.getByText(handedToMail)).toBeDefined();
+    });
+
+    it('keeps the list at a tablet width while nothing is open, the correspondence having nothing to stand alone with', () => {
+        renderSpace(tablet, { panelsHidden: true });
+
+        expect(screen.getByText(handedTheList)).toBeDefined();
+    });
+
+    // The list comes and goes on the desktop boundary as well as under the control, and only one of those is a view
+    // change somebody asked for. A window dragged narrower is the reader's own act on the window rather than on this
+    // screen, so it leaves focus where they put it — which is the rule the file states for every width.
+    it('moves focus nowhere when a window dragged narrower is what takes the list away', () => {
+        renderSpace(desktop, { selection: 'stored-1', panelsHidden: true });
+
+        const elsewhere = screen.getByRole('button', { name: "Show the thread's panels" });
+        elsewhere.focus();
+
+        theWindowBecomes(tablet);
+
+        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(document.activeElement).toBe(elsewhere);
+    });
+
+    it('takes the list away from the toolbar control itself, and puts focus where the list stood', () => {
+        renderSpace(tablet, { selection: 'stored-1' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide the panels — the correspondence alone' }));
+
+        expect(screen.queryByText(handedTheList)).toBeNull();
+        expect(document.activeElement).toBe(screen.getByRole('region', { name: 'What is open' }));
+    });
 });

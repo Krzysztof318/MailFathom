@@ -161,6 +161,89 @@ public sealed class MailFolderDirectoryReaderTests
         Assert.Equal(MailSynchronizationState.NeverSynchronized, folder.Freshness.State);
     }
 
+    /// <summary>
+    /// The user story behind issue 1758: a mailbox whose trash folder the deployment does not mirror still has a trash
+    /// folder, and a client is told so — otherwise deleting a message is refused for an account that can delete.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AMappedFolderNoRunHasReached_IsPublishedWithItsRoleRatherThanLeftOut()
+    {
+        // Arrange
+        var mappings = new StubMailFolderMappings()
+            .With(Work.Id, MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox))
+            .With(
+                Work.Id,
+                MailFolderMapping.ToSpecialUse(
+                    MailFolderAlias.Create("trash"),
+                    MailFolderSpecialUse.Trash,
+                    MailFolderParticipation.MappedOnly));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "inbox", "INBOX", storedEmailCount: 12, unreadEmailCount: 3)),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var trash = Assert.Single(
+            Assert.Single(directory.Accounts).Folders,
+            folder => folder.Role == MailFolderSpecialUse.Trash);
+        Assert.Equal("TRASH", trash.Alias.Value);
+        Assert.Equal(MailSynchronizationState.NeverSynchronized, trash.Freshness.State);
+        Assert.Empty(trash.HierarchyLevels);
+        Assert.Equal(0, trash.StoredEmailCount);
+    }
+
+    /// <summary>
+    /// A mirrored folder the composed reading left out was left out by the scope that withholds it, so it is not added
+    /// back here: the withholding is about a folder holding mail, and undoing it is exactly what this must not do.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AMirroredMappingTheReadingLeftOut_StaysOutOfTheTree()
+    {
+        // Arrange
+        var mappings = new StubMailFolderMappings()
+            .With(Work.Id, MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("trash"), MailFolderSpecialUse.Trash));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "inbox", "INBOX", storedEmailCount: 1, unreadEmailCount: 0)),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["INBOX"], Assert.Single(directory.Accounts).Folders.Select(folder => folder.Alias.Value));
+    }
+
+    /// <summary>A folder the composed reading already named is named once, whatever configuration says about it beside that.</summary>
+    [Fact]
+    public async Task ReadAsync_AMappedFolderARunHasReached_IsNotPublishedTwice()
+    {
+        // Arrange
+        var mappings = new StubMailFolderMappings()
+            .With(
+                Work.Id,
+                MailFolderMapping.ToSpecialUse(
+                    MailFolderAlias.Create("inbox"),
+                    MailFolderSpecialUse.Inbox,
+                    MailFolderParticipation.MappedOnly));
+        var reader = ReaderOver(
+            Freshness((Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            StoredFolders(Stored(Work.Id, "inbox", "INBOX", storedEmailCount: 1, unreadEmailCount: 0)),
+            mappings);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["INBOX"], Assert.Single(directory.Accounts).Folders.Select(folder => folder.Alias.Value));
+    }
+
     /// <summary>The folder's freshness is the composed reading's own, so the tree and the mailbox list beside it cannot disagree.</summary>
     [Fact]
     public async Task ReadAsync_AFolderWhoseTurnFailed_CarriesTheSameReadingTheMailboxListWouldGive()

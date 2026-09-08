@@ -12,18 +12,27 @@ import { controlShapes, labelledShape, symbolShown, type ControlShape } from './
 //
 // A shape drawing the symbol alone carries the name for the accessibility tree, because a control nobody can name is
 // one a reader cannot reach and a suite cannot assert on.
+//
+// A control that turns something on and off says which it is, and the platform has an attribute for exactly that. It
+// is optional because most controls do a thing rather than hold a state, and a button that reported one it does not
+// have would be read out as a switch by everything that speaks the screen.
 
 export function Control({
     label,
     icon,
     shape = 'labelled',
     className,
+    pressed,
     onPress,
 }: {
     readonly label: string;
     readonly icon?: IconName;
     readonly shape?: ControlShape;
     readonly className?: string;
+
+    /** Whether what this control turns on is on, for a control that turns something on, and absent for one that does not. */
+    readonly pressed?: boolean;
+
     readonly onPress: () => void;
 }) {
     const labelled = labelledShape(shape);
@@ -32,6 +41,7 @@ export function Control({
         <button
             type="button"
             aria-label={labelled ? undefined : label}
+            aria-pressed={pressed}
             title={label}
             className={`flex shrink-0 items-center whitespace-nowrap transition ${controlShapes[shape]} ${className ?? ''}`}
             onClick={onPress}

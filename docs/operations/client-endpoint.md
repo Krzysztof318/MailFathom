@@ -406,14 +406,14 @@ one folder at a time; the table above is the whole of it. An account's own readi
 a tree and the mailbox list beside it never disagree: a folder that failed makes its account `Failing`, and an account
 is `Unreachable` only where being unable to reach the server is the whole of what went wrong.
 
-**The folders are the ones this deployment knows of.** An alias
-[configuration maps](configuration-mail.md) that nothing has ever bound to a remote folder is absent rather than empty —
-there is no folder on the server to draw — and where an operator finds out about such a mapping is
-[the administrative status route](admin-endpoint.md). A folder an operator withheld from tools is absent for the same
-reason it is absent from every other read: this surface admits what configuration admits. A folder that has been
-discovered but never synchronized *is* present, carrying `NeverSynchronized`, no `path` where its binding is not
-recorded yet, and both counts at zero, because an empty folder and an unsynchronized one are not the same thing on
-screen.
+**The folders are the ones [configuration maps](configuration-mail.md)**, which is wider than the folders this
+deployment holds mail from. A folder an operator asked not to mirror is never scheduled, so no run discovers it, and a
+folder nothing has bound yet has no place in the hierarchy to report — both are present all the same, carrying
+`NeverSynchronized`, no `path`, and both counts at zero, because a folder MailFathom does not copy is still a folder the
+mailbox has and still a folder [a move](#the-mutation-routes) files into. A client that could not see one would
+be told an account has nowhere to put a deleted message while its mailbox has a trash folder. A folder an operator
+withheld from tools is the one that stays absent, for the same reason it is absent from every other read: this surface
+admits what configuration admits.
 
 **A user with no mail account reads an empty `accounts` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403` — the same two answers the accounts route gives, because naming a user's

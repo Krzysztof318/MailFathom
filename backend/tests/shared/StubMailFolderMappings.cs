@@ -51,5 +51,9 @@ internal sealed class StubMailFolderMappings : IMailFolderMappingReader
             .FirstOrDefault(folder => folder.AccountId == accountId && folder.Mapping.Alias == folderAlias)
             ?.Mapping;
 
+    /// <inheritdoc />
+    public IReadOnlyList<MailFolderMapping> FoldersOf(MailAccountId accountId) =>
+        [.. this.folders.Where(folder => folder.AccountId == accountId).Select(folder => folder.Mapping)];
+
     private sealed record ConfiguredFolder(MailAccountId AccountId, MailFolderMapping Mapping);
 }

@@ -250,6 +250,7 @@ export const pl: Catalogue = {
     'menu.move': 'Przenieś…',
     'mail.backToList': 'Wróć do listy',
     'mail.hidePanels': 'Ukryj panele — sama korespondencja',
+    'mail.showPanels': 'Pokaż panele wątku',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
     'mail.listWidth': 'Szerokość listy wiadomości',

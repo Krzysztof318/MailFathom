@@ -2,12 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useEffect } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import type { HeadMessage } from '../mailSpace/HeadActs';
 import { WorkspaceProvider } from '../workspace/Workspace';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { MessageHeaders } from './MessageHeaders';
 
 const headers: MailMessageHeaders = {
@@ -45,10 +47,23 @@ function disclosure(): HTMLDetailsElement {
     return opened;
 }
 
-function drawing(written: Partial<MailMessageHeaders> = {}): void {
+// The *fullscreen* toolbar control writes this, and the toolbar is not what a head is drawn beside — so a test about
+// what the control takes away states the value rather than pressing the control that sets it.
+function HidesThePanels({ hidden }: { readonly hidden: boolean }) {
+    const { revise } = useWorkspace();
+
+    useEffect(() => {
+        revise({ panelsHidden: hidden });
+    }, [revise, hidden]);
+
+    return null;
+}
+
+function drawing(written: Partial<MailMessageHeaders> = {}, panelsHidden = false): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
+                <HidesThePanels hidden={panelsHidden} />
                 <MessageHeaders headers={{ ...headers, ...written }} message={message} />
             </WorkspaceProvider>
         </LocalizationProvider>,
@@ -217,6 +232,21 @@ describe('MessageHeaders at the width its column has', () => {
         drawing();
 
         expect(screen.queryByRole('button', { name: 'Back to the list' })).toBeNull();
+    });
+
+    it('goes with the panels where the column stands beside the list, which is what the control takes away', () => {
+        atWorkspaceWidth(true);
+        drawing({}, true);
+
+        expect(screen.queryByRole('heading', { name: 'Quarterly invoice' })).toBeNull();
+    });
+
+    it('stays at the width the column is the whole screen, because it carries the way back to the list', () => {
+        atWorkspaceWidth(false);
+        drawing({}, true);
+
+        expect(screen.getByRole('heading', { name: 'Quarterly invoice' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Back to the list' })).toBeDefined();
     });
 
     it('offers handing the conversation to the agent only where the head has a column to itself', () => {

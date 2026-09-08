@@ -106,6 +106,7 @@ function workspaceIn(value: unknown): Workspace | null {
     const scope = scopeIn(record['scope']);
     const collapsed = collapsedIn(record['collapsed']);
     const mailboxesFolded = record['mailboxesFolded'] ?? false;
+    const panelsHidden = record['panelsHidden'] ?? false;
     const selection = record['selection'] ?? null;
     const selected = selectedIn(record['selected']);
     const question = record['question'];
@@ -126,7 +127,7 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    if (typeof mailboxesFolded !== 'boolean') {
+    if (typeof mailboxesFolded !== 'boolean' || typeof panelsHidden !== 'boolean') {
         return null;
     }
 
@@ -141,6 +142,7 @@ function workspaceIn(value: unknown): Workspace | null {
         scope,
         collapsed,
         mailboxesFolded,
+        panelsHidden,
         selection,
         conversation,
         fullHtml: null,

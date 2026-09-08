@@ -42,4 +42,15 @@ public interface IMailFolderMappingReader
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>
     /// <returns>The mapping, or <see langword="null" /> when configuration no longer names that alias.</returns>
     MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias);
+
+    /// <summary>Gets every folder configuration maps for an account.</summary>
+    /// <param name="accountId">The account the folders belong to.</param>
+    /// <returns>The account's mappings, empty where configuration maps none or names no such account.</returns>
+    /// <remarks>
+    /// Asked by a reader publishing what an account can do rather than what it currently holds. The two lookups above
+    /// answer about one folder somebody already has a name for; this answers the question a client has instead — which
+    /// folders exist to file into at all — and it is the mappings rather than local state because a folder MailFathom
+    /// does not mirror is still a folder it files into.
+    /// </remarks>
+    IReadOnlyList<MailFolderMapping> FoldersOf(MailAccountId accountId);
 }
