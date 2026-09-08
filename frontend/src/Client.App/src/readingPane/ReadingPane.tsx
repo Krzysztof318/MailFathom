@@ -25,6 +25,7 @@ import { useSignalledChanges } from '../signals/signalledChanges';
 import { useOpenAttachment } from '../workspace/openAttachment';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
+import { useMessageBody } from '../messageBody/useMessageBody';
 import { BackToList } from '../mailSpace/BackToList';
 import { NothingOpen } from '../mailSpace/NothingOpen';
 import { useTwoPanes } from '../shell/useWideWorkspace';
@@ -40,7 +41,10 @@ import { SenderVerdict } from './SenderVerdict';
 //
 // Two reads stand behind it and that is deliberate rather than incidental. The description and the body are separately
 // expensive, so the header block is drawn the moment the first answers and the body says it is still reading underneath
-// it; that is this screen's partial state rather than a gap in it.
+// it; that is this screen's partial state rather than a gap in it. **Both are started at the moment the message was
+// opened**, neither waiting on the other to settle: the identity both of them need is what the reader pressed, so a
+// body read owned by the component drawn inside the description's own branch would have spent a second round trip —
+// and the derivation every request on this surface pays — for an answer that needed nothing from the first.
 //
 // Neither of those reads writes to a mailbox, and that is the property ADR 0007 bought as a property of the types: both
 // are `GET`s against the local copy, and the route that serves a body holds no write session to reach a mail server
@@ -158,6 +162,11 @@ function OpenMessage({
     const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0, quietly: false });
     const [answer, setAnswer] = useState<Answered | null>(null);
     const [connected, setConnected] = useState(online);
+
+    // The body's own read, started here rather than inside the component that draws it, which is what makes the pair
+    // concurrent: this component mounts when the message is opened, and the branch drawing the body exists only once
+    // the description has answered.
+    const bodyRead = useMessageBody(session, transport, storedEmailId, online);
 
     // The opener is a new function on every render, so it is held rather than named as a dependency below: the effect
     // that follows a citation reacts to the citation and to the answer, and naming this would run it once per render.
@@ -457,8 +466,7 @@ function OpenMessage({
                             description above already says which account and folder the message is counted in, which is
                             what a folder's unread count is corrected by. */}
                         <Message
-                            session={session}
-                            transport={transport}
+                            body={bodyRead}
                             storedEmailId={storedEmailId}
                             onBodyDrawn={() => {
                                 markRead({

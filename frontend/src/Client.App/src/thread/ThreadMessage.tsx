@@ -12,6 +12,7 @@ import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { Message } from '../messageBody/Message';
+import { useMessageBody } from '../messageBody/useMessageBody';
 import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 import type { ArrivalMark } from './threadOpening';
 
@@ -80,6 +81,10 @@ export function ThreadMessage({
     const email = message.email;
     const sender = email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown');
 
+    // A collapsed message wants no read, which is what keeps a conversation of thirty heads to one body: the head is
+    // drawn from what the conversation already answered with, and pressing it is what asks for the words.
+    const body = useMessageBody(session, transport, email.id, !collapsed);
+
     // What the deployment last reported, less what this client has marked read since — the same reading the list's own
     // row draws from, because the two are the same message in two places and a reader who opened it here would
     // otherwise find it still unread there.
@@ -140,8 +145,7 @@ export function ThreadMessage({
                             decides for itself draws more than the latest message — the rest are collapsed until
                             pressed, which is a gesture the reader makes knowing whose message it opens. */}
                         <Message
-                            session={session}
-                            transport={transport}
+                            body={body}
                             storedEmailId={email.id}
                             quotedHistoryOnRequest
                             onBodyDrawn={() => {

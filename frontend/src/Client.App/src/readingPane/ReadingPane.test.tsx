@@ -98,8 +98,17 @@ function deploymentDescribing(described = description(), status = 200): MailFath
     };
 }
 
-/** A deployment that has taken the request and not answered it, which is what a surface that waits is proven against. */
-const answersNothing: MailFathomTransport = () => new Promise<ClientResponse>(() => undefined);
+/**
+ * A deployment that has taken the request and not answered it, which is what a surface that waits is proven against.
+ *
+ * It records what it was asked for, which is what makes a read that is in flight visible at all: an answer is what
+ * every other assertion here waits on, and a read that never answers has nothing but the record to be seen by.
+ */
+const answersNothing: MailFathomTransport = (request) => {
+    asked.push(request);
+
+    return new Promise<ClientResponse>(() => undefined);
+};
 
 function drawing(
     transport: MailFathomTransport,
@@ -210,6 +219,34 @@ describe('ReadingPane', () => {
         expect(await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 })).toBeDefined();
     });
 
+    // The body is read on the same terms as the description now that both leave together, and the network going is
+    // one of them: a refusal the gap itself caused is not something to leave a reader pressing through under a
+    // message that is otherwise on the screen, so it goes with the gap and the words arrive on their own afterwards.
+    it('reads the body again once the network is back, rather than standing on the refusal the gap caused', async () => {
+        let bodyStatus = 503;
+
+        const transport: MailFathomTransport = (request) => {
+            asked.push(request);
+
+            const answer: ClientResponse = request.path.includes('/body')
+                ? { status: bodyStatus, body: bodyStatus === 200 ? bodyAsWords : '', headers: {} }
+                : { status: 200, body: description(), headers: {} };
+
+            return Promise.resolve(answer);
+        };
+
+        const { rerender } = render(paneReading(transport, true));
+        await screen.findByText('The message could not be read: unavailable.');
+
+        rerender(paneReading(transport, false));
+        expect(screen.queryByText('The message could not be read: unavailable.')).toBeNull();
+
+        bodyStatus = 200;
+        rerender(paneReading(transport, true));
+
+        expect(await screen.findByText('The invoice is attached.')).toBeDefined();
+    });
+
     it('draws the headers and the body of the message it read', async () => {
         drawing(deploymentDescribing());
 
@@ -229,7 +266,24 @@ describe('ReadingPane', () => {
         // the body is a second read that has not necessarily been made by then. Reading the record at that moment is
         // what reports one route where there are two, on a machine loaded enough to put the two commits apart.
         await waitFor(() => {
-            expect([...new Set(asked.map((request) => request.path))]).toEqual([
+            expect([...new Set(asked.map((request) => request.path))].sort()).toEqual([
+                `https://mail.example.invalid/api/client/messages/${messageId}`,
+                `https://mail.example.invalid/api/client/messages/${messageId}/body`,
+            ]);
+        });
+    });
+
+    // The two reads need nothing from each other — the identity both of them carry is the one the reader pressed — so
+    // neither is allowed to wait on the other having settled. Proven against a deployment that answers neither: both
+    // paths reaching it while nothing has come back is the whole of what "at the same time" can mean here, and it is
+    // what the pane could not do while the body was read by the component drawn under the description's own answer.
+    it('asks for the description and the body at once, neither waiting on the other to answer', async () => {
+        asked.length = 0;
+
+        drawing(answersNothing);
+
+        await waitFor(() => {
+            expect([...new Set(asked.map((request) => request.path))].sort()).toEqual([
                 `https://mail.example.invalid/api/client/messages/${messageId}`,
                 `https://mail.example.invalid/api/client/messages/${messageId}/body`,
             ]);

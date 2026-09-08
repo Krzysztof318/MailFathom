@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -73,6 +73,25 @@ function deploymentServing(markup: unknown = asSent): { transport: MailFathomTra
     };
 }
 
+/**
+ * A deployment that has taken both requests and answered neither, recording what each of them asked for.
+ *
+ * It is how a read still in flight is seen at all: every other assertion here waits on an answer, and a read that
+ * never answers has nothing but the record to be seen by.
+ */
+function deploymentAnsweringNothing(): { transport: MailFathomTransport; asked: ClientRequest[] } {
+    const asked: ClientRequest[] = [];
+
+    return {
+        asked,
+        transport: (request) => {
+            asked.push(request);
+
+            return new Promise<ClientResponse>(() => undefined);
+        },
+    };
+}
+
 /** Draws the surface, and answers with the way to hand it a network that came or went afterwards. */
 async function drawing(
     transport: MailFathomTransport,
@@ -113,6 +132,22 @@ describe('FullHtmlSurface', () => {
         expect(asked.map((request) => request.path).filter((path) => path.includes('/body'))).toEqual([
             `${session.baseAddress}/api/client/messages/${messageId}/body?fullHtml=true`,
         ]);
+    });
+
+    // The head and the markup are two answers that need nothing from each other, so neither read waits on the other
+    // having settled: both leave for the deployment when the surface opens. Proven against a deployment answering
+    // neither, both paths reaching it while nothing has come back being the whole of what "at once" can mean here.
+    it('asks for the head and the markup at once, neither waiting on the other to answer', async () => {
+        const { transport, asked } = deploymentAnsweringNothing();
+
+        await drawing(transport);
+
+        await waitFor(() => {
+            expect([...new Set(asked.map((request) => request.path))].sort()).toEqual([
+                `${session.baseAddress}/api/client/messages/${messageId}`,
+                `${session.baseAddress}/api/client/messages/${messageId}/body?fullHtml=true`,
+            ]);
+        });
     });
 
     it('names the message it is showing, and who sent it and when', async () => {

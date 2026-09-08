@@ -138,6 +138,23 @@ describe('ThreadMessage', () => {
         expect(screen.queryByRole('button', { name: 'Open this message on its own' })).toBeNull();
     });
 
+    // The words are what the read costs, and a conversation of thirty messages draws thirty heads: so a collapsed
+    // message reaches the deployment for nothing at all, and pressing it is what asks. The record is what proves it —
+    // a message drawing no words could be one whose read is merely still in flight.
+    it('reads nothing from the deployment while it is collapsed', () => {
+        drawing(message(), { collapsed: true });
+
+        expect(asked).toEqual([]);
+    });
+
+    it('reads the body from the deployment once it is open', () => {
+        drawing(message());
+
+        expect(asked.map((request) => request.path)).toEqual([
+            `${session.baseAddress}/api/client/messages/a-message/body`,
+        ]);
+    });
+
     it('opens and closes from its head, which is the control the design draws it as', () => {
         const toggled = vi.fn();
 
