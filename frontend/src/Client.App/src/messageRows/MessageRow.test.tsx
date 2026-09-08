@@ -205,6 +205,14 @@ describe('MessageRow', () => {
         expect(reserved?.getAttribute('aria-hidden')).toBeNull();
     });
 
+    // Taking a flag off is asked for from the head of the open message rather than from a row, and the row it is about
+    // still says so: what a surface reports is the act, not the surface it was pressed on.
+    it('says a flagged message asked to lose its flag is being acted on, in the same reserved line', () => {
+        const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking('unflag'), true));
+
+        expect(reserved?.textContent).toBe('Removing the flag…');
+    });
+
     it('draws a message asked to be marked unread as unread, rather than waiting for the server to report it', () => {
         drawRow(undefined, false, nothingMarkedRead, asking('markUnread'));
 

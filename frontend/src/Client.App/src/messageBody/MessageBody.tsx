@@ -24,6 +24,12 @@ import { splitQuotedHistory } from './quotedHistory';
 // read instead, what the message asked to load from somebody else's server, and what a bound left out. None of it is
 // silent — a fallback nobody is told about reads as a message the sender wrote badly.
 
+// The measure a message's own words are set at, which is the design project's body: the step above what the client
+// says *about* a message, loosened, and in the softer of the two text tones so the sender's words sit under the head
+// rather than beside it. It is stated once here and inherited by every block, which is what makes a message of nothing
+// but paragraphs read as plain text and a message full of headings and tables read as the design draws one.
+const writtenWords = 'flex flex-col gap-2.75 text-lg leading-relaxed text-pretty text-text-soft';
+
 const availabilityMessages: Readonly<Record<Exclude<MailBodyAvailability, 'Readable'>, MessageKey>> = {
     EncryptedNotReadableLocally: 'body.encryptedNotReadable',
     NotStoredExceededSizeLimit: 'body.notStoredExceededSizeLimit',
@@ -129,7 +135,7 @@ export function MessageBody({
             ) : drawn === null ? (
                 <ReadAsWords body={body} />
             ) : (
-                <article className="flex flex-col gap-3">
+                <article className={writtenWords}>
                     <Written blocks={drawn.blocks} quotedHistoryOnRequest={quotedHistoryOnRequest} />
                     {drawn.truncated ? <p className="text-sm text-muted">{translate('body.truncated')}</p> : null}
                 </article>
@@ -163,7 +169,7 @@ function Written({
             <details>
                 <summary className="cursor-pointer text-sm text-muted">{translate('body.quotedHistory')}</summary>
 
-                <div className="mt-3 flex flex-col gap-3">
+                <div className={`mt-3 ${writtenWords}`}>
                     <MessageBlocks blocks={written.quotedHistory} />
                 </div>
             </details>
@@ -178,7 +184,7 @@ function ReadAsWords({ body }: { readonly body: MailBody }) {
     const reason = refusal === 'None' ? 'body.notReduced' : refusalMessages[refusal];
 
     return (
-        <article className="flex flex-col gap-3">
+        <article className={writtenWords}>
             <p className="text-sm text-muted">{translate(reason)}</p>
             <p className="whitespace-pre-wrap">{body.plainText.text}</p>
             {body.plainText.truncation === 'None' ? null : (

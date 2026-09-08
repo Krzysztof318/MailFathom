@@ -298,13 +298,14 @@ export function Thread({
                 <header className="flex flex-col gap-1.75 border-b border-line px-5.5 py-4">
                     {/* The acts the design draws beside a conversation's subject, the same four the head of a
                         message carries: a conversation is what they are about in the design, whichever message
-                        of it is on the screen. */}
+                        of it is on the screen — which is why none of them is handed a message here, and why each
+                        stands as what it is. `mailSpace/HeadActs.tsx` holds what a conversation would need first. */}
                     <div className="flex min-w-0 items-center gap-2.25">
                         <h2 className="min-w-0 flex-1 text-3xl font-semibold text-balance">
                             {held[0]?.email.subject ?? translate('message.noSubject')}
                         </h2>
 
-                        <HeadActs compact={!twoPanes} />
+                        <HeadActs compact={!twoPanes} message={null} />
                     </div>
 
                     {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are

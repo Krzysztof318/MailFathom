@@ -40,7 +40,7 @@ export function MessageLink({ link, children }: { readonly link: MailDocumentLin
     return (
         <>
             <a
-                className="text-accent underline decoration-accent/50 underline-offset-2"
+                className="text-accent-deep underline decoration-accent-deep/50 underline-offset-2"
                 href={link.target}
                 rel="noopener noreferrer"
                 target="_blank"

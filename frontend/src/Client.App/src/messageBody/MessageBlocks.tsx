@@ -25,6 +25,13 @@ import { MessageLink } from './MessageLink';
 //
 // The catalogue is closed, so this switch is exhaustive by its own type: a block added to the contract fails to
 // compile here until this file says how it is drawn.
+//
+// **How each of them is drawn is the design project's message body rather than a browser's defaults.** The measures
+// below are that document read block by block: a quotation is the callout the design draws — highlighted, cut against
+// its own rule — a table stands in a bordered card with its header row on the sunken tint, a code block is a panel of
+// its own, and a heading a sender wrote climbs the same three steps the design gives one. The scale itself lives with
+// the body around it in `MessageBody.tsx`, so a message carrying none of these blocks inherits it and reads as the
+// plain text it is.
 
 const alignments: Readonly<Record<MailBlockAlignment, string>> = {
     Inherited: '',
@@ -39,6 +46,15 @@ const alignments: Readonly<Record<MailBlockAlignment, string>> = {
 // sender wrote therefore starts below the subject it belongs to, which is what makes the reading order a real heading
 // order rather than a message whose own headings read as siblings of its subject.
 const headingElements = ['h3', 'h4', 'h5', 'h6', 'h6', 'h6'] as const;
+
+// What each of the levels a sender wrote is drawn at, which is the design's own three steps rather than six sizes: the
+// first two are titles inside the message and everything below them is the label the design draws a subheading as. The
+// element is decided above and independently, because the reading order a screen reader follows is not the type scale.
+const headingMeasures = [
+    'mt-0.5 text-3xl font-semibold tracking-tight text-text',
+    'mt-0.5 text-xl font-semibold text-text',
+    'mt-0.5 text-xs font-medium tracking-widest uppercase text-muted',
+] as const;
 
 export function MessageBlocks({ blocks }: { readonly blocks: readonly MailDocumentBlock[] }) {
     return (
@@ -69,7 +85,7 @@ function MessageBlock({ block }: { readonly block: MailDocumentBlock }) {
         case 'image':
             return <MessagePicture block={block} />;
         case 'separator':
-            return <hr className="border-line" />;
+            return <hr className="my-0.5 border-line" />;
         case 'preformatted':
             return <MessagePreformatted block={block} />;
         case 'unimplemented':
@@ -79,9 +95,10 @@ function MessageBlock({ block }: { readonly block: MailDocumentBlock }) {
 
 function MessageHeading({ block }: { readonly block: MailHeadingBlock }) {
     const Heading = headingElements[block.level - 1] ?? 'h6';
+    const measure = headingMeasures[Math.min(block.level, headingMeasures.length) - 1] ?? headingMeasures[2];
 
     return (
-        <Heading className={`font-semibold text-text ${alignments[block.alignment]}`}>
+        <Heading className={`${measure} ${alignments[block.alignment]}`}>
             <MessageRuns content={block.content} />
         </Heading>
     );
@@ -94,7 +111,14 @@ function MessageList({ block }: { readonly block: MailListBlock }) {
         </li>
     ));
 
-    return block.ordered ? <ol className="list-decimal ps-6">{items}</ol> : <ul className="list-disc ps-6">{items}</ul>;
+    // The marker is the browser's own rather than a column of text drawn beside each item: the design gives it the
+    // faint tone and nothing else, and a hand-drawn bullet is one a screen reader would announce as a character in the
+    // sentence. `space-y` rather than a gap, because a list item may itself hold several blocks.
+    return block.ordered ? (
+        <ol className="list-decimal space-y-1.5 ps-6 marker:text-faint">{items}</ol>
+    ) : (
+        <ul className="list-disc space-y-1.5 ps-6 marker:text-faint">{items}</ul>
+    );
 }
 
 function MessageTable({ block }: { readonly block: MailTableBlock }) {
@@ -105,8 +129,13 @@ function MessageTable({ block }: { readonly block: MailTableBlock }) {
         // It scrolls inside its own box rather than making the page scroll sideways under everything else — and it is
         // focusable and named, because WebKit gives a scroll container holding nothing focusable no keyboard path at
         // all, which would leave the columns past the right edge unreachable on the head the desktop shell renders in.
-        <div aria-label={translate('body.tableRegion')} className="overflow-x-auto" role="group" tabIndex={0}>
-            <table className="w-full border-collapse text-start">
+        <div
+            aria-label={translate('body.tableRegion')}
+            className="overflow-x-auto rounded-xl border border-line bg-panel"
+            role="group"
+            tabIndex={0}
+        >
+            <table className="w-full border-collapse text-start text-base">
                 <colgroup>
                     {block.columns.map((column, position) => (
                         <col
@@ -121,14 +150,16 @@ function MessageTable({ block }: { readonly block: MailTableBlock }) {
                 </colgroup>
                 <tbody>
                     {block.rows.map((row, rowPosition) => (
-                        <tr key={rowPosition}>
+                        <tr className="border-b border-line last:border-b-0" key={rowPosition}>
                             {row.cells.map((cell, cellPosition) => {
                                 const Cell = row.isHeader ? 'th' : 'td';
 
                                 return (
                                     <Cell
                                         key={cellPosition}
-                                        className={`border border-line px-3 py-2 align-top ${alignments[cell.alignment]}`}
+                                        className={`border-e border-line px-3 py-2.25 align-top last:border-e-0 ${
+                                            row.isHeader ? 'bg-sunken font-semibold text-text' : ''
+                                        } ${alignments[cell.alignment]}`}
                                         colSpan={cell.columnSpan}
                                         rowSpan={cell.rowSpan}
                                         scope={row.isHeader ? 'col' : undefined}
@@ -150,7 +181,7 @@ function MessageTable({ block }: { readonly block: MailTableBlock }) {
 
 function MessageQuote({ block }: { readonly block: MailQuoteBlock }) {
     return (
-        <blockquote className="border-s-2 border-line ps-4 text-muted">
+        <blockquote className="rounded-e-lg border-s-3 border-highlight-line bg-highlight px-3.75 py-2.75">
             <MessageBlocks blocks={block.blocks} />
         </blockquote>
     );
@@ -192,7 +223,7 @@ function MessagePreformatted({ block }: { readonly block: MailPreformattedBlock 
     return (
         <pre
             aria-label={translate('body.preformattedRegion')}
-            className="overflow-x-auto font-mono text-sm"
+            className="overflow-x-auto rounded-xl border border-line bg-sunken px-3.5 py-3 font-mono text-base whitespace-pre-wrap"
             role="group"
             tabIndex={0}
         >
@@ -276,11 +307,15 @@ function emphasize(run: MailInlineRun, text: ReactNode): ReactNode {
     let emphasized = text;
 
     if (run.emphasis.monospace) {
-        emphasized = <code className="font-mono">{emphasized}</code>;
+        emphasized = (
+            <code className="rounded-sm border border-line bg-hover px-1.25 py-px font-mono text-base">
+                {emphasized}
+            </code>
+        );
     }
 
     if (run.emphasis.strikethrough) {
-        emphasized = <s>{emphasized}</s>;
+        emphasized = <s className="text-muted">{emphasized}</s>;
     }
 
     if (run.emphasis.underline) {
@@ -291,5 +326,5 @@ function emphasize(run: MailInlineRun, text: ReactNode): ReactNode {
         emphasized = <em>{emphasized}</em>;
     }
 
-    return run.emphasis.bold ? <strong>{emphasized}</strong> : emphasized;
+    return run.emphasis.bold ? <strong className="font-semibold text-text">{emphasized}</strong> : emphasized;
 }

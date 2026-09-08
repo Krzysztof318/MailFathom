@@ -45,6 +45,7 @@ import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 // somebody pressing archive twice; the sentence goes on its own once the change has arrived.
 const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
     flag: 'act.flagging',
+    unflag: 'act.unflagging',
     markUnread: 'act.markingUnread',
     archive: 'act.archiving',
     delete: 'act.deleting',

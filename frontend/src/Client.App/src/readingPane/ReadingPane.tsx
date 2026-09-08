@@ -388,7 +388,7 @@ function OpenMessage({
             aria-label={message.headers.subject ?? translate('message.noSubject')}
             className="flex flex-col"
         >
-            <MessageHeaders headers={message.headers} />
+            <MessageHeaders headers={message.headers} message={message} />
 
             <div className="flex flex-col gap-3 px-5.5 py-4.5">
                 <SenderVerdict verdict={message.sender} />

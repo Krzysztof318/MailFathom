@@ -54,6 +54,11 @@ describe('actPending', () => {
         expect(actPending(asking('flag'), { ...email, flagged: true })).toBeNull();
     });
 
+    it('stops saying a flag is being taken off once the deployment reports the message unflagged', () => {
+        expect(actPending(asking('unflag'), { ...email, flagged: true })).toBe('unflag');
+        expect(actPending(asking('unflag'), email)).toBeNull();
+    });
+
     it('stops saying a message is being marked unread once the deployment reports it unread', () => {
         expect(actPending(asking('markUnread'), email)).toBe('markUnread');
         expect(actPending(asking('markUnread'), { ...email, unread: true })).toBeNull();

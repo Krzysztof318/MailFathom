@@ -91,6 +91,7 @@ describe('refusalFor', () => {
 
     it.each([
         ['flag', { flags: false, moves: true }],
+        ['unflag', { flags: false, moves: true }],
         ['markUnread', { flags: false, moves: true }],
         ['archive', { flags: true, moves: false }],
         ['delete', { flags: true, moves: false }],
@@ -102,8 +103,9 @@ describe('refusalFor', () => {
         },
     );
 
-    it('permits the two acts that change a flag without asking anything of the folders', () => {
+    it('permits the three acts that change a flag without asking anything of the folders', () => {
         expect(refusalFor('flag', [inWork('message-1')], null, everythingOffered)).toBeNull();
+        expect(refusalFor('unflag', [inWork('message-1')], null, everythingOffered)).toBeNull();
         expect(refusalFor('markUnread', [inWork('message-1')], null, everythingOffered)).toBeNull();
     });
 

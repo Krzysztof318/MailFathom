@@ -20,6 +20,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useToasts } from '../toasts/useToasts';
 import { destinationsFor, filingFor, refusalFor, type MoveDestination } from './mailboxDestinations';
 import {
+    changesAFlag,
     MailboxActsContext,
     nothingActed,
     type ActedMessage,
@@ -27,7 +28,7 @@ import {
     type MailboxActs,
 } from './useMailboxActs';
 
-// Performing the five acts, which is the one place in this client that changes somebody's mailbox from the Mail space.
+// Performing the acts, which is the one place in this client that changes somebody's mailbox from the Mail space.
 // Nothing here reaches a mail server: each act writes a durable record through `/api/client` and answers, and the
 // account's own convergence pass is what issues the IMAP command. So an account nobody can connect to leaves the act
 // pending rather than failing it, and what is held below is what was asked for rather than what has been observed.
@@ -43,6 +44,7 @@ import {
 /** What the toast reporting a finished act is titled, exhaustive by its own type. */
 const actReported: Readonly<Record<MailboxAct, MessageKey>> = {
     flag: 'act.flagged',
+    unflag: 'act.unflagged',
     markUnread: 'act.markedUnread',
     archive: 'act.archived',
     delete: 'act.deleted',
@@ -155,7 +157,7 @@ export function MailboxActsProvider({
     // person's mail — and their folders read as this one's.
     const held = kept.session === session ? kept : heldForNobody;
 
-    // The folders, because three of the five acts are folder moves and none of them can name a destination without
+    // The folders, because three of the acts are folder moves and none of them can name a destination without
     // them. Read only where the credential may file mail at all: without that grant those three acts are refused before
     // a destination is looked for, so asking would be a request every session pays for and no screen reads.
     //
@@ -253,7 +255,7 @@ export function MailboxActsProvider({
         messages: readonly ActedMessage[],
         destination: MoveDestination | undefined,
     ): Promise<readonly Submitted[]> {
-        const changesFlags = act === 'flag' || act === 'markUnread';
+        const changesFlags = changesAFlag(act);
         const filing = changesFlags ? [] : filingFor(act, messages, held.directory, destination?.alias ?? null);
         const filed = new Set(filing.map((one) => one.storedEmailId));
 
@@ -272,9 +274,9 @@ export function MailboxActsProvider({
                       asking,
                       transport,
                       batch.map((message) =>
-                          act === 'flag'
-                              ? { storedEmailId: message.storedEmailId, flagged: true }
-                              : { storedEmailId: message.storedEmailId, seen: false },
+                          act === 'markUnread'
+                              ? { storedEmailId: message.storedEmailId, seen: false }
+                              : { storedEmailId: message.storedEmailId, flagged: act === 'flag' },
                       ),
                   )
                 : moveMail(asking, transport, filing.slice(from, from + mostMessagesPerMutation));
@@ -301,19 +303,18 @@ export function MailboxActsProvider({
         failure: ClientFailureReason | null,
     ): void {
         if (recorded.length > 0) {
-            // The way back is the toast's single action, which is the design project's own: the two acts that change a
-            // flag offer none, because a flag is what the control that set it takes off again.
-            const wayBack =
-                act === 'flag' || act === 'markUnread'
-                    ? {}
-                    : {
-                          action: {
-                              label: translate('act.undo'),
-                              take: () => {
-                                  takeBack(recorded);
-                              },
+            // The way back is the toast's single action, which is the design project's own: the three acts that change
+            // a flag offer none, because a flag is what the control that set it takes off again.
+            const wayBack = changesAFlag(act)
+                ? {}
+                : {
+                      action: {
+                          label: translate('act.undo'),
+                          take: () => {
+                              takeBack(recorded);
                           },
-                      };
+                      },
+                  };
 
             toasts.raise({
                 kind: 'neutral',

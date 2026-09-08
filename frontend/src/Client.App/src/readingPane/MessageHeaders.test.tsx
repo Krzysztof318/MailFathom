@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import type { HeadMessage } from '../mailSpace/HeadActs';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { MessageHeaders } from './MessageHeaders';
 
@@ -21,6 +22,15 @@ const headers: MailMessageHeaders = {
     messageId: 'abc@example.invalid',
     inReplyTo: null,
     references: [],
+};
+
+// The message the head's acts are about, which this file states only so the head can be drawn: what those acts do is
+// `mailSpace/HeadActs.test.tsx`'s.
+const message: HeadMessage = {
+    storedEmailId: 'a1',
+    account: 'reader@example.invalid',
+    folder: 'INBOX',
+    flagged: false,
 };
 
 // Found by the words a person reads and then read as the element it is, because whether a disclosure is open is a
@@ -39,7 +49,7 @@ function drawing(written: Partial<MailMessageHeaders> = {}): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <MessageHeaders headers={{ ...headers, ...written }} />
+                <MessageHeaders headers={{ ...headers, ...written }} message={message} />
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
@@ -238,8 +248,14 @@ describe('MessageHeaders at the width its column has', () => {
         atWorkspaceWidth(false);
         drawing();
 
+        // Drawn with neither a composer nor a mailbox act above them, which is what this harness is: each says why it
+        // cannot act rather than going nameless. What each does when it can is `mailSpace/HeadActs.test.tsx`'s.
         expect(screen.getByRole('button', { name: 'Reply — not built yet' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Forward — not built yet' })).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Flag — not built yet' })).toBeDefined();
+        expect(
+            screen.getByRole('button', {
+                name: 'Flag — this credential may not change mail on your mail server.',
+            }),
+        ).toBeDefined();
     });
 });
