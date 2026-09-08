@@ -46,6 +46,16 @@ const tree = {
                     behind: false,
                 },
                 {
+                    alias: 'ARCHIVE',
+                    role: 'Archive',
+                    path: ['Archive'],
+                    storedEmailCount: 3100,
+                    unreadEmailCount: 7,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+                    behind: false,
+                },
+                {
                     alias: 'ARCHIVE-2024',
                     role: null,
                     path: ['Archiwum', '2024'],
@@ -279,6 +289,12 @@ describe('FolderTree', () => {
         expect(row(/^Work/).textContent).not.toContain('unread');
         expect(row(/^All mailboxes/).textContent).not.toContain('unread');
         expect(row(/^Archiwum/).textContent).not.toContain('unread');
+
+        // The archive plays a role and holds seven unread, so it is the row that separates "an inbox" from "a folder
+        // the deployment named": a rule reading "any folder with a role" would draw a count here.
+        for (const archive of screen.getAllByRole('treeitem', { name: /^Archive/ })) {
+            expect(archive.textContent).not.toContain('unread');
+        }
     });
 
     // A count that still named a message the reader has just opened would disagree with the row drawing that message
