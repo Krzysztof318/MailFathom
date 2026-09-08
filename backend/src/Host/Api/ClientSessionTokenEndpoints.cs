@@ -25,6 +25,11 @@ namespace MailFathom.Host.Api;
 /// person.
 /// </para>
 /// <para>
+/// <b>An access token is the one method it refuses</b>, and <see cref="AuthenticatedByAnAccessToken" /> holds why: a
+/// session standing in for a token would outlive the token, the authorization server's revocation of it, and the
+/// scopes that server's entry requires — while saving a caller nothing, a token costing no derivation to validate.
+/// </para>
+/// <para>
 /// <b>The same route renews.</b> A client presenting a live session token receives a fresh one and the presented one
 /// stops working, so renewing needs no second route, no second credential, and nobody typing a password. That is the
 /// whole of the renewal contract: read <c>expiresAt</c>, call this before it, keep what comes back.
@@ -62,7 +67,7 @@ internal static class ClientSessionTokenEndpoints
     /// <param name="context">The request, whose <c>Authorization</c> header says whether this is a sign-in or a renewal.</param>
     /// <param name="authorization">Reports the user the credential named and what it grants.</param>
     /// <param name="sessions">Mints the token and holds the session until it is revoked or expires.</param>
-    /// <returns><c>200</c> with the token, or <c>503</c> where this process is already holding as many sessions as it will hold.</returns>
+    /// <returns><c>200</c> with the token, <c>403</c> where an access token is what admitted the request, or <c>503</c> where this process is already holding as many sessions as it will hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required service is <see langword="null" />.</exception>
     /// <remarks>
     /// Renewal is recognized from the credential rather than from a second route or a body: a request already
@@ -79,7 +84,17 @@ internal static class ClientSessionTokenEndpoints
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(sessions);
 
-        var minted = PresentedToken(context) is { } presented
+        var presented = PresentedToken(context);
+
+        if (presented is null && AuthenticatedByAnAccessToken(context))
+        {
+            return TypedResults.Problem(
+                "An access token authenticates each request on its own, so this deployment exchanges none for a "
+                + "session. Present the token on every request instead.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var minted = presented is not null
             ? sessions.Renew(presented)
             : sessions.Mint(new AdmittedUserCredential(
                 CredentialBehind(context),
@@ -127,17 +142,39 @@ internal static class ClientSessionTokenEndpoints
             ? presented
             : null;
 
+    /// <summary>Whether an authorization server's access token is what admitted this request.</summary>
+    /// <remarks>
+    /// A token is the one method this exchange refuses, and refusing it is what keeps the session's life the
+    /// deployment's to end. Everything else it accepts is a credential this deployment holds, so disabling or deleting
+    /// the row ends the sessions it minted; a token is judged per request against the issuer that signed it, and a
+    /// session standing in for one would outlive the token's own expiry, survive the server revoking it, and stop
+    /// being measured against the scopes that issuer's entry requires — none of which this process can observe. The
+    /// cost of refusing is nothing a token pays: validating one derives no key, which is what the exchange exists to
+    /// stop spending per request.
+    /// </remarks>
+    private static bool AuthenticatedByAnAccessToken(HttpContext context) =>
+        context.User.FindFirst(OAuthIdentity.IssuerClaimType) is not null;
+
     /// <summary>The credential the exchange authenticated, which a session names so that revoking that credential ends it.</summary>
     /// <remarks>
+    /// <para>
     /// Read from the claim every user-facing method writes rather than from the principal's own identity, which four of
     /// the five name the credential in and the fifth does not: an access token's principal is named by the issuer and
-    /// the subject the deployment authorized. Reading the identity would therefore have minted an unrevocable session
-    /// for exactly one method and said nothing about it, which is the failure this refuses instead — a principal
-    /// carrying no such claim is one no user credential admitted, and no scheme this surface routes to produces one.
+    /// the subject the deployment authorized. Reading the identity would therefore have minted a session naming no
+    /// credential for exactly one method and said nothing about it, so an authenticated principal carrying no such
+    /// claim is a fault here rather than a session an operator would later find they could not end.
+    /// </para>
+    /// <para>
+    /// An unauthenticated caller is the one case that names no credential and is not a fault: a client endpoint
+    /// requiring no credential admits everybody as the deployment's own user, so there is no row behind the session
+    /// and nothing for an operator to revoke it by. The empty identifier says exactly that, and matches no credential
+    /// this deployment could ever hold.
+    /// </para>
     /// </remarks>
-    private static Guid CredentialBehind(HttpContext context) =>
-        TransportCallerCredential.CarriedBy(context.User)
-        ?? throw new InvalidOperationException("The exchange was reached by a principal no user credential admitted.");
+    private static Guid CredentialBehind(HttpContext context) => TransportCallerCredential.CarriedBy(context.User)
+        ?? (context.User.Identity is { IsAuthenticated: true }
+            ? throw new InvalidOperationException("The exchange was reached by a principal no user credential admitted.")
+            : Guid.Empty);
 }
 
 /// <summary>What the exchange answers with.</summary>

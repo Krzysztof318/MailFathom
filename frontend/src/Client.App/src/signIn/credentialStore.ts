@@ -4,9 +4,11 @@
 
 import type { DeploymentAddress } from '@mailfathom/client-backend';
 
-// Where the credential this client signed in with is kept between starts, as decided by ADR 0023. What is stored is the
-// finished header value, one value, bound to the address it was given for; the user name is inside it already and
-// nothing derived from it is kept beside it.
+// Where what this client signed in with is kept between starts, as decided by ADR 0023. What is stored is the session
+// document `keptSession.ts` writes — the finished header value, the instant it stops working, and the name of the
+// person it belongs to — as one value bound to the address it was given for. The name travels beside the credential
+// because a session token names nobody: the Basic header it replaced carried the user name inside it, and a bearer
+// token is a value with no reader.
 //
 // The application depends on the three operations below and on one thing it reports — how long what it keeps survives —
 // and never on which of them it was handed. Which one is constructed is decided once, by `credentialStore` below, from

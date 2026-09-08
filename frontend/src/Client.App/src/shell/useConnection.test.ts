@@ -6,7 +6,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientResponse } from '@mailfathom/client-backend';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
-import { mostReconnectionAttempts, reconnectionDelay, useConnection } from './useConnection';
+import { mostReconnectionAttempts, reconnectionDelay, useConnection, type SignedInCaller } from './useConnection';
 
 // The waiting the hook does between attempts, as a function of its arguments rather than of a clock or of a draw it
 // made itself — which is what lets it be stated here without a fake timer and without stubbing randomness.
@@ -40,8 +40,11 @@ describe('reconnectionDelay', () => {
 // is asserted where a person would read it, in `App.test.tsx` and `ConnectionSummary.test.tsx`.
 
 const baseAddress = 'https://mail.example.invalid';
-const firstCredential = 'Basic dXNlcjpvcGVu';
-const secondCredential = 'Basic c29tZWJvZHk6ZWxzZQ==';
+
+// Two people rather than two credentials, because that is what the hook keys on: a renewal replaces the header value
+// under one identity, and only signing in as somebody else is a different one.
+const firstPerson = { identity: 'karolina', authorization: 'Bearer mfs_first.c2Vzc2lvbg' };
+const secondPerson = { identity: 'somebody', authorization: 'Bearer mfs_second.c2Vzc2lvbg' };
 
 // The instant this suite decided, which is what an answer is stamped with when the hook is handed it — never a system
 // clock, so nothing here depends on the day it ran.
@@ -87,7 +90,7 @@ describe('useConnection', () => {
 
     it('stamps what it read with the instant its caller decided rather than with a clock of its own', async () => {
         const { result } = renderHook(() =>
-            useConnection(baseAddress, firstCredential, deploymentAnswering, nothingToDo, clock),
+            useConnection(baseAddress, firstPerson, deploymentAnswering, nothingToDo, clock),
         );
 
         await waitFor(() => {
@@ -97,13 +100,45 @@ describe('useConnection', () => {
         expect(result.current.readAt).toEqual(readAt);
     });
 
+    // A renewal replaces the header value roughly once every eleven hours while somebody is reading. Nothing about the
+    // deployment changed, so nothing may be re-read and nothing may leave the screen: a hook keyed on the value would
+    // empty the frame mid-morning and put the person back on 'Reaching your deployment…'.
+    it('keeps what it read when the session it presents is renewed under the same person', async () => {
+        const presented: (string | undefined)[] = [];
+        const recording: DeploymentTransport = () => (request) => {
+            presented.push(request.headers['Authorization']);
+
+            return Promise.resolve(request.path.endsWith('/session') ? readsMail : oneAccount);
+        };
+
+        const { result, rerender } = renderHook(
+            ({ signedIn }: { signedIn: SignedInCaller }) =>
+                useConnection(baseAddress, signedIn, recording, nothingToDo, clock),
+            { initialProps: { signedIn: firstPerson } },
+        );
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        const readSoFar = presented.length;
+
+        // Act
+        rerender({ signedIn: { ...firstPerson, authorization: 'Bearer mfs_renewed.c2Vzc2lvbg' } });
+
+        // Assert
+        expect(result.current.accounts?.outcome).toBe('read');
+        expect(result.current.session?.outcome).toBe('read');
+        expect(presented.length).toBe(readSoFar);
+    });
+
     it('hands the next person a budget of their own rather than one the last one spent', async () => {
         vi.useFakeTimers();
 
         const { result, rerender } = renderHook(
-            ({ authorization }: { authorization: string }) =>
-                useConnection(baseAddress, authorization, deploymentFailing, nothingToDo, clock),
-            { initialProps: { authorization: firstCredential } },
+            ({ signedIn }: { signedIn: SignedInCaller }) =>
+                useConnection(baseAddress, signedIn, deploymentFailing, nothingToDo, clock),
+            { initialProps: { signedIn: firstPerson } },
         );
 
         await act(async () => {
@@ -120,7 +155,7 @@ describe('useConnection', () => {
 
         expect(result.current.attempts).toBe(mostReconnectionAttempts);
 
-        rerender({ authorization: secondCredential });
+        rerender({ signedIn: secondPerson });
 
         expect(result.current.attempts).toBe(0);
 

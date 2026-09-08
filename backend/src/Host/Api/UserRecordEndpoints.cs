@@ -7,6 +7,7 @@ using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.UserSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
@@ -174,6 +175,7 @@ internal static class UserRecordEndpoints
     /// <summary>Erases one user and everything this deployment recorded for them.</summary>
     /// <param name="userId">The user to remove.</param>
     /// <param name="roster">The roster administration.</param>
+    /// <param name="sessions">Holds the client sessions this process minted, or nothing where this deployment serves no client endpoint.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
     /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody or a configuration source declares the user.</returns>
     /// <remarks>
@@ -188,6 +190,7 @@ internal static class UserRecordEndpoints
     internal static async Task<Results<Ok<UserErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid userId,
         [FromServices] UserRosterAdministration roster,
+        [FromServices] ClientSessionTokens? sessions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(roster);
@@ -199,9 +202,18 @@ internal static class UserRecordEndpoints
 
         var outcome = await roster.EraseAsync(user, cancellationToken);
 
-        return outcome.RefusalMessage is { } refused
-            ? Refusal(refused)
-            : TypedResults.Ok(new UserErasureResponse(outcome.UserErased, outcome.WasServed));
+        if (outcome.RefusalMessage is { } refused)
+        {
+            return Refusal(refused);
+        }
+
+        // The credential rows go with the user, by cascade and without being named, so the sessions they minted are
+        // ended by the user they act for. Without this the erasure would answer "erased" while a client signed in as
+        // that person went on authenticating against this process's own memory, and renewing indefinitely — a live
+        // principal for somebody the deployment says it no longer holds.
+        sessions?.RevokeEverythingMintedFor(user);
+
+        return TypedResults.Ok(new UserErasureResponse(outcome.UserErased, outcome.WasServed));
     }
 
     /// <summary>Replaces the label one user is told apart by.</summary>

@@ -96,6 +96,7 @@ public sealed class UserRecordEndpointsTests
         var result = await UserRecordEndpoints.EraseAsync(
             SyntheticMailUser.Another.Value,
             deployment.Roster,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -118,6 +119,7 @@ public sealed class UserRecordEndpointsTests
         var result = await UserRecordEndpoints.EraseAsync(
             SyntheticMailUser.Deployment.Value,
             deployment.Roster,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -137,6 +139,7 @@ public sealed class UserRecordEndpointsTests
         var result = await UserRecordEndpoints.EraseAsync(
             Guid.Empty,
             deployment.Roster,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert

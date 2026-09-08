@@ -163,17 +163,23 @@ export function fixtureAnswer(
     return answerFor(route, new URLSearchParams(query), request, options, state);
 }
 
+/** Which token the corpus minted for each credential it has been presented, so one credential is answered one session. */
+const mintedFor = new Map<string, string>();
+
 /**
  * The session the corpus mints for a credential, which lives as long as a deployment's own does.
  *
- * The token is derived from the credential rather than drawn at random, so a run is repeatable and a parity capture
- * signs in to the same value every time.
+ * A token per credential rather than one token, so signing in as somebody else on the same run is a session of its own
+ * exactly as it is against a deployment. It is numbered rather than derived from what was presented, because a real
+ * deployment answers a value carrying nothing of the credential — and a corpus that spelled a password into the token
+ * would put one into every capture, every console log, and every stored session a run leaves behind.
  */
 function fixtureSession(credential: string): { token: string; expiresAt: string } {
-    return {
-        token: `mfs_${credential.replace(/[^A-Za-z0-9]/g, '')}.Zml4dHVyZS1zZXNzaW9u`,
-        expiresAt: new Date(Date.now() + sessionLifetime).toISOString(),
-    };
+    const token = mintedFor.get(credential) ?? `mfs_fixture${String(mintedFor.size + 1)}.Zml4dHVyZS1zZXNzaW9u`;
+
+    mintedFor.set(credential, token);
+
+    return { token, expiresAt: new Date(Date.now() + sessionLifetime).toISOString() };
 }
 
 /** How long a session the corpus mints lasts, which is what the service's own is. */

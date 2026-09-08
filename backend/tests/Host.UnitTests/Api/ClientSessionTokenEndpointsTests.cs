@@ -10,6 +10,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -107,9 +108,10 @@ public sealed class ClientSessionTokenEndpointsTests
 
     /// <summary>A caller whose principal is named by something other than a credential still mints a session an operator can end.</summary>
     /// <remarks>
-    /// An access token's principal is named by the issuer and the subject the deployment authorized, so a session that
-    /// took its credential from that name would be one no disabling and no deletion could reach — live until its own
-    /// expiry however urgently somebody wanted it gone.
+    /// A key and a signed assertion each name their principal by the key rather than by the credential row behind it,
+    /// so a session that took its credential from that name would be one no disabling and no deletion could reach —
+    /// live until its own expiry however urgently somebody wanted it gone. What the session is ended by is the claim
+    /// the admitting scheme wrote, which is why the name is free to be anything.
     /// </remarks>
     [Fact]
     public void Exchange_ACallerWhoseIdentityNamesNoCredential_AnswersATokenTheCredentialStillEnds()
@@ -127,6 +129,34 @@ public sealed class ClientSessionTokenEndpointsTests
         var answered = Assert.IsType<Ok<ClientSessionTokenResponse>>(result.Result);
         Assert.Equal(1, sessions.RevokeEverythingMintedBy(CredentialId));
         Assert.Null(sessions.Verify(answered.Value!.Token));
+    }
+
+    /// <summary>An access token is refused here rather than exchanged for a session nothing could bound.</summary>
+    /// <remarks>
+    /// The token's own expiry, its revocation at the authorization server, and the scopes that server's entry requires
+    /// are each judged per request against the token, and none of them can be judged against a session this deployment
+    /// minted. It costs such a caller nothing either: validating a token derives no key.
+    /// </remarks>
+    [Fact]
+    public void Exchange_ARequestAnAccessTokenAdmitted_RefusesRatherThanMintingASessionNothingBounds()
+    {
+        // Arrange
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var request = new DefaultHttpContext();
+        request.Request.Headers[HeaderNames.Authorization] = "Bearer an.access.token";
+        request.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(OAuthIdentity.IssuerClaimType, "https://sso.example.test")],
+            "test"));
+
+        // Act
+        var result = ClientSessionTokenEndpoints.Exchange(
+            request,
+            AuthorizationNamedBy("https://sso.example.test|subject-7", SyntheticMailUser.Deployment),
+            sessions);
+
+        // Assert
+        var refused = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.StatusCode);
     }
 
     /// <summary>A principal no user credential admitted is refused rather than minting a session nothing could end.</summary>

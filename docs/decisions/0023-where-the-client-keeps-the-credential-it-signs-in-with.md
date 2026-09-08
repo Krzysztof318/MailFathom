@@ -37,7 +37,7 @@ This record decides where the value lives, what form it takes, what removes it, 
 
 Three axes, decided together because the answers constrain each other.
 
-1. **What is kept at all:** nothing, and the password is typed at every start; the finished `Basic` header value; the user name and the password as separate values.
+1. **What is kept at all:** nothing, and the password is typed at every start; the finished `Basic` header value; the user name and the password as separate values; the session the deployment mints in exchange for any of them, as the header value, its expiry and the person's name together.
 2. **The web head:** `sessionStorage`; `localStorage`; an in-memory value alone; a cookie the service sets.
 3. **The desktop head:** the operating system's keychain through the `keyring` crate, called from a command the shell registers; a community Tauri keychain plugin; `tauri-plugin-stronghold`; the WebView's own `localStorage`; `tauri-plugin-store`, which is a JSON file.
 
@@ -142,6 +142,15 @@ Both are catalogue entries in both languages, like every other string.
 - Neutral, because the storage mechanism is identical either way.
 - Bad, because it puts a composing step where `frontend/src/AGENTS.md` says none may be, and the finished value is what `ClientSession` already carries.
 - Bad, because it stores two things where one would do, and the second is personal data kept for a convenience.
+
+### Keeping the session the deployment minted rather than the credential that was typed
+
+- Good, because what is stored stops being a password: it expires on its own, an operator ends it by disabling the credential behind it, and nothing derives the password back from it.
+- Good, because it costs the deployment one key derivation per sign-in instead of one per request, which is what [#1746](https://github.com/Krzysztof318/MailFathom/issues/1746) is about and what makes every screen after sign-in answerable at all.
+- Neutral, because the storage mechanism on both heads is unchanged: one entry, one address, one act to write and one to remove.
+- Neutral, because it is three fields rather than one — the header value, the instant it ends, and who is signed in — none of which is a secret beside the first, and each of which the client would otherwise have to ask the deployment for before it could draw anything.
+- Bad, because a client that is closed across the session's own life is signed out where a stored password would still have worked, so somebody who opens MailFathom twice a week types their password every time.
+- Bad, because it is a credential the client renews on its own, so a script that reads one on the web head keeps it alive by reading it — which is exactly why `localStorage` stays refused below.
 
 ### `localStorage` on the web head
 

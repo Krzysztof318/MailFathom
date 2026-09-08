@@ -54,10 +54,17 @@ export function writeKeptSession(session: KeptSession): string {
  * somebody edited, and storage that returned a truncated string — none of which is a credential worth presenting to a
  * deployment.
  *
+ * A session whose instant has passed is nothing kept either, and that is the ordinary case rather than a damaged
+ * store: a twelve-hour session opened the next morning is over, and answering it as something kept would mount the
+ * whole frame, start a read, meet a refusal, and drop somebody onto the sign-in screen under a notice about a
+ * deployment that changed nothing. What is left of it is a sign-in screen rendered first, which is what this read
+ * happens before anything is drawn for.
+ *
  * @param stored What the credential store answered with.
+ * @param readAt The instant to judge the expiry against, which is this machine's clock unless a caller states one.
  * @returns The session, or `null`.
  */
-export function readKeptSession(stored: string | null): KeptSession | null {
+export function readKeptSession(stored: string | null, readAt: number = Date.now()): KeptSession | null {
     if (stored === null || stored.length === 0 || stored.length > longestKeptSession) {
         return null;
     }
@@ -83,7 +90,7 @@ export function readKeptSession(stored: string | null): KeptSession | null {
         return null;
     }
 
-    if (typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt))) {
+    if (typeof expiresAt !== 'string' || !(Date.parse(expiresAt) > readAt)) {
         return null;
     }
 

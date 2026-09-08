@@ -9,11 +9,13 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -255,6 +257,39 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.Equal(MappedCredentialId, TransportCallerCredential.CarriedBy(validated.Principal));
     }
 
+    /// <summary>A session this deployment minted authenticates on the composed surface and is admitted by the requirement its routes carry.</summary>
+    /// <remarks>
+    /// The seam nothing else reaches: the handler, the scheme selector and the access policy are each covered on their
+    /// own, and every endpoint test calls a route method directly. A scheme registered under a name the selector does
+    /// not return, a store resolved per scope rather than per process, or a policy that does not recognize a session
+    /// principal would each sign every client out on the request after it signed in, with all of those still green.
+    /// </remarks>
+    [Fact]
+    public async Task AddClientTransportSecurity_ASessionThisDeploymentMinted_AuthenticatesAndIsAdmittedByTheSurface()
+    {
+        // Arrange
+        using var composed = ComposeOAuthOnlyEndpoint();
+        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+
+        var request = new DefaultHttpContext { RequestServices = composed };
+        request.Request.Scheme = "https";
+        request.Request.Host = new HostString("mail.example.test");
+        request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
+
+        // Act
+        var authenticated = await composed
+            .GetRequiredService<IAuthenticationService>()
+            .AuthenticateAsync(request, TransportSurface.Client.RoutingSchemeName);
+
+        var admitted = await composed
+            .GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(authenticated.Principal!, resource: null, TransportSurface.Client.AccessPolicyName);
+
+        // Assert
+        Assert.True(authenticated.Succeeded);
+        Assert.True(admitted.Succeeded);
+    }
+
     /// <summary>The unauthenticated posture is served rather than refused, and a browser still has to be answered on it.</summary>
     [Fact]
     public void AddClientTransportSecurity_AnEndpointRequiringNoCredential_RegistersThePolicyAndNoScheme()
@@ -277,6 +312,26 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IAuthenticationService));
     }
 
+    /// <summary>An endpoint requiring no credential still holds the store, so the exchange it serves answers rather than faulting.</summary>
+    /// <remarks>
+    /// The exchange is mapped into the client group whatever the endpoint's posture is, and a client signs in the one
+    /// way rather than asking which posture it is talking to first. Without the store it would resolve nothing and the
+    /// route would fault on the first sign-in of a deployment that had deliberately asked for no credential.
+    /// </remarks>
+    [Fact]
+    public void AddClientTransportSecurity_AnEndpointRequiringNoCredential_StillHoldsTheStoreTheExchangeMintsFrom()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddClientTransportSecurity(EnabledEndpoint());
+
+        // Assert
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(ClientSessionTokens));
+    }
+
     private static CorsPolicy ClientCorsPolicyOf(ClientEndpointOptions endpointSettings)
     {
         var services = new ServiceCollection();
@@ -292,6 +347,11 @@ public sealed class ClientTransportSecurityExtensionsTests
     }
 
     private static ClientEndpointOptions EnabledEndpoint() => new() { Enabled = true };
+
+    private static AdmittedUserCredential AdmittedByACredential() => new(
+        MappedCredentialId,
+        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
+        [MailFathomPermission.MailRead]);
 
     private static void MapsTheSubject(IServiceCollection services)
     {

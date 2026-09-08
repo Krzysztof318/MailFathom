@@ -69,12 +69,24 @@ describe('App sign-in', () => {
         signIn();
         await framed();
 
-        // The password reaches the exchange and nothing else. That is the property the exchange exists for: every
-        // later request carries a token the deployment looks up, rather than one it derives a key from.
-        expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([
-            typedCredential,
-            mintedCredential,
-        ]);
+        // Counted rather than collapsed into a set: a client that presented the password again on every later request
+        // would produce the same two distinct values, so the set would be green for the one property this whole change
+        // exists for. The password reaches the exchange, once, and every request after it carries the token.
+        const presentingTheCredential = asked.filter((request) => request.headers['Authorization'] === typedCredential);
+
+        expect(presentingTheCredential.length).toBe(1);
+        expect(presentingTheCredential[0]?.path).toBe(`${servingAddress.baseAddress}/api/client/session/token`);
+        expect(asked.filter((request) => request.headers['Authorization'] === mintedCredential).length).toBeGreaterThan(
+            0,
+        );
+        expect(
+            asked.filter(
+                (request) =>
+                    request.headers['Authorization'] !== typedCredential &&
+                    request.headers['Authorization'] !== mintedCredential &&
+                    request.headers['Authorization'] !== undefined,
+            ),
+        ).toEqual([]);
     });
 
     it('keeps the session it was given rather than the credential it typed, so a later start opens already signed in', async () => {

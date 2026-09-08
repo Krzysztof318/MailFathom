@@ -132,11 +132,17 @@ export function App({
     const person = kept?.person ?? null;
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
+
+    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token every eleven
+    // hours, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
+    // a second session beginning — at an instant nothing happened at. The person and the address are what actually
+    // change when somebody signs out and somebody else signs in.
+    const signedInAs = person === null || baseAddress === null ? null : `${baseAddress}\n${person}`;
     const workspaceRegion = useRef<HTMLDivElement>(null);
     const [written, setWritten] = useState<ComposerOpening | null>(null);
     const [blockedOn, setBlockedOn] = useState<BlockingOperation | null>(null);
     const askedFrom = useRef<HTMLElement | null>(null);
-    const focusedFor = useRef(authorization);
+    const focusedFor = useRef(signedInAs);
 
     // Built once per address and credential rather than per render, because it is what the message read below depends
     // on: a fresh object every render would restart that read every render.
@@ -144,6 +150,12 @@ export function App({
         () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
         [baseAddress, authorization],
     );
+
+    // Who the deployment is read for, which is the identity above and whatever is being presented for them now. It is
+    // built per render rather than memoized because nothing keys on the object: the hook keys on the identity inside
+    // it and reads the header when a request actually goes out.
+    const signedInCaller =
+        signedInAs === null || authorization === null ? null : { identity: signedInAs, authorization };
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
@@ -163,16 +175,16 @@ export function App({
     // pull focus onto the workspace on exactly the ordinary open it exists to leave alone. Both invocations see the
     // same credential, so a comparison against it survives being run twice.
     useEffect(() => {
-        if (authorization === focusedFor.current) {
+        if (signedInAs === focusedFor.current) {
             return;
         }
 
-        focusedFor.current = authorization;
+        focusedFor.current = signedInAs;
 
-        if (authorization !== null) {
+        if (signedInAs !== null) {
             workspaceRegion.current?.focus();
         }
-    }, [authorization]);
+    }, [signedInAs]);
 
     // A credential the deployment has stopped accepting is acted on once rather than left to produce the same refusal
     // on every later read, which is why this is the one failure the frame does not render. What was kept goes with it:
@@ -217,7 +229,7 @@ export function App({
     // What the deployment says is read from the address and the credential rather than held beside them, which is what
     // makes a credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or
     // signing out, runs this again with nothing to present, and nothing of the previous one's answers survives it.
-    const connection = useConnection(baseAddress, authorization, send, credentialRefused);
+    const connection = useConnection(baseAddress, signedInCaller, send, credentialRefused);
 
     // A session has a life the deployment decides, so the client renews it rather than letting somebody be signed
     // out mid-morning. It renews only while there is a session to renew and a network to renew over; a client that was
@@ -311,18 +323,18 @@ export function App({
     // effect runs. It runs again whenever the permission changes, and the permission is false until the deployment has
     // answered what it forwards — so without this, an ordinary sign-in would record nothing and moving the switch
     // twice would record a session beginning twice.
-    const sessionReported = useRef<ClientSession | null>(null);
+    const sessionReported = useRef<string | null>(null);
 
     useEffect(() => {
         const stop = telemetry.exportFor(session, telemetryPermitted);
 
-        if (session !== null && telemetryPermitted && sessionReported.current !== session) {
-            sessionReported.current = session;
+        if (session !== null && telemetryPermitted && sessionReported.current !== signedInAs) {
+            sessionReported.current = signedInAs;
             telemetry.happened('session_started');
         }
 
         return stop;
-    }, [session, telemetry, telemetryPermitted]);
+    }, [session, signedInAs, telemetry, telemetryPermitted]);
 
     // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
     // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want

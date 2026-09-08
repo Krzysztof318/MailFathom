@@ -129,6 +129,17 @@ describe('parseMintedSession', () => {
         expect(parseMintedSession(minted({ token: `mfs_${'a'.repeat(300)}` }))).toBeNull();
     });
 
+    // The token becomes an `Authorization` header verbatim and is kept, so a value a header may not carry would be
+    // refused by the browser on every later request — reported as a deployment that cannot be reached, with the
+    // unusable session persisted across reloads.
+    it.each([
+        ['a header break', 'mfs_abc.def\r\nX-Injected: yes'],
+        ['a space', 'mfs_abc def'],
+        ['a character outside the bearer alphabet', 'mfs_abc.déf'],
+    ])('refuses a token carrying %s', (_, token) => {
+        expect(parseMintedSession(minted({ token }))).toBeNull();
+    });
+
     it('refuses a body too long to be an exchange answer without expanding it', () => {
         expect(parseMintedSession(minted({ padding: 'a'.repeat(5000) }))).toBeNull();
     });

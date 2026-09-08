@@ -103,15 +103,26 @@ export const anotherPersonsSession: KeptSession = {
     person: 'another',
 };
 
+/** Which token each credential a double has seen was minted for, so one credential is answered the same token twice. */
+const mintedFor = new Map<string, string>();
+
 /**
  * What a deployment double mints for a credential it accepts.
  *
  * A token per credential rather than one token, because that is the property the client depends on: a second person
  * signing in on the same machine gets a different session, and a fixture that minted one value for everybody would let
  * the frame carry the last person's grant into the next one without a test noticing.
+ *
+ * Numbered rather than derived from the credential, because a real deployment answers a value with nothing of the
+ * credential in it: a double that spelled the password into the token would make a client that leaked one indetectable
+ * here, which is the one thing these tests are for.
  */
 export function mintedTokenFor(credential: string): string {
-    return `mfs_${credential.replace(/[^A-Za-z0-9]/g, '')}.bWludGVkLXNlc3Npb24`;
+    const minted = mintedFor.get(credential) ?? `mfs_session${String(mintedFor.size + 1)}.bWludGVkLXNlc3Npb24`;
+
+    mintedFor.set(credential, minted);
+
+    return minted;
 }
 
 /** The header value the session minted for `typedCredential` is presented under. */

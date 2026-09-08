@@ -5,6 +5,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using MailFathom.Application.Access.Credentials;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Security.Sessions;
 
@@ -97,31 +98,10 @@ internal sealed class ClientSessionTokens
     {
         ArgumentNullException.ThrowIfNull(admitted);
 
-        var identifier = RandomText(IdentifierByteCount);
-        var secret = RandomNumberGenerator.GetBytes(SecretByteCount);
-        var expiresAt = this.timeProvider.GetUtcNow() + Lifetime;
-
         lock (this.gate)
         {
-            // Swept only where the bound is what would refuse this mint, for the reason the ticket store sweeps there:
-            // the difference between a live session and an expired one matters at exactly that moment, and walking the
-            // whole store on every sign-in would be a cost paid on the ordinary path to tidy state the bound limits.
-            if (this.live.Count >= MostLiveSessions)
-            {
-                this.SweepExpired();
-            }
-
-            if (this.live.Count >= MostLiveSessions)
-            {
-                return null;
-            }
-
-            this.live[identifier] = new LiveSession(admitted, secret, expiresAt);
+            return this.MintReplacing(admitted, replacing: null);
         }
-
-        return new MintedClientSessionToken(
-            string.Concat(TokenPrefix, identifier, Separator.ToString(), Base64Url.EncodeToString(secret)),
-            expiresAt);
     }
 
     /// <summary>Reports what a presented token admits, without deriving anything.</summary>
@@ -130,27 +110,14 @@ internal sealed class ClientSessionTokens
     /// <remarks>
     /// The one operation on the request path, and the reason this type exists: a lookup and a fixed-time comparison,
     /// with no key derivation, no database read, and no allocation past what reading the header already cost. An
-    /// expired session is refused here and left for a later sweep rather than removed under the read lock, so that
-    /// verifying stays a read.
+    /// expired session is refused here and left for a later sweep rather than removed, so that verifying stays a read.
     /// </remarks>
     internal AdmittedUserCredential? Verify(string? presented)
     {
-        if (!TrySplit(presented, out var identifier, out var proof))
-        {
-            return null;
-        }
-
-        LiveSession? session;
-
         lock (this.gate)
         {
-            if (!this.live.TryGetValue(identifier, out session))
-            {
-                return null;
-            }
+            return this.LiveSessionFor(presented, out _)?.Admitted;
         }
-
-        return Proves(session, proof) && this.timeProvider.GetUtcNow() <= session.ExpiresAt ? session.Admitted : null;
     }
 
     /// <summary>Replaces a live session with a fresh token, so a client renews without anybody typing a password.</summary>
@@ -165,27 +132,14 @@ internal sealed class ClientSessionTokens
     /// </remarks>
     internal MintedClientSessionToken? Renew(string? presented)
     {
-        // The three steps are one step, and holding the gate across them is what makes them one: two requests
-        // presenting the same token would otherwise both verify it, both mint, and leave two live sessions behind one
-        // sign-in — which is exactly the trail of valid credentials replacing the presented token exists to prevent.
-        // The lock is re-entrant, so the steps stay the three published operations rather than three copies of them.
+        // Read and replaced under one hold of the gate, because the two are one step: two requests presenting the same
+        // token would otherwise both read it as live, both mint, and leave two sessions behind one sign-in — the trail
+        // of valid credentials that replacing the presented token exists to prevent.
         lock (this.gate)
         {
-            var admitted = this.Verify(presented);
-
-            if (admitted is null)
-            {
-                return null;
-            }
-
-            var renewed = this.Mint(admitted);
-
-            if (renewed is not null)
-            {
-                this.Revoke(presented);
-            }
-
-            return renewed;
+            return this.LiveSessionFor(presented, out var identifier) is { } session
+                ? this.MintReplacing(session.Admitted, identifier)
+                : null;
         }
     }
 
@@ -221,12 +175,28 @@ internal sealed class ClientSessionTokens
     /// same trade that makes verifying cheap. Walking the store is what closes that, and it is walked only when an
     /// operator acts on a credential rather than on any request path.
     /// </remarks>
-    internal int RevokeEverythingMintedBy(Guid credentialId)
+    internal int RevokeEverythingMintedBy(Guid credentialId) =>
+        this.RevokeEverything(session => session.Admitted.CredentialId == credentialId);
+
+    /// <summary>Ends every session held for one user, which is what erasing that user means here.</summary>
+    /// <param name="user">The user this deployment no longer holds.</param>
+    /// <returns>How many sessions were ended.</returns>
+    /// <remarks>
+    /// By the user rather than by their credentials, because an erasure removes those rows by cascade and never names
+    /// them: a caller that walked the credentials it was about to delete would be reading a list the database is in
+    /// the middle of removing. A session names the user it acts for, which is the fact that outlived the rows.
+    /// </remarks>
+    internal int RevokeEverythingMintedFor(MailUserId user) =>
+        this.RevokeEverything(session => session.Admitted.User == user);
+
+    /// <summary>Ends every session an operator's act invalidated.</summary>
+    /// <remarks>Walked only when an operator acts on a credential or a user, never on a request path — which is what keeps the cost of holding sessions in a dictionary off the requests that read one.</remarks>
+    private int RevokeEverything(Func<LiveSession, bool> invalidated)
     {
         lock (this.gate)
         {
             var ended = this.live
-                .Where(session => session.Value.Admitted.CredentialId == credentialId)
+                .Where(session => invalidated(session.Value))
                 .Select(static session => session.Key)
                 .ToArray();
 
@@ -237,6 +207,62 @@ internal sealed class ClientSessionTokens
 
             return ended.Length;
         }
+    }
+
+    /// <summary>The session a presented token names and proves, or <see langword="null" /> where it names none.</summary>
+    /// <param name="presented">What the request carried.</param>
+    /// <param name="identifier">The half of the token the store is keyed by, so a caller replacing the session knows what to replace.</param>
+    /// <returns>The live session, or <see langword="null" /> where the token is malformed, unknown, expired, or revoked.</returns>
+    /// <remarks>Called under <c>gate</c>, which every caller holds because reading a session and acting on what it says are one step wherever the acting is a write.</remarks>
+    private LiveSession? LiveSessionFor(string? presented, out string identifier) =>
+        TrySplit(presented, out identifier, out var proof)
+        && this.live.TryGetValue(identifier, out var session)
+        && Proves(session, proof)
+        && this.timeProvider.GetUtcNow() <= session.ExpiresAt
+            ? session
+            : null;
+
+    /// <summary>Writes a session into the store, replacing the one a renewal presented where there is one.</summary>
+    /// <param name="admitted">What the session admits, which a renewal carries forward from the exchange.</param>
+    /// <param name="replacing">The session this one takes the place of, or <see langword="null" /> for a sign-in.</param>
+    /// <returns>The minted token and when it expires, or <see langword="null" /> when the bound refuses it.</returns>
+    /// <remarks>
+    /// A replacement never meets the bound, because it does not grow the store: the bound refuses a new sign-in rather
+    /// than ending a live session, and a renewal refused for capacity would end every live session at its own expiry
+    /// for as long as the process stayed full. The presented session is removed only once the replacement is certain,
+    /// so a refused mint leaves the caller holding exactly what it presented.
+    /// </remarks>
+    private MintedClientSessionToken? MintReplacing(AdmittedUserCredential admitted, string? replacing)
+    {
+        var replacesALiveSession = replacing is not null && this.live.ContainsKey(replacing);
+
+        // Swept only where the bound is what would refuse this mint, for the reason the ticket store sweeps there: the
+        // difference between a live session and an expired one matters at exactly that moment, and walking the whole
+        // store on every sign-in would be a cost paid on the ordinary path to tidy state the bound limits.
+        if (!replacesALiveSession && this.live.Count >= MostLiveSessions)
+        {
+            this.SweepExpired();
+
+            if (this.live.Count >= MostLiveSessions)
+            {
+                return null;
+            }
+        }
+
+        var identifier = RandomText(IdentifierByteCount);
+        var secret = RandomNumberGenerator.GetBytes(SecretByteCount);
+        var expiresAt = this.timeProvider.GetUtcNow() + Lifetime;
+
+        if (replacing is not null)
+        {
+            this.live.Remove(replacing);
+        }
+
+        this.live[identifier] = new LiveSession(admitted, secret, expiresAt);
+
+        return new MintedClientSessionToken(
+            string.Concat(TokenPrefix, identifier, Separator.ToString(), Base64Url.EncodeToString(secret)),
+            expiresAt);
     }
 
     /// <summary>Splits a presented value into the half that is looked up and the half that proves it.</summary>

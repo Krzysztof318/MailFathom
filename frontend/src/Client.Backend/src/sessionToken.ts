@@ -30,6 +30,16 @@ const longestExchangeBody = 4096;
 /** The most a token this client will hold may be, which is far past the seventy characters a deployment mints. */
 const longestToken = 256;
 
+/**
+ * What a token may be made of, which is the `token68` alphabet RFC 6750 gives a bearer credential.
+ *
+ * Checked here because this is the one value in the client that becomes a header: what comes back is composed into
+ * `Authorization` verbatim and kept, so a token carrying a line break would be refused by the `Headers` constructor on
+ * every later request — reported as a deployment that cannot be reached, with the unusable session persisted across
+ * reloads and no way out but signing out again.
+ */
+const tokenAlphabet = /^[A-Za-z0-9\-._~+/]+=*$/;
+
 /** What a deployment answers an exchange with. */
 export interface MintedSession {
     /** The token to present, which this package never composes a header from and never takes apart. */
@@ -108,9 +118,9 @@ export function endSession(session: ClientSession, transport: MailFathomTranspor
 /**
  * What an exchange answer says, or `null` where the body is not one MailFathom writes.
  *
- * Bounded before it is expanded and bounded again on the token itself, because this is the one answer in the client
- * that is a credential: a value past what a deployment mints is refused here rather than carried into storage and onto
- * every later request.
+ * Bounded before it is expanded, and bounded and read for its own alphabet on the token itself, because this is the
+ * one answer in the client that is a credential: a value past what a deployment mints, or carrying anything a header
+ * may not, is refused here rather than carried into storage and onto every later request.
  *
  * @param body The response body as it arrived.
  * @returns The minted session, or `null`.
@@ -136,7 +146,7 @@ export function parseMintedSession(body: string): MintedSession | null {
     const token = answered['token'];
     const expiresAt = answered['expiresAt'];
 
-    if (typeof token !== 'string' || token.length === 0 || token.length > longestToken) {
+    if (typeof token !== 'string' || token.length === 0 || token.length > longestToken || !tokenAlphabet.test(token)) {
         return null;
     }
 

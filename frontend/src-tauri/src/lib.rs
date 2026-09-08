@@ -83,13 +83,13 @@ async fn credential_arrangement() -> &'static str {
     credentials::arrangement().await
 }
 
-/// Keeps the finished header value for one deployment, answering whether it was kept.
+/// Keeps the session document for one deployment, answering whether it was kept.
 #[tauri::command]
 async fn keep_credential(deployment: String, credential: String) -> bool {
     credentials::keep(deployment, credential).await
 }
 
-/// The header value kept for one deployment, or nothing where none was kept or the store would not answer.
+/// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
 #[tauri::command]
 async fn read_credential(deployment: String) -> Option<String> {
     credentials::read(deployment).await

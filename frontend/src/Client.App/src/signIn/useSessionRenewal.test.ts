@@ -157,6 +157,46 @@ describe('useSessionRenewal', () => {
         expect(asked.length).toBe(1);
     });
 
+    // The renewal the deployment has already applied: it destroys the presented token the moment it answers, so an
+    // answer dropped because a dependency changed mid-flight would leave the client holding a dead credential and
+    // somebody signed out at the expiry for a network blip that lasted a second.
+    it('applies a renewal that answered after this machine lost and regained its network', async () => {
+        const renewed: KeptSession[] = [];
+        const kept = endingIn(renewalMargin / 2);
+        let answer: (response: ClientResponse) => void = () => undefined;
+
+        const { rerender } = renderHook(
+            ({ online }: { online: boolean }) => {
+                useSessionRenewal(
+                    session,
+                    kept,
+                    () =>
+                        new Promise<ClientResponse>((resolve) => {
+                            answer = resolve;
+                        }),
+                    online,
+                    (renewal) => {
+                        renewed.push(renewal);
+                    },
+                    () => undefined,
+                );
+            },
+            { initialProps: { online: true } },
+        );
+
+        // Act
+        rerender({ online: false });
+        rerender({ online: true });
+
+        await act(async () => {
+            answer({ status: 200, body: mintedBody(), headers: {} });
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        // Assert
+        expect(renewed.map((session) => session.authorization)).toEqual([`Bearer ${renewedToken}`]);
+    });
+
     it('says nothing about a renewal the deployment could not be asked for, and asks again on the next tick', async () => {
         const asked: ClientRequest[] = [];
         const running = driven(endingIn(renewalMargin / 2), (request) => {

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { renewSession, type ClientSession, type MailFathomTransport } from '@mailfathom/client-backend';
 import { resolveSessionCredential } from './credentialEntry';
 import type { KeptSession } from './keptSession';
@@ -42,27 +42,47 @@ export function useSessionRenewal(
     onRenewed: (renewed: KeptSession) => void,
     onRefused: () => void,
 ): void {
+    // What this client holds right now, read when an answer arrives rather than closed over when the request went out.
+    // The deployment destroys the presented token the moment it answers a renewal, so an answer dropped because a
+    // dependency changed mid-flight — a network that blipped, most of all — would leave the client holding a token
+    // that is already dead and the person signed out an hour later for no reason they did.
+    const held = useRef(kept);
+
+    // Which token a renewal is on the wire for, held across re-runs of the effect for the same reason: a second
+    // renewal started while the first is answering would present a token the deployment is about to destroy.
+    const renewingFor = useRef<string | null>(null);
+
+    // Declared above the renewal below, so a commit that replaced the session has it in hand before the effect that
+    // would renew it runs: effects run in the order they are written.
+    useEffect(() => {
+        held.current = kept;
+    }, [kept]);
+
     useEffect(() => {
         if (session === null || kept === null || !online) {
             return;
         }
 
-        // One renewal at a time, and abandoned rather than applied where the session it was started for is no longer
-        // the one being held: a renewal that answered after a sign-out would put a live credential back into a client
-        // the person has left.
-        let renewing = false;
-        let abandoned = false;
-
         const renewIfDue = (): void => {
-            if (renewing || Date.parse(kept.expiresAt) - Date.now() > renewalMargin) {
+            const presented = held.current?.authorization ?? null;
+
+            if (
+                presented === null ||
+                renewingFor.current !== null ||
+                Date.parse(kept.expiresAt) - Date.now() > renewalMargin
+            ) {
                 return;
             }
 
-            renewing = true;
+            renewingFor.current = presented;
 
             void renewSession(session, transport)
                 .then((answer) => {
-                    if (abandoned) {
+                    // Applied while the token it replaced is still the one being held, which is what says nobody has
+                    // signed out or signed in as somebody else in the meantime. Anything else is a session this client
+                    // has given up, and putting a live credential back into it would be putting it into a client the
+                    // person has left.
+                    if (held.current?.authorization !== presented) {
                         return;
                     }
 
@@ -84,7 +104,9 @@ export function useSessionRenewal(
                     }
                 })
                 .finally(() => {
-                    renewing = false;
+                    if (renewingFor.current === presented) {
+                        renewingFor.current = null;
+                    }
                 });
         };
 
@@ -93,7 +115,6 @@ export function useSessionRenewal(
         const ticking = window.setInterval(renewIfDue, renewalCheckInterval);
 
         return () => {
-            abandoned = true;
             window.clearInterval(ticking);
         };
     }, [session, kept, transport, online, onRenewed, onRefused]);

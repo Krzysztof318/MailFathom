@@ -176,11 +176,21 @@ authenticating a person, which is around half a second of the deployment's own p
 requests to draw one screen, and a surface authenticating each of them that way spends that cost per request rather
 than per sign-in. Verifying a token is a lookup and one fixed-time comparison: no derivation, and no database read.
 
-**Every method this endpoint accepts is accepted here**, so a deployment offering passwords, API keys, signed
-assertions or access tokens exchanges any of them. Nothing else changes about them: the bound on guessing a password is
-the same bound, counted the same way per source and per user name, because the exchange is where a password is
-presented and is therefore where that bound applies. The rest of the surface still refuses a request carrying no
-credential at all.
+**Every credential this deployment holds is exchanged here** — a password, an API key, a signed assertion. Nothing else
+changes about them: the bound on guessing a password is the same bound, counted the same way per source and per user
+name, because the exchange is where a password is presented and is therefore where that bound applies. The rest of the
+surface still refuses a request carrying no credential at all.
+
+**An access token is refused here, with `403`.** A session standing in for a token would outlive it: the token's own
+expiry, the authorization server revoking it, and the scopes that server's entry requires are each judged per request
+against the token, and none of them can be judged against a session this deployment minted. It also saves nothing —
+validating a token derives no key — so a caller presenting one presents it on every request, exactly as before. It costs
+such a caller nothing either: the client signs in with a user name and a password, so no screen reaches this route with
+an access token in the first place.
+
+**A client endpoint requiring no credential still answers the exchange**, so the client's sign-in is one path rather
+than a posture it has to ask about first. The session it mints authenticates nothing, because nothing on such an
+endpoint is authenticated, and no credential stands behind it for an operator to end it by.
 
 **A live token presented here renews it.** The answer is a fresh token, and the presented one stops working — one
 sign-in to one live credential, with no separate renewal credential and no second route. The client renews an hour

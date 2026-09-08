@@ -550,20 +550,16 @@ internal static class UserCredentialEndpoints
         ? "The request carried no password."
         : UserPasswordPolicy.FindRefusal(password);
 
-    /// <summary>Turns a write's outcome into the answer a client reads.</summary>
-    /// <remarks>
-    /// The two "unknown" outcomes are answered separately, because they are different mistakes an administrator makes
-    /// and each is a correction they can act on. Neither is a <c>404</c>: the identifier was in a request the caller
-    /// composed rather than a resource this surface publishes, and <c>404</c> already means "this port serves no
-    /// administrative endpoint" to every client here.
-    /// </remarks>
     /// <summary>Ends every client session one credential minted, once the write that invalidated it stands.</summary>
     /// <remarks>
     /// <para>
     /// A session token is verified against the store this process holds rather than against the row it was minted
     /// from, which is what makes verifying one cost no read at all. The price of that is exactly this call: without
-    /// it, disabling, deleting, or rotating a credential would leave whatever it signed in working until its token
-    /// expired, and the operator's act would be a promise the surface did not keep.
+    /// it, disabling or deleting a credential would leave whatever it signed in working until its token expired, and
+    /// the operator's act would be a promise the surface did not keep. Rotating a credential's material calls nothing
+    /// here and deliberately so — it changes what may be presented at the exchange and says nothing about a session
+    /// already exchanged, which <c>docs/operations/admin-endpoint.md</c> states for the operator deciding between the
+    /// two.
     /// </para>
     /// <para>
     /// Nothing happens where the write did not stand, so a refused administrative call signs nobody out. Nothing
@@ -583,6 +579,13 @@ internal static class UserCredentialEndpoints
         }
     }
 
+    /// <summary>Turns a write's outcome into the answer a client reads.</summary>
+    /// <remarks>
+    /// The two "unknown" outcomes are answered separately, because they are different mistakes an administrator makes
+    /// and each is a correction they can act on. Neither is a <c>404</c>: the identifier was in a request the caller
+    /// composed rather than a resource this surface publishes, and <c>404</c> already means "this port serves no
+    /// administrative endpoint" to every client here.
+    /// </remarks>
     private static Results<NoContent, ProblemHttpResult> Answer(
         UserCredentialWriteOutcome outcome,
         Guid userId,

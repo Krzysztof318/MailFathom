@@ -152,7 +152,7 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Keeps the finished header value for one deployment, answering whether it is stored. */
+    /** Keeps the session document for one deployment, answering whether it is stored. */
     private fun keep(deployment: String, credential: String): Boolean =
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, credentialKey()) }
