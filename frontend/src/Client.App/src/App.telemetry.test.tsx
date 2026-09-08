@@ -9,8 +9,8 @@ import {
     accepted,
     deploymentAnswering,
     framed,
-    heldCredential,
     heldPerson,
+    heldSession,
     openSettings,
     preferencesAnswering,
     renderApp,
@@ -18,11 +18,13 @@ import {
     servedFrom,
     servingAddress,
     sessionAnswering,
+    signIn,
     signOut,
     storeKeeping,
     telemetryRecording,
-    typedCredential,
+    typedSession,
 } from './App.harness';
+import { writeKeptSession } from './signIn/keptSession';
 
 // What the frame records, who it records it for, and every answer that stops it recording. The arrangement is
 // `App.harness`, which the rest of this family shares.
@@ -33,7 +35,7 @@ describe('App telemetry', () => {
     it('exports under the session that is signed in, and records that it began', async () => {
         const recording = telemetryRecording();
 
-        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        renderApp(servedFrom, heldSession, deploymentAnswering(), storeKeeping(), recording.telemetry);
         await framed();
 
         // Waited for rather than read once the frame is up, for the reason the deployment's own answer is below: what
@@ -47,7 +49,7 @@ describe('App telemetry', () => {
     it('stops exporting when the person signs out', async () => {
         const recording = telemetryRecording();
 
-        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        renderApp(servedFrom, heldSession, deploymentAnswering(), storeKeeping(), recording.telemetry);
         await framed();
         await signOut();
 
@@ -62,16 +64,16 @@ describe('App telemetry', () => {
     it('records a credential the deployment has stopped accepting', async () => {
         const recording = telemetryRecording();
         const credentials = storeKeeping();
-        await credentials.keep(servingAddress, typedCredential);
+        await credentials.keep(servingAddress, writeKeptSession(typedSession));
 
         renderApp(
             servedFrom,
-            typedCredential,
+            typedSession,
             deploymentAnswering({ status: 401, body: '' }),
             credentials,
             recording.telemetry,
         );
-        await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
+        await screen.findByText('This deployment has stopped accepting the sign-in that was kept. Sign in again.');
 
         expect(recording.events).toContain('credential_no_longer_accepted');
     });
@@ -85,7 +87,7 @@ describe('App telemetry', () => {
 
         renderApp(
             servedFrom,
-            heldCredential,
+            heldSession,
             deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], false)),
             storeKeeping(),
             recording.telemetry,
@@ -108,7 +110,7 @@ describe('App telemetry', () => {
 
         const recording = telemetryRecording();
 
-        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        renderApp(servedFrom, heldSession, deploymentAnswering(), storeKeeping(), recording.telemetry);
         await framed();
 
         expect(recording.permitted).not.toContain(true);
@@ -124,7 +126,7 @@ describe('App telemetry', () => {
 
         renderApp(
             servedFrom,
-            heldCredential,
+            heldSession,
             deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
             storeKeeping(),
             recording.telemetry,
@@ -144,7 +146,7 @@ describe('App telemetry', () => {
 
         renderApp(
             servedFrom,
-            heldCredential,
+            heldSession,
             deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
             storeKeeping(),
             recording.telemetry,
@@ -165,5 +167,24 @@ describe('App telemetry', () => {
         });
 
         expect(recording.events.filter((event) => event === 'session_started')).toHaveLength(1);
+    });
+
+    // What began is a session rather than a person, so the same person at the same deployment begins a second one by
+    // signing in again. Nothing unmounts this frame on the way out — it renders the sign-in screen — so the guard has
+    // to be cleared there or the commonest path of all records nothing: the deployment refuses the kept session and
+    // somebody signs straight back in.
+    it('reports a session beginning again when the same person signs back in', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(servedFrom, heldSession, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        await framed();
+        await signOut();
+
+        signIn(heldPerson);
+        await framed();
+
+        await waitFor(() => {
+            expect(recording.events.filter((event) => event === 'session_started')).toHaveLength(2);
+        });
     });
 });

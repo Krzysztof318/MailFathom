@@ -86,7 +86,12 @@ internal static class McpTransportSecurityExtensions
         var authentication = services.AddUserFacingTransportAuthentication(
             TransportSurface.Mcp,
             [.. endpointSettings.Authentication],
-            challengeSchemeName);
+            challengeSchemeName,
+
+            // No exchange here, and none is missing. A session is minted by a route on the surface that serves it and
+            // presented back to that surface; this one serves an agent protocol rather than a person signing in, and
+            // its clients set a credential deliberately on every call rather than typing one.
+            exchangesCredentialsForSessions: false);
 
         if (oauthMethods.Count > 0)
         {

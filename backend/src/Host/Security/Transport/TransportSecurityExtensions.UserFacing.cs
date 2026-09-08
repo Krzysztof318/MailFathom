@@ -8,6 +8,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -38,14 +39,23 @@ internal static partial class TransportSecurityExtensions
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
     /// <param name="methods">The methods the surface accepts, in configuration order.</param>
     /// <param name="challengeSchemeName">The scheme answering a request that presented no credential this surface can place, which is both what authenticates it and what challenges it.</param>
+    /// <param name="exchangesCredentialsForSessions">Whether this surface serves the exchange, and therefore judges the session tokens it mints.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
+    /// <remarks>
+    /// The exchange is a surface's own decision rather than something read off the methods it accepts, which is why it
+    /// is a parameter here: a surface that maps no exchange route registers nothing to judge. What the surface name
+    /// keeps apart is the scheme registration rather than the sessions, which one process-wide store holds keyed by
+    /// the token alone — so a token authenticates wherever the session scheme is registered, and it authenticates on
+    /// one surface today because one surface asks for the exchange.
+    /// </remarks>
     internal static AuthenticationBuilder AddUserFacingTransportAuthentication(
         this IServiceCollection services,
         TransportSurface surface,
         IReadOnlyList<UserFacingAuthenticationOptions> methods,
-        string challengeSchemeName)
+        string challengeSchemeName,
+        bool exchangesCredentialsForSessions)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(methods);
@@ -70,7 +80,19 @@ internal static partial class TransportSecurityExtensions
             acceptsApiKey ? surface.ApiKeySchemeName : null,
             acceptsPublicKey ? surface.ClientAssertionSchemeName : null,
             basicMethod is null ? null : surface.BasicSchemeName,
+            exchangesCredentialsForSessions ? surface.SessionTokenSchemeName : null,
             challengeSchemeName);
+
+        if (exchangesCredentialsForSessions)
+        {
+            // A singleton, because a session is process state rather than request state: the store is what a mint on
+            // one request and a verification on the next both reach, and a second instance would be a client signed in
+            // to whichever copy the container happened to resolve.
+            services.TryAddSingleton<ClientSessionTokens>();
+            authentication.AddScheme<ClientSessionTokenAuthenticationSchemeOptions, ClientSessionTokenAuthenticationHandler>(
+                surface.SessionTokenSchemeName,
+                schemeOptions => schemeOptions.Surface = surface);
+        }
 
         if (basicMethod is not null)
         {
@@ -186,6 +208,7 @@ internal static partial class TransportSecurityExtensions
         identity.AddClaims(
             TransportGrant.ClaimsFor(GrantHeldByToken(identity, admitted.Permissions, narrowedByTokenScopes)));
         identity.AddClaim(TransportCallerUser.ClaimFor(admitted.User));
+        identity.AddClaim(TransportCallerCredential.ClaimFor(admitted.CredentialId));
 
         context.Principal = new ClaimsPrincipal(identity);
     }

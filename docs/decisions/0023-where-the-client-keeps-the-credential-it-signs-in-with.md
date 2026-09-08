@@ -7,13 +7,15 @@ consulted:
 informed:
 ---
 
-# Keep the finished Basic header in the operating system's keychain on the desktop head and for the tab alone on the web head, ask the shell rather than the platform, and say so on the screen where nothing may be kept
+# Keep the session the deployment minted in the operating system's keychain on the desktop head and for the tab alone on the web head, ask the shell rather than the platform, and say so on the screen where nothing may be kept
 
 <!-- describes: frontend/src/Client.App/**, frontend/src-tauri/** -->
 
 ## Context and Problem Statement
 
-The client signs in with HTTP Basic and with nothing else, so what it holds between restarts is a user name and a password rather than a token that expires. There is no renewal to hide the question behind: either the client keeps something that reconstructs the `Authorization` header, or a person types their password every time the application starts. [#1422](https://github.com/Krzysztof318/MailFathom/issues/1422) requires the second not be the answer — *open it and already be signed in* is one of its user stories, and [#1419](https://github.com/Krzysztof318/MailFathom/issues/1419) is titled for keeping somebody signed in across restarts.
+The client signs in with HTTP Basic and holds a session afterwards. The password reaches one route — the exchange — which derives a key once and answers with a token, and every request after it presents that token; [#1746](https://github.com/Krzysztof318/MailFathom/issues/1746) is what made it so. What the client holds between restarts is therefore a credential that expires on the deployment's clock, that signing out revokes, and that names one client rather than the person's password. What has not changed is that it holds something: [#1422](https://github.com/Krzysztof318/MailFathom/issues/1422) requires *open it and already be signed in* as one of its user stories, and [#1419](https://github.com/Krzysztof318/MailFathom/issues/1419) is titled for keeping somebody signed in across restarts.
+
+This record was first written when the client presented a password on every request and kept the finished Basic header between starts. It is amended rather than replaced because the question it answers is unchanged — *where does each head put the credential it holds* — and both answers survived the exchange: what moved is what a leaked copy is worth. Every paragraph below is written against the session.
 
 Where that value may be kept has a different answer on each head, and neither is obvious. The web head is a page in a browser served from the deployment's own origin: `localStorage` is readable by any script that reaches that origin and outlives the browser, `sessionStorage` dies with the tab, an in-memory value means typing the password on every reload, and a cookie the service sets is a second authentication mechanism rather than a storage choice. The desktop head is a Tauri process beside an operating-system keychain, which is a dependency decision as much as a security one.
 
@@ -23,8 +25,8 @@ This record decides where the value lives, what form it takes, what removes it, 
 
 ## Decision Drivers
 
-- **What is kept is a password, not a session.** Basic carries no expiry, so a copy that leaks stays valid until somebody changes the password on the server, and nothing in the client can revoke it. Every storage option is therefore judged on what reaches the copy rather than on how long a window it opens.
-- **`Basic` is an encoding of the password, not a transformation of it.** `base64(user:password)` reverses in one line, so a decision that says *the header value rather than the password* has decided nothing about exposure and must not read as though it had.
+- **What is kept is a session, not a password.** The token expires on the deployment's own clock, signing out revokes it, and an operator disabling or deleting the credential behind it revokes every session that credential minted. A copy that leaks is therefore worth what is left of one session against one deployment, rather than a password somebody may have reused elsewhere and that nothing in the client could revoke. That is a smaller loss than this record was first written against and it is not a small one: a live token reads that person's whole mailbox for as long as it lasts, and a script holding one can renew it for as long as it keeps holding it. Every storage option is still judged on what reaches the copy.
+- **The password is still typed and still travels — once.** `base64(user:password)` reverses in one line, so the exchange is a request carrying a reversible password and is treated as one. What the exchange changed is how many requests that is: one per sign-in rather than one per read. No head keeps it afterwards, because after the exchange no head has it.
 - **The two heads have genuinely different threat models**, and that is the whole reason one answer will not do. A browser origin is shared with every script that reaches it and outlives the application; a desktop process has a keychain the operating system gates and no other origin in its WebView.
 - **Nothing in the client tree may branch on the platform.** `frontend/src/AGENTS.md` § *The two heads* refuses `if (isDesktop)`, a per-head component, and a module chosen by target, and permits a difference only where it is a CSS one or belongs to the shell. A decision that gives the heads different storage has to land inside that rule rather than beside it.
 - **A crate joins a closure this project distributes.** [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) already accepted that the desktop shell's crates are linked into a binary MailFathom ships, and [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) reviews `(component, version, artifact)`. Anything added for the desktop head is paid for in both closures' census as well as in a row.
@@ -35,30 +37,32 @@ This record decides where the value lives, what form it takes, what removes it, 
 
 Three axes, decided together because the answers constrain each other.
 
-1. **What is kept at all:** nothing, and the password is typed at every start; the finished `Basic` header value; the user name and the password as separate values.
+1. **What is kept at all:** nothing, and the password is typed at every start; the finished `Basic` header value; the user name and the password as separate values; the session the deployment mints in exchange for any of them, as the header value, its expiry and the person's name together.
 2. **The web head:** `sessionStorage`; `localStorage`; an in-memory value alone; a cookie the service sets.
 3. **The desktop head:** the operating system's keychain through the `keyring` crate, called from a command the shell registers; a community Tauri keychain plugin; `tauri-plugin-stronghold`; the WebView's own `localStorage`; `tauri-plugin-store`, which is a JSON file.
 
 ## Decision Outcome
 
-Chosen option: **the finished `Basic` header value, kept in the operating system's keychain where a shell offers one and in `sessionStorage` where none does, bound to the address it was given for, cleared by sign-out and by a refused credential** — because it is the only combination that keeps somebody signed in across restarts on the head that is an application, refuses to leave a permanent password where a later script on the origin can read it, and puts the difference between the heads in the shell rather than in a screen.
+Chosen option: **the session the deployment minted — the finished `Authorization` header value, the instant it expires, and the name of the person it belongs to — kept as one entry in the operating system's keychain where a shell offers one and in `sessionStorage` where none does, bound to the address it was given for, cleared by sign-out, by a refused credential, and by its own expiry** — because it is the only combination that keeps somebody signed in across restarts on the head that is an application, refuses to leave a renewable credential where a later script on the origin can read it, and puts the difference between the heads in the shell rather than in a screen.
 
-### What is stored is the finished header value, and it is one value
+### What is stored is the session, as one entry with three fields
 
-`ClientSession` carries `authorization` as a finished header value and `Client.Backend` composes none. What is kept is that same string and nothing beside it.
+`ClientSession` carries `authorization` as a finished header value and `Client.Backend` composes none. What is kept is that same string, the instant the deployment said the session stops working, and the name the deployment knows the person by — written as one document under one store entry, so one act writes it and one act removes it.
 
-- **It is not a hash and not a token.** Storing it is storing the password, and every rule below is written on that basis. A reader who takes `Basic Zm9vOmJhcg==` for an opaque credential has misread it, so nothing in the client, in a log line, or on a screen may describe it as one.
-- **The user name is not kept a second time.** It is inside the header value already, and a copy beside it would be half the credential stored twice for the sake of prefilling a field. Where the credential is kept there is nothing to prefill; where it is not, nothing is prefilled either.
-- **Nothing derived from it is kept**: no fingerprint, no "remember me" marker, no last-signed-in user. Each would be a second thing to clear and a second thing to leak, for an answer the presence or absence of the credential already gives.
-- **It is bound to the address it was given for**, which is the deployment's base address as [#1417](https://github.com/Krzysztof318/MailFathom/issues/1417) resolves it. A stored credential is read back only for that address; where the address has changed, it is discarded rather than sent to a deployment it was never issued against.
+- **It is a token and it is not a password.** Storing it is storing a credential with an expiry the deployment set and a revocation the deployment honours, which is what every rule below is now written against. Nothing in the client reconstructs a password from it, because nothing can: the client stops holding the password the moment the exchange answers.
+- **The instant earns its place because the client renews against it.** A session with no expiry beside it would be renewed constantly or never, and what is kept is the instant the deployment stated because the deployment is what decides when a session ends and nothing in the client can recompute it. What that costs is the client's own clock: a machine running behind the deployment by more than the renewal margin renews after the session is already over, is refused, and asks for a password again.
+- **The person's name earns its place because it is no longer inside the credential.** A Basic header carried it and a token does not, and the client needs it to say who is signed in and to key what this machine remembers per person. It is not a secret and it is not the credential's other half; it is what the deployment already answers on its own display-name route.
+- **Nothing else derived from it is kept**: no fingerprint, no "remember me" marker, no copy of the password, no last-signed-in user beyond the name above. Each would be a second thing to clear and a second thing to leak.
+- **It is bound to the address it was given for**, which is the deployment's base address as [#1417](https://github.com/Krzysztof318/MailFathom/issues/1417) resolves it. A stored session is read back only for that address; where the address has changed, it is discarded rather than sent to a deployment that never minted it.
+- **A stored value the client did not write is nothing kept.** An entry of the wrong shape, one somebody edited, one a release with a different shape wrote, or a truncated string is answered as nothing held and the person signs in again — which is the honest outcome, a credential this client cannot read being one it cannot present.
 
 ### The web head keeps it for the tab and not beyond
 
 `sessionStorage`, holding that one value, written by the single module that signs in and read by nothing else in `Client.App`.
 
-`localStorage` is refused, and the reason is the driver above rather than a general preference. Both are readable by any script that reaches the origin, but only `localStorage` outlives the tab and the browser — which means a script injected next month reads a password stored today, on a machine nobody was using at the time. `sessionStorage` costs almost nothing against an in-memory value under the same script, because anything that can read the object graph can read either, and it buys the reload: a single-page application reloaded by a keystroke or a crash resumes instead of asking for a password again.
+`localStorage` is refused, and the reason survived the exchange rather than being weakened by it. Both are readable by any script that reaches the origin, but only `localStorage` outlives the tab and the browser — which means a script injected next month reads a session stored today, on a machine nobody was using at the time. That the session expires does not close it: renewal is presenting the token to the exchange, so a script that reads one renews it for as long as it keeps reading, and an expiry nobody is there to let run out bounds nothing. `sessionStorage` costs almost nothing against an in-memory value under the same script, because anything that can read the object graph can read either, and it buys the reload: a single-page application reloaded by a keystroke or a crash resumes instead of asking for a password again.
 
-A cookie the service sets is not an option on this axis at all. It would be the service issuing a session, which is a second authentication mechanism, out of scope for the parent and a change to `ClientEndpoint` rather than to the client.
+A cookie the service sets stays refused, and now for one reason rather than two. The service does issue a session, so that half of the original objection is gone; what remains is that a cookie is a credential the browser attaches on its own, which is an ambient authority the client neither composes nor can withhold, and [#1422](https://github.com/Krzysztof318/MailFathom/issues/1422) refuses a second way in by name. The token is presented in a header the client composed, on requests the client made, which is the property that keeps one sign-in to one credential.
 
 **The browser's own password manager is outside this decision.** The sign-in fields are an ordinary form, so a browser may offer to remember what was typed; the client neither relies on that nor tries to suppress it, because suppression is both hostile and widely ignored. What a browser keeps is the person's arrangement with their browser, and nothing in the client reads it.
 
@@ -84,7 +88,9 @@ This is the part that has to be right for `frontend/src/AGENTS.md` to hold.
 
 ### What clears it
 
-- **Sign-out clears the stored credential**, everything held in memory, and everything derived from the session. On the desktop head that is the keychain entry deleted, not overwritten with an empty value.
+- **Sign-out clears the stored session**, everything held in memory, and everything derived from it. On the desktop head that is the keychain entry deleted, not overwritten with an empty value. It also tells the deployment, which stops the token working before it would have expired — asked and not waited on, because signing out of the client is what the person pressed and a deployment that never heard still expires the token on its own.
+- **A renewal replaces it.** The client renews before the session ends, so a client left open stays signed in without anybody typing anything, and what is stored is the newest session rather than a growing list of them.
+- **The expiry clears it by itself, wherever nothing renewed it.** A client that was not running through the margin comes back to a session the deployment refuses, which is the bullet below rather than a case of its own.
 - **A refused credential clears it and puts the person in front of the sign-in.** The trigger is the `unauthenticated` failure reason, which is what `Client.Backend` answers for a 401 — the credential the service has stopped accepting. It is *not* `unauthorized`, which is a 403 and means the credential is good and the grant is missing; clearing on that one would sign somebody out for asking about something they may not see. [#1419](https://github.com/Krzysztof318/MailFathom/issues/1419)'s acceptance names `unauthorized` for this, and that is the reason to read this paragraph rather than that line.
 - **A changed deployment address discards it**, by the binding above, rather than carrying it to a new address.
 - **Closing the tab clears it on the web head**, which is what choosing `sessionStorage` means and what the screen says.
@@ -94,21 +100,25 @@ This is the part that has to be right for `frontend/src/AGENTS.md` to hold.
 
 The sign-in screen says which of the two it is, before they type, in a sentence rather than an icon:
 
-- Where the credential outlives the application, that it will be kept until they sign out, and that signing out is what removes it.
-- Where it does not, that it is kept only until they close the client and they will be asked again — **and why**, which is the part that turns a nuisance into a decision somebody can act on: on the web head, because a password left in a browser can be read by anything that reaches the page; on a desktop machine offering no keychain, because the operating system offers nowhere to keep it safely.
+- Where the session outlives the application, that their password is not stored anywhere, that the sign-in is kept until they sign out, and that it stops working on its own after a while.
+- Where it does not, that their password is not stored anywhere either, that the sign-in is kept only until they close the client, and that they will be asked for the password again — **and why**, which is the part that turns a nuisance into a decision somebody can act on: on the web head, because anything that reaches the page can read what a browser keeps; on a desktop machine offering no keychain, because the operating system offers nowhere to keep it safely.
+
+Neither sentence says *your password is kept*, because none is. A screen that still said so would be the defect this amendment exists to close: a person deciding whether to sign in on a shared machine is deciding about what is actually left behind.
 
 Both are catalogue entries in both languages, like every other string.
 
 ### Consequences
 
-- Good, because the head that is an application keeps somebody signed in, and the head that is a web page never leaves a permanent password where a later script can find it.
-- Good, because one value is stored, in one place, bound to one address, and one act removes it — so what the client holds about a person is answerable in a sentence, which is what storage limitation looks like from the outside.
+- Good, because the head that is an application keeps somebody signed in, and the head that is a web page never leaves a renewable credential where a later script can find it.
+- Good, because what is stored is a session rather than a password: it expires, signing out revokes it, an operator revokes it by disabling or deleting the credential behind it, and none of those was possible when the stored value was a password.
+- Good, because one entry is stored, in one place, bound to one address, and one act removes it — so what the client holds about a person is answerable in a sentence, which is what storage limitation looks like from the outside.
 - Good, because a machine with no keychain is a stated outcome with wording of its own rather than a silent fallback to a worse store.
 - Neutral, because the desktop head gains the shell's first command and its first capability, which is reach the WebView did not have and is now permitted for exactly one operation.
 - Neutral, because the browser's own password manager may hold the same password regardless, and this decision governs the client rather than the person's browser.
 - Bad, because the crate closure grows a family this project distributes, and `keyring` reaches a different operating-system component on each target, so a storage defect can be a property of the machine rather than of the release — the same trade [ADR 0021](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) accepted for the rendering engine.
 - Bad, because the web head asks for a password again after every closed tab, which is the cost of refusing `localStorage` and is paid by the person rather than by the code.
-- Bad, because a stored password is still a stored password: a keychain raises what it takes to read it and does not make it safe to leak, so nothing here reduces what a compromised machine costs.
+- Bad, because a stored credential is still a stored credential: a keychain raises what it takes to read it and does not make it safe to leak, and a token that renews is a token a reader keeps. Nothing here reduces what a compromised machine costs, and the improvement over a stored password is that the damage stops at one deployment and can be ended from it.
+- Bad, because the sessions the deployment holds do not survive a restart of it, so every client is signed out when a deployment restarts. The client meets that as a refused credential, which is a path it already has, and a person meets it as being asked for their password again — which is the cost of the service holding sessions in memory rather than in the database, recorded in `docs/operations/client-endpoint.md` where an operator reads it.
 
 ## Validation
 
@@ -133,11 +143,20 @@ Both are catalogue entries in both languages, like every other string.
 - Bad, because it puts a composing step where `frontend/src/AGENTS.md` says none may be, and the finished value is what `ClientSession` already carries.
 - Bad, because it stores two things where one would do, and the second is personal data kept for a convenience.
 
+### Keeping the session the deployment minted rather than the credential that was typed
+
+- Good, because what is stored stops being a password: it expires on its own, an operator ends it by disabling the credential behind it, and nothing derives the password back from it.
+- Good, because it costs the deployment one key derivation per sign-in instead of one per request, which is what [#1746](https://github.com/Krzysztof318/MailFathom/issues/1746) is about and what makes every screen after sign-in answerable at all.
+- Neutral, because the storage mechanism on both heads is unchanged: one entry, one address, one act to write and one to remove.
+- Neutral, because it is three fields rather than one — the header value, the instant it ends, and who is signed in — none of which is a secret beside the first, and each of which the client would otherwise have to ask the deployment for before it could draw anything.
+- Bad, because a client that is closed across the session's own life is signed out where a stored password would still have worked, so somebody who opens MailFathom twice a week types their password every time.
+- Bad, because it is a credential the client renews on its own, so a script that reads one on the web head keeps it alive by reading it — which is exactly why `localStorage` stays refused below.
+
 ### `localStorage` on the web head
 
 - Good, because it is the only web option that keeps somebody signed in across a closed browser, which is the desktop behaviour on the head most people would meet first.
 - Neutral, because it is exactly as reachable as `sessionStorage` by a script running while the tab is open.
-- Bad, because it outlives the tab and the browser, so a script injected long after sign-in reads a password stored long before it — and a Basic password has no expiry to limit that.
+- Bad, because it outlives the tab and the browser, so a script injected long after sign-in reads a credential stored long before it — and an expiry bounds that only where nobody is there to renew, which a script reading the value is.
 - Bad, because it survives on a shared machine somebody has walked away from, with nothing on screen to say it is there.
 
 ### An in-memory value alone on the web head
@@ -180,4 +199,5 @@ Both are catalogue entries in both languages, like every other string.
 - [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs how the `keyring` closure is reviewed, per artifact: it reaches the desktop application and nothing else, so the web bundle records it nowhere.
 - [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) is why a refused credential and a missing grant are two different outcomes here rather than one: a permission is enforced in the use case as well as at the transport, so a 403 is an answer about what this user may do rather than about who they are.
 - [ADR 0027](0027-an-android-head-built-every-night-and-supported-by-nothing.md) amends this record for a third head. Two things below are the desktop's and the web's rather than every head's once Android exists: the keychain reached *through the `keyring` crate*, which has no Android backend, and the rule that a shell offering no keychain keeps the credential for the run in `sessionStorage`, which on Android is decided the other way — protected storage that cannot be reached keeps nothing rather than falling back to the page's own storage, on a sentence of its own rather than this record's. One count above is also superseded: § *The application asks the shell* and § *What the person is told* each say the screen renders one of **two** sentences, and there are three, which is what `CredentialLifetime` publishes — kept until signed out, until the tab closes, or until the client closes — with Android's own entry beside them. Everything else here holds on all three heads unchanged.
-- Revisit this decision if the client gains a way in that issues something expiring, in which case what is kept stops being a password and most of the reasoning above stops applying; if a supported desktop target appears whose keychain the `keyring` crate does not reach; or if the web head acquires an origin it does not share with the deployment.
+- [#1746](https://github.com/Krzysztof318/MailFathom/issues/1746) is what this record was amended for, and it is the revisit the first version of this paragraph asked for: the client gained a way in that issues something expiring, so what is kept stopped being a password. `docs/operations/client-endpoint.md` is where the exchange, the lifetime, and how a client renews are described for an operator.
+- Revisit this decision again if a supported desktop target appears whose keychain the `keyring` crate does not reach; if the web head acquires an origin it does not share with the deployment; or if the service starts holding sessions somewhere that survives a restart, which would remove the last consequence above without changing anything a head keeps.

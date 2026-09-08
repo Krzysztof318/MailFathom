@@ -89,11 +89,11 @@ keeps the credential this head signs in with in the operating system's own store
 shell can. `credential_arrangement` says where the credential will live this run, and `keep_credential`,
 `read_credential`, and `forget_credential` are the three operations on it. Two of them answer whether they succeeded,
 which is what lets the client say that a store refused to delete rather than report a sign-out that did not happen;
-none of them answers _why_ one failed, because everything a failure could name is about a password. No capability file
+none of them answers _why_ one failed, because everything a failure could name is about a credential. No capability file
 names them, and writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an
 access-control list and never an application's, so a `capabilities/` entry naming these four would grant the webview
 reach into plugins nothing here pins. The fifth, `client_configuration`, is what the shell was started with rather than
-anything about a password: it answers with what each of the three places an operator configures this head from stated,
+anything about a credential: it answers with what each of the three places an operator configures this head from stated,
 unvalidated and unpreferred, and `Client.App/src/shellOperations/configuredConnection.ts` is what reads it. What the
 webview reaches all five through is `app.withGlobalTauri` in `tauri.conf.json`, which puts `invoke` on
 `window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the five commands are this
@@ -351,7 +351,8 @@ it with `page.route`, a unit test hands it to a transport function, and the deve
 
 `pnpm dev:fixtures` serves this client out of that corpus: a populated mailbox, three accounts in three different
 states, a conversation, a search, and a notification centre, with no database, no mail server and no service running.
-It signs in with any name and password, because the credential reaches nothing.
+It signs in with any name and password, because the credential reaches nothing: the corpus exchanges whatever is
+presented for a session of its own, as a deployment does.
 
 The seam is `MailFathomTransport` and nothing else. `src/Client.App/src/development/fixtureDeployment.ts` is a second
 implementation of the one function the composition root hands the client, so no component learns that a fake exists and

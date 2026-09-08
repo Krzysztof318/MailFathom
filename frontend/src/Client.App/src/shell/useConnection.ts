@@ -2,13 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
     mostReconnectionAttempts,
     readDeploymentSession,
     readMailAccounts,
     reconnectionDelay,
     type ClientResult,
+    type ClientSession,
     type DeploymentSession,
     type MailAccountDirectory,
 } from '@mailfathom/client-backend';
@@ -50,6 +51,21 @@ export interface Connection {
 }
 
 /**
+ * Who this client is signed in as, and what it presents for them right now.
+ *
+ * The two are separate because only one of them lasts. A session token is replaced while somebody is reading — the
+ * client renews before it expires — so what names a sign-in is the person and the deployment rather than the value
+ * being presented, and everything this hook keys on is that name.
+ */
+export interface SignedInCaller {
+    /** What this sign-in is, which a renewal does not change and signing in as somebody else does. */
+    readonly identity: string;
+
+    /** The finished header value to present on the next request, which is whatever the client holds at that moment. */
+    readonly authorization: string;
+}
+
+/**
  * What one attempt answered, tagged with the attempt and the identity it answered for.
  *
  * The tag is what makes "still waiting" a thing this hook works out during a render rather than a second piece of state
@@ -57,10 +73,11 @@ export interface Connection {
  * that starts the next read would be a render spent saying what the tag already says.
  *
  * The identity is half of that tag rather than the attempt alone, and it is the half that matters most: signing out and
- * back in as somebody else changes the credential without changing the attempt, so an answer tagged by attempt alone
+ * back in as somebody else changes who is signed in without changing the attempt, so an answer tagged by attempt alone
  * would put the previous user's accounts and the previous user's grants in front of the next person for as long as
- * their own read takes. It holds the credential the frame is already holding rather than a second copy of anything, it
- * is compared and never read, and nothing renders it.
+ * their own read takes. What it holds is the identity rather than the credential — the credential is deliberately the
+ * thing not compared, a renewal replacing it while nothing about the deployment changed — and it is compared, never
+ * read, and never rendered.
  */
 interface Answered {
     readonly session: ClientResult<DeploymentSession> | null;
@@ -121,7 +138,7 @@ function isOnline(): boolean {
  * Holds what the deployment says, and reaches for it again on its own while it says nothing.
  *
  * @param baseAddress Where the deployment is, or `null` where none has been adopted.
- * @param authorization The finished header value this client signed in with, or `null` where nobody is signed in.
+ * @param signedIn Who is signed in and what to present for them, or `null` where nobody is.
  * @param send How a request reaches the deployment.
  * @param onCredentialRefused What to do about a credential the deployment has stopped accepting, which is the one
  * answer this hook reports rather than renders: it is acted on once, by whatever owns signing in, instead of producing
@@ -131,25 +148,39 @@ function isOnline(): boolean {
  */
 export function useConnection(
     baseAddress: string | null,
-    authorization: string | null,
+    signedIn: SignedInCaller | null,
     send: DeploymentTransport,
     onCredentialRefused: () => void,
     now: () => Date = systemClock,
 ): Connection {
     const online = useSyncExternalStore(subscribeToConnectivity, isOnline);
+
+    // What is read again is decided by who is signed in, and what is presented is decided when a request goes out.
+    // They are two different things because a session is renewed while somebody is reading: the header value changes
+    // every eleven hours and the person behind it does not, so keying anything on the value would empty the screen,
+    // move focus, and re-read everything at an instant nothing happened at.
+    const presenting = signedIn?.identity ?? null;
+    const authorization = signedIn?.authorization ?? null;
+    const carried = useRef(authorization);
     const [read, setRead] = useState(0);
     const [reaching, setReaching] = useState<Reaching>(noneMade);
     const [answered, setAnswered] = useState<Answered>(nothingRead);
 
     // Worked out during a render for the same reason the answer is: a budget spent against one identity is nothing to
     // the next one, so signing in as somebody else starts at nothing without an effect having to clear it.
-    const attempts = reaching.presentedAt === baseAddress && reaching.presenting === authorization ? reaching.made : 0;
+    const attempts = reaching.presentedAt === baseAddress && reaching.presenting === presenting ? reaching.made : 0;
+
+    // Declared above the read below, so a commit carrying both a fresh identity and a fresh header value has the
+    // value in hand before the read that will present it runs: effects run in the order they are written.
+    useEffect(() => {
+        carried.current = authorization;
+    }, [authorization]);
 
     useEffect(() => {
         // Nothing is read without a network, and what was read before it went is left on the screen rather than
         // cleared: the last answer is still the truest thing anybody has, and saying so beside it is what the offline
         // state is for. Coming back re-runs this, which is the whole of the automatic recovery from that direction.
-        if (baseAddress === null || authorization === null || !online) {
+        if (baseAddress === null || presenting === null || !online) {
             return;
         }
 
@@ -157,22 +188,39 @@ export function useConnection(
         // the signal already has to travel to the transport, so a second flag beside it would be a second thing to
         // keep true.
         const attempted = new AbortController();
-        const credential = { baseAddress, authorization };
         const transport = send(attempted.signal);
+
+        // Read per request rather than once per effect, so a renewal landing between the two reads below presents the
+        // token the deployment now holds. The one it replaced stopped working the moment the renewal answered.
+        const credential = (): ClientSession => ({ baseAddress, authorization: carried.current ?? '' });
 
         // Asked through a function rather than read off the controller, so nothing decides at the first check that it
         // can never be true at the second: what changes it is a cleanup running while a read is in flight.
         const abandoned = (): boolean => attempted.signal.aborted;
 
+        // A token this client replaced while the request was on the wire was refused for having been replaced rather
+        // than for the person behind it: the renewal that destroyed it minted its successor in the same answer. So the
+        // read is made again with what is held now, and the session somebody still has is not discarded under them.
+        const refused = (presented: ClientSession): void => {
+            if (presented.authorization === carried.current) {
+                onCredentialRefused();
+
+                return;
+            }
+
+            setRead((token) => token + 1);
+        };
+
         void (async () => {
-            const session = await readDeploymentSession(credential, transport);
+            const presentedToRead = credential();
+            const session = await readDeploymentSession(presentedToRead, transport);
 
             if (abandoned()) {
                 return;
             }
 
             if (session.outcome === 'failed' && session.failure.reason === 'unauthenticated') {
-                onCredentialRefused();
+                refused(presentedToRead);
 
                 return;
             }
@@ -184,13 +232,13 @@ export function useConnection(
                     readAt: null,
                     answering: read,
                     presentedAt: baseAddress,
-                    presenting: authorization,
+                    presenting,
                 });
 
                 return;
             }
 
-            setReaching({ made: 0, presentedAt: baseAddress, presenting: authorization });
+            setReaching({ made: 0, presentedAt: baseAddress, presenting });
 
             // On the screen as soon as it is known rather than once the accounts beside it are: what it decides — the
             // spaces, the controls, the deployment's version — is answerable now, and holding it back would leave the
@@ -201,7 +249,7 @@ export function useConnection(
                 readAt: null,
                 answering: read,
                 presentedAt: baseAddress,
-                presenting: authorization,
+                presenting,
             });
 
             // A credential that may not read mail is never asked for it. The refusal would be the service's to give
@@ -211,14 +259,15 @@ export function useConnection(
                 return;
             }
 
-            const accounts = await readMailAccounts(credential, transport);
+            const presentedToList = credential();
+            const accounts = await readMailAccounts(presentedToList, transport);
 
             if (abandoned()) {
                 return;
             }
 
             if (accounts.outcome === 'failed' && accounts.failure.reason === 'unauthenticated') {
-                onCredentialRefused();
+                refused(presentedToList);
 
                 return;
             }
@@ -229,20 +278,20 @@ export function useConnection(
                 readAt: now(),
                 answering: read,
                 presentedAt: baseAddress,
-                presenting: authorization,
+                presenting,
             });
         })();
 
         return () => {
             attempted.abort();
         };
-    }, [baseAddress, authorization, online, read, send, onCredentialRefused, now]);
+    }, [baseAddress, presenting, online, read, send, onCredentialRefused, now]);
 
     // An answer belonging to an earlier attempt, or to a credential this client is no longer signed in with, is not
     // this attempt's, and nothing on the screen may be drawn from it: what a person is looking at then is a read in
     // flight, which is what the frame says while it waits.
     const current =
-        answered.answering === read && answered.presentedAt === baseAddress && answered.presenting === authorization;
+        answered.answering === read && answered.presentedAt === baseAddress && answered.presenting === presenting;
     const connection = current ? answered : nothingRead;
 
     // Only a deployment that did not answer is reached for again. A credential it refused, a grant it does not hold,
@@ -258,7 +307,7 @@ export function useConnection(
 
         const waiting = setTimeout(
             () => {
-                setReaching({ made: attempts + 1, presentedAt: baseAddress, presenting: authorization });
+                setReaching({ made: attempts + 1, presentedAt: baseAddress, presenting });
                 setRead((token) => token + 1);
             },
             reconnectionDelay(attempts, Math.random()),
@@ -267,7 +316,7 @@ export function useConnection(
         return () => {
             clearTimeout(waiting);
         };
-    }, [lost, attempts, baseAddress, authorization]);
+    }, [lost, attempts, baseAddress, presenting]);
 
     return {
         session: connection.session,

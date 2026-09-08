@@ -34,6 +34,8 @@ public sealed class CredentialSchemeSelectorTests
 
     private const string BasicScheme = "MailFathom:Mcp:Basic";
 
+    private const string SessionTokenScheme = "MailFathom:Client:SessionToken";
+
     [Fact]
     public void SchemeFor_ATokenNamingAConfiguredIssuer_ReachesThatIssuersValidator()
     {
@@ -156,6 +158,7 @@ public sealed class CredentialSchemeSelectorTests
             ApiKeyScheme,
             clientAssertionSchemeName: null,
             basicSchemeName: null,
+            sessionTokenSchemeName: null,
             MetadataScheme);
 
         // Act, Assert
@@ -174,6 +177,7 @@ public sealed class CredentialSchemeSelectorTests
             apiKeySchemeName: null,
             clientAssertionSchemeName: null,
             basicSchemeName: null,
+            sessionTokenSchemeName: null,
             MetadataScheme);
 
         // Act, Assert
@@ -190,6 +194,7 @@ public sealed class CredentialSchemeSelectorTests
             ApiKeyScheme,
             clientAssertionSchemeName: null,
             basicSchemeName: null,
+            sessionTokenSchemeName: null,
             ApiKeyScheme);
 
         // Act, Assert
@@ -248,6 +253,39 @@ public sealed class CredentialSchemeSelectorTests
         Assert.Equal(selector.SchemeFor(credential), selector.SchemeFor(credential));
     }
 
+    /// <summary>A session token reaches the scheme that verifies one, which is what keeps an authenticated request from re-deriving the password behind it.</summary>
+    [Fact]
+    public void SchemeFor_ASessionToken_ReachesTheSessionSchemeRatherThanThePasswordOne()
+    {
+        // Arrange
+        var selector = AlsoAcceptingAPassword();
+
+        // Act, Assert
+        Assert.Equal(SessionTokenScheme, selector.SchemeFor("Bearer mfs_a-session.and-its-proof"));
+    }
+
+    /// <summary>An API key is not a session, so the two prefixes this deployment writes route to two different comparisons.</summary>
+    [Fact]
+    public void SchemeFor_AMintedApiKey_ReachesTheKeyComparisonRatherThanTheSessionScheme()
+    {
+        // Arrange
+        var selector = AlsoAcceptingAPassword();
+
+        // Act, Assert
+        Assert.Equal(ApiKeyScheme, selector.SchemeFor("Bearer mfk_an-issued-key"));
+    }
+
+    /// <summary>Where no surface exchanges anything, something merely shaped like a session is an API key that will not match.</summary>
+    [Fact]
+    public void SchemeFor_ASessionTokenWhereNothingIsExchanged_ReachesTheKeyComparison()
+    {
+        // Arrange
+        var selector = AcceptingBoth();
+
+        // Act, Assert
+        Assert.Equal(ApiKeyScheme, selector.SchemeFor("Bearer mfs_a-session.and-its-proof"));
+    }
+
     private static CredentialSchemeSelector AcceptingBoth() => new(
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -257,6 +295,7 @@ public sealed class CredentialSchemeSelectorTests
         ApiKeyScheme,
         ClientAssertionScheme,
         basicSchemeName: null,
+        sessionTokenSchemeName: null,
         MetadataScheme);
 
     private static CredentialSchemeSelector AlsoAcceptingAPassword() => new(
@@ -267,6 +306,7 @@ public sealed class CredentialSchemeSelectorTests
         ApiKeyScheme,
         ClientAssertionScheme,
         BasicScheme,
+        SessionTokenScheme,
         MetadataScheme);
 
     private static string TokenIssuedBy(string issuer)

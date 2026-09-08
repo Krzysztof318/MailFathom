@@ -113,6 +113,12 @@ async function servedByADeployment(page: Page): Promise<void> {
 
     await page.route('**/api/client/session', (route) => answering(route, sessionAnswer));
 
+    // The exchange and the revocation beside it, which is what signing in and signing out actually reach. The glob
+    // above ends at `session`, so neither is answered by it.
+    await page.route('**/api/client/session/token', (route) => answering(route, deployment.mintedSession));
+
+    await page.route('**/api/client/session/token/revocation', (route) => route.fulfill({ status: 204 }));
+
     await page.route('**/api/client/accounts', (route) => answering(route, deployment.mailAccounts));
 
     await page.route('**/api/client/folders', (route) => answering(route, deployment.mailFolders));
@@ -308,7 +314,9 @@ test('reads its mail exactly as it always did against a deployment serving no si
     expect(logged.filter((line) => line.toLowerCase().includes('signal'))).toStrictEqual([]);
 });
 
-test('sends the password as one Basic header the bundle composed, on every request it makes', async ({ page }) => {
+test('sends the password once to the exchange, and the session it was given on every request after', async ({
+    page,
+}) => {
     const presented: [string, string | undefined][] = [];
 
     page.on('request', (request) => {
@@ -321,14 +329,25 @@ test('sends the password as one Basic header the bundle composed, on every reque
 
     await openSignedIn(page);
 
-    // Every request on the client surface rather than the set of distinct values: a read that stopped carrying the
-    // credential would leave the set unchanged, because the sign-in request already put the one value in it. Only the
+    // Every request on the client surface rather than the set of distinct values: a read that stopped carrying a
+    // credential would leave the set unchanged, because the requests before it already put each value in it. Only the
     // built bundle answers this at all — the encoding runs through the browser's own `TextEncoder` and `btoa` after
     // the bundler has been over it, and what a screen sends is not what a component was handed in jsdom.
     expect(presented.length).toBeGreaterThan(0);
     for (const [route, authorization] of presented) {
-        expect(authorization, `no credential on ${route}`).toBe(deployment.expectedAuthorization);
+        const expected =
+            route === '/api/client/session/token'
+                ? deployment.expectedAuthorization
+                : deployment.expectedSessionAuthorization;
+
+        expect(authorization, `wrong credential on ${route}`).toBe(expected);
     }
+
+    // Stated as its own assertion rather than left to the loop above, because it is the property the exchange exists
+    // for: the password reaches exactly one route, and no read of anybody's mail costs the deployment a derivation.
+    expect(presented.filter(([, authorization]) => authorization === deployment.expectedAuthorization)).toStrictEqual([
+        ['/api/client/session/token', deployment.expectedAuthorization],
+    ]);
 });
 
 test('stays signed in across a reload, and asks again in a tab that was not signed in', async ({ page, context }) => {
@@ -377,7 +396,7 @@ test('reads a refused password itself rather than letting the browser ask for on
 
     page.on('dialog', (dialog) => prompted.push(dialog.type()));
     page.on('request', (request) => {
-        if (new URL(request.url()).pathname === '/api/client/session') {
+        if (new URL(request.url()).pathname === '/api/client/session/token') {
             asked.push(request);
         }
     });
@@ -393,7 +412,7 @@ test('reads a refused password itself rather than letting the browser ask for on
     // The deployment refuses the password and challenges as MailFathom does wherever it accepts one — Basic named
     // first, which is what tells the client a password may be sent at all and what separates this refusal from a
     // deployment offering no password method.
-    await page.route('**/api/client/session', (route) =>
+    await page.route('**/api/client/session/token', (route) =>
         route.fulfill({
             status: 401,
             headers: { 'www-authenticate': 'Basic realm="MailFathom", charset="UTF-8"' },
@@ -979,7 +998,7 @@ test('opens an attached file inside the client rather than handing it to the mac
     await expect(openTheFile).toBeFocused();
 });
 
-test('presents the credential the bundle composed when it fetches an attached file', async ({ page }) => {
+test('presents the session it holds when it fetches an attached file', async ({ page }) => {
     const presented: (string | undefined)[] = [];
 
     await openTheFirstMessage(page);
@@ -996,7 +1015,7 @@ test('presents the credential the bundle composed when it fetches an attached fi
     await page.getByRole('button', { name: 'Download orders.csv' }).click();
     await offered;
 
-    expect(presented).toStrictEqual([deployment.expectedAuthorization]);
+    expect(presented).toStrictEqual([deployment.expectedSessionAuthorization]);
 });
 
 test('fetches nothing from the sender until the reader asks, and asks again next time', async ({ page }) => {

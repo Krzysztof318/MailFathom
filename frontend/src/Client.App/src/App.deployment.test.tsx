@@ -13,7 +13,7 @@ import {
     deploymentAnswering,
     directory,
     framed,
-    heldCredential,
+    heldSession,
     nothingAdopted,
     renderApp,
     resetsBetweenTests,
@@ -27,6 +27,7 @@ import {
     wasConfiguredWith,
     workAccount,
 } from './App.harness';
+import { writeKeptSession } from './signIn/keptSession';
 
 // Which deployment the client reads from, how it was adopted, and what pointing it somewhere else does. The
 // arrangement is `App.harness`, which the rest of this family shares.
@@ -120,6 +121,7 @@ describe('App deployment', () => {
         await waitFor(() => {
             expect(routesAsked()).toEqual([
                 'https://mail.example.test/api/client/session',
+                'https://mail.example.test/api/client/session/token',
                 'https://mail.example.test/api/client/accounts',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
@@ -230,7 +232,7 @@ describe('App deployment', () => {
         // Seeded against the address this test itself chose rather than against the serving fixture that happens to
         // spell the same one: the two are different origins, and a test that passed on the coincidence would stop
         // proving what its name says the moment either literal moved.
-        await credentials.keep(pointedAt, heldCredential);
+        await credentials.keep(pointedAt, writeKeptSession(heldSession));
 
         // Read on the sign-in screen rather than inside the frame, which is where the control now is — and where the
         // assertion is about pointing elsewhere alone, signing out having its own reason to clear the same store.
@@ -305,7 +307,9 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/display-name',
                 'https://first.example.invalid/api/client/signals/ticket',
                 'https://first.example.invalid/api/client/notifications/unread-count',
+                'https://first.example.invalid/api/client/session/token/revocation',
                 'https://second.example.invalid/api/client/session',
+                'https://second.example.invalid/api/client/session/token',
                 'https://second.example.invalid/api/client/accounts',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',

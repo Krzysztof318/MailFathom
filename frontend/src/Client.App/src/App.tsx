@@ -3,13 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type {
-    ClientSession,
-    DeploymentAddress,
-    MailFathomSignalChannel,
-    MailFathomTransport,
-    NotificationTarget,
-    SignalStreamSchedule,
+import {
+    endSession,
+    type ClientSession,
+    type DeploymentAddress,
+    type MailFathomSignalChannel,
+    type MailFathomTransport,
+    type NotificationTarget,
+    type SignalStreamSchedule,
 } from '@mailfathom/client-backend';
 import { BlockingOverlay } from './blocking/BlockingOverlay';
 import { BlockingContext, type BlockingOperation } from './blocking/useBlocking';
@@ -70,9 +71,10 @@ import { useConnection } from './shell/useConnection';
 import { useBackNavigation } from './shellOperations/backNavigation';
 import { ScreenLayersContext, useScreenLayerStack } from './shell/screenLayers';
 import { useCoarsePointer, useDesktopComposition, useTwoPanes, useWideWorkspace } from './shell/useWideWorkspace';
-import { userNameIn } from './signIn/credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
+import { writeKeptSession, type KeptSession } from './signIn/keptSession';
+import { useSessionRenewal } from './signIn/useSessionRenewal';
 import { SignIn } from './signIn/SignIn';
 import { SignalledChangesContext } from './signals/signalledChanges';
 import { useSignals } from './signals/useSignals';
@@ -106,7 +108,7 @@ export function App({
     signalSchedule,
 }: {
     readonly deployment: ClientDeployment;
-    readonly signedInWith: string | null;
+    readonly signedInWith: KeptSession | null;
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
 
@@ -122,14 +124,25 @@ export function App({
     const { workspace, revise } = useWorkspace();
     const telemetry = useTelemetry();
     const [adopted, setAdopted] = useState(deployment.outcome === 'resolved' ? deployment.adopted : null);
-    const [authorization, setAuthorization] = useState(signedInWith);
+    const [kept, setKept] = useState(signedInWith);
+    const authorization = kept?.authorization ?? null;
+
+    // Who is signed in, taken from what was kept rather than out of the credential. A session token names nobody — the
+    // Basic header it replaced carried the name inside it — so the name travels beside it, and it is not a secret.
+    const person = kept?.person ?? null;
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
+
+    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token every eleven
+    // hours, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
+    // a second session beginning — at an instant nothing happened at. The person and the address are what actually
+    // change when somebody signs out and somebody else signs in.
+    const signedInAs = person === null || baseAddress === null ? null : `${baseAddress}\n${person}`;
     const workspaceRegion = useRef<HTMLDivElement>(null);
     const [written, setWritten] = useState<ComposerOpening | null>(null);
     const [blockedOn, setBlockedOn] = useState<BlockingOperation | null>(null);
     const askedFrom = useRef<HTMLElement | null>(null);
-    const focusedFor = useRef(authorization);
+    const focusedFor = useRef(signedInAs);
 
     // Built once per address and credential rather than per render, because it is what the message read below depends
     // on: a fresh object every render would restart that read every render.
@@ -137,6 +150,12 @@ export function App({
         () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
         [baseAddress, authorization],
     );
+
+    // Who the deployment is read for, which is the identity above and whatever is being presented for them now. It is
+    // built per render rather than memoized because nothing keys on the object: the hook keys on the identity inside
+    // it and reads the header when a request actually goes out.
+    const signedInCaller =
+        signedInAs === null || authorization === null ? null : { identity: signedInAs, authorization };
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
@@ -156,27 +175,27 @@ export function App({
     // pull focus onto the workspace on exactly the ordinary open it exists to leave alone. Both invocations see the
     // same credential, so a comparison against it survives being run twice.
     useEffect(() => {
-        if (authorization === focusedFor.current) {
+        if (signedInAs === focusedFor.current) {
             return;
         }
 
-        focusedFor.current = authorization;
+        focusedFor.current = signedInAs;
 
-        if (authorization !== null) {
+        if (signedInAs !== null) {
             workspaceRegion.current?.focus();
         }
-    }, [authorization]);
+    }, [signedInAs]);
 
     // A credential the deployment has stopped accepting is acted on once rather than left to produce the same refusal
     // on every later read, which is why this is the one failure the frame does not render. What was kept goes with it:
-    // a stored password the service refuses is a password nothing will make work again.
+    // a session this deployment refuses is one it expired or revoked, and nothing this client holds renews it.
     //
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
     const credentialRefused = useCallback(() => {
         telemetry.happened('credential_no_longer_accepted');
         setNotices(['credentialNoLongerAccepted']);
-        setAuthorization(null);
+        setKept(null);
         revise(emptyWorkspace);
         forgetListings();
         forgetComposition();
@@ -187,15 +206,35 @@ export function App({
 
         void credentials.forget({ baseAddress }).then((removed) => {
             if (!removed) {
-                setNotices((shown) => [...shown, 'passwordNotRemoved']);
+                setNotices((shown) => [...shown, 'sessionNotRemoved']);
             }
         });
     }, [baseAddress, credentials, revise, telemetry]);
 
+    // A renewed session replaces what is held and what is kept, in that order and in one place: holding it without
+    // keeping it would leave the next start presenting a token this run has already replaced, which the deployment
+    // refuses. A store that would not write is not reported again here — the screen said what it would keep at
+    // sign-in, and saying it a second time mid-morning tells nobody anything they can act on.
+    const sessionRenewed = useCallback(
+        (renewed: KeptSession) => {
+            setKept(renewed);
+
+            if (baseAddress !== null) {
+                void credentials.keep({ baseAddress }, writeKeptSession(renewed));
+            }
+        },
+        [baseAddress, credentials],
+    );
+
     // What the deployment says is read from the address and the credential rather than held beside them, which is what
     // makes a credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or
     // signing out, runs this again with nothing to present, and nothing of the previous one's answers survives it.
-    const connection = useConnection(baseAddress, authorization, send, credentialRefused);
+    const connection = useConnection(baseAddress, signedInCaller, send, credentialRefused);
+
+    // A session has a life the deployment decides, so the client renews it rather than letting somebody be signed
+    // out mid-morning. It renews only while there is a session to renew and a network to renew over; a client that was
+    // offline across its own expiry is signed out at the next request, which is the same path a revoked one takes.
+    useSessionRenewal(session, kept, readMail, connection.online, sessionRenewed, credentialRefused);
 
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
@@ -261,11 +300,7 @@ export function App({
     // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a
     // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
     // would meet nothing at all.
-    const preferences = useClientPreferences(
-        readsMail && connection.online ? session : null,
-        readMail,
-        userNameIn(authorization),
-    );
+    const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail, person);
 
     // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
     // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a
@@ -288,18 +323,24 @@ export function App({
     // effect runs. It runs again whenever the permission changes, and the permission is false until the deployment has
     // answered what it forwards — so without this, an ordinary sign-in would record nothing and moving the switch
     // twice would record a session beginning twice.
-    const sessionReported = useRef<ClientSession | null>(null);
+    const sessionReported = useRef<string | null>(null);
 
     useEffect(() => {
         const stop = telemetry.exportFor(session, telemetryPermitted);
 
-        if (session !== null && telemetryPermitted && sessionReported.current !== session) {
-            sessionReported.current = session;
+        // Forgotten on the way out as well as written on the way in, because this frame is not unmounted by signing
+        // out — it renders the sign-in screen instead. A value left behind would make signing back in as the same
+        // person at the same deployment record nothing, and the commonest way to reach that is the path this event is
+        // most about: the deployment refuses the kept session and somebody signs straight back in.
+        if (session === null) {
+            sessionReported.current = null;
+        } else if (telemetryPermitted && sessionReported.current !== signedInAs) {
+            sessionReported.current = signedInAs;
             telemetry.happened('session_started');
         }
 
         return stop;
-    }, [session, telemetry, telemetryPermitted]);
+    }, [session, signedInAs, telemetry, telemetryPermitted]);
 
     // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
     // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want
@@ -465,7 +506,7 @@ export function App({
         revise({ selection: null, conversation: null });
     }, [space, layers, closeAttachment, closeFullHtml, revise]);
 
-    function signedIn(reached: DeploymentAddress, presented: string): void {
+    function signedIn(reached: DeploymentAddress, session: KeptSession): void {
         if (adopted === null) {
             storeDeployment(reached);
             setAdopted({ deployment: reached, origin: 'chosen' });
@@ -480,38 +521,47 @@ export function App({
         forgetListings();
         forgetComposition();
 
-        // The screen has already said how long the password will be kept, so a store that refused the write says so
+        // The screen has already said how long the sign-in will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
         // one is read inside the frame: signing in worked, and what failed is only the keeping.
-        void credentials.keep(reached, presented).then((stored) => {
+        void credentials.keep(reached, writeKeptSession(session)).then((stored) => {
             if (!stored) {
-                setNotices(['passwordNotKept']);
+                setNotices(['sessionNotKept']);
             }
         });
-        setAuthorization(presented);
+        setKept(session);
     }
 
     // Everything this session held goes with the credential, including what the person carried between the spaces:
     // the question in the intent field and the mailbox it was scoped to are theirs rather than the machine's, and a
     // client that kept them would show the next person what the last one was asking about.
     //
-    // A store that would not delete is reported rather than swallowed. The screen has already said that signing out is
-    // what removes the password, so a refused deletion leaves it on the machine for the next start to read back while
-    // the person believes they signed out.
+    // A store that would not delete is reported rather than swallowed. The screen has already said that the sign-in is
+    // kept until signing out, so a refused deletion leaves the session on the machine for the next start to read back
+    // while the person believes they signed out.
     function signOut(): void {
         setNotices([]);
-        setAuthorization(null);
+        setKept(null);
         revise(emptyWorkspace);
         forgetListings();
         forgetComposition();
 
-        if (adopted !== null) {
-            void credentials.forget(adopted.deployment).then((removed) => {
-                if (!removed) {
-                    setNotices(['passwordNotRemoved']);
-                }
-            });
+        if (adopted === null) {
+            return;
         }
+
+        // The deployment is told first, so the token stops working before it would have expired rather than staying
+        // good for whatever is left of its life. It is asked and not waited on: signing out of the client is what the
+        // person pressed, and a deployment that never heard still expires the session on its own.
+        if (session !== null) {
+            void endSession(session, readMail);
+        }
+
+        void credentials.forget(adopted.deployment).then((removed) => {
+            if (!removed) {
+                setNotices(['sessionNotRemoved']);
+            }
+        });
     }
 
     // What the reading column holds: the empty state where somebody working in tabs has closed all of them, and what
@@ -655,10 +705,10 @@ export function App({
                                                         ) : (
                                                             <Space
                                                                 space={space}
-                                                                // Who is signed in, taken apart in the one module that composes a credential and never here.
+                                                                // Who is signed in, which is what was kept beside the session rather than anything read out of a credential.
                                                                 // A screen never sees the credential; what it is handed is the name the deployment knows the
                                                                 // person by, which is what a preference kept per person on this machine is written under.
-                                                                person={userNameIn(authorization)}
+                                                                person={person}
                                                                 // Asking is what the field is for, so a credential that may not ask is not shown one. It is
                                                                 // absent rather than disabled: a control nobody can use says less about why than the sentence
                                                                 // above does. Where it stands is the space's decision, which is why it is handed in rather
@@ -997,7 +1047,7 @@ function SignInScreen({
     readonly lifetime: CredentialStore['lifetime'];
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
-    readonly onSignedIn: (reached: DeploymentAddress, authorization: string) => void;
+    readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession) => void;
     readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();

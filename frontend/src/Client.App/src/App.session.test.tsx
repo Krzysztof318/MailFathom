@@ -12,7 +12,7 @@ import {
     deploymentRefusing,
     directory,
     framed,
-    heldCredential,
+    heldSession,
     nothingAdopted,
     openingAt,
     renderApp,
@@ -38,7 +38,7 @@ describe('App session', () => {
     }
 
     it('offers only the spaces the grant permits, rather than ones the deployment would refuse', async () => {
-        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
         await framed();
 
         expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
@@ -51,7 +51,7 @@ describe('App session', () => {
     });
 
     it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {
-        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
         await framed();
 
         expect(
@@ -62,14 +62,14 @@ describe('App session', () => {
     });
 
     it('offers nothing to ask with where the credential may not ask', async () => {
-        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
         await framed();
 
         expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
     });
 
     it('never asks for the mail a credential may not read, rather than letting the read be refused', async () => {
-        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.ask'));
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.ask'));
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
         await waitFor(() => {
@@ -81,7 +81,7 @@ describe('App session', () => {
     it('hands the keyboard back to what asked for a message once the message is closed', async () => {
         renderApp(
             servedFrom,
-            heldCredential,
+            heldSession,
             granting('mailfathom.mail.read', 'mailfathom.mail.drafts.write', 'mailfathom.mail.send'),
         );
         await framed();
@@ -105,7 +105,7 @@ describe('App session', () => {
     it('answers an address naming a space this credential may not open with one it may', async () => {
         openingAt('#/discover');
 
-        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        renderApp(servedFrom, heldSession, granting('mailfathom.mail.read'));
 
         expect(await screen.findByRole('main', { name: 'Mail' })).toBeDefined();
         await waitFor(() => {
@@ -114,7 +114,7 @@ describe('App session', () => {
     });
 
     it('tells a credential granted nothing everything it may not do, rather than leaving it to guess', async () => {
-        renderApp(servedFrom, heldCredential, granting());
+        renderApp(servedFrom, heldSession, granting());
 
         expect(await screen.findByText(/This credential may not read mail on this deployment/)).toBeDefined();
         expect(screen.getByText(/This credential may not ask questions of your mail/)).toBeDefined();
@@ -126,7 +126,7 @@ describe('App session', () => {
     it('reaches for a deployment that did not answer on its own, and says which attempt it is on', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 
-        renderApp(servedFrom, heldCredential, deploymentRefusing({ status: 503, body: '' }));
+        renderApp(servedFrom, heldSession, deploymentRefusing({ status: 503, body: '' }));
         await screen.findByText(/Trying again — attempt 1 of/);
 
         await act(async () => {
@@ -139,7 +139,7 @@ describe('App session', () => {
     it('stops reaching once the budget is spent, and hands the way out to the person', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 
-        renderApp(servedFrom, heldCredential, deploymentRefusing({ status: 503, body: '' }));
+        renderApp(servedFrom, heldSession, deploymentRefusing({ status: 503, body: '' }));
         await screen.findByText(/Trying again — attempt 1 of/);
 
         // One pass per wait in the budget, because each attempt is only scheduled once the one before it has answered:
@@ -212,7 +212,7 @@ describe('App session', () => {
     it('names each account and what its last attempt did, behind the line that summarizes them', async () => {
         const failing = { ...workAccount, id: 'news', displayName: 'Newsletters', synchronizationState: 'Unreachable' };
 
-        renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [workAccount, failing])));
+        renderApp(servedFrom, heldSession, deploymentAnswering(directory(true, [workAccount, failing])));
 
         // The one gesture the design asks for: the reading is closed when the frame is drawn, and this is what a
         // person does to it.
@@ -229,7 +229,7 @@ describe('App session', () => {
     });
 
     it('tells a user holding no account what would fill it, rather than showing a failure', async () => {
-        renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [])));
+        renderApp(servedFrom, heldSession, deploymentAnswering(directory(true, [])));
 
         expect(await screen.findByText(/No mail account is configured for this user yet\./)).toBeDefined();
         expect(

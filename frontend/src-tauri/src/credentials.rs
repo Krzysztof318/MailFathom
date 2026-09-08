@@ -6,7 +6,7 @@
 // equivalent of at all. ADR 0023 decided the question for a desktop keychain and a browser page, and ADR 0027 amended
 // it for the Android head: the mechanism there is the Android Keystore rather than the `keyring` crate, which has no
 // Android backend, and the fallback is the opposite of the desktop's — a device whose protected storage cannot be
-// reached keeps nothing rather than writing the password into the page, because a phone kills the client all day and
+// reached keeps nothing rather than writing the credential into the page, because a phone kills the client all day and
 // the page is where a script that reached the origin would read it.
 //
 // That second half is why this module answers with an *arrangement* rather than with a fact about the machine. The
@@ -19,7 +19,7 @@
 // a key from, and an Android one never offers the page as a fallback.
 //
 // The two implementations below are selected by target and are the whole of the difference between the heads. Neither
-// reports why anything failed: everything they could report is about a password, and a client told nothing simply asks
+// reports why anything failed: everything they could report is about a credential, and a client told nothing simply asks
 // for it again.
 
 /// The shell keeps it in the operating system's own protected store, and only signing out removes it.
@@ -58,12 +58,12 @@ mod platform {
         }
     }
 
-    /// Keeps the finished header value for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, authorization: String) -> bool {
-        entry(&deployment).is_some_and(|entry| entry.set_password(&authorization).is_ok())
+    /// Keeps the session document for one deployment, answering whether it was kept.
+    pub async fn keep(deployment: String, credential: String) -> bool {
+        entry(&deployment).is_some_and(|entry| entry.set_password(&credential).is_ok())
     }
 
-    /// The header value kept for one deployment, or nothing where none was kept or the store would not answer.
+    /// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
     pub async fn read(deployment: String) -> Option<String> {
         entry(&deployment).and_then(|entry| entry.get_password().ok())
     }
@@ -136,8 +136,8 @@ mod platform {
         }
     }
 
-    /// Keeps the finished header value for one deployment, answering whether it was kept.
-    pub async fn keep(deployment: String, authorization: String) -> bool {
+    /// Keeps the session document for one deployment, answering whether it was kept.
+    pub async fn keep(deployment: String, credential: String) -> bool {
         let Some(store) = PROTECTED_STORE.get() else {
             return false;
         };
@@ -145,13 +145,13 @@ mod platform {
         store
             .run_mobile_plugin_async::<bool>(
                 "keep",
-                HashMap::from([("deployment", deployment), ("authorization", authorization)]),
+                HashMap::from([("deployment", deployment), ("credential", credential)]),
             )
             .await
             .unwrap_or(false)
     }
 
-    /// The header value kept for one deployment, or nothing where none was kept or the store would not answer.
+    /// The session document kept for one deployment, or nothing where none was kept or the store would not answer.
     pub async fn read(deployment: String) -> Option<String> {
         let store = PROTECTED_STORE.get()?;
 

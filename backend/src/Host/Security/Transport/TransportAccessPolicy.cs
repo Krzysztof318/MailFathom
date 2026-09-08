@@ -6,6 +6,7 @@ using System.Security.Claims;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Infrastructure.Security.OAuth;
 
 namespace MailFathom.Host.Security.Transport;
@@ -145,16 +146,26 @@ internal static class TransportAccessPolicy
 
     /// <summary>Reports whether a credential this deployment holds rather than a token an authorization server issued produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
     /// <remarks>
+    /// <para>
     /// Each claim type is read rather than one of them standing for the others, because each names a different kind of
     /// credential and a principal carrying none of them has to fall through to the token rules. What each one names
     /// follows the surface: on the administrative surface an API key and a client public key are stated in
     /// configuration, and on a mail-serving surface all three name one of this deployment's own credential rows. The
     /// distinction does not matter here — the identity is established before this runs either way, and what is left to
     /// decide is that it was not an unrecognized subject.
+    /// </para>
+    /// <para>
+    /// A session token is the fourth, and it is read as its own claim rather than as the credential it was minted for:
+    /// the session is a credential this deployment holds — minted here, held here, and revoked here — whatever method
+    /// was presented at the exchange. Reading <see cref="TransportCallerCredential.CredentialClaimType" /> instead
+    /// would admit a principal an access token produced without the scopes its issuer asks for, because that claim
+    /// travels on a token's principal too and would answer here before those scopes were ever compared.
+    /// </para>
     /// </remarks>
     private static bool AuthenticatedWithACredentialThisDeploymentHolds(ClaimsPrincipal principal) =>
         principal.HasClaim(claim =>
             claim.Type == ApiKeyAuthentication.ApiKeyNameClaimType
             || claim.Type == ClientAssertionAuthentication.KeyNameClaimType
-            || claim.Type == BasicAuthentication.CredentialIdClaimType);
+            || claim.Type == BasicAuthentication.CredentialIdClaimType
+            || claim.Type == ClientSessionTokenAuthentication.CredentialIdClaimType);
 }

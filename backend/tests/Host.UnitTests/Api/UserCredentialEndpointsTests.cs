@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -757,6 +758,7 @@ public sealed class UserCredentialEndpointsTests
             CredentialId,
             new UserCredentialEnablementRequest(enabled),
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -781,6 +783,7 @@ public sealed class UserCredentialEndpointsTests
             CredentialId,
             new UserCredentialEnablementRequest(null),
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -800,6 +803,7 @@ public sealed class UserCredentialEndpointsTests
             SyntheticMailUser.Deployment.Value,
             CredentialId,
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -808,6 +812,78 @@ public sealed class UserCredentialEndpointsTests
             SyntheticMailUser.Deployment,
             CredentialId,
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Disabling a credential ends the client sessions it minted, which is what makes the operator's act reach a client already signed in.</summary>
+    /// <remarks>
+    /// The store is what a session token is verified against, so a session outlives the row it came from unless this
+    /// call ends it. Asserted through a real store rather than a double, because what is under test is that the
+    /// endpoint reaches it at all — the walk itself is <c>ClientSessionTokensTests</c>'.
+    /// </remarks>
+    [Fact]
+    public async Task SetEnabledAsync_ACredentialBeingDisabled_EndsTheSessionsItMinted()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Moment));
+        var held = sessions.Mint(SessionMintedByTheCredential())!;
+
+        // Act
+        var result = await UserCredentialEndpoints.SetEnabledAsync(
+            SyntheticMailUser.Deployment.Value,
+            CredentialId,
+            new UserCredentialEnablementRequest(false),
+            harness.Administration,
+            sessions,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NoContent>(result.Result);
+        Assert.Null(sessions.Verify(held.Value));
+    }
+
+    /// <summary>Deleting one does the same, so the two acts an operator reaches for say the same thing about a signed-in client.</summary>
+    [Fact]
+    public async Task DeleteAsync_ACredentialTheUserHolds_EndsTheSessionsItMinted()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Moment));
+        var held = sessions.Mint(SessionMintedByTheCredential())!;
+
+        // Act
+        var result = await UserCredentialEndpoints.DeleteAsync(
+            SyntheticMailUser.Deployment.Value,
+            CredentialId,
+            harness.Administration,
+            sessions,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NoContent>(result.Result);
+        Assert.Null(sessions.Verify(held.Value));
+    }
+
+    /// <summary>A write that did not stand signs nobody out, so a mistyped identifier is not a way to end somebody's session.</summary>
+    [Fact]
+    public async Task SetEnabledAsync_ARequestStatingNeitherDecision_LeavesTheSessionsThatCredentialMintedLive()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        var sessions = new ClientSessionTokens(new FakeTimeProvider(Moment));
+        var held = sessions.Mint(SessionMintedByTheCredential())!;
+
+        // Act
+        await UserCredentialEndpoints.SetEnabledAsync(
+            SyntheticMailUser.Deployment.Value,
+            CredentialId,
+            new UserCredentialEnablementRequest(null),
+            harness.Administration,
+            sessions,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(sessions.Verify(held.Value));
     }
 
     /// <summary>Reading who holds a credential and deciding who may read somebody's mail are separately granted, so the reading grant reaches none of the writes.</summary>
@@ -822,8 +898,12 @@ public sealed class UserCredentialEndpointsTests
             SyntheticMailUser.Deployment.Value,
             CredentialId,
             harness.Administration,
+            sessions: null,
             TestContext.Current.CancellationToken));
     }
+
+    private static AdmittedUserCredential SessionMintedByTheCredential() =>
+        new(CredentialId, SyntheticMailUser.Deployment, [MailFathomPermission.MailRead]);
 
     private static UserCredentialProvisioningRequest PasswordRequest(
         string? username,

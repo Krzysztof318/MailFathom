@@ -39,7 +39,7 @@ import javax.crypto.spec.GCMParameterSpec
 // What is written to disk is ciphertext only, in preferences private to this application, keyed by the deployment
 // address the credential was given for so one deployment's credential is never read back for another. Neither the
 // credential nor anything derived from it is logged, put in an exception message, or handed to the bridge on a failure
-// — every operation below answers with a value and never rejects, because everything it could say is about a password.
+// — every operation below answers with a value and never rejects, because everything it could say is about a credential.
 //
 // The whole of it is excluded from every copy the platform would otherwise take: `android:allowBackup="false"` and the
 // `sharedpref` exclusion in both sections of `res/xml/data_extraction_rules.xml` are ADR 0027's, and they cover this
@@ -78,7 +78,7 @@ internal class DeploymentArgument {
 @InvokeArg
 internal class CredentialArgument {
     lateinit var deployment: String
-    lateinit var authorization: String
+    lateinit var credential: String
 }
 
 @TauriPlugin
@@ -92,7 +92,7 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
     fun keep(invoke: Invoke) {
         val argument = invoke.parseArgs(CredentialArgument::class.java)
 
-        invoke.resolveObject(keep(argument.deployment, argument.authorization))
+        invoke.resolveObject(keep(argument.deployment, argument.credential))
     }
 
     @Command
@@ -152,11 +152,11 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Keeps the finished header value for one deployment, answering whether it is stored. */
-    private fun keep(deployment: String, authorization: String): Boolean =
+    /** Keeps the session document for one deployment, answering whether it is stored. */
+    private fun keep(deployment: String, credential: String): Boolean =
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, credentialKey()) }
-            val sealed = cipher.iv + cipher.doFinal(authorization.toByteArray(Charsets.UTF_8))
+            val sealed = cipher.iv + cipher.doFinal(credential.toByteArray(Charsets.UTF_8))
 
             preferences().edit().putString(deployment, Base64.encodeToString(sealed, Base64.NO_WRAP)).commit()
         } catch (refused: Exception) {
@@ -167,7 +167,7 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
      * The credential kept for one deployment, or nothing where none was kept or what was kept cannot be read back.
      *
      * A ciphertext that will not open is a key the device replaced or an entry something else corrupted, and either way
-     * it is a password nobody can use again — so it is removed here rather than kept for every later start to fail on,
+     * it is a credential nobody can use again — so it is removed here rather than kept for every later start to fail on,
      * and the person is asked to sign in again.
      */
     private fun read(deployment: String): String? =
@@ -218,7 +218,7 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
      * The key every credential on this device is encrypted under, generated on first use.
      *
      * No authentication requirement is set on it: nothing in the design asks a person to unlock the device again before
-     * the password is released, and that is a decision of its own rather than one to take here. What the key does carry
+     * the credential is released, and that is a decision of its own rather than one to take here. What the key does carry
      * is the whole of what this file needs — AES-256 in GCM, generated inside the Keystore and never leaving it.
      */
     private fun credentialKey(): SecretKey {

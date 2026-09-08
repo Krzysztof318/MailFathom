@@ -187,6 +187,11 @@ internal readonly record struct TransportSurface
     /// <remarks>Composed from the surface's name like the others, even though the credentials it consults are one set for the deployment rather than one per surface: what the name keeps apart is the attempt bucket and the policy, so a caller spending its guesses on one surface has not spent them on the other.</remarks>
     internal string BasicSchemeName => $"MailFathom:{this.Name}:Basic";
 
+    /// <summary>Gets the scheme judging a session token this process minted when a credential was exchanged for one.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>Composed from the surface's name like the others, and what it keeps apart is the registration rather than the sessions: one process-wide store holds those, keyed by the token alone, so a token authenticates wherever this scheme is registered. One surface asks for the exchange today, which is what makes that the same thing.</remarks>
+    internal string SessionTokenSchemeName => $"MailFathom:{this.Name}:SessionToken";
+
     /// <summary>Gets the scheme verifying a signed assertion, against this surface's configured client public keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     /// <remarks>One name registering two handlers, for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart either way is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>

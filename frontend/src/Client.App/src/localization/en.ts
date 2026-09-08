@@ -87,21 +87,21 @@ export const en = {
         'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
     'signIn.grantMissing': 'This deployment accepted the credential, but it is allowed to read no mail.',
     'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
-    'signIn.noLongerAccepted': 'This deployment has stopped accepting the password that was kept. Sign in again.',
+    'signIn.noLongerAccepted': 'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
     'signIn.notRemoved':
-        'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+        'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
     'signIn.notKept':
-        'Your password could not be stored on this machine, so you will be asked for it again the next time you open MailFathom. You are signed in either way.',
+        'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
     'signIn.keptUntilSignedOut':
-        'Your password is kept in this machine’s keychain until you sign out. Signing out is what removes it.',
+        'Your password is not stored anywhere. This sign-in is kept in this machine’s keychain until you sign out, and it stops working on its own after a while.',
     'signIn.keptUntilTheTabCloses':
-        'Your password is kept until you close this tab, and you will be asked for it again — a password left in a browser can be read by anything that reaches this page.',
+        'Your password is not stored anywhere. This sign-in is kept until you close this tab, and you will be asked for your password again — anything that reaches this page can read what a browser keeps.',
     'signIn.keptUntilTheClientCloses':
-        'Your password is kept until you close MailFathom, and you will be asked for it again — this machine offers no keychain to keep it in safely.',
+        'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again — this machine offers no keychain to keep it in safely.',
     'signIn.notKeptStorageUnreachable':
-        'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a password anywhere less safe.',
+        'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a credential anywhere less safe.',
     'signIn.notKeptKeyInvalidated':
-        'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
+        'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
 
     'connect.address': 'Server',
     'connect.addressExample': 'mailfathom.example.com:8443',
@@ -110,7 +110,7 @@ export const en = {
     'connect.clearTextConfigured':
         'This was set for you when the client was installed, so it is not yours to change here. Whoever configured it decides it.',
     'connect.clearTextExplanation':
-        'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
+        'Your password is encoded rather than encrypted when you sign in, and every request afterwards carries the session it is exchanged for. Anybody between this client and the deployment can read either. Leave this off unless the network between them is yours.',
     'connect.clearTextInForce':
         'TLS is off. The login, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
     'connect.portHint': 'port {port}',

@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Net.Http.Headers;
 
 namespace MailFathom.Host.Security.Endpoints;
@@ -72,6 +74,13 @@ internal static class ClientTransportSecurityExtensions
             CorsPolicyName,
             policy => ConfigureCorsPolicy(policy, originPolicy)));
 
+        // The store is registered for an enabled endpoint rather than for an authenticating one, because the exchange
+        // is mapped on the group rather than per method and a client signs in through it whatever the endpoint asks
+        // for. A deployment requiring no credential still answers it, with a session that authenticates nothing
+        // because nothing here is authenticated — which is one sign-in path for the client instead of a posture it
+        // would have to ask about before it could sign in at all.
+        services.TryAddSingleton<ClientSessionTokens>();
+
         if (!endpointSettings.RequiresAuthentication)
         {
             return services;
@@ -80,7 +89,14 @@ internal static class ClientTransportSecurityExtensions
         services.AddUserFacingTransportAuthentication(
             TransportSurface.Client,
             [.. endpointSettings.Authentication],
-            ChallengeSchemeFor(endpointSettings));
+            ChallengeSchemeFor(endpointSettings),
+
+            // The exchange is served here whichever methods the endpoint accepts, because what it saves is paid on
+            // every request rather than only by a password: a client that signed in with a key or a token holds one
+            // credential for the deployment's whole life, and a session it can end is the better thing to leave in a
+            // browser. What it saves most is still the password, which is the only method that derives. An access
+            // token is the exception, and ClientSessionTokenEndpoints holds why it is refused at the exchange itself.
+            exchangesCredentialsForSessions: true);
 
         return services;
     }

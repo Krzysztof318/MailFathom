@@ -2,19 +2,28 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Claims;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
+using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Net.Http.Headers;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Endpoints;
@@ -27,6 +36,12 @@ namespace MailFathom.Host.UnitTests.Security.Endpoints;
 /// </remarks>
 public sealed class ClientTransportSecurityExtensionsTests
 {
+    private const string MappedIssuer = "https://sso.example.test";
+
+    private const string MappedSubject = "11111111-2222-3333-4444-555555555555";
+
+    private static readonly Guid MappedCredentialId = new("0197c0de-0000-7000-8000-000000000004");
+
     [Fact]
     public void AddClientTransportSecurity_AConfiguredOriginList_ServesExactlyThoseOrigins()
     {
@@ -219,6 +234,92 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.True(result.None);
     }
 
+    /// <summary>A token this deployment mapped names the credential behind it, so a session it is exchanged for is one that credential ends.</summary>
+    /// <remarks>
+    /// The principal an access token produces is named by the issuer and the subject rather than by the credential, so
+    /// this is the one method where the exchange has nothing to read unless the claim is written. A session minted
+    /// without it would be live until its own expiry whatever an operator did to the mapping.
+    /// </remarks>
+    [Fact]
+    public async Task AddClientTransportSecurity_AnOAuthOnlyEndpoint_CarriesTheCredentialTheSubjectResolved()
+    {
+        // Arrange
+        using var composed = ComposeOAuthOnlyEndpoint(MapsTheSubject);
+        var validated = ValidatedTokenReaching(composed);
+
+        // Act
+        await composed
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Client.OAuthSchemeNameFor("workforce"))
+            .Events!
+            .OnTokenValidated(validated);
+
+        // Assert
+        Assert.NotNull(validated.Principal);
+        Assert.Equal(MappedCredentialId, TransportCallerCredential.CarriedBy(validated.Principal));
+    }
+
+    /// <summary>A session this deployment minted authenticates on the composed surface and is admitted by the requirement its routes carry.</summary>
+    /// <remarks>
+    /// The seam nothing else reaches: the handler, the scheme selector and the access policy are each covered on their
+    /// own, and every endpoint test calls a route method directly. A scheme registered under a name the selector does
+    /// not return, a store resolved per scope rather than per process, or a policy that does not recognize a session
+    /// principal would each sign every client out on the request after it signed in, with all of those still green.
+    /// </remarks>
+    [Fact]
+    public async Task AddClientTransportSecurity_ASessionThisDeploymentMinted_AuthenticatesAndIsAdmittedByTheSurface()
+    {
+        // Arrange
+        using var composed = ComposeOAuthOnlyEndpoint();
+        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+
+        var request = new DefaultHttpContext { RequestServices = composed };
+        request.Request.Scheme = "https";
+        request.Request.Host = new HostString("mail.example.test");
+        request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
+
+        // Act
+        var authenticated = await composed
+            .GetRequiredService<IAuthenticationService>()
+            .AuthenticateAsync(request, TransportSurface.Client.RoutingSchemeName);
+
+        var admitted = await composed
+            .GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(authenticated.Principal!, resource: null, TransportSurface.Client.AccessPolicyName);
+
+        // Assert
+        Assert.True(authenticated.Succeeded);
+        Assert.True(admitted.Succeeded);
+    }
+
+    /// <summary>A request presenting a session derives no key, which is the whole of what exchanging the password for one buys.</summary>
+    /// <remarks>
+    /// Asserted against a surface that takes passwords as well, because a surface taking none could not derive
+    /// anything whatever the composition did. The hasher counts what a request asks of it — the derivation a
+    /// verification performs and the one a rehash performs — rather than the decoy, which is derived once while the
+    /// process composes and belongs to no request.
+    /// </remarks>
+    [Fact]
+    public async Task AddClientTransportSecurity_ASessionPresentedWherePasswordsAreTakenToo_AuthenticatesWithoutDerivingAKey()
+    {
+        // Arrange
+        var hasher = new CountingPasswordHasher();
+        using var composed = ComposeEndpointTakingPasswordsAndSessions(hasher);
+        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+
+        var request = new DefaultHttpContext { RequestServices = composed };
+        request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
+
+        // Act
+        var authenticated = await composed
+            .GetRequiredService<IAuthenticationService>()
+            .AuthenticateAsync(request, TransportSurface.Client.RoutingSchemeName);
+
+        // Assert
+        Assert.True(authenticated.Succeeded);
+        Assert.Equal(0, hasher.Derivations);
+    }
+
     /// <summary>The unauthenticated posture is served rather than refused, and a browser still has to be answered on it.</summary>
     [Fact]
     public void AddClientTransportSecurity_AnEndpointRequiringNoCredential_RegistersThePolicyAndNoScheme()
@@ -241,6 +342,26 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IAuthenticationService));
     }
 
+    /// <summary>An endpoint requiring no credential still holds the store, so the exchange it serves answers rather than faulting.</summary>
+    /// <remarks>
+    /// The exchange is mapped into the client group whatever the endpoint's posture is, and a client signs in the one
+    /// way rather than asking which posture it is talking to first. Without the store it would resolve nothing and the
+    /// route would fault on the first sign-in of a deployment that had deliberately asked for no credential.
+    /// </remarks>
+    [Fact]
+    public void AddClientTransportSecurity_AnEndpointRequiringNoCredential_StillHoldsTheStoreTheExchangeMintsFrom()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddClientTransportSecurity(EnabledEndpoint());
+
+        // Assert
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(ClientSessionTokens));
+    }
+
     private static CorsPolicy ClientCorsPolicyOf(ClientEndpointOptions endpointSettings)
     {
         var services = new ServiceCollection();
@@ -257,10 +378,53 @@ public sealed class ClientTransportSecurityExtensionsTests
 
     private static ClientEndpointOptions EnabledEndpoint() => new() { Enabled = true };
 
-    private static ServiceProvider ComposeOAuthOnlyEndpoint()
+    private static AdmittedUserCredential AdmittedByACredential() => new(
+        MappedCredentialId,
+        MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
+        [MailFathomPermission.MailRead]);
+
+    private static void MapsTheSubject(IServiceCollection services)
+    {
+        var credentials = Substitute.For<IUserCredentialStore>();
+        Assert.True(UserCredentialLookup.TryCreateForOAuthSubject(MappedIssuer, MappedSubject, out var lookup));
+
+        credentials.FindAsync(UserCredentialMethod.OAuthSubject, lookup, Arg.Any<CancellationToken>())
+            .Returns(new ResolvedUserCredential(
+                MappedCredentialId,
+                MailUserId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff")),
+                UserCredentialMethod.OAuthSubject,
+                [MailFathomPermission.MailRead],
+                Enabled: true,
+                Material: null));
+
+        services.AddSingleton(credentials);
+        services.AddScoped<UserOAuthSubjectResolver>();
+    }
+
+    /// <summary>The context the authentication framework hands the event once a token's signature, issuer, audience, and lifetime have been checked.</summary>
+    private static TokenValidatedContext ValidatedTokenReaching(ServiceProvider composed)
+    {
+        var scheme = new AuthenticationScheme(
+            TransportSurface.Client.OAuthSchemeNameFor("workforce"),
+            displayName: null,
+            typeof(JwtBearerHandler));
+
+        return new TokenValidatedContext(
+            new DefaultHttpContext { RequestServices = composed },
+            scheme,
+            new JwtBearerOptions())
+        {
+            Principal = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim("iss", MappedIssuer), new Claim("sub", MappedSubject)],
+                "test")),
+        };
+    }
+
+    private static ServiceProvider ComposeOAuthOnlyEndpoint(Action<IServiceCollection>? alsoRegistering = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        alsoRegistering?.Invoke(services);
 
         var endpointSettings = EnabledEndpoint();
         var oauthSettings = new OAuthValidationOptions
@@ -283,5 +447,61 @@ public sealed class ClientTransportSecurityExtensionsTests
         services.AddClientTransportSecurity(endpointSettings);
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>Composes a client endpoint that takes a password and mints sessions, with the whole password graph behind it.</summary>
+    /// <remarks>The credential store holds nobody, because what is asserted is which handler a value reaches rather than what a password would have resolved to.</remarks>
+    private static ServiceProvider ComposeEndpointTakingPasswordsAndSessions(IPasswordHasher passwordHasher)
+    {
+        var credentials = Substitute.For<IUserCredentialStore>();
+        credentials.FindAsync(
+                Arg.Any<UserCredentialMethod>(),
+                Arg.Any<UserCredentialLookup>(),
+                Arg.Any<CancellationToken>())
+            .Returns((ResolvedUserCredential?)null);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(credentials);
+        services.AddSingleton(passwordHasher);
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider());
+        services.AddSingleton<PasswordAttemptLimiter>();
+        services.AddSingleton<DecoyPasswordHash>();
+        services.AddSingleton<UserPasswordAuthenticator>();
+
+        var endpointSettings = EnabledEndpoint();
+        endpointSettings.Authentication.Add(new UserFacingAuthenticationOptions
+        {
+            Method = UserCredentialMethod.Password.Name,
+        });
+
+        services.AddClientTransportSecurity(endpointSettings);
+
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>Counts the key derivations a request asked for, and answers with a fixed stored representation.</summary>
+    /// <remarks>Hand-written rather than substituted, because the members take the password as a <see cref="ReadOnlySpan{T}" /> and a dynamic proxy cannot carry a by-ref-like argument through its invocation.</remarks>
+    private sealed class CountingPasswordHasher : IPasswordHasher
+    {
+        private const string StoredHash = "$mf1$stored$";
+
+        internal int Derivations { get; private set; }
+
+        public string HashDecoy() => StoredHash;
+
+        public string Hash(ReadOnlySpan<char> password)
+        {
+            this.Derivations++;
+
+            return StoredHash;
+        }
+
+        public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password)
+        {
+            this.Derivations++;
+
+            return PasswordVerification.Failed;
+        }
     }
 }

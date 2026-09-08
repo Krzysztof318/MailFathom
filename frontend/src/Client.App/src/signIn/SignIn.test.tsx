@@ -4,24 +4,42 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
+import {
+    sessionExchangeRoute,
+    type ClientRequest,
+    type DeploymentAddress,
+    type MailFathomTransport,
+} from '@mailfathom/client-backend';
 import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import { LocalizationProvider } from '../localization/Localization';
 import type { CredentialNotice } from './CredentialNotices';
 import { SignIn } from './SignIn';
 import { longestCredentialPart } from './credentialEntry';
 import type { CredentialLifetime } from './credentialStore';
+import type { KeptSession } from './keptSession';
 
 // Everything below reaches the transport this screen takes from its caller, so nothing here patches a global or stands
 // up a server. What is under test is the real request, the real parsing, and the real failure mapping; only the answer
 // they are given is the test's.
 
-const signedIn: MailFathomTransport = () =>
-    Promise.resolve({
-        status: 200,
-        body: JSON.stringify({ service: 'MailFathom', version: '0.8.0', permissions: [] }),
-        headers: {},
-    });
+const mintedToken = 'mfs_signinscreen.c2lnbi1pbi1zY3JlZW4tcHJvb2Y';
+const mintedExpiry = '2126-08-31T21:41:00+00:00';
+
+/** What the screen reports once a deployment took the credential, which is a session rather than the credential. */
+const mintedSession: KeptSession = { authorization: `Bearer ${mintedToken}`, expiresAt: mintedExpiry, person: 'user' };
+
+// One deployment answering two routes, because signing in asks two questions: what is at this address, and will it take
+// this credential. The second answers with a session, and that is the only place a token comes from.
+const signedIn: MailFathomTransport = (request) =>
+    Promise.resolve(
+        request.path.endsWith(sessionExchangeRoute)
+            ? { status: 200, body: JSON.stringify({ token: mintedToken, expiresAt: mintedExpiry }), headers: {} }
+            : {
+                  status: 200,
+                  body: JSON.stringify({ service: 'MailFathom', version: '0.8.0', permissions: [] }),
+                  headers: {},
+              },
+    );
 
 const nothingThere: MailFathomTransport = () => Promise.reject(new TypeError('Failed to fetch'));
 
@@ -67,7 +85,7 @@ const configuredDeployment: AdoptedDeployment = { deployment: knownDeployment, o
 
 /** What the screen reported and what it started, so a test sees an attempt being called off rather than only ignored. */
 interface Rendered {
-    readonly presented: { deployment: DeploymentAddress; authorization: string }[];
+    readonly presented: { deployment: DeploymentAddress; session: KeptSession }[];
     readonly attempts: AbortSignal[];
     readonly pointedAway: boolean[];
 }
@@ -82,7 +100,7 @@ function renderScreen(
     notices: readonly CredentialNotice[] = [],
     clearTextPermitted: boolean | null = null,
 ): Rendered {
-    const presented: { deployment: DeploymentAddress; authorization: string }[] = [];
+    const presented: { deployment: DeploymentAddress; session: KeptSession }[] = [];
     const attempts: AbortSignal[] = [];
     const pointedAway: boolean[] = [];
 
@@ -98,8 +116,8 @@ function renderScreen(
 
                     return send;
                 }}
-                onSignedIn={(reached, authorization) => {
-                    presented.push({ deployment: reached, authorization });
+                onSignedIn={(reached, session) => {
+                    presented.push({ deployment: reached, session });
                 }}
                 onPointSomewhereElse={() => {
                     pointedAway.push(true);
@@ -163,7 +181,7 @@ describe('SignIn', () => {
 
         expect(
             screen.getByText(
-                'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
+                'Your password is encoded rather than encrypted when you sign in, and every request afterwards carries the session it is exchanged for. Anybody between this client and the deployment can read either. Leave this off unless the network between them is yours.',
             ),
         ).toBeDefined();
     });
@@ -340,10 +358,7 @@ describe('SignIn', () => {
 
         await vi.waitFor(() => {
             expect(presented).toEqual([
-                {
-                    deployment: { baseAddress: 'http://mail.example.test' },
-                    authorization: 'Basic dXNlcjpvcGVuIHNlc2FtZQ==',
-                },
+                { deployment: { baseAddress: 'http://mail.example.test' }, session: mintedSession },
             ]);
         });
 
@@ -351,7 +366,7 @@ describe('SignIn', () => {
         // anything went out at all, so no credential travelled over the transport the first attempt was refused for.
         expect(asked.map((request) => request.path)).toEqual([
             'http://mail.example.test/api/client/session',
-            'http://mail.example.test/api/client/session',
+            'http://mail.example.test/api/client/session/token',
         ]);
         expect(credentialsSent(asked)).toEqual([undefined, 'Basic dXNlcjpvcGVuIHNlc2FtZQ==']);
     });
@@ -410,10 +425,7 @@ describe('SignIn', () => {
 
         await vi.waitFor(() => {
             expect(presented).toEqual([
-                {
-                    deployment: { baseAddress: 'https://mail.example.test:8443' },
-                    authorization: 'Basic dXNlcjpvcGVuIHNlc2FtZQ==',
-                },
+                { deployment: { baseAddress: 'https://mail.example.test:8443' }, session: mintedSession },
             ]);
         });
     });
@@ -492,7 +504,7 @@ describe('SignIn', () => {
         submit();
 
         await screen.findByRole('alert');
-        expect(asked).toEqual(['https://mail.example.invalid/api/client/session']);
+        expect(asked).toEqual(['https://mail.example.invalid/api/client/session/token']);
     });
 
     it('says what answered was not MailFathom rather than signing in against anything that replies', async () => {
@@ -509,29 +521,29 @@ describe('SignIn', () => {
         renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['credentialNoLongerAccepted']);
 
         expect(screen.getByRole('status').textContent).toBe(
-            'This deployment has stopped accepting the password that was kept. Sign in again.',
+            'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
         );
     });
 
-    it('says the password is still on the machine when signing out could not remove it', () => {
-        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['passwordNotRemoved']);
+    it('says the sign-in is still on the machine when signing out could not remove it', () => {
+        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['sessionNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
-            'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
         );
     });
 
     it('says both things at once when the credential was refused and the password could not be removed', () => {
         renderScreen(signedIn, servingDeployment, 'untilSignedOut', [
             'credentialNoLongerAccepted',
-            'passwordNotRemoved',
+            'sessionNotRemoved',
         ]);
 
         // Two facts rather than one told twice: a person is signed out for one reason and is still carrying a password
         // for another, and hearing only the first would leave them believing the machine holds nothing.
         expect(screen.getAllByRole('status').map((shown) => shown.textContent)).toEqual([
-            'This deployment has stopped accepting the password that was kept. Sign in again.',
-            'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+            'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
+            'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
         ]);
     });
 
@@ -573,12 +585,12 @@ describe('SignIn', () => {
         expect(document.body.textContent).not.toContain('dXNlcjpvcGVuIHNlc2FtZQ==');
     });
 
-    it('says the password lasts only as long as the tab where nothing may be kept beyond it', () => {
+    it('says the sign-in lasts only as long as the tab where nothing may be kept beyond it', () => {
         renderScreen(signedIn, servingDeployment);
 
         expect(
             screen.getByText(
-                'Your password is kept until you close this tab, and you will be asked for it again — a password left in a browser can be read by anything that reaches this page.',
+                'Your password is not stored anywhere. This sign-in is kept until you close this tab, and you will be asked for your password again — anything that reaches this page can read what a browser keeps.',
             ),
         ).toBeDefined();
     });
@@ -589,11 +601,11 @@ describe('SignIn', () => {
     it.each([
         [
             'notKeptStorageUnreachable' as const,
-            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a password anywhere less safe.',
+            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a credential anywhere less safe.',
         ],
         [
             'notKeptKeyInvalidated' as const,
-            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
+            'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
         ],
     ])('says nothing will be kept, and why, where the store reports %s', (lifetime, sentence) => {
         renderScreen(signedIn, servingDeployment, lifetime);

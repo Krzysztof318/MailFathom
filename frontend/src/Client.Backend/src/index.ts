@@ -207,6 +207,14 @@ export {
     type PortraitImageType,
 } from './ownPortrait';
 export { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
+export {
+    endSession,
+    parseMintedSession,
+    renewSession,
+    sessionExchangeRoute,
+    sessionRevocationRoute,
+    type MintedSession,
+} from './sessionToken';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 export {
     hubAddressFor,

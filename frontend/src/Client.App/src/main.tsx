@@ -18,6 +18,7 @@ import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
 import { SystemNotifierContext, systemNotifierForThisApplication } from './shellOperations/systemNotifier';
 import { credentialStore } from './signIn/credentialStore';
+import { readKeptSession } from './signIn/keptSession';
 import { browserSchedule, openSignalChannel } from './signals/signalChannel';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
@@ -72,7 +73,7 @@ async function open(root: HTMLElement): Promise<void> {
     const deployment = adoptedDeployment(await configuredConnection());
     const adopted = deployment.outcome === 'resolved' ? deployment.adopted : null;
     const credentials = await credentialStore();
-    const signedInWith = adopted === null ? null : await credentials.read(adopted.deployment);
+    const signedInWith = adopted === null ? null : readKeptSession(await credentials.read(adopted.deployment));
     const send = await transportForThisRun();
 
     // The root is where what the deployment is told about a failed render is composed, which is why the boundaries

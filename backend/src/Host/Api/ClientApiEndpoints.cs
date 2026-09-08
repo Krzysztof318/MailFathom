@@ -28,6 +28,12 @@ namespace MailFathom.Host.Api;
 /// will serve it.
 /// </para>
 /// <para>
+/// The exchange and the revocation, which <see cref="ClientSessionTokenEndpoints" /> describes, are what turn a
+/// credential into a session and back again. They are the reason the rest of this group costs what the query costs:
+/// the exchange is where a password is derived, once, and every route below it is reached with a token that verifies
+/// without deriving anything.
+/// </para>
+/// <para>
 /// The record routes, which <see cref="ClientUserRecordEndpoint" /> describes, are where a person changes what this
 /// deployment reads for them, and the mutation routes, which <see cref="ClientMailMutationsEndpoint" /> describes, are
 /// where they change the mailbox itself. None of them names a user: the acting user comes off the credential, which
@@ -122,6 +128,7 @@ internal static class ClientApiEndpoints
                 TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry)))
             .RequireNoPermission();
 
+        api.MapClientSessionTokens();
         api.MapClientUserRecord();
         api.MapClientDisplayName();
         api.MapClientPreferences();

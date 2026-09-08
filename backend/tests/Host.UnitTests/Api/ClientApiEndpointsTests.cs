@@ -173,6 +173,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.ExchangeRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.RevocationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
@@ -264,6 +266,8 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientSessionTokenEndpoints.ExchangeRoute} -> none",
+                $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
@@ -334,6 +338,7 @@ public sealed class ClientApiEndpointsTests
                         || WritesTheCallersOwnPortrait(endpoint)
                         || MarksTheCallersOwnNotificationsRead(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
+                        || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
                         || AsksAQuestionOfTheCallersOwnMail(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
@@ -403,6 +408,21 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}";
+
+    /// <summary>Reports whether a route is the exchange or the revocation of the caller's own session, by the two routes they are served at.</summary>
+    /// <remarks>
+    /// The route rather than the grant, for the reason the preferences write is named that way, and with a stronger
+    /// claim behind it: signing in and signing out are what a caller does before it holds a grant and after it stops
+    /// needing one, so a permission on either would be a credential that could authenticate and not sign in. Naming
+    /// the two routes keeps that narrow — a third route published under no permission fails this rather than joining
+    /// it.
+    /// </remarks>
+    private static bool ExchangesTheCallersOwnCredentialForASession(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && ($"/{route.RoutePattern.RawText?.TrimStart('/')}"
+                == $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.ExchangeRoute}"
+            || $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+                == $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.RevocationRoute}");
 
     /// <summary>Reports whether a route follows the caller's own citations, by the route it is served at.</summary>
     /// <remarks>
