@@ -16,7 +16,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useSignalledChanges } from '../signals/signalledChanges';
-import { scopeKey } from '../workspace/mailScope';
+import { everything, scopeKey, scopeStillOffered } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
 import { folderTreeOf, visibleRows, type VisibleRow } from './folderTreeRows';
@@ -44,6 +44,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 /** What one attempt answered, tagged with the attempt, so whether a read is in flight is worked out rather than kept. */
@@ -108,6 +109,24 @@ export function FolderTree({
             listening = false;
         };
     }, [session, transport, attempt, refreshed, online]);
+
+    // A scope outlives the tree it was chosen from, so the answer that arrives is also what says whether it still
+    // names anything: the session's store carries a folder across a reload, and a folder deleted on the mail server in
+    // between would otherwise leave the list asking for a mailbox nobody can reach and the tree highlighting no row.
+    // Falling back to the widest scope is what the client opens with, so a folder that has gone reads as never having
+    // been chosen rather than as an error somebody has to press through.
+    //
+    // An effect rather than a derivation, which § *State* would otherwise prefer: the scope is one value the whole
+    // client reads and this tree is one of its readers, so deriving a second scope here would be the two-values-that
+    // -must-agree defect rather than a cure for it. It is also not the reconciling effect that rule refuses — nothing
+    // is being kept in step, and this runs once per answer that disagrees rather than on every render.
+    useEffect(() => {
+        if (answered?.result.outcome !== 'read' || scopeStillOffered(workspace.scope, answered.result.value)) {
+            return;
+        }
+
+        revise({ scope: everything });
+    }, [answered, workspace.scope, revise]);
 
     // Three of the five kinds move this tree, because all three move a count it draws: mail arriving in a folder, a
     // message changing folder or read state, and the mapping itself moving. It re-reads under whatever is drawn rather

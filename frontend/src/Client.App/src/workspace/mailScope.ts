@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { MailFolderRole } from '@mailfathom/client-backend';
+import type { MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 
 // What the client is looking at, which the list, the search, and the next question are all asked against. It is one
@@ -169,4 +169,33 @@ export function scopeReaches(scope: MailScope, account: string, folder: string |
 /** The scope naming one whole account, or everything where no account was named. */
 export function scopeOfAccount(accountId: string | null): MailScope {
     return accountId === null ? everything : { kind: 'account', accountId };
+}
+
+/**
+ * Whether the deployment still offers what a scope names.
+ *
+ * A scope outlives the answer it was chosen from — the session's store carries it across a reload — so a folder
+ * somebody deleted from their mail server, an account whose declaration was removed, or the last folder playing a role
+ * each leave a scope naming something nobody can reach. Asked of the directory rather than of the tree drawn from it,
+ * because what makes a scope reachable is the mapping the deployment answered with and not how a column happens to be
+ * folded.
+ *
+ * `everything` is always offered, including where there is no account at all: it is the widest scope rather than a
+ * place, and a client with no mailbox is told so by the tree rather than by having its scope taken away.
+ */
+export function scopeStillOffered(scope: MailScope, directory: MailFolderDirectory): boolean {
+    switch (scope.kind) {
+        case 'everything':
+            return true;
+        case 'role':
+            return directory.accounts.some((entry) => entry.folders.some((folder) => folder.role === scope.role));
+        case 'account':
+            return directory.accounts.some((entry) => entry.account.id === scope.accountId);
+        case 'folder':
+            return directory.accounts.some(
+                (entry) =>
+                    entry.account.id === scope.accountId &&
+                    entry.folders.some((folder) => folder.alias === scope.alias),
+            );
+    }
 }

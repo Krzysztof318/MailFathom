@@ -38,6 +38,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 // How many are picked out, in the forms a language has for the noun — the same sentence the mail list's own bar says,

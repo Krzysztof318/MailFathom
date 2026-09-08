@@ -154,7 +154,13 @@ export function readMailMessage(
         }
 
         if (response.status !== 200) {
-            return failed(failureReasonForStatus(response.status), response.status);
+            // The one route where a `404` is its own answer rather than one more way of not reaching the deployment:
+            // it names a single message, so the deployment saying it does not hold that message is the deployment
+            // answering. A reader whose open message was deleted or moved elsewhere is told it is gone and let go of
+            // it, rather than being offered a retry that cannot succeed.
+            const reason = response.status === 404 ? 'missing' : failureReasonForStatus(response.status);
+
+            return failed(reason, response.status);
         }
 
         const message = parseMessage(response.body);

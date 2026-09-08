@@ -53,6 +53,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 export function Thread({

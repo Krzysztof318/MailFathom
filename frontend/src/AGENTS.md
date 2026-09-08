@@ -61,9 +61,13 @@ Four things may never cross, in either direction:
 
 - One exported function per thing the client asks for, named for what it asks — `readMailAccounts`, not `getAccounts`
   and not `accountsApi.fetch`. It takes the session and the transport and answers a `ClientResult`.
-- **An expected failure is a value, never an exception.** The four `ClientFailureReason` values exist because a screen
-  does something different with each, so a new operation reuses them rather than inventing a fifth for the same four
-  outcomes; a genuinely new outcome is a new member argued in the change that adds it.
+- **An expected failure is a value, never an exception.** The `ClientFailureReason` values exist because a screen does
+  something different with each, so a new operation reuses them rather than inventing another for outcomes they already
+  cover; a genuinely new outcome is a new member argued in the change that adds it. `missing` is the worked example of
+  that bar being met — a message the deployment no longer holds is let go of where every other failure is retried or
+  reported — and it is also the example of where such a reading belongs: `failureReasonForStatus` maps a `404` to
+  `unavailable`, because most routes here name no one thing, and the one route that names a single message reads that
+  status differently at its own call site.
 - **The credential is a finished header value and nothing composes it here.** Nothing logs it, puts it in a URL, stores
   it where another origin can read it, or passes it to anything but a request on the client surface.
 - Bound what a screen asks for. A route that can answer with a mailbox-sized collection is called with the window the
@@ -273,9 +277,10 @@ not a preference about polish.
 
 - **Every surface that waits says it is waiting**, from the moment the wait starts, in the place the answer will appear.
   A screen that looks finished while a read is in flight is a screen a person acts on twice.
-- **Every failure says what failed and offers the way out.** The four failure reasons are four different sentences and
-  four different next steps: signing in again, saying the grant is missing, retrying, and reporting a defect. "Something
-  went wrong" is none of them, and neither is a status code on a screen.
+- **Every failure says what failed and offers the way out.** Each failure reason is its own sentence and its own next
+  step: signing in again, saying the grant is missing, retrying, reporting a defect, and — for something the deployment
+  no longer holds — letting go of it and landing on the empty state, which is the one whose way out is that no way out
+  is needed. "Something went wrong" is none of them, and neither is a status code on a screen.
 - **No state is reachable that a person cannot leave.** Every dialog closes, every flow can be abandoned, and every
   error state offers something other than reloading the page.
 - **Every screen has its five states, and each is designed rather than defaulted**: loading, empty, partial (some of it

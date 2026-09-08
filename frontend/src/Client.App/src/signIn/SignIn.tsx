@@ -88,6 +88,12 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
     unauthorized: { message: 'signIn.grantMissing', controls: [] },
     unavailable: { message: 'connect.unavailable', controls: [] },
     unreadable: { message: 'connect.unreadable', controls: [] },
+
+    // `missing` is named for the same reason the two above it are and is reached from here even less: it is produced
+    // by the one route that names a single message, which nothing on this screen calls. It reads as a deployment that
+    // did not answer, because at this point that is what a reader would have to act on — an address to check and a
+    // deployment to start — and nothing here has named a thing that could have gone.
+    missing: { message: 'connect.unavailable', controls: [] },
 };
 
 // What "nothing answered" reads as where there is no address on the screen. `connect.unavailable` asks somebody to

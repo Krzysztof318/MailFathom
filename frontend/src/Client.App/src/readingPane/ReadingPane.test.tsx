@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
     ClientResponse,
@@ -23,7 +23,7 @@ import {
 } from '../readMarking/useReadMarking';
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
-import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { emptyWorkspace, useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import {
     SignalledChangesContext,
@@ -110,6 +110,47 @@ const answersNothing: MailFathomTransport = (request) => {
     return new Promise<ClientResponse>(() => undefined);
 };
 
+// What the pane wrote back, read the way the frame above it reads it: out of the workspace rather than out of the
+// component. An `output` reports itself as a status region, so it is picked out by carrying a workspace.
+function SelectionProbe() {
+    const { workspace } = useWorkspace();
+
+    return <output>{JSON.stringify(workspace)}</output>;
+}
+
+function selected(): string | null {
+    const probe = screen.getAllByRole('status').find((element) => element.textContent.startsWith('{'));
+
+    return (JSON.parse(probe?.textContent ?? '') as Workspace).selection;
+}
+
+// The pane opened on the message the workspace says is open, which is the arrangement a reload produces and the only
+// one in which letting go of what is open means anything.
+function drawingWithSelection(transport: MailFathomTransport): void {
+    window.sessionStorage.setItem('mailfathom.workspace', JSON.stringify({ ...emptyWorkspace, selection: messageId }));
+
+    render(
+        <LocalizationProvider>
+            <WorkspaceProvider>
+                <LinkOpenerContext value={() => Promise.resolve()}>
+                    <AttachmentExchangeContext value={deliversNothing}>
+                        <OpenAttachmentContext value={() => undefined}>
+                            <ReadingPane
+                                session={session}
+                                transport={transport}
+                                storedEmailId={messageId}
+                                online
+                                onShowFullHtml={() => undefined}
+                            />
+                        </OpenAttachmentContext>
+                    </AttachmentExchangeContext>
+                </LinkOpenerContext>
+                <SelectionProbe />
+            </WorkspaceProvider>
+        </LocalizationProvider>,
+    );
+}
+
 function drawing(
     transport: MailFathomTransport,
     storedEmailId: string | null = messageId,
@@ -179,6 +220,12 @@ function recordingMarkings(): { marking: ReadMarking; opened: MessageOpened[] } 
         },
     };
 }
+
+// The session's store outlives a test rather than a file, so a workspace one test opened the pane on would be the one
+// the next test opened with.
+afterEach(() => {
+    window.sessionStorage.clear();
+});
 
 describe('ReadingPane', () => {
     it('says nothing is open rather than drawing an empty message', () => {
@@ -316,6 +363,28 @@ describe('ReadingPane', () => {
         expect(await screen.findByText('This message could not be opened: unauthorized.')).toBeDefined();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     });
+
+    // What is open outlives the message across a reload, so a reader returning to a message their deployment no longer
+    // holds is owed the empty state rather than a failure with nothing behind it. Asserted on the workspace because
+    // that is where the fact lives: the pane above this one draws nothing open once the selection has gone.
+    it('lets go of a message the deployment no longer holds, so what is open is nothing rather than a failure', async () => {
+        drawingWithSelection(deploymentDescribing(description(), 404));
+
+        await waitFor(() => {
+            expect(selected()).toBeNull();
+        });
+    });
+
+    it.each([401, 403, 500, 503])(
+        'keeps what is open where a status of %i says nothing about the message being there',
+        async (status) => {
+            drawingWithSelection(deploymentDescribing(description(), status));
+
+            await screen.findByRole('alert');
+
+            expect(selected()).toBe(messageId);
+        },
+    );
 
     it('names no file where the message carries none', async () => {
         drawing(deploymentDescribing());
@@ -577,21 +646,33 @@ describe('ReadingPane against a deployment that says what changed', () => {
 // Following a search result's citation, which is one act across two components: the row records which file of which
 // message it cited, and this pane is the only place that learns how large that file declares itself to be — the bound
 // the download is read under, and the reason the citation is a coordinate rather than an opened file.
+const followTheCitation = 'Follow the citation, as a search result would write it.';
+
 describe('ReadingPane following a cited file', () => {
     // The citation is written the way a search row writes it — through the workspace, before the pane has read the
     // message — rather than by seeding a store, which `rememberWorkspace` deliberately never keeps it in.
     function citing(cited: Workspace['citedAttachment']): { opened: OpenedAttachment[]; cite: () => void } {
         const opened: OpenedAttachment[] = [];
-        let cite = (): void => undefined;
 
+        // A control the test presses rather than a function captured out of the render: writing to a variable declared
+        // outside a component is a side effect during render whatever the variable is for, and a render React repeats
+        // is a render that would do it twice.
         function Citing() {
             const { workspace, revise } = useWorkspace();
 
-            cite = () => {
-                revise({ citedAttachment: cited });
-            };
-
-            return <output>{JSON.stringify(workspace.citedAttachment)}</output>;
+            return (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            revise({ citedAttachment: cited });
+                        }}
+                    >
+                        {followTheCitation}
+                    </button>
+                    <output>{JSON.stringify(workspace.citedAttachment)}</output>
+                </>
+            );
         }
 
         render(
@@ -624,7 +705,7 @@ describe('ReadingPane following a cited file', () => {
         return {
             opened,
             cite: () => {
-                cite();
+                fireEvent.click(screen.getByRole('button', { name: followTheCitation }));
             },
         };
     }

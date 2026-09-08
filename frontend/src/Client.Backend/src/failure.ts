@@ -5,10 +5,17 @@
 /**
  * Why a read did not answer.
  *
- * The four are separated because a screen does something different with each: a refused credential is signed in again,
- * a missing grant is not, an unreachable deployment is retried, and a body this package could not read is a defect.
+ * The five are separated because a screen does something different with each: a refused credential is signed in again,
+ * a missing grant is not, an unreachable deployment is retried, a body this package could not read is a defect, and
+ * something the deployment no longer holds is let go of.
+ *
+ * `missing` is the member added last and it is the one that earns its place by what a screen must *not* do: a message
+ * somebody had open which has since been deleted or moved answers exactly as a deployment that is down does, so a
+ * client that cannot tell them apart either offers to retry something that will never answer, or drops what a reader
+ * had open every time the deployment blinks. Both are wrong, and neither is fixable on the screen — only the status
+ * knows, and a status is this package's to read.
  */
-export type ClientFailureReason = 'unauthenticated' | 'unauthorized' | 'unavailable' | 'unreadable';
+export type ClientFailureReason = 'unauthenticated' | 'unauthorized' | 'unavailable' | 'unreadable' | 'missing';
 
 /** A read that did not answer, and enough to say so on a screen without showing what the service returned. */
 export interface ClientFailure {
@@ -29,7 +36,14 @@ export function failed<TValue>(reason: ClientFailureReason, status: number | nul
     return { outcome: 'failed', failure: { reason, status } };
 }
 
-/** The failure an HTTP status stands for, for a status this package did not expect to succeed. */
+/**
+ * The failure an HTTP status stands for, for a status this package did not expect to succeed.
+ *
+ * A `404` is `unavailable` here rather than `missing`, because most routes on this surface name no one thing: a
+ * deployment that never served the client surface at all answers a session probe with the same status a deleted
+ * message answers a read with, and the two are not the same sentence. A route that does name one thing says so at its
+ * own call site, which is where the knowledge that a status means *gone* actually lives.
+ */
 export function failureReasonForStatus(status: number): ClientFailureReason {
     switch (status) {
         case 401:

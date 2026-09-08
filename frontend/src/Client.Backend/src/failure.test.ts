@@ -6,9 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { failed, failureReasonForStatus, read } from './failure';
 
 describe('failureReasonForStatus', () => {
-    // The four reasons exist because a screen acts differently on each, so the mapping is asserted status by status
-    // rather than as "not read": a refused credential that arrived as `unavailable` would be retried forever instead
-    // of sending the person back to sign in.
+    // The reasons exist because a screen acts differently on each, so the mapping is asserted status by status rather
+    // than as "not read": a refused credential that arrived as `unavailable` would be retried forever instead of
+    // sending the person back to sign in.
+    //
+    // `404` is `unavailable` here deliberately, and `mailMessage.test.ts` is where the other reading of it is asserted:
+    // most routes on this surface name no one thing, so a deployment that never served the client surface answers a
+    // probe with the same status a deleted message answers a read with.
     it.each([
         [401, 'unauthenticated'],
         [403, 'unauthorized'],

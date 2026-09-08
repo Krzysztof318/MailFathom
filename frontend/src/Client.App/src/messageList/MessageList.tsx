@@ -74,6 +74,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 // How long after scrolling stops before where the reader is is written down. Long enough that a flick through a folder

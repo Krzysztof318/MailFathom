@@ -52,6 +52,7 @@ const failureSaid: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'compose.failedUnauthorized',
     unavailable: 'compose.failedUnavailable',
     unreadable: 'compose.failedUnreadable',
+    missing: 'compose.failedMissing',
 };
 
 // What each rule that refuses a send is called, and what would change it. Exhaustive by its own type, so a refusal the

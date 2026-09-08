@@ -47,6 +47,7 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthorized: 'failure.unauthorized',
     unavailable: 'failure.unavailable',
     unreadable: 'failure.unreadable',
+    missing: 'failure.missing',
 };
 
 // What a reader is told about each bound that could have cut this representation short, and nothing where none did.

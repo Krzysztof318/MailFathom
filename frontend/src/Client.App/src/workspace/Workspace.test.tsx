@@ -83,6 +83,7 @@ describe('WorkspaceProvider', () => {
         const change: Partial<Workspace> = {
             scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
             collapsed: ['account:personal'],
+            selection: 'AAMkAD-42',
         };
         const { rerender } = renderProbe(change);
 
