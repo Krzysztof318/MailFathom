@@ -90,6 +90,10 @@ jobs:
           pinned="$(sed -n 's:.*<PackageVersion Include="Aspire.Hosting.AppHost" Version="\([^"]*\)".*:\1:p' backend/Directory.Packages.props | head -n 1)"
           dotnet tool install --global Aspire.Cli --version "$pinned"
 
+          # Stated rather than assumed, exactly as `Build the schema artifact` states it. A global tool lands here
+          # whatever the runner image happens to put on PATH, and the pipeline below refuses to run without `aspire`.
+          printf '%s\n' "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
       # Ahead of the browser install, which runs out of the workspace's own `node_modules`. The pipeline restores the
       # workspace again as its first step and finds nothing left to do.
       - name: Restore the client workspace

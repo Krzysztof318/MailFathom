@@ -28,6 +28,16 @@ var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(args);
 // what the other does not: this one starts no MailFathom at all.
 var runsEndToEndClient = OrchestrationContract.RunsEndToEndClient(args);
 
+// Refused rather than resolved, because the two switches name incompatible shapes and this file would silently pick
+// one: the end-to-end branch returns before the integration topology's analyzer, spam daemon, silo, migrations and
+// MailFathom are ever declared, so a caller passing both would get a run that looks like it started and is missing
+// everything it asked for.
+if (runsIntegrationTests && runsEndToEndClient)
+{
+    throw new InvalidOperationException(
+        $"'{OrchestrationContract.IntegrationTestingArgument}' and '{OrchestrationContract.EndToEndClientArgument}' select different topologies and cannot be passed together. State one of them.");
+}
+
 // Both ephemeral topologies name their containers and volumes under the run prefix, keep nothing across runs, and are
 // removed by whatever started them. Everything below that distinguishes them is about MailFathom rather than about the
 // servers underneath it.

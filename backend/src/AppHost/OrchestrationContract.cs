@@ -625,8 +625,9 @@ public static class OrchestrationContract
     /// <remarks>
     /// Matched against the argument list for the reason <see cref="IntegrationTestingArgument" /> is, and exclusive
     /// with it: this topology starts the database and the mail server and no MailFathom at all, because the run that
-    /// selects it stands its own service up the way an operator does. <c>scripts/run-end-to-end-client.sh</c> is the
-    /// only caller.
+    /// selects it stands its own service up the way an operator does. The app host refuses the two together rather
+    /// than resolving them, so the exclusivity is enforced where both answers are read rather than stated here alone.
+    /// <c>scripts/run-end-to-end-client.sh</c> is the only caller.
     /// </remarks>
     public const string EndToEndClientArgument = "EndToEndClient=true";
 
@@ -652,9 +653,11 @@ public static class OrchestrationContract
     /// <remarks>Stated for the reason <see cref="EndToEndClientPostgresPort" /> is.</remarks>
     public const int EndToEndClientMailServerApiPort = 24080;
 
-    /// <summary>The prefix every container and volume the integration-test topology creates is named with.</summary>
+    /// <summary>The prefix every container and volume an ephemeral topology creates is named with.</summary>
     /// <remarks>
-    /// Test containers and volumes are ephemeral, and a run that is killed rather than shut down leaves both behind.
+    /// Both ephemeral topologies use it — the integration-test one and the end-to-end-client one — so a leftover names
+    /// the shape it came from rather than which run created it, which is what the identifier below is for.
+    /// Their containers and volumes are ephemeral, and a run that is killed rather than shut down leaves both behind.
     /// The shared prefix is what makes the leftovers identifiable without inspecting them, so removing them is one
     /// filtered command rather than a decision per resource. It is the leading part of a name rather than the whole of
     /// one: <see cref="ResolveEphemeralResourceNamePrefix" /> appends this run's own identifier after it.
@@ -680,10 +683,11 @@ public static class OrchestrationContract
     /// <summary>The environment variable a caller states this run's ephemeral resource identifier in.</summary>
     /// <remarks>
     /// <para>
-    /// Set by <c>scripts/run-integration-tests.sh</c>, which needs the identifier before the suite starts so that the
-    /// removal it performs afterwards can name what this run created rather than everything the shared prefix matches.
-    /// A sweep of the shared prefix would take a concurrent run's containers with it, which is the collision the
-    /// identifier exists to prevent.
+    /// Set by <c>scripts/run-integration-tests.sh</c> and by <c>scripts/run-end-to-end-client.sh</c>, each of which
+    /// needs the identifier before its run starts so that the removal it performs afterwards can name what this run
+    /// created rather than everything the shared prefix matches. A sweep of the shared prefix would take a concurrent
+    /// run's containers with it — and the two topologies share that prefix, so the concurrent run is not necessarily
+    /// of the same shape. That is the collision the identifier exists to prevent.
     /// </para>
     /// <para>
     /// An environment variable rather than an argument, unlike <see cref="IntegrationTestingArgument" />, and the
