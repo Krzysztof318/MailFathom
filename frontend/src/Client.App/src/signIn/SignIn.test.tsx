@@ -181,7 +181,7 @@ describe('SignIn', () => {
 
         expect(
             screen.getByText(
-                'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
+                'Your password is encoded rather than encrypted when you sign in, and every request afterwards carries the session it is exchanged for. Anybody between this client and the deployment can read either. Leave this off unless the network between them is yours.',
             ),
         ).toBeDefined();
     });
@@ -525,7 +525,7 @@ describe('SignIn', () => {
         );
     });
 
-    it('says the password is still on the machine when signing out could not remove it', () => {
+    it('says the sign-in is still on the machine when signing out could not remove it', () => {
         renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['sessionNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
@@ -585,7 +585,7 @@ describe('SignIn', () => {
         expect(document.body.textContent).not.toContain('dXNlcjpvcGVuIHNlc2FtZQ==');
     });
 
-    it('says the password lasts only as long as the tab where nothing may be kept beyond it', () => {
+    it('says the sign-in lasts only as long as the tab where nothing may be kept beyond it', () => {
         renderScreen(signedIn, servingDeployment);
 
         expect(

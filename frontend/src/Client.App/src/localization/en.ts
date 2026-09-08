@@ -110,7 +110,7 @@ export const en = {
     'connect.clearTextConfigured':
         'This was set for you when the client was installed, so it is not yours to change here. Whoever configured it decides it.',
     'connect.clearTextExplanation':
-        'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
+        'Your password is encoded rather than encrypted when you sign in, and every request afterwards carries the session it is exchanged for. Anybody between this client and the deployment can read either. Leave this off unless the network between them is yours.',
     'connect.clearTextInForce':
         'TLS is off. The login, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
     'connect.portHint': 'port {port}',

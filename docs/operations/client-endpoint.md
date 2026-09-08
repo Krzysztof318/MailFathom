@@ -194,7 +194,10 @@ endpoint is authenticated, and no credential stands behind it for an operator to
 
 **A live token presented here renews it.** The answer is a fresh token, and the presented one stops working — one
 sign-in to one live credential, with no separate renewal credential and no second route. The client renews an hour
-before the expiry it was given, so a client left open stays signed in and nobody types a password again.
+before the expiry it was given, so a client left open stays signed in and nobody types a password again. A read already
+on the wire when the renewal answers is therefore refused `401` for a token its own client has just replaced, which is
+an ordinary `401` in a log rather than a credential anybody stopped accepting: the client presents what it now holds and
+reads again instead of signing the person out.
 
 ```http
 POST /api/client/session/token/revocation

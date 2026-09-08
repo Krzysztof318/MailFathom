@@ -198,15 +198,29 @@ export function useConnection(
         // can never be true at the second: what changes it is a cleanup running while a read is in flight.
         const abandoned = (): boolean => attempted.signal.aborted;
 
+        // A token this client replaced while the request was on the wire was refused for having been replaced rather
+        // than for the person behind it: the renewal that destroyed it minted its successor in the same answer. So the
+        // read is made again with what is held now, and the session somebody still has is not discarded under them.
+        const refused = (presented: ClientSession): void => {
+            if (presented.authorization === carried.current) {
+                onCredentialRefused();
+
+                return;
+            }
+
+            setRead((token) => token + 1);
+        };
+
         void (async () => {
-            const session = await readDeploymentSession(credential(), transport);
+            const presentedToRead = credential();
+            const session = await readDeploymentSession(presentedToRead, transport);
 
             if (abandoned()) {
                 return;
             }
 
             if (session.outcome === 'failed' && session.failure.reason === 'unauthenticated') {
-                onCredentialRefused();
+                refused(presentedToRead);
 
                 return;
             }
@@ -245,14 +259,15 @@ export function useConnection(
                 return;
             }
 
-            const accounts = await readMailAccounts(credential(), transport);
+            const presentedToList = credential();
+            const accounts = await readMailAccounts(presentedToList, transport);
 
             if (abandoned()) {
                 return;
             }
 
             if (accounts.outcome === 'failed' && accounts.failure.reason === 'unauthenticated') {
-                onCredentialRefused();
+                refused(presentedToList);
 
                 return;
             }

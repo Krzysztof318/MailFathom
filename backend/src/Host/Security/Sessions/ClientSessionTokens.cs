@@ -85,7 +85,7 @@ internal sealed class ClientSessionTokens
 
     /// <summary>The most a presented value may be before it is refused unread.</summary>
     /// <remarks>A token this type mints is seventy characters, so anything past this is not one. Bounded here rather than left to whatever a listener or a proxy in front of it allows, neither of which is this type's to rely on.</remarks>
-    private const int LongestPresentedToken = 256;
+    internal const int LongestPresentedToken = 256;
 
     private readonly Dictionary<string, LiveSession> live = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, DateTimeOffset> endedCredentials = [];
@@ -213,7 +213,7 @@ internal sealed class ClientSessionTokens
     {
         lock (this.gate)
         {
-            this.endedCredentials[credentialId] = this.timeProvider.GetUtcNow() + MintBarrier;
+            this.BarMinting(this.endedCredentials, credentialId);
 
             return this.RevokeEverything(session => session.Admitted.CredentialId == credentialId);
         }
@@ -231,7 +231,7 @@ internal sealed class ClientSessionTokens
     {
         lock (this.gate)
         {
-            this.endedUsers[user] = this.timeProvider.GetUtcNow() + MintBarrier;
+            this.BarMinting(this.endedUsers, user);
 
             return this.RevokeEverything(session => session.Admitted.User == user);
         }
@@ -379,8 +379,25 @@ internal sealed class ClientSessionTokens
         SweepBarriers(this.endedUsers, now);
     }
 
+    /// <summary>Bars minting against what an operator's act invalidated, and prunes what no exchange can still be in flight across.</summary>
+    /// <remarks>
+    /// Both barrier dictionaries are swept here rather than only beside the sessions, because the session sweep runs
+    /// only where the store is full: a deployment that never reaches <see cref="MostLiveSessions" /> would otherwise
+    /// keep one entry per act an operator ever performed for the life of the process.
+    /// </remarks>
+    private void BarMinting<TKey>(Dictionary<TKey, DateTimeOffset> barriers, TKey key)
+        where TKey : notnull
+    {
+        var now = this.timeProvider.GetUtcNow();
+
+        barriers[key] = now + MintBarrier;
+
+        SweepBarriers(this.endedCredentials, now);
+        SweepBarriers(this.endedUsers, now);
+    }
+
     /// <summary>Removes the barriers an exchange can no longer have been in flight across.</summary>
-    /// <remarks>Swept beside the sessions rather than on a timer of its own, because a barrier holds one entry per act an operator performed and outlives none of them by more than <see cref="MintBarrier" />.</remarks>
+    /// <remarks>Called under <c>gate</c>, which is what lets it enumerate a dictionary while removing from it.</remarks>
     private static void SweepBarriers<TKey>(Dictionary<TKey, DateTimeOffset> barriers, DateTimeOffset now)
         where TKey : notnull
     {

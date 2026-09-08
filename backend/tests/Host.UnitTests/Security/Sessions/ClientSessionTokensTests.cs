@@ -100,14 +100,25 @@ public sealed class ClientSessionTokensTests
     }
 
     /// <summary>A value longer than anything this type mints is refused unread rather than walked.</summary>
+    /// <remarks>
+    /// The value presented is a live token of this store's own with whitespace inside its proof, which the base64url
+    /// decoder ignores — so every step after the length check holds and the value authenticates the moment the bound
+    /// stops refusing to walk it. That is what makes this an assertion about the bound rather than about a lookup
+    /// missing in an empty store.
+    /// </remarks>
     [Fact]
-    public void Verify_AValuePastTheBound_IsRefused()
+    public void Verify_AValuePastTheBound_IsRefusedWithoutBeingWalked()
     {
         // Arrange
         var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
+        var minted = sessions.Mint(Admitted())!;
+        var separator = minted.Value.IndexOf('.', StringComparison.Ordinal) + 1;
+        var padded = minted.Value[..separator] + new string(' ', 300) + minted.Value[separator..];
 
         // Act, Assert
-        Assert.Null(sessions.Verify(ClientSessionTokens.TokenPrefix + new string('a', 300) + ".proof"));
+        Assert.NotNull(sessions.Verify(minted.Value));
+        Assert.True(padded.Length > ClientSessionTokens.LongestPresentedToken);
+        Assert.Null(sessions.Verify(padded));
     }
 
     /// <summary>A session ends by itself, so a token left on a machine nobody came back to stops authenticating.</summary>

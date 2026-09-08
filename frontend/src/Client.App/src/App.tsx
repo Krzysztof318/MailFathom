@@ -188,7 +188,7 @@ export function App({
 
     // A credential the deployment has stopped accepting is acted on once rather than left to produce the same refusal
     // on every later read, which is why this is the one failure the frame does not render. What was kept goes with it:
-    // a stored password the service refuses is a password nothing will make work again.
+    // a session this deployment refuses is one it expired or revoked, and nothing this client holds renews it.
     //
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
@@ -536,9 +536,9 @@ export function App({
     // the question in the intent field and the mailbox it was scoped to are theirs rather than the machine's, and a
     // client that kept them would show the next person what the last one was asking about.
     //
-    // A store that would not delete is reported rather than swallowed. The screen has already said that signing out is
-    // what removes the password, so a refused deletion leaves it on the machine for the next start to read back while
-    // the person believes they signed out.
+    // A store that would not delete is reported rather than swallowed. The screen has already said that the sign-in is
+    // kept until signing out, so a refused deletion leaves the session on the machine for the next start to read back
+    // while the person believes they signed out.
     function signOut(): void {
         setNotices([]);
         setKept(null);

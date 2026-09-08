@@ -128,6 +128,53 @@ describe('useConnection', () => {
         expect(result.current.accounts?.outcome).toBe('read');
         expect(result.current.session?.outcome).toBe('read');
         expect(presented.length).toBe(readSoFar);
+
+        // What the renewal is for: the next request carries the token the deployment now holds. The one it replaced
+        // stopped working the moment the renewal answered, so a hook that kept presenting it would be refused.
+        act(() => {
+            result.current.reread();
+        });
+
+        await waitFor(() => {
+            expect(presented.length).toBeGreaterThan(readSoFar);
+        });
+
+        expect(presented.at(-1)).toBe('Bearer mfs_renewed.c2Vzc2lvbg');
+    });
+
+    // A renewal destroys the token it replaced the moment the deployment answers, so a read already on the wire comes
+    // back refused for a value this client itself replaced. Signing somebody out over that would discard the session
+    // the renewal just minted, which is the ordinary path for a client opened inside the renewal margin.
+    it('reads again rather than signing out when the refused token is one it has already replaced', async () => {
+        const refusing: DeploymentTransport = () => (request) => {
+            if (request.headers['Authorization'] !== 'Bearer mfs_renewed.c2Vzc2lvbg') {
+                return Promise.resolve({ status: 401, body: '', headers: {} });
+            }
+
+            return Promise.resolve(request.path.endsWith('/session') ? readsMail : oneAccount);
+        };
+
+        let refused = 0;
+
+        // Stable across renders like every other argument here, and for a sharper reason: a new callback each render is
+        // a new dependency each render, which would restart the read and abandon the one this test is about.
+        const countRefusal = (): void => {
+            refused += 1;
+        };
+
+        const { result, rerender } = renderHook(
+            ({ signedIn }: { signedIn: SignedInCaller }) =>
+                useConnection(baseAddress, signedIn, refusing, countRefusal, clock),
+            { initialProps: { signedIn: firstPerson } },
+        );
+
+        rerender({ signedIn: { ...firstPerson, authorization: 'Bearer mfs_renewed.c2Vzc2lvbg' } });
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        expect(refused).toBe(0);
     });
 
     it('hands the next person a budget of their own rather than one the last one spent', async () => {

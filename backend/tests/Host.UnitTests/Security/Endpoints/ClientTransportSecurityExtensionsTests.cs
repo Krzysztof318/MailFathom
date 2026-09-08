@@ -12,6 +12,7 @@ using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Sessions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.Security.Transport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -20,6 +21,7 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Net.Http.Headers;
 using NSubstitute;
 using Xunit;
@@ -290,6 +292,34 @@ public sealed class ClientTransportSecurityExtensionsTests
         Assert.True(admitted.Succeeded);
     }
 
+    /// <summary>A request presenting a session derives no key, which is the whole of what exchanging the password for one buys.</summary>
+    /// <remarks>
+    /// Asserted against a surface that takes passwords as well, because a surface taking none could not derive
+    /// anything whatever the composition did. The hasher counts what a request asks of it — the derivation a
+    /// verification performs and the one a rehash performs — rather than the decoy, which is derived once while the
+    /// process composes and belongs to no request.
+    /// </remarks>
+    [Fact]
+    public async Task AddClientTransportSecurity_ASessionPresentedWherePasswordsAreTakenToo_AuthenticatesWithoutDerivingAKey()
+    {
+        // Arrange
+        var hasher = new CountingPasswordHasher();
+        using var composed = ComposeEndpointTakingPasswordsAndSessions(hasher);
+        var held = composed.GetRequiredService<ClientSessionTokens>().Mint(AdmittedByACredential())!;
+
+        var request = new DefaultHttpContext { RequestServices = composed };
+        request.Request.Headers[HeaderNames.Authorization] = $"Bearer {held.Value}";
+
+        // Act
+        var authenticated = await composed
+            .GetRequiredService<IAuthenticationService>()
+            .AuthenticateAsync(request, TransportSurface.Client.RoutingSchemeName);
+
+        // Assert
+        Assert.True(authenticated.Succeeded);
+        Assert.Equal(0, hasher.Derivations);
+    }
+
     /// <summary>The unauthenticated posture is served rather than refused, and a browser still has to be answered on it.</summary>
     [Fact]
     public void AddClientTransportSecurity_AnEndpointRequiringNoCredential_RegistersThePolicyAndNoScheme()
@@ -417,5 +447,61 @@ public sealed class ClientTransportSecurityExtensionsTests
         services.AddClientTransportSecurity(endpointSettings);
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>Composes a client endpoint that takes a password and mints sessions, with the whole password graph behind it.</summary>
+    /// <remarks>The credential store holds nobody, because what is asserted is which handler a value reaches rather than what a password would have resolved to.</remarks>
+    private static ServiceProvider ComposeEndpointTakingPasswordsAndSessions(IPasswordHasher passwordHasher)
+    {
+        var credentials = Substitute.For<IUserCredentialStore>();
+        credentials.FindAsync(
+                Arg.Any<UserCredentialMethod>(),
+                Arg.Any<UserCredentialLookup>(),
+                Arg.Any<CancellationToken>())
+            .Returns((ResolvedUserCredential?)null);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(credentials);
+        services.AddSingleton(passwordHasher);
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider());
+        services.AddSingleton<PasswordAttemptLimiter>();
+        services.AddSingleton<DecoyPasswordHash>();
+        services.AddSingleton<UserPasswordAuthenticator>();
+
+        var endpointSettings = EnabledEndpoint();
+        endpointSettings.Authentication.Add(new UserFacingAuthenticationOptions
+        {
+            Method = UserCredentialMethod.Password.Name,
+        });
+
+        services.AddClientTransportSecurity(endpointSettings);
+
+        return services.BuildServiceProvider();
+    }
+
+    /// <summary>Counts the key derivations a request asked for, and answers with a fixed stored representation.</summary>
+    /// <remarks>Hand-written rather than substituted, because the members take the password as a <see cref="ReadOnlySpan{T}" /> and a dynamic proxy cannot carry a by-ref-like argument through its invocation.</remarks>
+    private sealed class CountingPasswordHasher : IPasswordHasher
+    {
+        private const string StoredHash = "$mf1$stored$";
+
+        internal int Derivations { get; private set; }
+
+        public string HashDecoy() => StoredHash;
+
+        public string Hash(ReadOnlySpan<char> password)
+        {
+            this.Derivations++;
+
+            return StoredHash;
+        }
+
+        public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password)
+        {
+            this.Derivations++;
+
+            return PasswordVerification.Failed;
+        }
     }
 }

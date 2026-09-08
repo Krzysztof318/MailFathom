@@ -110,7 +110,7 @@ export const pl: Catalogue = {
     'connect.clearTextConfigured':
         'To ustawienie zostało określone przy instalacji klienta, więc nie zmienisz go tutaj. Decyduje o nim osoba, która go skonfigurowała.',
     'connect.clearTextExplanation':
-        'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
+        'Twoje hasło jest kodowane, a nie szyfrowane, przy logowaniu, a każde kolejne żądanie niesie sesję, na którą zostało wymienione. Każdy, kto znajduje się między tym klientem a wdrożeniem, może odczytać jedno i drugie. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
     'connect.clearTextInForce':
         'TLS jest wyłączony. Login, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
     'connect.portHint': 'port {port}',

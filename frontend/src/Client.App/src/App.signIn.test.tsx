@@ -103,7 +103,7 @@ describe('App sign-in', () => {
         });
     });
 
-    it('says how long the password will be kept before anybody has typed one', () => {
+    it('says how long the sign-in will be kept before anybody has typed a password', () => {
         renderApp(servedFrom, null, deploymentAnswering(), storeKeeping('untilSignedOut'));
 
         expect(
@@ -207,7 +207,7 @@ describe('App sign-in', () => {
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
     });
 
-    it('says the password is still on the machine when the deployment stops accepting it and the store will not', async () => {
+    it('says the sign-in is still on the machine when the deployment stops accepting it and the store will not', async () => {
         renderApp(servedFrom, typedSession, deploymentAnswering({ status: 401, body: '' }), storeRefusingToForget());
 
         // Two things went wrong at once and both are the person's to act on: the deployment no longer accepts what was
@@ -276,7 +276,7 @@ describe('App sign-in', () => {
         ).toBeDefined();
     });
 
-    it('says the password is still on the machine when the store would not remove it', async () => {
+    it('says the sign-in is still on the machine when the store would not remove it', async () => {
         renderApp(servedFrom, null, deploymentAnswering(), storeRefusingToForget());
         signIn();
         await framed();

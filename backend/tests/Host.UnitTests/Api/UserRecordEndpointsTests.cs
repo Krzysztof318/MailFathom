@@ -168,22 +168,35 @@ public sealed class UserRecordEndpointsTests
     }
 
     /// <summary>A refused erasure ends nothing, so a caller that could not erase has not signed anybody out either.</summary>
+    /// <remarks>
+    /// Refused for the user the call names rather than for a request naming nobody, because that is the branch a
+    /// misplaced revoke would be wrong in: a configuration source declares this person, the surface answers
+    /// <c>400</c>, and their client would have been signed out and barred from minting for the barrier window
+    /// while nothing about them changed.
+    /// </remarks>
     [Fact]
-    public async Task EraseAsync_ARequestNamingNoUser_LeavesTheSessionsThatUserHoldsLive()
+    public async Task EraseAsync_AnErasureTheRosterRefuses_LeavesTheSessionsThatUserHoldsLive()
     {
         // Arrange
         var deployment = new UserRecordDeployment([MailFathomPermission.AdminErase]);
+        deployment.Serving(new ServedMailUser(
+            SyntheticMailUser.Deployment,
+            "alex",
+            MailUserAccountSource.DeploymentSection,
+            []));
+
         var sessions = new ClientSessionTokens(new FakeTimeProvider(Instant));
         var held = sessions.Mint(SessionHeldForTheUser())!;
 
         // Act
-        await UserRecordEndpoints.EraseAsync(
-            Guid.Empty,
+        var result = await UserRecordEndpoints.EraseAsync(
+            SyntheticMailUser.Deployment.Value,
             deployment.Roster,
             sessions,
             TestContext.Current.CancellationToken);
 
         // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.NotNull(sessions.Verify(held.Value));
     }
 
