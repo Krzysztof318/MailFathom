@@ -2036,8 +2036,28 @@
               "string"
             ]
           },
+          "body": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailBodyResponse"
+              }
+            ]
+          },
           "email": {
             "$ref": "#/components/schemas/ClientMailTimelineEntryResponse"
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailMessageResponse"
+              }
+            ]
           },
           "position": {
             "format": "int32",
@@ -2051,7 +2071,9 @@
         "required": [
           "position",
           "answeredId",
-          "email"
+          "email",
+          "message",
+          "body"
         ],
         "type": "object"
       },
@@ -12490,6 +12512,13 @@
             "name": "cursor",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "content",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],

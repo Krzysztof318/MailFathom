@@ -826,8 +826,24 @@ this conversation's own `messageCount`, because that is what the field means and
 conversation — so a row drawn from a thread reads the same number as the header above it. That is the *assembled* count
 rather than the counted one, so a conversation past the 500 this route assembles reads `500` here beside
 `moreMessagesNotAssembled` and reads its real length on a
-[mail list row](#the-mail-list-route). There is no body here
-either: the whole of a message is a request of its own, named by the `id` that row already carries.
+[mail list row](#the-mail-list-route).
+
+**`content=true` adds the messages themselves, which is how a client draws a correspondence in one request.** Without
+it every entry carries `email` alone and the whole of a message is a request of its own, named by the `id` that row
+already carries — which is what a client listing a thread wants. With it each entry gains two more fields, `message` and
+`body`, and they are [the message route's](#the-message-route) and [the message body route's](#the-message-body-route) own answers,
+field for field: a client that draws a conversation as a document of open messages parses one message shape across all
+three routes, and reading the earlier messages of an exchange costs nothing further on the wire.
+
+Two things are decided by that being a content read rather than a listing. **The page is bounded at 10**, which is the
+ceiling any content read is held to: `pageSize` above it with `content=true` is refused with `400` rather than served
+half-drawn, `pageSize` is 10 by default here rather than 25, and a longer conversation is read on with `nextCursor`
+exactly as it is without content. And **the three per-message asks are not made**: the sender's own markup is absent
+(`selfContainedHtml` is `null`), no attachment download link is minted, and no remote image reference is resolved —
+each of those is a decision a reader makes about one message, and a conversation that took all three would mint a
+bearer credential per message and disclose the reader to every sender's host at once. A message whose local copy this
+deployment could not open carries `message` and `body` as `null` rather than being left out of the conversation, so a
+client draws the correspondence with a gap in it that can still be opened on its own.
 
 **`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's
 own order and continues across pages, so a client that has paged twice still knows what it is holding. `answeredId`
@@ -864,8 +880,9 @@ defect in the client.
 | Parameter | Accepts | Default |
 | --- | --- | --- |
 | `threadId` | The conversation's identifier, as a message row published it | required, in the path |
-| `pageSize` | 1 to 100 | 25 |
+| `pageSize` | 1 to 100, or 1 to 10 with `content=true` | 25, or 10 with `content=true` |
 | `cursor` | A cursor a previous page returned | the beginning of the conversation |
+| `content` | `true` to carry each message and its body beside the row | `false` |
 
 **A conversation this user does not hold is answered `404`**, and so is one no deployment ever held: nothing in the
 answer, its timing, or its failure separates somebody else's exchange from one that never existed. Text that is not a

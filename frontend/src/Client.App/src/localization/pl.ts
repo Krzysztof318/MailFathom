@@ -657,7 +657,6 @@ export const pl: Catalogue = {
         'Obrazy tej wiadomości są pobierane od nadawcy, więc jego serwery mogą rozpoznać, że ją otwarto. Nic z tego nie jest zapamiętywane: po wyjściu z wiadomości i powrocie pytamy ponownie.',
 
     'thread.label': 'Rozmowa',
-    'thread.open': 'Pokaż całą rozmowę',
     'thread.close': 'Wróć do wiadomości',
     'thread.reading': 'Trwa wczytywanie tej rozmowy…',
     'thread.readingMore': 'Trwa wczytywanie dalszej części tej rozmowy…',
@@ -675,8 +674,14 @@ export const pl: Catalogue = {
     'thread.storedIn': 'W koncie {account}, folder {folder}',
     'thread.openOnItsOwn': 'Otwórz tę wiadomość osobno',
     'thread.messageBy': 'Wiadomość od: {sender}',
-    'thread.showEarlier': 'Pokaż wcześniejsze wiadomości ({count})',
+    'thread.showEarlier.one': 'Pokaż {count} wcześniejszą wiadomość',
+    'thread.showEarlier.few': 'Pokaż {count} wcześniejsze wiadomości',
+    'thread.showEarlier.many': 'Pokaż {count} wcześniejszych wiadomości',
+    'thread.showEarlier.other': 'Pokaż {count} wcześniejszych wiadomości',
     'thread.hideEarlier': 'Ukryj wcześniejsze wiadomości',
+    'thread.showAll': 'Pokaż wszystkie wiadomości',
+    'thread.hideOthers': 'Ukryj pozostałe wiadomości',
+    'thread.messageNotRead': 'Nie udało się tutaj odczytać wiadomości od: {sender}. Otwórz ją osobno, aby przeczytać.',
     'thread.openedFromList': 'Otwarta z listy',
     'thread.landedFromResult': 'Otwarta z wyniku wyszukiwania',
 

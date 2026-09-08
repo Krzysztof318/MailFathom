@@ -4,6 +4,8 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
+import { longestBodyAnswer, parseMailBody, type MailBody } from './mailBody';
+import { longestMessageAnswer, parseMailMessage, type MailMessage } from './mailMessage';
 import { parseTimelineEntry, type MailTimelineEntry } from './mailTimeline';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
@@ -19,8 +21,13 @@ import { send, type MailFathomTransport } from './transport';
 // would be paging a conversation in order to draw its header.
 //
 // A message arrives as the mail list route's own row, field for field, and is parsed by that module's own parser rather
-// than by a second one here. What a row does not carry is the message: the whole of one, quoted history included, is a
-// request of its own naming the identity the row already carries.
+// than by a second one here.
+//
+// A caller that draws the correspondence rather than a list of it asks for the messages themselves, and each one then
+// arrives with what the message route and the body route answer for it — parsed by those two modules' own parsers, for
+// the reason the row is. That is what makes reading a correspondence one request rather than one request per message
+// somebody reveals, and it is why a read that carries them asks for a smaller page: it costs what reading that many
+// messages costs, and the deployment refuses a larger one.
 
 /** The route one page of one conversation is served at, relative to the client prefix. */
 export function mailThreadRoute(threadId: string): string {
@@ -42,6 +49,17 @@ export interface MailThreadMessage {
 
     /** The message itself, in the same shape a list row carries. Its `preview` is what this message added. */
     readonly email: MailTimelineEntry;
+
+    /**
+     * What a reading surface draws around the message, or `null` where the read asked for a list of messages.
+     *
+     * It is also `null` for a message this deployment could not open, which is a gap in the correspondence rather than
+     * a refusal of it: the row is still here, and a surface that wants the message reads it on its own.
+     */
+    readonly message: MailMessage | null;
+
+    /** What the message says, or `null` for the same two reasons. */
+    readonly body: MailBody | null;
 }
 
 /** Somebody who has written in the conversation, and how much of it is theirs. */
@@ -87,10 +105,26 @@ export interface MailThreadPage {
  */
 export const longestThreadPage = 100;
 
-// The most of one page this client reads. A page is at most a hundred rows of the shape the mail list answers with,
-// beside the conversation's authors — who are bounded by the messages one read assembles rather than by the page. That
-// puts a full answer well inside this, and this well inside the transport's own backstop.
+/**
+ * The largest page a read carrying the messages themselves is served, which is the deployment's own content-read
+ * ceiling rather than a preference.
+ *
+ * Reading a conversation with what its messages say costs what reading that many messages costs, so the service holds
+ * it to the bound every content read is held to and refuses a larger page with a `400`. A correspondence longer than
+ * this is read on with the cursor, exactly as a longer page of rows is.
+ */
+export const longestDrawnThreadPage = 10;
+
+// The most of one page of rows this client reads. A page is at most a hundred rows of the shape the mail list answers
+// with, beside the conversation's authors — who are bounded by the messages one read assembles rather than by the page.
+// That puts a full answer well inside this, and this well inside the transport's own backstop.
 const longestThreadAnswer = 512 * 1024;
+
+// The most of one page carrying the messages themselves, which is the page times what one message is already allowed
+// to be: this answer is the two per-message routes' answers put end to end, so a conversation of ten legitimate
+// messages has to fit inside it. It is composed from those two ceilings rather than written as a number, because a
+// number would go on standing after one of them moved and would then refuse a conversation the service composed.
+const longestDrawnThreadAnswer = longestDrawnThreadPage * (longestMessageAnswer + longestBodyAnswer);
 
 // What one answer may carry before the page is refused unread. Each is far above anything the service composes and
 // exists for the answer that is not a page at all — checked while the collections are walked rather than after.
@@ -109,6 +143,7 @@ const mostParticipants = 1_024;
  * @param transport How the request goes out.
  * @param threadId The conversation to read, as a message row published it.
  * @param cursor The cursor a previous page answered with, or `null` for the beginning of the conversation.
+ * @param drawing Whether each message arrives with what it says, which a surface drawing the correspondence asks for.
  * @returns The page, or why it never arrived.
  */
 export function readMailThread(
@@ -116,13 +151,14 @@ export function readMailThread(
     transport: MailFathomTransport,
     threadId: string,
     cursor: string | null,
+    drawing = false,
 ): Promise<ClientResult<MailThreadPage>> {
     return spanned('GET /threads/{threadId}', async () => {
         const response = await send(transport, {
             method: 'GET',
-            path: routeFor(session, mailThreadRoute(threadId)) + threadQueryString(cursor),
+            path: routeFor(session, mailThreadRoute(threadId)) + threadQueryString(cursor, drawing),
             headers: headersFor(session),
-            longestAnswer: longestThreadAnswer,
+            longestAnswer: drawing ? longestDrawnThreadAnswer : longestThreadAnswer,
         });
 
         if (response === null) {
@@ -133,18 +169,22 @@ export function readMailThread(
             return failed(failureReasonForStatus(response.status), response.status);
         }
 
-        const page = parsePage(response.body);
+        const page = parsePage(response.body, drawing);
 
         return page === null ? failed('unreadable', response.status) : read(page);
     });
 }
 
-/** The query string one page is asked with: the size every read here runs under, and where in the conversation it starts. */
-export function threadQueryString(cursor: string | null): string {
-    const asked = [`pageSize=${String(longestThreadPage)}`];
+/** The query string one page is asked with: the size the read runs under, where in the conversation it starts, and whether it carries the messages. */
+export function threadQueryString(cursor: string | null, drawing = false): string {
+    const asked = [`pageSize=${String(drawing ? longestDrawnThreadPage : longestThreadPage)}`];
 
     if (cursor !== null) {
         asked.push(`cursor=${encodeURIComponent(cursor)}`);
+    }
+
+    if (drawing) {
+        asked.push('content=true');
     }
 
     return `?${asked.join('&')}`;
@@ -153,7 +193,7 @@ export function threadQueryString(cursor: string | null): string {
 // The page is held against what was asked for as well as against its own shape: a deployment answering with more
 // messages than the request admits is one this client refuses to render rather than one it draws, which is the bound
 // the root instructions place at every remote boundary.
-function parsePage(body: string): MailThreadPage | null {
+function parsePage(body: string, drawing: boolean): MailThreadPage | null {
     let parsed: unknown;
 
     try {
@@ -186,7 +226,9 @@ function parsePage(body: string): MailThreadPage | null {
         return null;
     }
 
-    if (!isCount(pageSize) || pageSize < 1 || pageSize > longestThreadPage) {
+    const largestPage = drawing ? longestDrawnThreadPage : longestThreadPage;
+
+    if (!isCount(pageSize) || pageSize < 1 || pageSize > largestPage) {
         return null;
     }
 
@@ -245,7 +287,30 @@ function parseMessage(value: unknown): MailThreadMessage | null {
         return null;
     }
 
-    return { position, answeredId, email };
+    const carried = record['message'] ?? null;
+    const said = record['body'] ?? null;
+
+    // The two arrive together or not at all: a message drawn from a head with no words under it, or from words with no
+    // head above them, is half a message, and the read that would repair it is the one this answer exists to spare.
+    if (carried === null || said === null) {
+        return { position, answeredId, email, message: null, body: null };
+    }
+
+    const message = parseMailMessage(carried);
+    const body = parseMailBody(said, { remoteImages: false, fullHtml: false });
+
+    if (message === null || body === null) {
+        return null;
+    }
+
+    // Three identities are parsed apart here — the row's, the head's and the words' — and a conversation is the one
+    // place they could be paired wrongly and still look drawable. A screen given a mismatched trio would draw one
+    // message's row and its `open on its own` beside another message's words, so the answer is refused instead.
+    if (message.storedEmailId !== email.id || body.storedEmailId !== email.id) {
+        return null;
+    }
+
+    return { position, answeredId, email, message, body };
 }
 
 function parseParticipants(value: unknown): readonly MailThreadParticipant[] | null {

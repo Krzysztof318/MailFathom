@@ -84,14 +84,68 @@ function row(id: string, overrides: Readonly<Record<string, unknown>> = {}): Rea
     };
 }
 
+/** One message as the conversation route describes it, which is what everything but the words is drawn from. */
+function describing(id: string, unread: boolean): Readonly<Record<string, unknown>> {
+    return {
+        storedEmailId: id,
+        account: 'work',
+        folder: 'INBOX',
+        threadId,
+        sizeOctets: 1_024,
+        headers: {
+            subject: 'The quarterly figures',
+            sentAt: '2026-08-31T09:40:00+00:00',
+            receivedAt: '2026-08-31T09:41:00+00:00',
+            participants: [{ role: 'From', address: 'auditor@example.invalid', displayName: 'The auditor' }],
+            messageId: `${id}@example.invalid`,
+            inReplyTo: null,
+            references: [],
+        },
+        body: { availability: 'Readable', plainText: true, html: false },
+        sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
+        attachments: [],
+        carried: null,
+        unread,
+        flagged: false,
+        answered: false,
+    };
+}
+
+/** The same message's words, carried by the same answer, which is what makes the conversation one request. */
+function saying(id: string): Readonly<Record<string, unknown>> {
+    return {
+        storedEmailId: id,
+        availability: 'Readable',
+        plainText: {
+            text: `The whole of what ${id} says.`,
+            originalCharacterCount: 32,
+            truncation: 'None',
+        },
+        document: null,
+        selfContainedHtml: null,
+        remoteImagesRequested: false,
+    };
+}
+
 function pageOf(
     ids: readonly string[],
     overrides: Readonly<Record<string, unknown>> = {},
     rows: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
+    unopened: readonly string[] = [],
 ): string {
     return JSON.stringify({
         threadId,
-        messages: ids.map((id, at) => ({ position: at, answeredId: null, email: row(id, rows[id] ?? {}) })),
+        messages: ids.map((id, at) => ({
+            position: at,
+            answeredId: null,
+            email: row(id, rows[id] ?? {}),
+
+            // A message named in `unopened` is one whose local copy the deployment could not open, and it arrives
+            // carrying neither field — which is the gap a conversation is still drawn with.
+            ...(unopened.includes(id)
+                ? {}
+                : { message: describing(id, rows[id]?.['unread'] === true), body: saying(id) }),
+        })),
         participants: [
             { address: 'auditor@example.invalid', displayName: 'The auditor', messageCount: 2 },
             { address: 'user@example.invalid', displayName: null, messageCount: 1 },
@@ -100,7 +154,7 @@ function pageOf(
         moreMessagesNotAssembled: false,
         moreParticipantsNotNamed: false,
         nextCursor: null,
-        pageSize: 100,
+        pageSize: 10,
         ...overrides,
     });
 }
@@ -108,21 +162,9 @@ function pageOf(
 /** What the deployment says about a message nobody has read yet. */
 const unread = { unread: true };
 
-/** One message's whole text, named after the message so a test can tell which of them was read. */
+/** One message's whole text served on its own, which is a route nothing under a conversation reaches any more. */
 function bodyAsWords(path: string): string {
-    const storedEmailId = path.split('/messages/')[1]?.split('/')[0] ?? '';
-
-    return JSON.stringify({
-        storedEmailId,
-        availability: 'Readable',
-        plainText: {
-            text: `The whole of what ${storedEmailId} says.`,
-            originalCharacterCount: 32,
-            truncation: 'None',
-        },
-        document: null,
-        remoteImagesRequested: false,
-    });
+    return JSON.stringify(saying(path.split('/messages/')[1]?.split('/')[0] ?? ''));
 }
 
 /** A deployment answering the conversation with what a test named, and every message body the same way. */
@@ -186,6 +228,7 @@ function inTheFrame(
                             conversation={conversation}
                             online={online}
                             expandWholeThread={expandWholeThread}
+                            onShowFullHtml={() => undefined}
                         />
                     </ReadMarkingContext>
                 </LinkOpenerContext>
@@ -224,17 +267,6 @@ function bodiesAsked(): string[] {
     return asked.filter((request) => request.path.includes('/body')).map((request) => request.path);
 }
 
-// The head of the first earlier message drawn collapsed, which is the control that opens it.
-function firstCollapsedHead(): HTMLElement {
-    const [head] = screen.getAllByRole('button', { expanded: false });
-
-    if (head === undefined) {
-        throw new Error('No message of the conversation is drawn collapsed.');
-    }
-
-    return head;
-}
-
 describe('Thread', () => {
     // Issue 1758's panel control, from the conversation's side. jsdom answers every media query `false`, so the
     // composition here is the single-pane one — where the design keeps the head whatever the control says, because it
@@ -258,22 +290,18 @@ describe('Thread', () => {
 
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
-        expect(screen.getByRole('button', { name: 'Show earlier messages (2)' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Show 2 earlier messages' })).toBeDefined();
     });
 
     it('shows the whole history in one press, and hides it again in the next', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (2)' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Show 2 earlier messages' }));
 
-        // Every earlier message arrives as its head alone, so nothing already drawn moves while a body arrives.
+        // Every message revealed is drawn out, which is what the conversation carried the words for.
         expect(screen.getAllByRole('listitem')).toHaveLength(3);
-        expect(screen.getAllByRole('button', { expanded: false })).toHaveLength(2);
-        expect(screen.queryByText('The whole of what one says.')).toBeNull();
-
-        fireEvent.click(firstCollapsedHead());
-
-        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getByText('The whole of what two says.')).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Hide earlier messages' }));
 
@@ -281,6 +309,34 @@ describe('Thread', () => {
         expect(screen.queryByText('The whole of what one says.')).toBeNull();
     });
 
+    // #1759: no message of a conversation carries a control that would fold it away. The one control on the screen is
+    // the correspondence's own, which is what makes `aria-expanded` unambiguous here.
+    it('draws every revealed message in full, with no control on any of them', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show 2 earlier messages' }));
+
+        expect(screen.getAllByRole('button', { expanded: true })).toHaveLength(1);
+        expect(screen.queryAllByRole('button', { expanded: false })).toHaveLength(0);
+    });
+
+    // The whole correspondence stands in the pane it was already open in: nothing is asked for over the wire, and
+    // nothing about where the client is has moved.
+    it('reveals the history without asking the deployment for anything', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
+
+        const control = await screen.findByRole('button', { name: 'Show 2 earlier messages' });
+        const asksOnOpening = asked.length;
+
+        fireEvent.click(control);
+
+        expect(screen.getByText('The whole of what one says.')).toBeDefined();
+        expect(asked).toHaveLength(asksOnOpening);
+        expect(window.location.hash).toBe('');
+    });
+
+    // Both values of the setting, which #1759 asks for by name: off, the conversation opens at the message it was
+    // reached by and the rest wait behind the design's own control; on, the whole correspondence is drawn at once.
     it('opens with every message drawn where the reader asked conversations to open expanded', async () => {
         drawing(
             deploymentAnswering(pageOf(['one', 'two', 'three'])),
@@ -346,15 +402,18 @@ describe('Thread', () => {
         ).toBeDefined();
     });
 
-    it('reads no body for a message the history hides', async () => {
+    // #1759: the correspondence is one read of the deployment. Every message's words came with it, so no message of it
+    // is asked for on its own however many of them are drawn.
+    it('reads the whole conversation in one request and no message body at all', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
-        await screen.findByText('The whole of what three says.');
 
-        // The latest of them is drawn, so exactly one body is read out of three messages rather than all three.
-        await waitFor(() => {
-            expect(bodiesAsked()).toHaveLength(1);
-        });
-        expect(bodiesAsked()[0]).toContain('/messages/three/body');
+        await screen.findByText('The whole of what three says.');
+        fireEvent.click(screen.getByRole('button', { name: 'Show 2 earlier messages' }));
+        await screen.findByText('The whole of what one says.');
+
+        expect(bodiesAsked()).toHaveLength(0);
+        expect(asked).toHaveLength(1);
+        expect(asked[0]?.path).toContain('content=true');
     });
 
     // ADR 0026 marks read every body the conversation drew, which is one rule rather than two — and the conversation
@@ -376,7 +435,7 @@ describe('Thread', () => {
         });
     });
 
-    it('marks read each earlier message the reader opens, and none they only showed the head of', async () => {
+    it('marks read every message revealing the history drew, each of them having been read', async () => {
         const { marking, opened } = recordingMarkings();
 
         drawing(
@@ -386,14 +445,7 @@ describe('Thread', () => {
             marking,
         );
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (1)' }));
-
-        await waitFor(() => {
-            expect(opened.map((message) => message.storedEmailId)).toStrictEqual(['two']);
-        });
-
-        fireEvent.click(screen.getByRole('button', { expanded: false }));
-        await screen.findByText('The whole of what one says.');
+        fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier message' }));
 
         await waitFor(() => {
             expect(opened.map((message) => message.storedEmailId).toSorted()).toStrictEqual(['one', 'two']);
@@ -412,23 +464,17 @@ describe('Thread', () => {
         });
     });
 
-    it('reads a message the reader opens, and not before: showing the history reads nothing', async () => {
-        drawing(deploymentAnswering(pageOf(['one', 'two'])));
-        const control = await screen.findByRole('button', { name: 'Show earlier messages (1)' });
+    // A message whose local copy the deployment could not open arrives without one, and is the one case a conversation
+    // still says something rather than drawing words.
+    it('says a message the conversation could not carry rather than drawing it empty', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two'], {}, {}, ['one'])));
 
-        expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(false);
+        fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier message' }));
 
-        fireEvent.click(control);
-
-        expect(screen.getByRole('button', { expanded: false })).toBeDefined();
-        expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(false);
-
-        fireEvent.click(screen.getByRole('button', { expanded: false }));
-
-        await waitFor(() => {
-            expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(true);
-        });
-        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(
+            screen.getByText('The message from The auditor could not be read here. Open it on its own to read it.'),
+        ).toBeDefined();
+        expect(bodiesAsked()).toHaveLength(0);
     });
 
     it('opens a conversation nobody named a message in at its last word', async () => {
@@ -438,11 +484,14 @@ describe('Thread', () => {
         expect(screen.queryByText('The whole of what one says.')).toBeNull();
     });
 
-    it('shows the history and puts the reader at the message it was opened at', async () => {
+    // A conversation opened in the middle of its history hides messages on both sides of the one it was opened at, so
+    // what the control offers is the whole correspondence rather than the earlier part of it.
+    it('puts the reader at the message it was opened at, with the rest of the correspondence behind the control', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two' });
 
         expect(await screen.findByText('The whole of what two says.')).toBeDefined();
-        expect(screen.getAllByRole('listitem')).toHaveLength(3);
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Show all the messages' })).toBeDefined();
 
         await waitFor(() => {
             expect(document.activeElement?.getAttribute('aria-label')).toBe('Message from The auditor');
@@ -458,7 +507,7 @@ describe('Thread', () => {
         await waitFor(() => {
             expect(document.activeElement?.textContent).toContain('The whole of what three says.');
         });
-        expect(screen.getByRole('button', { name: 'Show earlier messages (2)' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Show 2 earlier messages' })).toBeDefined();
     });
 
     it('puts the reader at the latest message, where the message it was opened at is not in the conversation', async () => {
@@ -487,7 +536,7 @@ describe('Thread', () => {
 
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show 2 earlier messages' }));
 
         expect(screen.queryByText('Opened from the list')).toBeNull();
     });
@@ -498,10 +547,9 @@ describe('Thread', () => {
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
         expect(screen.queryByText('Opened from the list')).toBeNull();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
-        fireEvent.click(firstCollapsedHead());
+        fireEvent.click(screen.getByRole('button', { name: 'Show 2 earlier messages' }));
 
-        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getByText('The whole of what one says.')).toBeDefined();
         expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 
@@ -534,7 +582,7 @@ describe('Thread', () => {
         });
 
         const arrivedAt = document.activeElement;
-        const control = screen.getByRole('button', { name: 'Show earlier messages (2)' });
+        const control = screen.getByRole('button', { name: 'Show 2 earlier messages' });
 
         control.focus();
         fireEvent.click(control);
@@ -544,7 +592,7 @@ describe('Thread', () => {
         expect(document.activeElement).not.toBe(arrivedAt);
     });
 
-    it('reads on until the message it was opened at is in hand, keeping the history above it', async () => {
+    it('reads on until the message it was opened at is in hand, and stands the reader on it', async () => {
         drawing(
             deploymentAnswering(
                 pageOf(['one', 'two'], { nextCursor: 'onwards', messageCount: 4 }),
@@ -554,8 +602,11 @@ describe('Thread', () => {
         );
 
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show all the messages' }));
+
         expect(screen.getAllByRole('listitem')).toHaveLength(4);
-        expect(screen.getByRole('button', { name: 'Hide earlier messages' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Hide the other messages' })).toBeDefined();
     });
 
     it('keeps the message the reader is standing on when a further page arrives, rather than unmounting it under their focus', async () => {

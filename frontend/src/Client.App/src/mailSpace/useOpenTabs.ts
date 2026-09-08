@@ -42,8 +42,14 @@ export interface OpenTabsInForce {
      */
     readonly emptiedByClosing: boolean;
 
-    /** Opens a message — in a tab of its own where the person works in tabs, and in the pane where they do not. */
-    readonly openMail: (storedEmailId: string, subject: string | null) => void;
+    /**
+     * Opens a message — in a tab of its own where the person works in tabs, and in the pane where they do not.
+     *
+     * A message the deployment threaded opens as the correspondence it belongs to, at that message: the reading
+     * column draws the conversation and one request carries every message in it. `threadId` absent, or `null`, is a
+     * message that belongs to no correspondence, and that one is drawn on its own.
+     */
+    readonly openMail: (storedEmailId: string, subject: string | null, threadId?: string | null) => void;
 
     /**
      * Opens the surface that draws one message's own markup, the reader having been asked first.
@@ -147,10 +153,10 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
         active: held.active,
         emptiedByClosing,
 
-        openMail: (storedEmailId, subject) => {
+        openMail: (storedEmailId, subject, threadId = null) => {
             const tab = tabFor('thread', storedEmailId, subject, {
                 selection: storedEmailId,
-                conversation: null,
+                conversation: threadId === null ? null : { threadId, openAt: storedEmailId },
                 fullHtml: null,
                 attachment: null,
             });

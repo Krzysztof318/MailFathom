@@ -393,6 +393,11 @@ export function deploymentWorkingInTabs(): DeploymentTransport {
 // conversation, and closing the conversation returns to the message the workspace still holds.
 const conversationThreadId = '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d';
 
+/** One answer's body as the value it serializes to, so a conversation can carry what a route serves on its own. */
+function parsed(answer: Answer): Readonly<Record<string, unknown>> {
+    return JSON.parse(answer.body) as Readonly<Record<string, unknown>>;
+}
+
 function threaded(answer: Answer): Answer {
     return { ...answer, body: answer.body.replace('"threadId":null', `"threadId":"${conversationThreadId}"`) };
 }
@@ -424,6 +429,11 @@ const drawnConversation: Answer = {
                     sizeOctets: 4_096,
                     preview: 'The invoice for August.',
                 },
+
+                // The conversation route carries every message's own description and words, which is what makes
+                // opening a correspondence one request rather than one per message drawn.
+                message: parsed(threaded(describedMessage)),
+                body: parsed(drawnMessage),
             },
         ],
         participants: [{ address: 'billing@example.invalid', displayName: 'Billing', messageCount: 1 }],
@@ -431,7 +441,7 @@ const drawnConversation: Answer = {
         moreMessagesNotAssembled: false,
         moreParticipantsNotNamed: false,
         nextCursor: null,
-        pageSize: 100,
+        pageSize: 10,
     }),
 };
 

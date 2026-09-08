@@ -14,6 +14,7 @@ import { useOpenTabs } from './useOpenTabs';
 const openTheQuarterly = 'Open the quarterly figures.';
 const openTheInvoice = 'Open the invoice.';
 const openTheQuarterlyAgain = 'Open the quarterly figures a second time.';
+const openTheCorrespondence = 'Open a message the deployment threaded.';
 const readDownTheConversation = 'Read down the conversation, as the pane would.';
 const openTheChart = 'Open the chart the quarterly figures carry.';
 const closeTheChart = 'Close the file being read.';
@@ -67,6 +68,15 @@ function Tabs({ inTabs }: { readonly inTabs: boolean }) {
                 }}
             >
                 {openTheQuarterlyAgain}
+            </button>
+
+            <button
+                type="button"
+                onClick={() => {
+                    tabs.openMail('message-3', 'A correspondence', 'thread-3');
+                }}
+            >
+                {openTheCorrespondence}
             </button>
 
             <button
@@ -431,5 +441,37 @@ describe('useOpenTabs, opening a file a message carries', () => {
         press(openTheInvoice);
 
         expect(fileBeingRead()).toBe('File: nothing');
+    });
+});
+
+describe('useOpenTabs opening a threaded message', () => {
+    // #1759: opening a message from the list opens the correspondence it belongs to, at that message — so the reading
+    // column draws the conversation and one request carries every message in it.
+    it('opens the conversation a threaded message belongs to, at that message', () => {
+        render(
+            <WorkspaceProvider>
+                <Tabs inTabs={false} />
+            </WorkspaceProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: openTheCorrespondence }));
+
+        expect(screen.getByText('In front of it: thread-3')).toBeDefined();
+
+        // The message itself stays what the workspace holds, which is what closing the conversation returns to.
+        expect(screen.getByText('Reading: message-3')).toBeDefined();
+    });
+
+    it('opens a message the deployment threaded with nothing on its own', () => {
+        render(
+            <WorkspaceProvider>
+                <Tabs inTabs={false} />
+            </WorkspaceProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: openTheQuarterly }));
+
+        expect(screen.getByText('In front of it: nothing')).toBeDefined();
+        expect(screen.getByText('Reading: message-1')).toBeDefined();
     });
 });
