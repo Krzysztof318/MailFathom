@@ -299,7 +299,18 @@ function parseMessage(value: unknown): MailThreadMessage | null {
     const message = parseMailMessage(carried);
     const body = parseMailBody(said, { remoteImages: false, fullHtml: false });
 
-    return message === null || body === null ? null : { position, answeredId, email, message, body };
+    if (message === null || body === null) {
+        return null;
+    }
+
+    // Three identities are parsed apart here — the row's, the head's and the words' — and a conversation is the one
+    // place they could be paired wrongly and still look drawable. A screen given a mismatched trio would draw one
+    // message's row and its `open on its own` beside another message's words, so the answer is refused instead.
+    if (message.storedEmailId !== email.id || body.storedEmailId !== email.id) {
+        return null;
+    }
+
+    return { position, answeredId, email, message, body };
 }
 
 function parseParticipants(value: unknown): readonly MailThreadParticipant[] | null {

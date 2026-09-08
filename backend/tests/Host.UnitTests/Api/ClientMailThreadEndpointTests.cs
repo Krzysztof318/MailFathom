@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
@@ -199,6 +200,57 @@ public sealed class ClientMailThreadEndpointTests
 
         // Assert
         Assert.IsType<Ok<ClientMailThreadResponse>>(result.Result);
+    }
+
+    /// <summary>A page of zero is refused in the words of the read it was asked for, rather than in the general range.</summary>
+    /// <remarks>
+    /// The general bound would refuse this too, and would name one to a hundred while the request that was made holds
+    /// one to ten. A caller acting on that refusal would ask again for a page this route refuses a second time.
+    /// </remarks>
+    [Fact]
+    public async Task ReadThreadAsync_ADrawnPageOfNoMessages_IsRefusedInTheRangeADrawnReadHolds()
+    {
+        // Arrange
+        this.Holding(2);
+
+        // Act
+        var result = await this.ReadAsync(pageSize: 0, content: true);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            $"between 1 and {GetEmailContentRequest.MaximumEmails}",
+            refusal.ProblemDetails.Detail,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The whole of a drawn read, from the parameter through the content read and back onto the page it belongs to.</summary>
+    /// <remarks>
+    /// Every other test of the drawing branch stops at a refusal or asserts the response factories directly, so this is
+    /// the one that proves the route reaches the content read at all and pairs what it answered with the right row.
+    /// </remarks>
+    [Fact]
+    public async Task ReadThreadAsync_WithTheMessagesAsked_CarriesEachRowsOwnMessageAndWords()
+    {
+        // Arrange
+        var summaries = this.Holding(2);
+
+        // Act
+        var result = await this.ReadDrawingAsync(summaries);
+
+        // Assert
+        var page = Assert.IsType<Ok<ClientMailThreadResponse>>(result.Result).Value;
+
+        Assert.NotNull(page);
+        Assert.All(page.Messages, message =>
+        {
+            Assert.NotNull(message.Message);
+            Assert.NotNull(message.Body);
+            Assert.Equal(message.Email.Id, message.Message.StoredEmailId);
+            Assert.Equal(message.Email.Id, message.Body.StoredEmailId);
+        });
     }
 
     /// <summary>A conversation read as a list of messages carries neither the message nor its words, so nothing is paid for what nobody asked for.</summary>
@@ -486,11 +538,89 @@ public sealed class ClientMailThreadEndpointTests
             ReadingNothing(),
             TestContext.Current.CancellationToken);
 
-    /// <summary>A content read standing in for the one behind the route, which the tests here never let answer.</summary>
+    /// <summary>Reads the conversation with its messages drawn, over a content read that answers for the summaries given.</summary>
+    private Task<Results<Ok<ClientMailThreadResponse>, NotFound, ProblemHttpResult>> ReadDrawingAsync(
+        EmailSummary[] summaries) =>
+        ClientMailThreadEndpoint.ReadThreadAsync(
+            Conversation.Value,
+            null,
+            null,
+            content: true,
+            this.Browser(),
+            this.ReadingDrawnMessages(summaries),
+            TestContext.Current.CancellationToken);
+
+    /// <summary>A content read that answers, so the route's own composition is exercised rather than only its refusals.</summary>
     /// <remarks>
-    /// Every test that reaches it is a refusal taken before the read runs, and what a drawn conversation composes to is
-    /// asserted against the two response factories instead — where the message is a value rather than a store, a
-    /// renderer and a scope resolution stood up to produce one.
+    /// The folder every summary sits in is mapped here, which is what makes the mail readable at all: a read scoped
+    /// over an unmapped alias answers with nothing, and a test arranged that way would pass while proving the opposite
+    /// of what it claims.
+    /// </remarks>
+    private EmailContentReader ReadingDrawnMessages(EmailSummary[] summaries)
+    {
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+
+        var readTelemetry = Substitute.For<IMailboxReadTelemetry>();
+        readTelemetry.BeginRead(Arg.Any<MailboxReadOperation>(), Arg.Any<CancellationToken>())
+            .Returns(Substitute.For<IMailboxReadScope>());
+
+        foreach (var summary in summaries)
+        {
+            this.summaryReader.FindAsync(summary.StoredEmailId, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<EmailSummary?>(summary));
+        }
+
+        var rawMime = "From: sender@example.test\r\n\r\nBody"u8.ToArray();
+        var stored = new StoredEmailContent(rawMime, rawMime.Length, SHA256.HashData(rawMime));
+
+        var contentStore = Substitute.For<IEmailContentStore>();
+        contentStore.FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<StoredEmailContent?>(stored));
+
+        var renderer = Substitute.For<IEmailContentRenderer>();
+        renderer.RenderAsync(
+                Arg.Any<StoredEmailContent>(),
+                Arg.Any<EmailContentRenderingBounds>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailContentRenderingResult.Rendered(new EmailContentRendering(
+                new EmailContentHeaders("a subject", SentAt: null, ReceivedAt: null, [], EmailThreadReferences.None),
+                new EmailBodyRepresentation("Body", 4, EmailBodyTruncation.None),
+                SanitizedHtmlBody: null,
+                new EmailBodyForms(PlainText: true, Html: false),
+                BodyIsEncrypted: false,
+                EmailAttachmentSummary.Create(
+                    [],
+                    inlineResourceCount: 0,
+                    isEncrypted: false,
+                    carriesUnverifiedSignature: false,
+                    containsUnexpandedTnefPart: false),
+                []))));
+
+        return new EmailContentReader(
+            this.summaryReader,
+            this.threadReader,
+            contentStore,
+            renderer,
+            Substitute.For<IEmailContentRepairRequestStore>(),
+            new MailboxScopeResolver(
+                catalog,
+                StubMailFolderParticipation.Mapping(
+                    new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX"))),
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing),
+            Substitute.For<IAttachmentDownloadLinkIssuer>(),
+            SensitiveContentEgressGuards.Inactive(),
+            new EmailContentReadOptions(),
+            readTelemetry,
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+    }
+
+    /// <summary>A content read standing in for the one behind the route, which the test reaching it never lets answer.</summary>
+    /// <remarks>
+    /// Every test given this one is a refusal taken before the read runs, so a read that answered would prove nothing
+    /// they claim. <see cref="ReadingDrawnMessages" /> is the one that answers, and it is what the drawn read itself is
+    /// asserted through.
     /// </remarks>
     private static EmailContentReader ReadingNothing()
     {

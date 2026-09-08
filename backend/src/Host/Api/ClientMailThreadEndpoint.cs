@@ -89,11 +89,14 @@ internal static class ClientMailThreadEndpoint
 
         var drawing = content is true;
 
-        if (drawing && pageSize > GetEmailContentRequest.MaximumEmails)
+        // The whole range rather than the ceiling alone, so that a page of zero is refused in the words of the read it
+        // was asked for: the general bound below would otherwise answer a drawn conversation with the 1-to-100 range,
+        // which is not the range that request had.
+        if (drawing && pageSize is { } asked && asked is < 1 or > GetEmailContentRequest.MaximumEmails)
         {
             return Refuse(
-                $"A conversation read with its messages carries at most {GetEmailContentRequest.MaximumEmails} of them, "
-                + "so ask for a smaller page and read on with the cursor.");
+                $"A conversation read with its messages holds between 1 and {GetEmailContentRequest.MaximumEmails} of them, "
+                + "so ask for a page within that and read on with the cursor.");
         }
 
         var request = new BrowseThreadRequest

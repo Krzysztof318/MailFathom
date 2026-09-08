@@ -14,6 +14,9 @@ const session: ClientSession = {
 
 const threadId = '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d';
 
+/** A message the conversation does not hold, for the answers that pair a row with somebody else's head or words. */
+const anotherMessage = '7c3e5a91-2d84-4b6f-8e15-40a9c7b2d6e3';
+
 const email = {
     id: '2f7d4f2a-6c1e-4e0a-9a2f-1b0c9d8e7f60',
     account: 'work',
@@ -352,6 +355,36 @@ describe('readMailThread drawing the messages', () => {
         [
             'words that are not words',
             drawnBodyOf({ messages: [{ position: 0, answeredId: null, email, message: described, body: {} }] }),
+        ],
+        // The row, the head and the words are three identities parsed apart, and a screen handed a mismatched trio
+        // would draw one message's row beside another message's words with nothing saying so.
+        [
+            'a description belonging to another message',
+            drawnBodyOf({
+                messages: [
+                    {
+                        position: 0,
+                        answeredId: null,
+                        email,
+                        message: { ...described, storedEmailId: anotherMessage },
+                        body: said,
+                    },
+                ],
+            }),
+        ],
+        [
+            'words belonging to another message',
+            drawnBodyOf({
+                messages: [
+                    {
+                        position: 0,
+                        answeredId: null,
+                        email,
+                        message: described,
+                        body: { ...said, storedEmailId: anotherMessage },
+                    },
+                ],
+            }),
         ],
     ])('refuses %s rather than drawing a conversation with a hole in it', async (_, body) => {
         const answered = await readMailThread(session, answering({ status: 200, body }), threadId, null, true);
