@@ -14,8 +14,10 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// The two body forms are answered together rather than one being derived from the other, and that is the whole point
 /// of this mode. The deterministic generator's HTML is one <c>&lt;p&gt;</c> per paragraph around its own text, so a
 /// corpus built from it exercises MIME extraction and the client's document model against markup this repository
-/// wrote. Real mail is headings, lists, tables, links, emphasis, and a signature block, and asking for that shape is
-/// how the readers meet markup nobody here chose.
+/// wrote. Real mail is what a sending client emitted — Word's own HTML, a campaign of nested layout tables, a web
+/// composer's <c>&lt;div&gt;</c> soup, or markup that is not well-formed at all — and
+/// <see cref="SyntheticMarkupDialect" /> is what the request names so the answer is one of those rather than the
+/// well-formed document a model writes when nobody says otherwise.
 /// </para>
 /// <para>
 /// Model-produced markup is untrusted by construction, which is what

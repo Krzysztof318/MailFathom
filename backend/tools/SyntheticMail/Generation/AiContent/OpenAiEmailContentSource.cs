@@ -42,7 +42,10 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
     /// content again as the markup real mail carries, and a message in a language whose words cost more tokens than
     /// English pays that twice as well. Measured against real answers, a rich HTML message runs to about two thousand
     /// output tokens, so the earlier bound cut one in the middle — and a cut answer arrives as an incomplete JSON
-    /// object, which reads as a model that cannot write the answer rather than as a ceiling that stopped it.
+    /// object, which reads as a model that cannot write the answer rather than as a ceiling that stopped it. A
+    /// message written as a real client's markup costs more again, a dialect that wraps every run of words in a span
+    /// most of all, which is why every description in <see cref="SyntheticMarkupDialect" /> asks for a compact
+    /// document rather than a full client export.
     /// </remarks>
     private const int MaximumOutputTokens = 6000;
 
@@ -362,6 +365,7 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
         {
             $"Language: {request.LanguageCode}",
             $"Topic: {request.Topic.PromptDescription}",
+            $"Markup: {request.MarkupDialect.PromptDescription}",
             $"Write as {request.AuthorName}.",
         };
 
@@ -403,7 +407,7 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 
         "body": the message as plain text, with paragraphs separated by blank lines, opening with a natural greeting and closing with a short signature.
 
-        "html": the same message as an HTML document, carrying the structure real business mail carries rather than one paragraph per line. Use a mixture appropriate to what the message says, drawn from headings, paragraphs, ordered and unordered lists, a table with a header row where the message reports figures or items, links, bold and italic emphasis, blockquotes for anything being quoted back, a horizontal rule, and a signature block. Inline style attributes are welcome and so are simple font, colour, and spacing choices. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, an inline event-handler attribute such as onclick or onerror, a remote image, or a tracking pixel.
+        "html": the same message as an HTML document, written as the markup the request's "Markup" line describes. That line names the constructs a real mail client of one kind emits, and several of them are deprecated, proprietary, redundant, or not well-formed. Write them as described rather than tidying them into clean semantic markup: a well-formed document is the one thing this answer must not be, because the corpus exists to be read by software that has to survive what real senders emit. Keep it compact — a few of each named construct is what makes the document that dialect, and a full client export would be cut off by the answer's own length. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, an inline event-handler attribute such as onclick or onerror, a remote image, or a tracking pixel; nothing the "Markup" line asks for overrides this sentence.
 
         "attachment": present only when the request names an enclosed file, holding that file's contents as text. Write it in the format the file's extension names — a .csv as a header row and data rows, a .txt as the notes or the log the name describes — and make it say what the message says it encloses, with the same invented names, figures, and dates. Nothing else goes in this key: no explanation, no code fence, no repeat of the body.
 

@@ -42,9 +42,13 @@ internal static class CorpusListing
             : "none";
 
         // What an AI-generated message was written in and about, which the seed decided like every other axis and is
-        // the one a dry run of it has to say without a reader recognising a language in the subject.
+        // the one a dry run of it has to say without a reader recognising a language in the subject. The markup is
+        // there for the stronger version of the same reason: nothing in a listing shows which client's HTML a message
+        // was written as, and that is exactly what a message the readers handle badly has to be reproduced by.
         var aiContent = email.AiOrigin is { } origin
-            ? string.Create(CultureInfo.InvariantCulture, $" | language={origin.Language} topic={origin.Topic}")
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $" | language={origin.Language} topic={origin.Topic} markup={origin.MarkupDialect}")
             : string.Empty;
 
         return string.Create(

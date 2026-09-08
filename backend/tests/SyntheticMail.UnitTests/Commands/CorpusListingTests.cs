@@ -120,19 +120,25 @@ public sealed class CorpusListingTests
     }
 
     [Fact]
-    public void Describe_AMessageGeneratedByAProvider_NamesTheLanguageAndTheTopicItWasGeneratedUnder()
+    public void Describe_AMessageGeneratedByAProvider_NamesTheLanguageTheTopicAndTheMarkupItWasGeneratedUnder()
     {
         // Arrange
         var email = Build(inReplyTo: null, carbonCopies: 0, attachment: null) with
         {
-            AiOrigin = new SyntheticEmailAiOrigin("pl", SyntheticMailTopic.TechnicalSupport),
+            AiOrigin = new SyntheticEmailAiOrigin(
+                "pl",
+                SyntheticMailTopic.TechnicalSupport,
+                SyntheticMarkupDialect.WordOutlook),
         };
 
         // Act
         var line = CorpusListing.Describe(email);
 
         // Assert
-        Assert.Contains("| sensitive=none | language=pl topic=technical-support |", line, StringComparison.Ordinal);
+        Assert.Contains(
+            "| sensitive=none | language=pl topic=technical-support markup=word-outlook |",
+            line,
+            StringComparison.Ordinal);
     }
 
     [Fact]
