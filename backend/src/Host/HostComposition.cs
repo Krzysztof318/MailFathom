@@ -1334,6 +1334,7 @@ internal static class HostComposition
         if (clientEndpointSettings.Enabled)
         {
             builder.Services.AddClientTransportSecurity(clientEndpointSettings);
+            builder.Services.AddClientResponseCompression();
             AddClientTelemetryProxy(builder);
             AddClientSignalChannel(builder);
             // What puts a Discover run on a scope of its own and keeps it running past the request that asked for it.

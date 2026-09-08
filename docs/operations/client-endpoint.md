@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -2062,6 +2062,39 @@ whether it is taken out of service.
 **Neither reaches [the signal channel's hub](#the-signal-channel)**, which is mapped outside this surface's route group
 for that reason, and both reach the route that mints its tickets — so a client reconnecting in a loop is bounded by the
 minting it cannot avoid rather than by a timeout on the connection itself.
+
+## What travels compressed
+
+**A response is compressed when the request offered an encoding this deployment can produce, and is served unchanged
+when it did not.** Nothing configures it: there is no key, no switch, and no per-route opt-out. A caller that sends
+`Accept-Encoding: br, gzip` is answered with `content-encoding: br`, one that offers `gzip` alone is answered with
+`gzip` rather than with an encoding it cannot read, and one that offers neither is answered with the bytes it asked
+for. Every compressed response carries `Vary: Accept-Encoding`, so a cache in front of the deployment keeps one body
+per encoding rather than handing a Brotli page to a client that never offered it.
+
+It matters most where it is least visible from: a hundred-row mail list is around 75 kB of JSON that repeats its own
+field names, and it travels several times smaller than that. On a local or intranet deployment the difference is
+nothing; on a phone it is most of the time a folder takes to open.
+
+**What is compressed is JSON, text, XML, CSS, JavaScript, and WebAssembly**, which is the framework's default set.
+Everything else travels as it arrived, which is what keeps an [attachment](#the-attachment-route) or a
+[portrait](#the-portrait-routes) from being compressed a second time: a JPEG, a PDF, and a ZIP are octets somebody else
+already compressed, and a pass over them costs latency to produce a slightly longer body. The
+[signal channel](#the-signal-channel) is excluded as well, for the reason the limits and the ceiling exclude it — what
+travels there is a connection rather than a response — and so is the route that mints its tickets, which is the one
+answer here that is itself a credential and is a couple of hundred bytes either way.
+
+**This is the client endpoint alone.** The MCP surface and the administrative surface serve their responses
+uncompressed, and whether they want the same treatment is a separate reading rather than an oversight.
+
+**It applies over HTTPS as well as over clear text**, which the framework does not do by default, because compressing a
+response over TLS is what BREACH exploits. The attack recovers a secret from a compressed body by watching how the
+body's length moves as an attacker-chosen string is reflected into it, and it needs the victim's browser to attach a
+credential to a request the attacker caused. This surface authenticates by header — the token, key, or assertion the
+page attaches itself — and never by cookie, so a cross-site request arrives here with no credential and is answered as
+an anonymous one. Nor does any response here reflect a caller-supplied value back: the [search route](#the-mail-search-route)
+is the closest and deliberately does not echo the query it was asked, and the refusals that do quote a caller's value
+are served as `application/problem+json`, which is outside the compressed set above.
 
 ## Transport security
 

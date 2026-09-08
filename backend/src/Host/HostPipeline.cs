@@ -89,6 +89,14 @@ internal static class HostPipeline
 
         if (composition.Client.Enabled)
         {
+            // Behind the isolation above, so a listener that does not serve the client surface never wraps a response
+            // stream, and ahead of every route that writes one. What it is deliberately behind is the exception
+            // handler, whose document is written from upstream and therefore travels uncompressed: a body nobody asked
+            // for is not worth a compression pass. It scopes itself to this surface's paths rather than being branched
+            // on here, because what it must not reach is the signal hub, which is a client path as well;
+            // ClientResponseCompression holds that reading and the BREACH one beside it.
+            app.UseClientResponseCompression();
+
             // What lets the signal hub accept an upgrade at all, and behind the isolation above so a listener that does
             // not serve the client surface never reaches it. It is added on whether this deployment serves the client
             // rather than beside the routes, because middleware is the process's pipeline and a route is not.
