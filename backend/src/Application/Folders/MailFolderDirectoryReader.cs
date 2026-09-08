@@ -26,11 +26,12 @@ namespace MailFathom.Application.Folders;
 /// server's hierarchy, and how much mail is stored in it.
 /// </para>
 /// <para>
-/// The folders are the ones local state knows of, which is what the composed reading already names. A folder an
-/// operator mapped that nothing has ever bound to a remote folder is absent rather than empty: there is no folder on
-/// the server to draw, and a client showing one would be showing a mailbox that is not there. Where an operator finds
-/// out about such a mapping is the administrative status surface, which composes its folder list from configuration for
-/// exactly that reason.
+/// The folders are the ones configuration maps, which is a wider answer than the composed reading gives: that reading
+/// is of local state, and a folder an operator asked not to mirror is never scheduled, so no run ever discovers it. It
+/// is still a folder the account has and still a folder MailFathom files into — resolution is indifferent to
+/// mirroring — so it is published beside the mirrored ones as never synchronized, with no place in the hierarchy and
+/// no mail here. A client that could not see it would be told an account has nowhere to put a deleted message while
+/// its mailbox has a trash folder.
 /// </para>
 /// <para>
 /// It reaches no mail server and returns no mail. Folder names, roles, counts, and instants are the whole of it, and
@@ -100,13 +101,47 @@ public sealed class MailFolderDirectoryReader
             [.. accounts.Accounts.Select(account => this.Describe(account, storedByFolder))]);
     }
 
-    /// <summary>Describes one account's folders, in the order the composed reading answered them.</summary>
+    /// <summary>Describes one account's folders, in the order the composed reading answered them, and the mapped folders it never reached.</summary>
+    /// <remarks>
+    /// A folder an operator mapped and asked not to mirror is never scheduled, so no run discovers it and the composed
+    /// reading — which is of local state — does not name it. It is still a folder the account has and still a folder
+    /// MailFathom files into, resolution being indifferent to mirroring, so leaving it out would answer a client asking
+    /// <em>where does a deleted message go</em> with <em>nowhere</em> for a mailbox that has a trash folder. It is
+    /// therefore published beside the mirrored ones, as what it is: never synchronized, no place in the hierarchy, and
+    /// no mail here.
+    /// <para>
+    /// Only the unmirrored mappings are added, which is what keeps this from undoing a withholding. A folder an
+    /// operator withheld from tools is a mirrored folder the resolved scope left out of the composed reading, and
+    /// adding it back here would publish a folder holding mail that every other read refuses; an unmirrored folder
+    /// holds no mail to refuse and could never have been in that reading at all.
+    /// </para>
+    /// </remarks>
     private MailAccountFolders Describe(
         MailAccountFreshness account,
         IReadOnlyDictionary<MailFolderIdentity, StoredMailFolder> storedByFolder) =>
         new(
             account,
-            [.. account.Folders.Select(folder => this.Describe(account.Account.Id, folder, storedByFolder))]);
+            [
+                .. account.Folders.Select(folder => this.Describe(account.Account.Id, folder, storedByFolder)),
+                .. this.UnreachedFolders(account),
+            ]);
+
+    /// <summary>Describes the folders configuration maps for an account that no run has ever reached.</summary>
+    private IEnumerable<DescribedMailFolder> UnreachedFolders(MailAccountFreshness account)
+    {
+        var reached = account.Folders.Select(static folder => folder.Alias).ToHashSet();
+
+        return this.folderMappings
+            .FoldersOf(account.Account.Id)
+            .Where(mapping => !mapping.Participation.IsSynchronized && !reached.Contains(mapping.Alias))
+            .OrderBy(static mapping => mapping.Alias.Value, StringComparer.Ordinal)
+            .Select(static mapping => new DescribedMailFolder(
+                new MailFolderFreshness(mapping.Alias, MailSynchronizationState.NeverSynchronized, null, false),
+                mapping.SpecialUse,
+                [],
+                0,
+                0));
+    }
 
     /// <summary>Describes one folder, with what local state holds about it where local state holds anything.</summary>
     /// <remarks>

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { ReactElement } from 'react';
+import { useEffect, type ReactElement } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
@@ -16,6 +16,7 @@ import {
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import type { OpenConversation } from '../workspace/openConversation';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { Thread } from './Thread';
 
 // The network boundary is the transport and it is the whole of what these tests fake, so the routes the conversation
@@ -34,10 +35,30 @@ beforeEach(() => {
     asked.length = 0;
 });
 
+// The width this column has is the one thing jsdom cannot answer, and the setup answers every query `false` — so a
+// test about the wide composition states it, and every other test inherits the single-pane reading.
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+
+function theColumnStandsBesideTheList(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: query.includes('min-width'),
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
 // A fake clock left installed changes the next file this worker runs, so it is released here rather than at the end of
-// the one test that installs it.
+// the one test that installs it, and the width a test stated goes back with it for the same reason.
 afterEach(() => {
     vi.useRealTimers();
+
+    if (declaredMatchMedia !== undefined) {
+        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
 });
 
 function row(id: string, overrides: Readonly<Record<string, unknown>> = {}): Readonly<Record<string, unknown>> {
@@ -133,16 +154,30 @@ function deploymentRefusing(status: number): MailFathomTransport {
 /** A deployment that has taken the request and not answered it, which is what a surface that waits is proven against. */
 const answersNothing: MailFathomTransport = () => new Promise<ClientResponse>(() => undefined);
 
+// The *fullscreen* toolbar control writes this, and a conversation is not drawn beside the toolbar — so a test about
+// what the control takes away states the value rather than pressing the control that sets it.
+function HidesThePanels({ hidden }: { readonly hidden: boolean }) {
+    const { revise } = useWorkspace();
+
+    useEffect(() => {
+        revise({ panelsHidden: hidden });
+    }, [revise, hidden]);
+
+    return null;
+}
+
 function inTheFrame(
     transport: MailFathomTransport,
     conversation: OpenConversation,
     online: boolean,
     marking: ReadMarking = nothingMarkedRead,
     expandWholeThread = false,
+    panelsHidden = false,
 ): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
+                <HidesThePanels hidden={panelsHidden} />
                 <LinkOpenerContext value={() => Promise.resolve()}>
                     <ReadMarkingContext value={marking}>
                         <Thread
@@ -165,8 +200,9 @@ function drawing(
     online = true,
     marking: ReadMarking = nothingMarkedRead,
     expandWholeThread = false,
+    panelsHidden = false,
 ) {
-    return render(inTheFrame(transport, conversation, online, marking, expandWholeThread));
+    return render(inTheFrame(transport, conversation, online, marking, expandWholeThread, panelsHidden));
 }
 
 /** A client that would mark read, recording what each drawn body said was opened rather than submitting it. */
@@ -200,6 +236,23 @@ function firstCollapsedHead(): HTMLElement {
 }
 
 describe('Thread', () => {
+    // Issue 1758's panel control, from the conversation's side. jsdom answers every media query `false`, so the
+    // composition here is the single-pane one — where the design keeps the head whatever the control says, because it
+    // is what carries the way back to the list.
+    it('keeps its head in a single-pane composition although the panels are hidden', async () => {
+        drawing(deploymentAnswering(pageOf(['one'])), { threadId, openAt: null }, true, nothingMarkedRead, false, true);
+
+        expect(await screen.findByRole('heading', { name: 'The quarterly figures' })).toBeDefined();
+    });
+
+    it('gives its head up with the panels where the column stands beside the list', async () => {
+        theColumnStandsBesideTheList();
+        drawing(deploymentAnswering(pageOf(['one'])), { threadId, openAt: null }, true, nothingMarkedRead, false, true);
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.queryByRole('heading', { name: 'The quarterly figures' })).toBeNull();
+    });
+
     it('draws the latest message and hides every earlier one behind the control that names how many there are', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 

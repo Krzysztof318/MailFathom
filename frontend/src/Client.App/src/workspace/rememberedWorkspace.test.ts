@@ -12,6 +12,7 @@ const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
     collapsed: ['account:personal'],
     mailboxesFolded: true,
+    panelsHidden: true,
     selection: 'AAMkAD-42',
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fullHtml: null,

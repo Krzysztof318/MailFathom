@@ -12,6 +12,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MailboxActControls } from '../mailboxActs/MailboxActControls';
 import { actedMessages, useListedMail } from '../messageList/useListedMail';
+import { useTwoPanes } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import type { StripFitting } from './useStripFit';
 
@@ -39,10 +40,12 @@ const answers: readonly { readonly answer: MailDraftAnswer; readonly icon: IconN
 
 export function MailToolbar({ strip, fit }: StripFitting) {
     const { translate } = useLocalization();
-    const { workspace } = useWorkspace();
+    const { workspace, revise } = useWorkspace();
     const composing = useComposing();
     const listed = useListedMail();
+    const twoPanes = useTwoPanes();
     const open = workspace.selection;
+    const panelsHidden = workspace.panelsHidden;
     const actShape: ControlShape = fit === 'symbols' ? 'symbol' : 'labelled';
 
     return (
@@ -103,10 +106,26 @@ export function MailToolbar({ strip, fit }: StripFitting) {
             <MailboxActControls messages={open === null ? [] : actedMessages(listed, [open])} shape={actShape} />
 
             {/* The one control in the strip that changes the view rather than the message, which is why the design
-                keeps it apart at the far edge and draws it as its symbol alone at every width. What it hides is the
-                thread's state panels — MailFathom's own reading of a conversation — which the client does not draw
-                yet, so there is nothing for it to hide. */}
-            <PlannedControl label={translate('mail.hidePanels')} icon="fullscreen" shape="symbol" className="ms-auto" />
+                keeps it apart at the far edge and draws it as its symbol alone at every width. What it takes away is
+                everything the design draws around the correspondence — the head of the thread, and beside it the state
+                panels the client does not draw yet — so it is the head that goes today and the panels that join it as
+                they arrive. It is a setting for the space rather than for a message, so it holds as the reader moves
+                from one thread to the next, and it says which way it is set: the symbol, the name, and `aria-pressed`
+                all turn over together. Drawn only where the composition has two panes, because that is where the
+                design gives it something to do — a single pane keeps the head, which carries the way back to the
+                list. */}
+            {twoPanes ? (
+                <Control
+                    label={translate(panelsHidden ? 'mail.showPanels' : 'mail.hidePanels')}
+                    icon={panelsHidden ? 'fullscreen_exit' : 'fullscreen'}
+                    shape="symbol"
+                    pressed={panelsHidden}
+                    className={`ms-auto ${panelsHidden ? 'bg-accent-soft text-accent-strong' : ''}`}
+                    onPress={() => {
+                        revise({ panelsHidden: !panelsHidden });
+                    }}
+                />
+            ) : null}
         </div>
     );
 }

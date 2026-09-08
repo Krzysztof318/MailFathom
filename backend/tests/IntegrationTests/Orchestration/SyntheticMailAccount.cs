@@ -377,6 +377,10 @@ internal sealed class SyntheticMailAccount(
             : null;
 
     /// <inheritdoc />
+    public IReadOnlyList<MailFolderMapping> FoldersOf(MailAccountId accountId) =>
+        accountId == AccountId ? this.ConfiguredFolders : [];
+
+    /// <inheritdoc />
     /// <remarks>
     /// Off unless a test asks for it, which is the opposite of the deployed default and deliberate: a deployment files
     /// the copy, and an account that filed one on every class in this collection would append a message to a folder

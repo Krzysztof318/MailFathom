@@ -36,6 +36,9 @@ internal sealed class ConfiguredMailFolderMappingReader : IMailFolderMappingRead
     public MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias) =>
         this.MappingsOf(accountId).FirstOrDefault(mapping => mapping.Alias == folderAlias);
 
+    /// <inheritdoc />
+    public IReadOnlyList<MailFolderMapping> FoldersOf(MailAccountId accountId) => this.MappingsOf(accountId);
+
     /// <summary>Reads one account's folders as the mappings this port answers with.</summary>
     private IReadOnlyList<MailFolderMapping> MappingsOf(MailAccountId accountId) =>
         this.mappingsByAccount.Value.TryGetValue(accountId.Value, out var mappings) ? mappings : [];

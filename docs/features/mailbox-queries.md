@@ -538,11 +538,17 @@ every binding's mail together, because an alias rebound after a server recreated
 binding stored, and they admit exactly the rows a listing of the folder would return — a count assembled from its own
 idea of what is readable would be a figure no listing could reproduce.
 
-The folders are the ones local state knows of. An alias configuration maps that nothing has ever bound to a remote
-folder is absent rather than empty, because there is no folder on the server to draw; where an operator finds out about
-such a mapping is [the administrative status route](../operations/admin-endpoint.md), which composes its folder list
-from configuration for exactly that reason. The tree is what
-[`GET /api/client/folders`](../operations/client-endpoint.md#the-folders-route) publishes.
+The folders this port answers are the ones local state knows of, and an alias configuration maps that nothing has ever
+bound to a remote folder is absent from it rather than empty, because there is no binding to read a hierarchy or a count
+from. The reading composed on top of it is wider: `MailFolderDirectoryReader` publishes the folders configuration maps
+as well, so a folder an operator asked not to mirror — never scheduled, therefore never discovered — is published beside
+the mirrored ones as never synchronized, with no place in the hierarchy and no mail here. It is still a folder the
+account has and still a folder [a move](../operations/client-endpoint.md#the-mutation-routes) files into, resolution being indifferent to
+mirroring, so a client that could not see one would be told an account has nowhere to put a deleted message while its
+mailbox has a trash folder. A folder an operator withheld from tools is the one that stays absent, for the same reason
+it is absent from every other read. That reading is what
+[`GET /api/client/folders`](../operations/client-endpoint.md#the-folders-route) publishes; the whole configured list,
+mirrored or not and withheld or not, is [the administrative status route](../operations/admin-endpoint.md).
 
 ## Where the pieces live
 

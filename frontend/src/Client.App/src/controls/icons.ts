@@ -54,6 +54,7 @@ export const iconNames = [
     'format_quote',
     'forward',
     'fullscreen',
+    'fullscreen_exit',
     'gpp_maybe',
     'group',
     'handshake',
