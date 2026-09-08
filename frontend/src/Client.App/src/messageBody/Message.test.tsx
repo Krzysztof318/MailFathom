@@ -9,6 +9,7 @@ import type { ClientResponse, ClientSession, MailFathomTransport } from '@mailfa
 import { LocalizationProvider } from '../localization/Localization';
 import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import { Message } from './Message';
+import { useMessageBody } from './useMessageBody';
 
 // The transport is handed in, so nothing here replaces a module: the request, the parsing, and the failure mapping
 // stay the real ones, and only the answer they are given is the test's.
@@ -75,6 +76,27 @@ function readsAsked(): string[] {
     return [...new Set(asked)];
 }
 
+// A surface reading one message, which is what every test below is holding: the read is started where the surface
+// mounts and the component under test draws what it produced, exactly as the reading pane and a conversation do it.
+function ReadMessage({
+    storedEmailId,
+    quotedHistoryOnRequest = false,
+    onBodyDrawn = () => undefined,
+}: {
+    readonly storedEmailId: string;
+    readonly quotedHistoryOnRequest?: boolean;
+    readonly onBodyDrawn?: () => void;
+}) {
+    return (
+        <Message
+            body={useMessageBody(session, transport, storedEmailId, true)}
+            storedEmailId={storedEmailId}
+            quotedHistoryOnRequest={quotedHistoryOnRequest}
+            onBodyDrawn={onBodyDrawn}
+        />
+    );
+}
+
 function readingOneMessage(storedEmailId = 'stub-message') {
     return render(reading(storedEmailId));
 }
@@ -83,7 +105,7 @@ function reading(storedEmailId: string) {
     return (
         <StrictMode>
             <LocalizationProvider>
-                <Message session={session} transport={transport} storedEmailId={storedEmailId} />
+                <ReadMessage storedEmailId={storedEmailId} />
             </LocalizationProvider>
         </StrictMode>
     );
@@ -94,7 +116,7 @@ function readingInAConversation() {
     return render(
         <StrictMode>
             <LocalizationProvider>
-                <Message session={session} transport={transport} storedEmailId="stub-message" quotedHistoryOnRequest />
+                <ReadMessage storedEmailId="stub-message" quotedHistoryOnRequest />
             </LocalizationProvider>
         </StrictMode>,
     );
@@ -105,12 +127,7 @@ function readingReported(onBodyDrawn: () => void, storedEmailId = 'stub-message'
     return (
         <StrictMode>
             <LocalizationProvider>
-                <Message
-                    session={session}
-                    transport={transport}
-                    storedEmailId={storedEmailId}
-                    onBodyDrawn={onBodyDrawn}
-                />
+                <ReadMessage storedEmailId={storedEmailId} onBodyDrawn={onBodyDrawn} />
             </LocalizationProvider>
         </StrictMode>
     );
@@ -122,7 +139,7 @@ function readingUnder(embeddedHtmlMessages: boolean) {
         <StrictMode>
             <LocalizationProvider>
                 <EmbeddedHtmlMessagesContext value={embeddedHtmlMessages}>
-                    <Message session={session} transport={transport} storedEmailId="stub-message" />
+                    <ReadMessage storedEmailId="stub-message" />
                 </EmbeddedHtmlMessagesContext>
             </LocalizationProvider>
         </StrictMode>
