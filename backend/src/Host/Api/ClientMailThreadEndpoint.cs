@@ -183,7 +183,11 @@ internal sealed record ClientMailThreadEmailResponse(
     /// <remarks>
     /// The conversation's own count is what the row's <c>threadMessageCount</c> carries here, because that is what the
     /// field means and every message of one conversation is in the same conversation. A client drawing a message of a
-    /// thread from this row therefore reads the same number the header above it reads.
+    /// thread from this row therefore reads the same number the header above it reads — which is the assembled count
+    /// rather than the counted one, so a correspondence past
+    /// <see cref="Application.Emails.Threads.IEmailThreadReader.MaximumAssembledEmails" /> reads here as the bound with
+    /// <c>moreMessagesNotAssembled</c> beside it and reads on a list row as its real length. Agreeing with the list
+    /// instead would mean counting the conversation a second time to publish a number this route already states.
     /// </remarks>
     internal static ClientMailThreadEmailResponse For(BrowsedThreadEmail message, int threadMessageCount) => new(
         message.Position,

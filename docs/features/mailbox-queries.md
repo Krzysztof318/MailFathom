@@ -299,9 +299,16 @@ at all asks nothing.
 
 **It counts under the same scope the conversation route reads under**, which is neither the account nor the folder the
 listing was narrowed to, with the junk folder included. A count narrowed to the folder somebody is listing would answer
-one for nearly every row in it, and a row and the conversation it opens would then disagree about how long the exchange
-is. What the scope does narrow is unchanged: a folder [withheld from tools](#folders-withheld-from-tools) is counted
-nowhere, which is what keeps a withheld folder's size from being published one integer at a time.
+one for nearly every row in it, which is the opposite of what the number is drawn for. What the scope does narrow is
+unchanged: a folder [withheld from tools](#folders-withheld-from-tools) is counted nowhere, which is what keeps a
+withheld folder's size from being published one integer at a time.
+
+**What it does not share with that read is the assembly bound.** A conversation is assembled to at most
+`IEmailThreadReader.MaximumAssembledEmails` messages and says `MoreMessagesNotAssembled` when it ran further, so
+`BrowsedThread.MessageCount` never exceeds that; this is a count rather than an assembly and has no such ceiling. So the
+two part above the bound, deliberately: a row says how long the exchange actually is, and the conversation says how much
+of it was assembled and that there is more. Capping the count to make them agree would leave a long correspondence
+drawn as though it were exactly the bound, which is the one thing the number exists to tell a reader apart from.
 
 Being a number rather than text, it reaches no sensitive-content scanner; the egress points are for what a message
 says.

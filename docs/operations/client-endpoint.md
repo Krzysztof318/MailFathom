@@ -452,7 +452,6 @@ continues the list at each end:
       "attachmentCount": 2,
       "sizeOctets": 48213,
       "preview": "The release went out this morning and the notes are attached.",
-      "threadMessageCount": 4,
       "enrichment": {
         "derivedAt": "2026-08-15T10:02:44+00:00",
         "marks": [
@@ -466,7 +465,8 @@ continues the list at each end:
             "evidence": [ "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92" ]
           }
         ]
-      }
+      },
+      "threadMessageCount": 4
     }
   ],
   "nextCursor": "AbCd...",
@@ -490,10 +490,16 @@ change it.
 **`threadMessageCount` is how long the correspondence is**, counted over the whole conversation rather than over the
 page — a correspondence spans a page boundary as readily as it sits inside one, so a client counting the rows it holds
 would answer a different number depending on where the page was cut. It is counted across every folder the user may
-read with the junk folder included, which is the same membership `GET /api/client/threads/{threadId}` publishes, so a
-row and the conversation it opens cannot disagree about how long the exchange is. It is `null` for a message threading
-has placed in no conversation, and `1` for one whose conversation holds only it. The count comes out of the same read
-the page comes from rather than a request per row.
+read with the junk folder included, which is the same membership `GET /api/client/threads/{threadId}` reads under. It is
+`null` for a message threading has placed in no conversation, and `1` for one whose conversation holds only it. The
+count comes out of the same read the page comes from rather than a request per row.
+
+**It is the one place a conversation's length is published without the assembly bound.** The two routes agree up to the
+500 messages the conversation route assembles and part above it: a correspondence longer than that is reported here as
+the length it actually is, while `GET /api/client/threads/{threadId}` reports `messageCount` as 500 and says so with
+`moreMessagesNotAssembled`. That is deliberate. What a client draws this field as says *this row stands for a long
+exchange*, which a number capped at the bound would stop saying — and making the two agree would mean counting the
+conversation a second time to publish a number the conversation route already states.
 
 **`enrichment` is what a derivation concluded about the message**, and it is on every row of every response, whether or
 not the deployment turned [message enrichment](../features/message-enrichment.md) on. It carries at most
@@ -742,7 +748,22 @@ It answers with one conversation as a single document — the messages in it, wh
         "hasAttachments": true,
         "attachmentCount": 2,
         "sizeOctets": 48213,
-        "preview": "The release went out this morning and the notes are attached."
+        "preview": "The release went out this morning and the notes are attached.",
+        "enrichment": {
+          "derivedAt": "2026-08-15T10:02:44+00:00",
+          "marks": [
+            {
+              "aspect": "Sense",
+              "text": "The 0.8.0 release notes, with the changelog attached.",
+              "reason": "The opening paragraph announces the release and names the attachment.",
+              "dueAt": null,
+              "source": "Model",
+              "origin": "mailfathom-email-enrichment",
+              "evidence": [ "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92" ]
+            }
+          ]
+        },
+        "threadMessageCount": 2
       }
     },
     {
@@ -765,7 +786,9 @@ It answers with one conversation as a single document — the messages in it, wh
         "hasAttachments": false,
         "attachmentCount": 0,
         "sizeOctets": 3120,
-        "preview": "Thanks — I will read the notes this afternoon."
+        "preview": "Thanks — I will read the notes this afternoon.",
+        "enrichment": null,
+        "threadMessageCount": 2
       }
     }
   ],
@@ -800,7 +823,10 @@ trimmed off — which is what keeps the eighth reply from redrawing the seven ab
 derivation reached shows its marks whichever screen draws it, and a conversation that answered `null` for a message the
 list shows marks for would be stating that no derivation has reached it. `threadMessageCount` on each of these rows is
 this conversation's own `messageCount`, because that is what the field means and every message here is in this
-conversation — so a row drawn from a thread reads the same number as the header above it. There is no body here
+conversation — so a row drawn from a thread reads the same number as the header above it. That is the *assembled* count
+rather than the counted one, so a conversation past the 500 this route assembles reads `500` here beside
+`moreMessagesNotAssembled` and reads its real length on a
+[mail list row](#the-mail-list-route). There is no body here
 either: the whole of a message is a request of its own, named by the `id` that row already carries.
 
 **`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's

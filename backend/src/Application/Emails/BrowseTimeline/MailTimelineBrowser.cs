@@ -365,8 +365,10 @@ public sealed class MailTimelineBrowser
     /// <remarks>
     /// Neither an account nor a folder narrows the count and the junk folder takes part, exactly as they do not narrow
     /// the conversation <see cref="BrowseThread.MailThreadBrowser" /> reads: a correspondence is threaded across every
-    /// folder it reached, so a count narrowed to the folder somebody is listing would answer one for every row in it
-    /// and the pill a row draws would disagree with the conversation behind it.
+    /// folder it reached, so a count narrowed to the folder somebody is listing would answer one for nearly every row
+    /// in it. What it does not share with that read is the assembly bound — this is a count rather than an assembly, so
+    /// a correspondence past <see cref="IEmailThreadReader.MaximumAssembledEmails" /> is reported here as the length it
+    /// is while the conversation itself is published as the bound with its own flag saying more was not assembled.
     /// </remarks>
     private async Task<IReadOnlyDictionary<EmailThreadId, int>> ThreadSizesAsync(
         IReadOnlyList<EmailSummary> page,

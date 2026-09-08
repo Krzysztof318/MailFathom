@@ -315,9 +315,18 @@ internal sealed record ClientMailTimelineResponse(
 /// </para>
 /// <para>
 /// <c>threadMessageCount</c> counts the whole correspondence rather than the rows one page holds, and is counted across
-/// every folder this user may read with the junk folder included — the same membership the thread route publishes, so a
-/// row and the conversation it opens cannot disagree about how long the exchange is. It is absent for a message
-/// threading has placed in no conversation, and <c>1</c> for one whose conversation holds only it.
+/// every folder this user may read with the junk folder included — the same membership the conversation route reads
+/// under. It is absent for a message threading has placed in no conversation, and <c>1</c> for one whose conversation
+/// holds only it.
+/// </para>
+/// <para>
+/// It is counted rather than assembled, so it is the one place on this surface a conversation's length is published
+/// without the assembly bound. The two agree up to
+/// <see cref="Application.Emails.Threads.IEmailThreadReader.MaximumAssembledEmails" /> and part above it: a
+/// correspondence longer than that is published here as the length it actually is, while the conversation route
+/// reports the bound and says so with <c>moreMessagesNotAssembled</c>. That is deliberate rather than a discrepancy to
+/// reconcile — what this field is drawn as says *this row stands for a long exchange*, which a number capped at the
+/// bound would stop saying.
 /// </para>
 /// </remarks>
 internal sealed record ClientMailTimelineEntryResponse(
