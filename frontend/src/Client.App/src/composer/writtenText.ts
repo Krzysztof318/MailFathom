@@ -61,9 +61,11 @@ const writableElements: readonly string[] = [
 // nothing.
 const followableSchemes: readonly string[] = ['http:', 'https:', 'mailto:'];
 
-// What a written message may carry. They bound both directions rather than only the read: a message the composer
-// wrote past one of them would be kept and then refused on the next reload, which is a draft lost silently — so
-// `writtenIn` holds to the depth below as it reads, and the other two are set far above anything typing produces.
+// What a written message may carry. All three bound both directions rather than only the read, and that is the whole
+// point of them: a message the composer wrote past one of them would be kept and then refused on the next reload, and
+// `keptComposition.ts` answers nothing for a record it cannot read whole — so the recipients, the subject, and the
+// account would go down with the words. `writtenIn` therefore holds to each of them as it reads, and each is set far
+// above anything typing produces, so what a person actually meets is a paste of a whole document being cut.
 const mostWrittenNodes = 100_000;
 const longestWrittenRun = 100_000;
 const deepestWriting = 64;
@@ -83,22 +85,46 @@ export function followable(address: string): boolean {
  *
  * An element outside the set is unwrapped rather than dropped, so what somebody typed inside one survives a wrapper
  * this client has no name for — which is what an engine leaves behind after an editing command it composed its own way.
+ *
+ * It holds to every bound `writtenTextIn` reads by, so what this composes is always what that accepts. A region past
+ * one of them is cut here rather than kept whole, because the alternative is not a longer message: it is a message
+ * kept, refused on the next reload, and taken down with the recipients and the subject it was written beside.
  */
-export function writtenIn(parent: Node, depth = 0): readonly WrittenNode[] {
-    const written: WrittenNode[] = [];
+export function writtenIn(parent: Node): readonly WrittenNode[] {
+    return readWritten(parent, 0, { nodes: mostWrittenNodes });
+}
 
-    // Past the depth a kept message may be read back at, an element is unwrapped rather than kept. Reading deeper
-    // would compose a message `writtenTextIn` then refuses, and a draft that survives being written and not the
-    // reload after it is a draft lost with nothing said.
+// What is left of the one bound that is spent across a whole reading rather than measured node by node.
+interface WritingBudget {
+    nodes: number;
+}
+
+function readWritten(parent: Node, depth: number, budget: WritingBudget): readonly WrittenNode[] {
+    // Past the depth a kept message may be read back at, an element is unwrapped rather than kept.
     if (depth >= deepestWriting) {
-        return [{ text: parent.textContent ?? '' }];
+        if (budget.nodes <= 0) {
+            return [];
+        }
+
+        budget.nodes -= 1;
+
+        return [{ text: (parent.textContent ?? '').slice(0, longestWrittenRun) }];
     }
 
+    const written: WrittenNode[] = [];
+
     for (const node of [...parent.childNodes]) {
+        if (budget.nodes <= 0) {
+            break;
+        }
+
         if (node.nodeType === Node.TEXT_NODE) {
-            const text = node.nodeValue ?? '';
+            // A run past the bound is cut rather than dropped: what somebody pasted is mostly still there, and the
+            // whole of it would have been lost on the reload that refused it.
+            const text = (node.nodeValue ?? '').slice(0, longestWrittenRun);
 
             if (text !== '') {
+                budget.nodes -= 1;
                 written.push({ text });
             }
 
@@ -110,9 +136,17 @@ export function writtenIn(parent: Node, depth = 0): readonly WrittenNode[] {
         }
 
         const named = node.tagName.toLowerCase();
-        const holds = writtenIn(node, depth + 1);
+        const writable = writableElements.includes(named);
 
-        if (!writableElements.includes(named)) {
+        // An element that is kept is one of the nodes the budget counts, and it is counted before what it holds is
+        // read, so a wide tree cannot spend the whole budget on children and then add a parent past the bound.
+        if (writable) {
+            budget.nodes -= 1;
+        }
+
+        const holds = readWritten(node, depth + 1, budget);
+
+        if (!writable) {
             written.push(...holds);
 
             continue;
@@ -123,6 +157,7 @@ export function writtenIn(parent: Node, depth = 0): readonly WrittenNode[] {
 
         // A link to nowhere is a link this client did not make, so what it held is kept and the link itself is not.
         if (element === 'a' && (address === null || !followable(address))) {
+            budget.nodes += 1;
             written.push(...holds);
 
             continue;

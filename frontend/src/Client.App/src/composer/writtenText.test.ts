@@ -82,6 +82,26 @@ describe('writtenIn', () => {
         ]);
     });
 
+    it('cuts a run longer than a kept message may carry, rather than composing one that is refused on reload', () => {
+        const written = writtenIn(region('a'.repeat(150_000)));
+
+        expect(plainTextOf(written).length).toBeLessThan(150_000);
+        expect(writtenTextIn(JSON.parse(JSON.stringify(written)) as unknown)).not.toBeNull();
+    });
+
+    it('stops at the count a kept message may carry, rather than composing one that is refused on reload', () => {
+        const many = region();
+
+        for (let node = 0; node < 120_000; node += 1) {
+            many.append(element('div', 'One'));
+        }
+
+        const written = writtenIn(many);
+
+        expect(written.length).toBeLessThan(120_000);
+        expect(writtenTextIn(JSON.parse(JSON.stringify(written)) as unknown)).not.toBeNull();
+    });
+
     it('reads a region nested past the bound as words, so what it composes is always kept and read back', () => {
         let deepest = element('div', 'Still here');
 
