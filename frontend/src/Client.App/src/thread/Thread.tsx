@@ -468,6 +468,11 @@ export function Thread({
                                 session={session}
                                 transport={transport}
                                 message={message}
+                                // A rule pointing at the only message on the screen points at nothing, so the mark
+                                // waits for the rest of the correspondence to stand beside it. Asked here rather than
+                                // where the arrival is decided, because it is a question about what is drawn: showing
+                                // the history is what makes the marked message one among several, and that is exactly
+                                // when saying which one the list opened starts being worth anything.
                                 mark={drawn.length > 1 && message.email.id === arrival?.storedEmailId ? mark : null}
                                 online={online}
                                 onShowFullHtml={() => {

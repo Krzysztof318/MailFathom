@@ -5,11 +5,10 @@
 import type { MailThreadMessage, MailThreadPage } from '@mailfathom/client-backend';
 import type { OpenConversation } from '../workspace/openConversation';
 
-// Where a conversation puts the reader when it is first drawn. A conversation shows its latest message and hides
-// everything before it behind one control, so the only question left is which message the reader arrived at: the one
-// they named, where the conversation holds it, and the latest otherwise. That answer decides two things — where focus
-// is placed, and whether the history starts shown, because arriving at a message the history holds cannot leave that
-// message hidden.
+// Where a conversation puts the reader when it is first drawn. A conversation shows the message it was opened at and
+// hides everything else behind one control, so the only question left is which message that is: the one they named,
+// where the conversation holds it, and the latest otherwise. That answer decides two things — where focus is placed,
+// and which message is marked out from the ones around it once the rest of the correspondence stands beside it.
 //
 // It is decided once, from what is held at the moment the conversation stops reading, and never again: a later page
 // arriving would otherwise move the reader off the message they came for.
@@ -28,17 +27,6 @@ export function holdsMessage(messages: readonly MailThreadMessage[], storedEmail
 export interface Arrival {
     /** The message arrived at, by the identity it is reached by. */
     readonly storedEmailId: string;
-
-    /**
-     * Whether the conversation stood the reader in front of messages other than the one they arrived at.
-     *
-     * True exactly where the arrival is not the conversation's latest, which is the one case the pane opens with its
-     * history shown. It decides that, and it decides whether the arrival is marked out from what surrounds it — both
-     * being questions about where the reader landed rather than about what they have done since, which is why the
-     * answer is taken here and never recomputed. A mark derived from what is drawn would appear on a message already
-     * on the screen the moment somebody showed the history, moving its words sideways under them.
-     */
-    readonly amongOthers: boolean;
 }
 
 /**
@@ -55,7 +43,7 @@ export function arrivesAt(messages: readonly MailThreadMessage[], openAt: string
     const latest = messages[messages.length - 1]?.email.id ?? null;
     const storedEmailId = openAt !== null && holdsMessage(messages, openAt) ? openAt : latest;
 
-    return storedEmailId === null ? null : { storedEmailId, amongOthers: storedEmailId !== latest };
+    return storedEmailId === null ? null : { storedEmailId };
 }
 
 /**
@@ -71,13 +59,13 @@ export type ArrivalMark = 'list' | 'result';
  * What marks the message a conversation arrived at, or `null` where nothing does.
  *
  * Nothing is marked where the conversation was opened on its own subject, because there is no message somebody was
- * sent to and a mark saying otherwise would be a sentence that is not true. Nothing is marked either where the
- * conversation stood the reader in front of that message alone: a rule pointing at the only thing on the screen points
- * at nothing.
+ * sent to and a mark saying otherwise would be a sentence that is not true.
  *
- * Every answer here is a function of the arrival, which is decided once, so a mark neither appears nor disappears
- * while somebody reads. Showing the history is the gesture that would otherwise do it, and a message already on the
- * screen gaining a rule and an indent is words moving sideways under a reader.
+ * What is *not* asked here is whether the marked message is standing alone on the screen. A rule pointing at the only
+ * thing drawn points at nothing, so that case carries no mark either — but it is a question about what is drawn rather
+ * than about where the reader landed, and it changes under the one control the conversation offers. `Thread.tsx` asks
+ * it where the messages are drawn, which is what keeps the mark on the message the list opened once the rest of the
+ * correspondence is shown beside it, whether that message is the conversation's latest or one inside its history.
  *
  * @param conversation The conversation as it was opened.
  * @param arrival Where it arrived, or `null` where it has not decided yet.
@@ -97,5 +85,5 @@ export function arrivalMark(
         return settled ? null : 'result';
     }
 
-    return arrival.amongOthers ? 'list' : null;
+    return 'list';
 }

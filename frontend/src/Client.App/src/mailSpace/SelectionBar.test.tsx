@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
-import type { MoveDestination } from '../mailboxActs/mailboxDestinations';
+import type { MoveDestination, MoveDestinationGroup } from '../mailboxActs/mailboxDestinations';
 import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { ListedMailContext, nothingListed, type ListedMail } from '../messageList/useListedMail';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -18,7 +18,13 @@ const drawnRows: readonly ActedMessage[] = [
     { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' },
 ];
 
-const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients' };
+const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };
+const work: MoveDestinationGroup = {
+    accountId: 'work',
+    accountName: 'Northwind \u00b7 work',
+    ordinal: 0,
+    destinations: [clients],
+};
 
 function Picks({ selected }: { readonly selected: readonly string[] }) {
     const { workspace, revise } = useWorkspace();
@@ -124,7 +130,7 @@ describe('SelectionBar', () => {
     it('files everything picked out in the folder somebody chose, rather than in one this client guessed', () => {
         const performed = vi.fn();
 
-        drawBar(['message-1'], { perform: performed, destinationsOf: () => [clients] });
+        drawBar(['message-1'], { perform: performed, destinationsOf: () => [work] });
 
         fireEvent.click(screen.getByRole('button', { name: 'Move' }));
         fireEvent.click(screen.getByRole('button', { name: 'Projects / Clients' }));

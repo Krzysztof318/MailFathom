@@ -115,7 +115,7 @@ export function ActQuestions({
 
             <MoveChoice
                 asked={filing}
-                destinations={acts.destinationsOf(messages)}
+                groups={acts.destinationsOf(messages)}
                 onChosen={(destination) => {
                     acts.perform('move', messages, destination);
                     onActed?.();

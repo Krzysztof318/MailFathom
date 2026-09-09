@@ -338,11 +338,13 @@ export const en = {
     'act.moveClose': 'Close',
 
     'compose.titleNew': 'New message',
+    'compose.titleDraft': 'Draft',
     'compose.titleReply': 'Reply',
     'compose.titleReplyAll': 'Reply to everyone',
     'compose.titleForward': 'Forward',
     'compose.close': 'Close the message',
     'compose.reading': 'Reading the message you are answering…',
+    'compose.readingDraft': 'Reading the draft you are carrying on…',
     'compose.from': 'From',
     'compose.to': 'To',
     'compose.cc': 'Cc',

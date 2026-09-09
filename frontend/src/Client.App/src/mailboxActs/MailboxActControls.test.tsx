@@ -6,13 +6,19 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { MailboxActControls } from './MailboxActControls';
-import type { ActRefusal, MoveDestination } from './mailboxDestinations';
+import type { ActRefusal, MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 import { MailboxActsContext, nothingActed, type ActedMessage, type MailboxActs } from './useMailboxActs';
 
 const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' };
 const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' };
 
-const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients' };
+const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };
+const work: MoveDestinationGroup = {
+    accountId: 'work',
+    accountName: 'Northwind \u00b7 work',
+    ordinal: 0,
+    destinations: [clients],
+};
 
 function drawControls(
     acts: Partial<MailboxActs> = {},
@@ -97,7 +103,7 @@ describe('MailboxActControls', () => {
     });
 
     it('offers the folders the messages could go to, asked of the messages rather than of the mailbox', () => {
-        const offered = vi.fn(() => [clients]);
+        const offered = vi.fn(() => [work]);
 
         drawControls({ destinationsOf: offered }, [invoice, receipt]);
         fireEvent.click(screen.getByRole('button', { name: 'Move' }));

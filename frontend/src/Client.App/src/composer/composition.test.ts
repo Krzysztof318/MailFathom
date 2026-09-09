@@ -8,6 +8,7 @@ import {
     anythingWritten,
     answeredSubject,
     answerTo,
+    draftContinued,
     looksLikeAnAddress,
     nothingWrittenYet,
     whatWouldBeMissing,
@@ -97,6 +98,44 @@ describe('answerTo', () => {
         expect(composed.answering).toEqual({ storedEmailId: 'e1', answers: 'everyone' });
         expect(composed.account).toBe('work');
         expect(composed.words).toEqual([]);
+    });
+});
+
+describe('draftContinued', () => {
+    // A draft is a message this deployment already holds, so nothing here is composed: what was filed is what comes
+    // back, including the blind copies a reply would never have derived.
+    it('opens the composer on what was filed, each header where its author put it', () => {
+        const filed = message('Half written', [
+            participant('From', 'me@example.invalid'),
+            participant('To', 'ada@example.invalid'),
+            participant('Cc', 'grace@example.invalid'),
+            participant('Bcc', 'alan@example.invalid'),
+        ]);
+
+        const composed = draftContinued(filed, null);
+
+        expect(composed.subject).toBe('Half written');
+        expect(composed.account).toBe('work');
+        expect(composed.to).toStrictEqual(['ada@example.invalid']);
+        expect(composed.cc).toStrictEqual(['grace@example.invalid']);
+        expect(composed.bcc).toStrictEqual(['alan@example.invalid']);
+    });
+
+    // It answers nothing — a draft is a message of its own — and says instead which stored message the words came
+    // from, which is what tells one composition from another when neither answers anything.
+    it('answers nothing and says which stored message it was carried on from', () => {
+        const composed = draftContinued(message('Half written', []), null);
+
+        expect(composed.answering).toBeNull();
+        expect(composed.continuing).toBe('e1');
+    });
+
+    it('opens on an empty subject where the draft was filed without one, rather than on nothing at all', () => {
+        expect(draftContinued(message(null, []), null).subject).toBe('');
+    });
+
+    it('opens on no words where the body could not be read, which is a draft to carry on rather than one to refuse', () => {
+        expect(draftContinued(message('Half written', []), null).words).toStrictEqual([]);
     });
 });
 

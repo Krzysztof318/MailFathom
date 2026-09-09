@@ -14,6 +14,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
     type MailFolderDirectory,
+    type MailFolderRole,
     type MailMutationResult,
 } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
@@ -21,6 +22,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useToasts } from '../toasts/useToasts';
 import {
     deletesPermanently,
+    destinationName,
     destinationsFor,
     filingFor,
     refusalFor,
@@ -366,7 +368,9 @@ export function MailboxActsProvider({
                 kind: 'neutral',
                 title: destroyed
                     ? translate('act.deletedPermanently')
-                    : translate(actReported[act], { folder: destination?.name ?? '' }),
+                    : translate(actReported[act], {
+                          folder: destination === undefined ? '' : destinationName(destination, translate),
+                      }),
                 body: counted(recorded.length),
                 ...wayBack,
             });
@@ -442,6 +446,17 @@ export function MailboxActsProvider({
         });
     }
 
+    // Which role a message's own folder plays, read out of the same tree the destinations are read from. Matched by
+    // the account as well as the alias, because an alias names a folder inside one account and two accounts may spell
+    // one the same way.
+    function folderRoleOf(message: ActedMessage): MailFolderRole | null {
+        return (
+            held.directory?.accounts
+                .find((entry) => entry.account.id === message.account)
+                ?.folders.find((folder) => folder.alias === message.folder)?.role ?? null
+        );
+    }
+
     function perform(act: MailboxAct, messages: readonly ActedMessage[], destination?: MoveDestination): void {
         if (session === null || refusalOf(act, messages) !== null) {
             return;
@@ -472,6 +487,7 @@ export function MailboxActsProvider({
             : {
                   asked: held.asked,
                   refusalOf,
+                  folderRoleOf,
                   destinationsOf: (messages) => destinationsFor(held.directory, messages),
                   deletesPermanently: destroys,
                   perform,

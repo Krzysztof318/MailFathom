@@ -136,6 +136,12 @@ export function NotificationCentre({
             // The two compositions are the design project's own: a sheet that stops above the bottom navigation in a
             // narrow window, and a panel standing beside the rail in a wide one. Where it comes from differs with it,
             // which is what the two motions and the two closed positions below say.
+            //
+            // Each closed position is written under the composition it belongs to rather than one of them under the
+            // breakpoint and the other under nothing. `translate-y-*` and `-translate-x-*` are two axes of the one
+            // `translate` property, so a vertical offset left standing outside the breakpoint composes with the
+            // horizontal one above it and the panel travels diagonally out of the corner instead of in from the side.
+            // `max-workspace:` and `workspace:` never both apply, which is what keeps each composition to one axis.
             // The panel is in the platform's top layer, where the frame's safe-area padding is not around it: the top
             // inset is padded away inside it, and the bottom one is a margin because what the sheet stops above is the
             // bottom navigation, which the frame has already lifted clear of the gesture bar.
@@ -145,7 +151,7 @@ export function NotificationCentre({
                     : swipe.springing
                       ? 'motion-spring'
                       : 'motion-sheet workspace:motion-panel'
-            } translate-y-full open:translate-y-0 starting:open:translate-y-full workspace:-translate-x-full workspace:open:translate-x-0 workspace:starting:open:-translate-x-full`}
+            } max-workspace:translate-y-full max-workspace:open:translate-y-0 max-workspace:starting:open:translate-y-full workspace:-translate-x-full workspace:open:translate-x-0 workspace:starting:open:-translate-x-full`}
             onPointerDown={swipe.onPanelPointerDown}
             onCancel={(event) => {
                 // Refused so that leaving by the keyboard is the same act as leaving by the scrim: the centre is asked

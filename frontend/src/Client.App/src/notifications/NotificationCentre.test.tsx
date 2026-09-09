@@ -124,6 +124,29 @@ describe('NotificationCentre', () => {
         expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
     });
 
+    // `translate-x-*` and `translate-y-*` write the one `translate` property, so a class list that leaves both on the
+    // panel at once composes a diagonal — which is the travel a reader sees as a slide out of the lower corner rather
+    // than the one axis the design project draws for each composition. Nothing in jsdom applies a stylesheet, so what
+    // is asserted is that every displacement the panel carries is gated on exactly one of the two compositions.
+    it('travels along one axis in each composition: up from under a phone, in from the side beside a rail', () => {
+        panel();
+
+        const displaced = [...screen.getByRole('dialog', { name: 'Notifications' }).classList].filter((name) =>
+            name.includes('translate-'),
+        );
+
+        expect(displaced.length).toBeGreaterThan(0);
+        expect(
+            displaced.filter((name) => name.startsWith('max-workspace:')).every((name) => name.includes('-y-')),
+        ).toBe(true);
+        expect(displaced.filter((name) => name.startsWith('workspace:')).every((name) => name.includes('-x-'))).toBe(
+            true,
+        );
+        expect(displaced.every((name) => name.startsWith('max-workspace:') || name.startsWith('workspace:'))).toBe(
+            true,
+        );
+    });
+
     it('says how many arrived beside its own title', () => {
         panel({ unreadCount: 4 });
 

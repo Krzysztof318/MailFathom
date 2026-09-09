@@ -26,7 +26,12 @@ export function Switch({
     readonly disabled?: boolean;
 }) {
     return (
-        <>
+        // The input is hidden by being taken out of the flow, so it is positioned against whichever ancestor is
+        // positioned — and a scrolling panel that is not one leaves it standing at its static position outside every
+        // clip between here and there, which the panel's own scroller then reports as overflow nobody can see. So the
+        // control carries the containing block itself rather than each screen remembering to, and the wrapper is what
+        // keeps the track the input's next sibling, which is what `peer-checked` reads.
+        <span className="relative flex shrink-0">
             <input
                 type="checkbox"
                 role="switch"
@@ -40,6 +45,6 @@ export function Switch({
             <span className="flex w-7.5 shrink-0 items-center rounded-full bg-line-strong p-0.5 transition peer-checked:justify-end peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
                 <span className="size-3.25 rounded-full bg-panel" />
             </span>
-        </>
+        </span>
     );
 }

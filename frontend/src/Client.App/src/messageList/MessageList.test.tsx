@@ -510,6 +510,18 @@ describe('MessageList', () => {
         expect(carried().selection).toBe('message-2');
     });
 
+    // A drafts folder holds what somebody was writing rather than what arrived, so the reading pane is the wrong
+    // surface for one: what a reader asked for is the words back under their own cursor.
+    it('opens a draft in the composer rather than in the reading pane, and leaves the pane where it was', async () => {
+        renderList(answering(wholeFolder), { acts: { ...nothingActed, folderRoleOf: () => 'Drafts' } });
+
+        await rows();
+        fireEvent.pointerDown(row(2));
+
+        expect(composing.compose).toHaveBeenCalledWith({ kind: 'draft', storedEmailId: 'message-2' });
+        expect(carried().selection).toBeNull();
+    });
+
     it('picks a message out rather than opening it while others are already picked out', async () => {
         renderList(answering(wholeFolder));
 

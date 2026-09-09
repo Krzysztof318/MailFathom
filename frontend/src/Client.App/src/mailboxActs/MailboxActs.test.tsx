@@ -479,6 +479,36 @@ describe('MailboxActsProvider', () => {
         });
     });
 
+    // What a folder is *for* is the account's own label rather than anything about its name, and it is the same
+    // reading `archive` and `delete` are resolved through — which is why the answer comes from here rather than from
+    // a second reader beside the one screen that asks.
+    it('names what the account labels the folder a message is in, which is how a drafts folder is recognised', async () => {
+        const { held } = acting(deploymentAnswering());
+
+        await waitFor(() => {
+            expect(held().folderRoleOf(invoice)).toBe('Inbox');
+        });
+    });
+
+    it('names none for a folder the account never described, rather than guessing one', async () => {
+        const { held } = acting(deploymentAnswering());
+
+        await waitFor(() => {
+            expect(held().folderRoleOf(invoice)).toBe('Inbox');
+        });
+
+        expect(held().folderRoleOf({ ...invoice, folder: 'work-clients' })).toBeNull();
+        expect(held().folderRoleOf({ ...invoice, account: 'nobody' })).toBeNull();
+    });
+
+    // A session that may neither file mail nor delete it reads no folders at all, so nothing here says what any of
+    // them is for.
+    it('names none where the folders were never read, which is a session that files and deletes nothing', () => {
+        const { held } = acting(deploymentAnswering(), { moves: false, deletes: false });
+
+        expect(held().folderRoleOf(invoice)).toBeNull();
+    });
+
     it('reads no folders for a credential that may neither file mail nor delete it, both acts being refused', () => {
         const deployment = deploymentAnswering();
 

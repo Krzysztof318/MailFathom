@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
-import type { MailTimelineEntry } from '@mailfathom/client-backend';
-import type { ActRefusal, MoveDestination } from './mailboxDestinations';
+import type { MailFolderRole, MailTimelineEntry } from '@mailfathom/client-backend';
+import type { ActRefusal, MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 
 // The things a person does to their own mailbox from the Mail space, as an operation on messages rather than as
 // anything on a screen. It belongs to the application rather than to the toolbar, because five surfaces reach the same
@@ -61,8 +61,24 @@ export interface MailboxActs {
     /** Why the act cannot be performed on those messages, or `null` where it can. */
     readonly refusalOf: (act: MailboxAct, messages: readonly ActedMessage[]) => ActRefusal | null;
 
-    /** The folders those messages could be filed into, which are their one account's. */
-    readonly destinationsOf: (messages: readonly ActedMessage[]) => readonly MoveDestination[];
+    /**
+     * The role the folder that message is in plays, or `null` where it plays none and where this client has not read
+     * the user's folders at all.
+     *
+     * Answered here because this is where the folders are already held, and asked because opening a message is not one
+     * behaviour for every folder: a message in a drafts folder is something somebody was writing, and it opens in the
+     * composer rather than in the reading pane. The question is about where a message sits rather than about what may
+     * be done to it, which is the one thing here that is not an act — kept together with the acts because a second
+     * reader of `/folders` costs every session a request, which the note in `MailboxActs.tsx` already weighs.
+     *
+     * A session whose credential may not file mail reads no folders, so every message answers `null` there and a draft
+     * opens as a message. That is the same limitation as the acts themselves being refused, and it goes when the read
+     * does.
+     */
+    readonly folderRoleOf: (message: ActedMessage) => MailFolderRole | null;
+
+    /** The folders those messages could be filed into, under the one account they are all in. */
+    readonly destinationsOf: (messages: readonly ActedMessage[]) => readonly MoveDestinationGroup[];
 
     /**
      * Whether `delete` would destroy those messages rather than file them in the trash.
@@ -92,6 +108,7 @@ export interface MailboxActs {
 export const nothingActed: MailboxActs = {
     asked: new Map(),
     refusalOf: () => 'notOffered',
+    folderRoleOf: () => null,
     destinationsOf: () => [],
     deletesPermanently: () => false,
     perform: () => undefined,
@@ -101,6 +118,20 @@ export const MailboxActsContext = createContext<MailboxActs>(nothingActed);
 
 export function useMailboxActs(): MailboxActs {
     return useContext(MailboxActsContext);
+}
+
+/**
+ * Whether opening that message is opening a draft, which is the composer rather than the reading pane.
+ *
+ * A draft is a message somebody was writing, so pressing it puts them back where they were writing it. What decides
+ * that is the role its folder plays rather than anything on the message: a mail server files a draft where its own
+ * configuration says drafts go, and a folder called `Entwürfe` is the drafts folder as surely as one called `Drafts`.
+ *
+ * Stated once, beside the acts, because two lists open a message — the mailbox's own and the search's — and a second
+ * reading of *this is a draft* is how the two come to open the same message differently.
+ */
+export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boolean {
+    return acts.folderRoleOf({ storedEmailId: email.id, account: email.account, folder: email.folder }) === 'Drafts';
 }
 
 /**

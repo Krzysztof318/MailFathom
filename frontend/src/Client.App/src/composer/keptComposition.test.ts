@@ -35,6 +35,14 @@ describe('rememberedComposition', () => {
         expect(rememberedComposition()).toEqual(answering);
     });
 
+    it('reads back a draft with the stored message it was carried on from', () => {
+        const carriedOn: Composition = { ...written, continuing: 'e1' };
+
+        rememberComposition(carriedOn);
+
+        expect(rememberedComposition()).toEqual(carriedOn);
+    });
+
     it('answers nothing where nothing was kept', () => {
         expect(rememberedComposition()).toBeNull();
     });
@@ -67,6 +75,11 @@ describe('rememberedComposition', () => {
             JSON.stringify({ ...written, answering: { storedEmailId: 'e1', answers: 'shout' } }),
         ],
         ['an answer that is a list', JSON.stringify({ ...written, answering: [] })],
+        ['a draft carried on from something that is not text', JSON.stringify({ ...written, continuing: 7 })],
+        [
+            'a draft carried on from an identifier longer than one',
+            JSON.stringify({ ...written, continuing: 'x'.repeat(257) }),
+        ],
     ])('answers nothing for %s, rather than a message with a hole in it', (_, stored) => {
         window.sessionStorage.setItem(storageKey, stored);
 

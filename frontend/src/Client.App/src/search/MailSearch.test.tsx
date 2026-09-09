@@ -156,6 +156,7 @@ function searchUnder(
                     accounts={[work]}
                     online={true}
                     onOpen={() => undefined}
+                    onOpenDraft={null}
                     now={now}
                 >
                     <p>{mailInScope}</p>
