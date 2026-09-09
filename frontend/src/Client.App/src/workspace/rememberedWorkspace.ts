@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { longestSearchText } from '@mailfathom/client-backend';
-import { mostAskedQuestions, type AskedQuestion, type AskScope } from './askScope';
+import { mostAskedQuestions, withoutFragmentText, type AskedQuestion, type AskScope } from './askScope';
 import { everything, isMailFolderRole, type MailScope } from './mailScope';
 import type { OpenConversation } from './openConversation';
 import { emptyWorkspace, type Workspace } from './useWorkspace';
@@ -82,12 +82,23 @@ export function rememberedWorkspace(): Workspace {
  * fetch the file again on a reload nobody meant as a request for it — so a reload returns to the message, which is
  * where the file was opened from and is one press away. A file a search result cited goes with it, being the same act
  * half finished.
+ *
+ * A question asked about a passage is kept and the passage is not, for the same reason the selected fragment is left
+ * out: the question is a sentence somebody typed, and the words they highlighted are a piece of somebody's mail. What
+ * is stored beside the question is the message the passage came from, which is a name the service assigned.
  */
 export function rememberWorkspace(workspace: Workspace): void {
     try {
         window.sessionStorage.setItem(
             storageKey,
-            JSON.stringify({ ...workspace, fragment: null, fullHtml: null, attachment: null, citedAttachment: null }),
+            JSON.stringify({
+                ...workspace,
+                fragment: null,
+                fullHtml: null,
+                attachment: null,
+                citedAttachment: null,
+                askedBefore: workspace.askedBefore.map(withoutFragmentText),
+            }),
         );
     } catch {
         // A browser refusing storage still runs the client; what a person was looking at then lasts the run rather
@@ -105,8 +116,8 @@ function workspaceIn(value: unknown): Workspace | null {
 
     const record = value as Record<string, unknown>;
     const scope = scopeIn(record['scope']);
-    const chosen = record['askScope'] ?? null;
-    const askScope = chosen === null ? null : namedScopeIn(chosen);
+    const chosen = record['askScopeKey'] ?? null;
+    const askScopeKey = chosen === null ? null : namedScopeKeyIn(chosen);
     const askedBefore = askedBeforeIn(record['askedBefore'] ?? []);
     const collapsed = collapsedIn(record['collapsed']);
     const mailboxesFolded = record['mailboxesFolded'] ?? false;
@@ -119,7 +130,7 @@ function workspaceIn(value: unknown): Workspace | null {
 
     if (
         scope === null ||
-        (chosen !== null && askScope === null) ||
+        (chosen !== null && askScopeKey === null) ||
         askedBefore === null ||
         collapsed === null ||
         selected === null ||
@@ -157,7 +168,7 @@ function workspaceIn(value: unknown): Workspace | null {
         fragment: null,
         selected,
         question,
-        askScope,
+        askScopeKey,
         askedBefore,
         recentSearches,
     };
@@ -195,19 +206,21 @@ function askedBeforeIn(value: unknown): readonly AskedQuestion[] | null {
     return asked;
 }
 
-// The mailbox somebody pointed the field at, held to the two shapes the field can actually offer: every mailbox at
-// once, or one of them. A folder or a role read back here would be a scope no control in the client can produce and
-// nothing anywhere drops when the deployment stops declaring it — the mail space watches its own scope and not this
-// one — so it would ask about a folder nobody has until the tab was closed. Refusing it at the boundary is what makes
-// `askScope.ts` right to re-check the account alone.
-function namedScopeIn(value: unknown): MailScope | null {
-    const scope = scopeIn(value);
-
-    return scope === null || scope.kind === 'everything' || scope.kind === 'account' ? scope : null;
+// What somebody pointed the field at, which is a key rather than a scope and is checked as one: it names a scope only
+// against the list the field is offering, and `askScope.ts` falls back to the screen for a key that names nothing there
+// now. So nothing here has to know which scopes a control can produce, and a key that has gone stale costs a fallback
+// rather than a question asked about a folder nobody has. The bound is a folded row's, that being the same shape — an
+// account and a folder's whole place on its mail server.
+function namedScopeKeyIn(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestRow ? value : null;
 }
 
-// Read through the same three checks the workspace's own values are read through, because that is exactly what the
-// three shapes hold: a mail scope, a correspondence the deployment named, and a list of messages it named.
+// Read through the same checks the workspace's own values are read through, because that is exactly what these shapes
+// hold: a mail scope, a correspondence the deployment named, a list of messages it named, and one message.
+//
+// A passage is refused rather than read, because none was written: `rememberWorkspace` reduces a question asked about
+// one to the message it came from, so a fragment scope in a store is somebody's own writing and reading it back would
+// be this client putting a stranger's words into a question's scope.
 function askScopeIn(value: unknown): AskScope | null {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return null;
@@ -215,6 +228,7 @@ function askScopeIn(value: unknown): AskScope | null {
 
     const record = value as Record<string, unknown>;
     const threadId = record['threadId'];
+    const messageId = record['messageId'];
 
     switch (record['kind']) {
         case 'mail': {
@@ -224,6 +238,8 @@ function askScopeIn(value: unknown): AskScope | null {
         }
         case 'thread':
             return isIdentifier(threadId) ? { kind: 'thread', threadId } : null;
+        case 'message':
+            return isIdentifier(messageId) ? { kind: 'message', messageId } : null;
         case 'selection': {
             const messages = selectedIn(record['messages']);
 

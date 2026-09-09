@@ -83,9 +83,9 @@ export function OpenedMessage({
             return;
         }
 
-        const fragment = selected.toString().trim().slice(0, longestFragment);
+        const text = selected.toString().trim().slice(0, longestFragment);
 
-        revise({ fragment: fragment === '' ? null : fragment });
+        revise({ fragment: text === '' ? null : { messageId: storedEmailId, text } });
     }
 
     return (

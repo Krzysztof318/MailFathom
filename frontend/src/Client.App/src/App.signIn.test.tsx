@@ -261,7 +261,10 @@ describe('App sign-in', () => {
         // The next person to sign in on this machine reads their own empty screen rather than the last one's question
         // and the mailbox it was scoped to.
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
-        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
+            'value',
+            'everything',
+        );
     });
 
     it('says the password was not kept when the store would not write it, without refusing the sign-in', async () => {

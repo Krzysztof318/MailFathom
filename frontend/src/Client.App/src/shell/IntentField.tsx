@@ -5,21 +5,21 @@
 import { useEffect, useRef } from 'react';
 import type { MailAccount } from '@mailfathom/client-backend';
 import { chip } from '../controls/chrome';
-import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import type { Locale } from '../localization/locale';
 import { useLocalization, type Translate } from '../localization/useLocalization';
 import { goToSpace } from '../routing/useSpace';
-import { askScopeInForce, askScopeOnScreen, withAsked, type AskedQuestion, type AskScope } from '../workspace/askScope';
 import {
-    everything,
-    folderRoleLabels,
-    sameScope,
-    scopeKey,
-    scopeOfAccount,
-    type MailScope,
-} from '../workspace/mailScope';
+    askScopeInForce,
+    askScopeKey,
+    askScopeOnScreen,
+    askScopesOffered,
+    withAsked,
+    type AskedQuestion,
+    type AskScope,
+} from '../workspace/askScope';
+import { folderRoleLabels, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 // What the product puts in front of the person in every space: the question they are composing, drawn as the design
@@ -44,16 +44,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 
     const onScreen = askScopeOnScreen(workspace);
     const inForce = askScopeInForce(workspace, accounts);
-    const offered = scopesOffered(onScreen, accounts, translate, locale);
-
-    // Read out of the list the control renders rather than out of the workspace, because the list is the shorter of
-    // the two: a mailbox somebody named in the field stops being offered separately the moment the mail space moves to
-    // it, and a value naming an option that is no longer there leaves the control drawing nothing selected while the
-    // question is still scoped to it. The first option is what answers then, and it is the same scope under another
-    // name — following the screen, where the screen now shows what was named.
-    const named = workspace.askScope;
-    const chosen =
-        named === null ? undefined : offered.find((one) => one.scope !== null && sameScope(one.scope, named));
+    const offered = askScopesOffered(workspace, accounts);
 
     // The front door is reachable without hunting for it, which is what "from anywhere in the application" costs: a
     // reader inside a list of messages would otherwise tab back out of it to reach the field. An imperative browser
@@ -130,56 +121,47 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 
             {/* Said as well as drawn: the scope changes because somebody opened a correspondence or ticked a row, which
                 is a change a reader who cannot see the chip would otherwise not be told about at all — and this is the
-                one place where not being told is a disclosure rather than a missed detail. */}
+                one place where not being told is a disclosure rather than a missed detail. A passage is said with its
+                words for that same reason: naming it as a passage would tell a reader who cannot see the quote beside
+                the control that something was narrowed to, and not what. */}
             <p className="sr-only" role="status">
-                {translate('scope.asking', { scope: scopeName(inForce, accounts, translate, locale) })}
+                {inForce.kind === 'fragment'
+                    ? translate('scope.fragment', { fragment: inForce.text })
+                    : translate('scope.asking', { scope: scopeName(inForce, accounts, translate, locale) })}
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
+                {/* Choosing what the screen is already showing is choosing to keep following it, which is why that
+                    option is kept as nothing named rather than pinned: somebody who picks the correspondence they are
+                    reading and then opens another one means the one in front of them. */}
                 <select
                     aria-label={translate('scope.inScope')}
-                    value={chosen?.value ?? ''}
+                    value={askScopeKey(inForce)}
                     onChange={(event) => {
-                        revise({ askScope: offered.find((one) => one.value === event.target.value)?.scope ?? null });
+                        revise({
+                            askScopeKey: event.target.value === askScopeKey(onScreen) ? null : event.target.value,
+                        });
                     }}
                     className={`px-2.75 py-1.25 text-sm ${chip}`}
                 >
                     {offered.map((one) => (
-                        <option key={one.value} value={one.value}>
-                            {one.label}
+                        <option key={askScopeKey(one)} value={askScopeKey(one)}>
+                            {scopeName(one, accounts, translate, locale)}
                         </option>
                     ))}
                 </select>
 
-                {/* The other half of the scope, and the one a person set by pointing at something rather than by
-                    choosing from a list. It is shown rather than assumed, because a question silently narrowed to
-                    words somebody selected minutes ago is a question answered about the wrong thing — and it carries
-                    the words themselves rather than that a fragment exists, so what the next question is about is
-                    readable before it is asked. */}
-                {workspace.fragment === null ? null : (
+                {/* The words themselves, beside the control that named them. The list above can only say that a
+                    passage is in scope; a question silently asked about words somebody highlighted minutes ago is a
+                    question answered about the wrong thing, so what is quoted here is what will be read. Widening away
+                    from it is the control beside this rather than a close button on the chip, because giving the scope
+                    back must not take the highlight off the message the reader is still looking at. */}
+                {inForce.kind !== 'fragment' ? null : (
                     <span
                         className={`flex min-w-0 max-w-full items-center gap-1.5 border-accent-line bg-accent-soft px-2.75 py-1.25 text-sm text-accent-deep ${chip}`}
-                        title={translate('scope.fragment', { fragment: workspace.fragment })}
+                        title={translate('scope.fragment', { fragment: inForce.text })}
                     >
-                        <span className="truncate">
-                            {translate('scope.fragment', { fragment: workspace.fragment })}
-                        </span>
-
-                        {/* Giving the scope back takes this chip off the screen, and the control somebody pressed
-                            with it, so focus is placed rather than left to fall to the document: it goes to the
-                            question itself, which is what widening the scope was in aid of asking. */}
-                        <button
-                            type="button"
-                            aria-label={translate('scope.wholeMessage')}
-                            title={translate('scope.wholeMessage')}
-                            className="flex shrink-0 items-center rounded-full transition hover:bg-hover"
-                            onClick={() => {
-                                revise({ fragment: null });
-                                question.current?.focus();
-                            }}
-                        >
-                            <Icon name="close" className="size-3.5" />
-                        </button>
+                        <span className="truncate">{translate('scope.fragment', { fragment: inForce.text })}</span>
                     </span>
                 )}
             </div>
@@ -220,45 +202,14 @@ const selectionCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     other: 'scope.selection.other',
 };
 
-/** One thing the field offers to ask about: what to show for it, and the mailbox to pin, or `null` to follow the screen. */
-interface OfferedScope {
-    readonly value: string;
-    readonly label: string;
-    readonly scope: MailScope | null;
-}
-
-/**
- * What the field offers to ask about.
- *
- * What the mail space is showing comes first, and choosing it is choosing to keep following the screen — so opening a
- * correspondence or ticking a row moves the scope without anybody touching the control. Everything after it is a
- * mailbox to hold the question to whatever the screen does next, which is what widening after too narrow an answer
- * actually is. The screen's own scope is not offered twice.
- */
-function scopesOffered(
-    onScreen: AskScope,
-    accounts: readonly MailAccount[],
-    translate: Translate,
-    locale: Locale,
-): readonly OfferedScope[] {
-    const mailboxes = [everything, ...accounts.map((account) => scopeOfAccount(account.id))].filter(
-        (scope) => onScreen.kind !== 'mail' || !sameScope(onScreen.scope, scope),
-    );
-
-    return [
-        { value: '', label: scopeName(onScreen, accounts, translate, locale), scope: null },
-        ...mailboxes.map((scope) => ({
-            value: scopeKey(scope),
-            label: mailScopeName(scope, accounts, translate),
-            scope,
-        })),
-    ];
-}
-
 // What a scope is called on the screen, which is the whole of what the field promises: the words beside the question
 // are what the question will be asked about.
 function scopeName(scope: AskScope, accounts: readonly MailAccount[], translate: Translate, locale: Locale): string {
     switch (scope.kind) {
+        case 'fragment':
+            return translate('scope.selectedText');
+        case 'message':
+            return translate('scope.message');
         case 'thread':
             return translate('scope.thread');
         case 'selection':

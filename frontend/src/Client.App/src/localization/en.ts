@@ -64,6 +64,8 @@ export const en = {
     'scope.allMailboxes': 'All mailboxes',
     'scope.everyMailbox': '{folder}, every mailbox',
     'scope.folderIn': '{folder} in {mailbox}',
+    'scope.selectedText': 'The part you selected',
+    'scope.message': 'This message',
     'scope.thread': 'This correspondence',
     'scope.selection.one': '{count} selected message',
     'scope.selection.few': '{count} selected messages',
@@ -828,7 +830,6 @@ export const en = {
         'This message carries a winmail.dat part, which was recorded without being opened, so whatever it holds is not listed above.',
 
     'scope.fragment': 'Asking about the part of this message you selected: “{fragment}”',
-    'scope.wholeMessage': 'Ask about the whole message instead',
 
     'blocking.progress': 'How far the operation has got',
     'blocking.progressReading': '{percentage} — do not close this window',
