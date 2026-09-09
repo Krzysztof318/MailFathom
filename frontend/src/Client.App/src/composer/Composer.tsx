@@ -242,14 +242,16 @@ export function Composer({
     }, [composition]);
 
     // Opening the composer is a view change, so focus goes into it rather than staying on the control that opened it.
-    // Once, as the fields appear, on the first one there is to write in — the words for an answer, whose recipients are
-    // written already, and the recipients for a message of its own.
+    // Once, as the fields appear, on the first one there is to write in — the words wherever the recipients are written
+    // already, which an answer and a draft carried on both are, and the recipients for a message of its own.
     const written = composition !== null;
 
     useEffect(() => {
         if (written) {
             frame.current
-                ?.querySelector<HTMLElement>(opening.kind === 'answer' ? '[contenteditable="true"]' : 'input')
+                ?.querySelector<HTMLElement>(
+                    opening.kind === 'answer' || opening.kind === 'draft' ? '[contenteditable="true"]' : 'input',
+                )
                 ?.focus();
         }
     }, [written, opening.kind]);

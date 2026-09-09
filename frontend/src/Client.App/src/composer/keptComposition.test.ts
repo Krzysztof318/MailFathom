@@ -80,6 +80,10 @@ describe('rememberedComposition', () => {
             'a draft carried on from an identifier longer than one',
             JSON.stringify({ ...written, continuing: 'x'.repeat(257) }),
         ],
+        [
+            'a message that is both an answer and a draft carried on, which nothing here writes',
+            JSON.stringify({ ...written, answering: { storedEmailId: 'e1', answers: 'everyone' }, continuing: 'e2' }),
+        ],
     ])('answers nothing for %s, rather than a message with a hole in it', (_, stored) => {
         window.sessionStorage.setItem(storageKey, stored);
 

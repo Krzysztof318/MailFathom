@@ -129,6 +129,14 @@ export function useMailboxActs(): MailboxActs {
  *
  * Stated once, beside the acts, because two lists open a message — the mailbox's own and the search's — and a second
  * reading of *this is a draft* is how the two come to open the same message differently.
+ *
+ * A workspace whose folders have not arrived yet names no role, so a message pressed in the window between it mounting
+ * and that read landing opens as mail. The list and the folders are read in the same render pass, and a press that does
+ * nothing while a second read finishes is worse than the surface this opens instead — so what closes the window is the
+ * one shared reading of the folders `MailboxActs.tsx` already carries as its debt, rather than a wait on the press.
+ *
+ * ponytail: a press classified against a folder tree that may not have landed. The single `/folders` read the client
+ * shares is the upgrade, and it closes this window in the same move as it closes the second read.
  */
 export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boolean {
     return acts.folderRoleOf({ storedEmailId: email.id, account: email.account, folder: email.folder }) === 'Drafts';

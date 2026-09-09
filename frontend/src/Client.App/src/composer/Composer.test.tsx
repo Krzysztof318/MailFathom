@@ -1063,6 +1063,16 @@ describe('Composer, a draft', () => {
         expect(screen.getByText('Half a thought')).toBeDefined();
     });
 
+    // A draft's recipients are written already, exactly as an answer's are, so what somebody came back for is the
+    // words rather than the address standing above them.
+    it('opens with the cursor in the words rather than in recipients that are already written', async () => {
+        drawComposer(continued);
+
+        await screen.findByText('Half a thought');
+
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+    });
+
     it('offers the subject for editing, a draft being a message of its own rather than one the deployment words', async () => {
         drawComposer(continued);
 

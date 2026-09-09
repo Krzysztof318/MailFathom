@@ -106,7 +106,12 @@ function compositionIn(value: unknown): Composition | null {
         return null;
     }
 
-    if (continuing !== null && (typeof continuing !== 'string' || continuing.length > longestIdentifier)) {
+    // An answer and a draft carried on are two messages to have started from, and nothing here writes both at once —
+    // so a value carrying both is a shape this client did not write, whatever each half of it says on its own.
+    if (
+        continuing !== null &&
+        (answering !== null || typeof continuing !== 'string' || continuing.length > longestIdentifier)
+    ) {
         return null;
     }
 

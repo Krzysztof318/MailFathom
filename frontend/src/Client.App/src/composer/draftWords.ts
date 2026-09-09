@@ -19,14 +19,15 @@ import { followable, type WrittenElement, type WrittenNode } from './writtenText
 // **What the composer cannot write is not written.** A draft carrying a table, a picture, or a block a later
 // deployment publishes has no shape here — the composer's set is what a person can type with its own controls, and
 // inventing an approximation would put words on the screen the author never wrote. A table's cells are still walked,
-// because the words in them are the message; the grid is what is lost. A body the deployment could not reduce at all
-// falls back to its plain text, which is the rendering it always answers with.
+// because the words in them are the message; the grid is what is lost. A body that leaves nothing the composer can
+// write — one the deployment could not reduce at all, and one whose every block is a block this has no shape for —
+// falls back to its plain text, which is the rendering the deployment always answers with.
 
 /** The words of a draft, as the closed tree the composer writes. */
 export function draftWords(body: MailBody): readonly WrittenNode[] {
-    const blocks = body.document?.blocks ?? [];
+    const written = (body.document?.blocks ?? []).flatMap(writtenBlock);
 
-    return blocks.length === 0 ? paragraphsOf(body.plainText.text) : blocks.flatMap(writtenBlock);
+    return written.length === 0 ? paragraphsOf(body.plainText.text) : written;
 }
 
 // One block as the elements the composer has for it. An empty array is a block it has none for, which is dropped

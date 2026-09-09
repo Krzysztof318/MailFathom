@@ -37,6 +37,18 @@ function paragraph(...content: readonly MailInlineRun[]): MailDocumentBlock {
     return { type: 'paragraph', content, alignment: 'Inherited' };
 }
 
+// Every block the composer has no shape for, which is what it drops rather than approximates.
+const undrawn: readonly MailDocumentBlock[] = [
+    { type: 'separator' },
+    {
+        type: 'image',
+        image: { source: 'cid:one', alternativeText: null, width: null, height: null },
+        link: null,
+        alignment: 'Inherited',
+    },
+    { type: 'unimplemented', identity: 'chart', version: 3 },
+];
+
 function bodyOf(blocks: readonly MailDocumentBlock[], plainText = ''): MailBody {
     return {
         storedEmailId: 'message-1',
@@ -148,18 +160,15 @@ describe('draftWords', () => {
     });
 
     it('drops a block the composer has nothing to write it with, rather than approximating one', () => {
-        const undrawn: readonly MailDocumentBlock[] = [
-            { type: 'separator' },
-            {
-                type: 'image',
-                image: { source: 'cid:one', alternativeText: null, width: null, height: null },
-                link: null,
-                alignment: 'Inherited',
-            },
-            { type: 'unimplemented', identity: 'chart', version: 3 },
-        ];
+        expect(htmlOf(draftWords(bodyOf([...undrawn.slice(0, 1), paragraph(run('one')), ...undrawn.slice(1)])))).toBe(
+            '<p>one</p>',
+        );
+    });
 
-        expect(draftWords(bodyOf(undrawn))).toStrictEqual([]);
+    // The blocks are dropped one by one, so a message made of nothing else reduces to nothing at all — and what is
+    // left to open the composer on is the rendering the deployment always carries beside the document.
+    it('falls back to the plain text where every block is one it has nothing to write', () => {
+        expect(plainTextOf(draftWords(bodyOf(undrawn, 'The chart is attached')))).toBe('The chart is attached');
     });
 
     it('keeps preformatted text line by line, which is the shape the composer’s own region produces', () => {
