@@ -2,31 +2,34 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type {
-    MailAccountFolders,
-    MailFolder,
-    MailFolderDirectory,
-    MailFolderRole,
-    MailSynchronizationState,
-} from '@mailfathom/client-backend';
+import type { MailAccountFolders, MailFolder, MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
 import { everything, roleRank, scopeKey, type MailScope } from '../workspace/mailScope';
 
 // What the service answered, turned into the rows a tree draws. It is a function over values rather than anything a
 // component does while rendering: the shape of the tree is the interesting decision here, and a decision that can be
 // read as a value can be tested as one.
 //
-// Three things it decides. The user's mailboxes are one workspace rather than four applications, so the tree opens
-// with every account at once and the roles that span them — the inbox of all three accounts is a thing somebody wants
-// as often as the inbox of one. Below that each account carries its own folders, nested the way its mail server nests
-// them, which is what the levels of a folder's path are for. And a folder that plays a role is placed by that role
-// rather than by its name, because a name is whatever a provider chose in whatever language.
+// Four things it decides. The user's mailboxes are one workspace rather than four applications, so the tree opens with
+// every account at once and the roles that span them — the inbox of all three accounts is a thing somebody wants as
+// often as the inbox of one. That group is what several mailboxes are for, so a user holding exactly one account is
+// not offered it: it would draw that account's folders a second time under a heading meaning the same thing. Below it
+// each account carries its own folders, nested the way its mail server nests them, which is what the levels of a
+// folder's path are for. And a folder that plays a role is placed by that role rather than by its name, because a name
+// is whatever a provider chose in whatever language.
 
 /** One row of the tree, whatever it stands for: the whole workspace, a role across it, an account, or a folder. */
 export interface FolderTreeRow {
     /** What identifies the row — what is folded, what is focused, and what is compared against the current scope. */
     readonly key: string;
 
-    /** What selecting the row scopes the client to, or `null` for a level of a path the service named no folder for. */
+    /**
+     * What selecting the row scopes the client to, or `null` for a level of a path the service named no folder for.
+     *
+     * Not the same thing as the key, and an account's row is where the two part: pressing a mailbox's name means its
+     * inbox rather than every folder it has at once, so the row is keyed by the account and scopes to the inbox. What
+     * that leaves is a heading that selects without ever drawing as the selected row, which is how the design draws a
+     * group: the row that lights up is the inbox beneath it, and that is the row somebody was pointing at.
+     */
     readonly scope: MailScope | null;
 
     /** The name whatever this row stands for has: a mailbox's display name, a level of a path, or a folder's alias. */
@@ -37,12 +40,6 @@ export interface FolderTreeRow {
 
     /** How deep the row sits, counted from one, which is what a tree reports as its level. */
     readonly level: number;
-
-    /** How current the local copy is, or `null` for a row that stands for more than one thing. */
-    readonly state: MailSynchronizationState | null;
-
-    /** Whether the last attempt ended with mail it had not yet taken in. */
-    readonly behind: boolean;
 
     /** How many unread messages the deployment holds here, or `null` where nothing counted any. */
     readonly unreadEmailCount: number | null;
@@ -82,7 +79,42 @@ export function folderTreeOf(directory: MailFolderDirectory): readonly FolderTre
         return [];
     }
 
-    return [everythingRow(directory), ...directory.accounts.map(accountRow)];
+    const accounts = directory.accounts.map(accountRow);
+
+    return directory.accounts.length === 1 ? accounts : [everythingRow(directory), ...accounts];
+}
+
+/**
+ * Where the client opens, and where it lands again when what it was scoped to has gone.
+ *
+ * The inbox, which is where the design opens and where a mail client has opened for thirty years: mail arrives there,
+ * and the widest scope is every folder at once — sent, drafts and deleted mail among them, which is a list nobody
+ * opens an application to read. Every account's inbox at once where the tree draws that row, and the one account's own
+ * where it does not.
+ *
+ * Answered from the tree's shape rather than from the directory's, which is the whole of why it is answered here: a
+ * user with one account is offered no row spanning every account, so a scope the directory still allows can be one
+ * nothing draws — and a column with no row drawn as the open one is a column that has stopped saying the one thing it
+ * is for.
+ */
+export function openingScope(directory: MailFolderDirectory): MailScope {
+    const [only, ...rest] = directory.accounts;
+
+    if (only === undefined) {
+        return everything;
+    }
+
+    if (rest.length > 0) {
+        return directory.accounts.some((entry) => entry.folders.some((folder) => folder.role === 'Inbox'))
+            ? { kind: 'role', role: 'Inbox' }
+            : everything;
+    }
+
+    const inbox = only.folders.find((folder) => folder.role === 'Inbox');
+
+    return inbox === undefined
+        ? { kind: 'account', accountId: only.account.id }
+        : { kind: 'folder', accountId: only.account.id, alias: inbox.alias };
 }
 
 /**
@@ -124,8 +156,6 @@ function everythingRow(directory: MailFolderDirectory): FolderTreeRow {
         name: '',
         role: null,
         level: 1,
-        state: null,
-        behind: false,
         unreadEmailCount: totalOf(directory, (folder) => folder.unreadEmailCount),
         storedEmailCount: totalOf(directory, (folder) => folder.storedEmailCount),
         children: [...roles.entries()]
@@ -143,8 +173,6 @@ function roleRow(role: MailFolderRole, folders: readonly MailFolder[]): FolderTr
         name: '',
         role,
         level: 2,
-        state: null,
-        behind: false,
         unreadEmailCount: sumOf(folders, (folder) => folder.unreadEmailCount),
         storedEmailCount: sumOf(folders, (folder) => folder.storedEmailCount),
         children: [],
@@ -152,16 +180,15 @@ function roleRow(role: MailFolderRole, folders: readonly MailFolder[]): FolderTr
 }
 
 function accountRow(entry: MailAccountFolders): FolderTreeRow {
-    const scope: MailScope = { kind: 'account', accountId: entry.account.id };
+    const whole: MailScope = { kind: 'account', accountId: entry.account.id };
+    const inbox = entry.folders.find((folder) => folder.role === 'Inbox');
 
     return {
-        key: scopeKey(scope),
-        scope,
+        key: scopeKey(whole),
+        scope: inbox === undefined ? whole : { kind: 'folder', accountId: entry.account.id, alias: inbox.alias },
         name: entry.account.displayName,
         role: null,
         level: 1,
-        state: entry.account.synchronizationState,
-        behind: entry.account.behind,
         unreadEmailCount: sumOf(entry.folders, (folder) => folder.unreadEmailCount),
         storedEmailCount: sumOf(entry.folders, (folder) => folder.storedEmailCount),
         children: folderRows(entry),
@@ -221,8 +248,6 @@ function rowOfLevel(level: PathLevel, accountId: string, above: readonly string[
             name: level.name,
             role: null,
             level: depth,
-            state: null,
-            behind: false,
             unreadEmailCount: null,
             storedEmailCount: null,
             children,
@@ -247,8 +272,6 @@ function folderRow(
         name,
         role: folder.role,
         level: depth,
-        state: folder.synchronizationState,
-        behind: folder.behind,
         unreadEmailCount: folder.unreadEmailCount,
         storedEmailCount: folder.storedEmailCount,
         children,

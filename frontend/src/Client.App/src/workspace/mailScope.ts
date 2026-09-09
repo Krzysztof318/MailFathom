@@ -35,11 +35,11 @@ export const everything: MailScope = { kind: 'everything' };
 // fails to compile here until somebody has decided where it belongs.
 const roleOrder: Readonly<Record<MailFolderRole, number>> = {
     Inbox: 0,
-    Drafts: 1,
-    Sent: 2,
+    Sent: 1,
+    Drafts: 2,
     Archive: 3,
-    Junk: 4,
-    Trash: 5,
+    Trash: 4,
+    Junk: 5,
     Flagged: 6,
     Important: 7,
     All: 8,

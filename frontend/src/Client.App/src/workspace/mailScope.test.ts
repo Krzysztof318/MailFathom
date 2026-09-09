@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import type { MailFolderDirectory } from '@mailfathom/client-backend';
+import type { MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
 import {
     accountInScope,
     everything,
@@ -116,6 +116,13 @@ describe('isMailFolderRole', () => {
 describe('roleRank', () => {
     it('offers the inbox before everything else', () => {
         expect(roleRank('Inbox')).toBeLessThan(roleRank('Sent'));
+    });
+
+    it('offers the five folders a reader reaches for in the order they are reached for', () => {
+        const reachedFor: readonly MailFolderRole[] = ['Inbox', 'Sent', 'Drafts', 'Archive', 'Trash'];
+
+        expect([...reachedFor].sort((one, other) => roleRank(one) - roleRank(other))).toEqual(reachedFor);
+        expect(roleRank('Trash')).toBeLessThan(roleRank('Junk'));
     });
 
     it('offers a folder playing no role after every folder that plays one', () => {
