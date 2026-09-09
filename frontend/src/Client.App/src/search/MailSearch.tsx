@@ -2,9 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
+    calendarDayOf,
     longestSearchText,
+    phraseNotRead,
+    readMailSearchPhrase,
+    readsMailSearchPhrases,
     type ClientSession,
     type MailAccount,
     type MailFathomTransport,
@@ -22,7 +26,16 @@ import { mostRecentSearches } from '../workspace/rememberedWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { SearchFilters } from './SearchFilters';
 import { SearchResults } from './SearchResults';
-import { askable, askIn, askKey, narrowings, widened, type MailSearchAsk } from './searchAsk';
+import {
+    askable,
+    askFromPhrase,
+    askIn,
+    askKey,
+    narrowings,
+    widened,
+    withoutCriterion,
+    type MailSearchAsk,
+} from './searchAsk';
 
 // Finding a message, which stands at the top of the mail a person is looking at rather than on a screen of its own.
 // That is where somebody reaches for it — they are looking at a folder and the message is not in front of them — and
@@ -34,11 +47,16 @@ import { askable, askIn, askKey, narrowings, widened, type MailSearchAsk } from 
 // account, and a search across everything are three different questions, and somebody who cannot see which one they
 // asked reads an empty result as an absence rather than as something to widen.
 //
-// The field accepts a phrase and nothing else today. The design words it as accepting a description too, which is
-// stage 3's work writing filters out of a sentence — it lands on this screen rather than replacing it, which is why
-// the filters here are objects with values in them for something to write into. Until it does, the field promises what
-// it does: a field offering to take a description of what somebody needs, over a deployment that can only match words,
-// fails them at the one moment they trusted it.
+// The field takes a description as well as words, on a deployment that reads one. What that means here is one extra
+// step in front of the search: the sentence goes to the deployment, comes back as filters and criteria, and those are
+// what the search runs under — visibly, as objects on this screen, rather than as a query nobody can see. A search
+// that silently reinterpreted would be one nobody can correct, and a wrong interpretation then reads as an absence of
+// mail rather than as something to fix.
+//
+// What the field promises follows what the deployment can do, and it is asked before anybody types. A field offering
+// to take a description over a deployment that can only match words fails a person at the one moment they trusted it,
+// so the promise is made from an answer rather than from hope: no reading, no description, and the plain word search
+// is exactly what it always was.
 
 export function MailSearch({
     session,
@@ -86,6 +104,55 @@ export function MailSearch({
     // something the field is: a filter taken off replaces it, and typing into the field does not.
     const [ask, setAsk] = useState<MailSearchAsk | null>(null);
 
+    // Whether this deployment turns a sentence into filters, and `null` while nobody has asked yet. It is what the
+    // field promises rather than something a search discovers, which is why it is asked once on mount and held.
+    const [readsPhrases, setReadsPhrases] = useState<boolean | null>(null);
+
+    // The sentence submitted and not yet read. It stands where the results will, so somebody who typed a sentence sees
+    // that something is happening to it rather than an empty column and a field that stopped responding.
+    const [beingRead, setBeingRead] = useState<string | null>(null);
+
+    useEffect(() => {
+        let listening = true;
+
+        void readsMailSearchPhrases(session, transport).then((result) => {
+            if (listening) {
+                // A deployment that could not be asked reads no sentence as far as this screen is concerned: the field
+                // then promises words, which is a promise every deployment keeps.
+                setReadsPhrases(result.outcome === 'read' && result.value);
+            }
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport]);
+
+    // The one effect that sends a sentence to be read. An answer to a submission this screen has moved on from is
+    // discarded rather than cancelled, exactly as the results below discard a page of a search nobody is reading.
+    useEffect(() => {
+        if (beingRead === null) {
+            return;
+        }
+
+        let listening = true;
+
+        void readMailSearchPhrase(session, transport, beingRead, calendarDayOf(new Date())).then((result) => {
+            if (!listening) {
+                return;
+            }
+
+            // A reading that failed is not a search that failed. What is left is the words somebody typed, which is
+            // the search this screen ran before any of this existed and the one a deployment with no provider runs.
+            setAsk(askFromPhrase(scope, beingRead, result.outcome === 'read' ? result.value : phraseNotRead));
+            setBeingRead(null);
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport, scope, beingRead]);
+
     function search(text: string): void {
         if (!askable(text, longestSearchText)) {
             setRefused(text.trim().length === 0 ? 'search.blank' : 'search.tooLong');
@@ -97,13 +164,23 @@ export function MailSearch({
 
         setRefused(null);
         setTyped(words);
-        setAsk(askIn(scope, words));
         revise({ recentSearches: withRecent(workspace.recentSearches, words) });
+
+        // A deployment that has not answered yet is one that reads nothing, for the same reason one that answered no
+        // is: the search runs now, over the words, rather than waiting on a capability nobody promised.
+        if (readsPhrases === true) {
+            setAsk(null);
+            setBeingRead(words);
+        } else {
+            setBeingRead(null);
+            setAsk(askIn(scope, words));
+        }
     }
 
     function stopSearching(): void {
         setRefused(null);
         setTyped('');
+        setBeingRead(null);
         setAsk(null);
     }
 
@@ -130,7 +207,9 @@ export function MailSearch({
                     <input
                         type="search"
                         className="min-h-12 w-full rounded-full border border-line bg-rail px-4 text-md text-text transition placeholder:text-faint hover:border-line-strong workspace:min-h-0 workspace:px-3.25 workspace:py-2.25 workspace:text-base"
-                        placeholder={translate('search.placeholder')}
+                        placeholder={translate(
+                            readsPhrases === true ? 'search.placeholderDescribed' : 'search.placeholder',
+                        )}
                         value={typed}
                         onChange={(event) => {
                             setRefused(null);
@@ -149,7 +228,9 @@ export function MailSearch({
                     <Icon name="search" className="size-4.75" />
                 </button>
 
-                {ask === null ? null : <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />}
+                {ask === null && beingRead === null ? null : (
+                    <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />
+                )}
 
                 {/* Where the list puts the control that opens its filters, as the last thing on the row. */}
                 <span
@@ -171,7 +252,7 @@ export function MailSearch({
             {/* Offered where there is nothing else in the column's own controls to read, which is where somebody is
                 about to type. They are this tab's own and they go with the credential, which is what the workspace
                 already promises everything it holds. */}
-            {ask === null && workspace.recentSearches.length > 0 ? (
+            {ask === null && beingRead === null && workspace.recentSearches.length > 0 ? (
                 <RecentSearches
                     searches={workspace.recentSearches}
                     onSearch={search}
@@ -181,12 +262,30 @@ export function MailSearch({
                 />
             ) : null}
 
+            {/* What stands under the row while a sentence is being read. It is a line rather than a spinner over the
+                folder's own list, because the list below is about to be replaced by results and a column that goes on
+                showing the inbox reads as a search that did nothing. */}
+            {beingRead === null ? null : (
+                <p className="px-3 pt-2 text-sm text-muted" role="status">
+                    {translate('search.readingPhrase')}
+                </p>
+            )}
+
             {ask === null ? (
-                <ListHeadRowContext value={filtersPlace}>{children}</ListHeadRowContext>
+                beingRead !== null ? null : (
+                    <ListHeadRowContext value={filtersPlace}>{children}</ListHeadRowContext>
+                )
             ) : (
                 <>
                     <div className="px-3 pt-2">
-                        <SearchFilters ask={ask} accounts={accounts} onNarrow={setAsk} />
+                        <SearchFilters
+                            ask={ask}
+                            accounts={accounts}
+                            onNarrow={setAsk}
+                            onRemoveCriterion={(criterion) => {
+                                setAsk(withoutCriterion(ask, criterion));
+                            }}
+                        />
                     </div>
 
                     {/* Keyed by the search, so changing a word or a filter starts a search rather than reconciles one:

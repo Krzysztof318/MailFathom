@@ -63,6 +63,28 @@ public sealed class ChatModelOptionsTests
     }
 
     /// <summary>
+    /// Reading a sentence into filters follows the endpoint rather than declaring one, which is why it is absent from
+    /// the list above: it is the one nested block that is on by default, so a section carrying it is the section every
+    /// deployment binds. Writing it off is an operator declining something they have, and it declares nothing.
+    /// </summary>
+    [Fact]
+    public void Validate_PhraseReadingWrittenOffWithNoAlias_DeclaresNoProvider()
+    {
+        // Arrange
+        var settings = new ChatModelOptions
+        {
+            SearchPhrasing = new MailSearchPhrasingOptions { Enabled = false },
+        };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.False(settings.IsConfigured);
+        Assert.Empty(errors);
+    }
+
+    /// <summary>
     /// A section left entirely alone is the ordinary deployment that generates nothing, and the bounds and the timeout
     /// carry defaults — so a deployment that accepted them is indistinguishable from one that never wrote the section,
     /// and neither may be refused.

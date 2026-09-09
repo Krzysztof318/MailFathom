@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Discovery.Planning;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
@@ -24,8 +25,6 @@ namespace MailFathom.AI.Discovery;
 /// </remarks>
 internal static class DiscoveryPlanReading
 {
-    private const string JsonFence = "```";
-
     /// <summary>Reads a plan out of an agent's answer, falling back to the question's own words wherever the answer cannot be believed.</summary>
     /// <param name="answerText">What the agent wrote, which may be empty, fenced, or surrounded by prose.</param>
     /// <param name="question">The question, whose words are the lookup of last resort.</param>
@@ -96,7 +95,7 @@ internal static class DiscoveryPlanReading
 
     private static DiscoveryPlanDocument? ReadDocument(string? answerText)
     {
-        if (Unfenced(answerText) is not { } json)
+        if (AgentJsonAnswer.Unfenced(answerText) is not { } json)
         {
             return null;
         }
@@ -109,26 +108,6 @@ internal static class DiscoveryPlanReading
         {
             return null;
         }
-    }
-
-    /// <summary>Finds the JSON object inside whatever the model wrote around it.</summary>
-    /// <remarks>
-    /// A model told to answer with one object still fences it, prefaces it, or writes a sentence after it often enough
-    /// that treating any of those as a failed derivation would throw away a usable plan. The outermost braces are what
-    /// is read; anything either side of them is discarded unexamined.
-    /// </remarks>
-    private static string? Unfenced(string? answerText)
-    {
-        if (string.IsNullOrWhiteSpace(answerText))
-        {
-            return null;
-        }
-
-        var text = answerText.Replace(JsonFence, string.Empty, StringComparison.Ordinal);
-        var opening = text.IndexOf('{', StringComparison.Ordinal);
-        var closing = text.LastIndexOf('}');
-
-        return opening >= 0 && closing > opening ? text[opening..(closing + 1)] : null;
     }
 
     /// <summary>Turns one proposed lookup into a query, or into nothing where its words could not be searched for.</summary>

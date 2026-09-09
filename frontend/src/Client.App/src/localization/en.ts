@@ -516,6 +516,11 @@ export const en = {
 
     'search.label': 'Find a message',
     'search.placeholder': 'Words from the message you are looking for',
+    'search.placeholderDescribed': 'Search, or describe what you need',
+    'search.readingPhrase': 'Reading what you wrote…',
+    'search.criteria': 'What this search is ranked by',
+    'search.removeCriterion': 'Stop ranking by {criterion}',
+    'search.unaccounted': 'Nothing was made of “{part}”, so it is not part of this search.',
     'search.blank': 'Type something to look for.',
     'search.submit': 'Search',
     'search.stop': 'Stop searching',

@@ -12,6 +12,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.Retrieval;
+using MailFathom.AI.Search;
 using MailFathom.AI.ThreadStates;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
@@ -21,6 +22,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -346,6 +348,34 @@ public static class AiServiceCollectionExtensions
 
             return new AnsweringEndpointIdentity(endpoint.Alias, endpoint.PublishedModelName);
         });
+
+        return services;
+    }
+
+    /// <summary>Registers the agent that reads a typed sentence into the filters and criteria a search is made of.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the deployment declared a chat endpoint and left this on, so the port's absence <em>is</em> the
+    /// answer a search screen gets: it offers the plain word search rather than a field promising a description over a
+    /// deployment that cannot read one. That is why nothing stands in for the reader when this is not called — a
+    /// stand-in answering "not read" would have every caller ask a provider-shaped question of a deployment that has no
+    /// provider.
+    /// </para>
+    /// <para>
+    /// Scoped, because one request is one sentence: the ledger the call is charged to, the credential it resolves, and
+    /// the transport it opens all belong to that request.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddMailSearchPhraseAgent(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IMailSearchPhraseReader, MailSearchPhraseAgent>();
 
         return services;
     }

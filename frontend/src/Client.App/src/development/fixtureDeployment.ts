@@ -276,6 +276,11 @@ function answerFor(
         return answering(deployment.troubledFolders);
     }
 
+    // Before the search itself, because that route's path is a prefix of this one.
+    if (route === '/emails/search/phrasing') {
+        return request.method === 'GET' ? answering({ readsPhrases: true }) : answering(mail.phraseReading);
+    }
+
     if (route === '/emails/search') {
         return answering(options.emptyCollections ? mail.noSearchResults : mail.searchResults);
     }

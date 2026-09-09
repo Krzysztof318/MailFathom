@@ -164,6 +164,15 @@ export {
     type MailSemanticSearch,
 } from './mailSearch';
 export {
+    calendarDayOf,
+    mailSearchPhrasingRoute,
+    phraseNotRead,
+    readMailSearchPhrase,
+    readsMailSearchPhrases,
+    type MailSearchPhraseFilters,
+    type MailSearchPhraseReading,
+} from './mailSearchPhrase';
+export {
     longestDrawnThreadPage,
     longestThreadPage,
     mailThreadRoute,

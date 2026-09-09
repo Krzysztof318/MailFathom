@@ -21,8 +21,12 @@ generation parameters each turn runs with, the instruction envelope described be
 **Not every model call is an agent, and the ones that are not do not come through here.** The second pass below sends a
 single relevance judgement through the chat client directly: it carries its own instruction, offers no tool, and runs no
 loop, so there is no agent to compose — [§ An optional second pass: the model decides what
-answers](#an-optional-second-pass-the-model-decides-what-answers) is what governs it. `ask_mail` is the one agent this
-build composes; the operations that will join it are the model-invoking work still to be built.
+answers](#an-optional-second-pass-the-model-decides-what-answers) is what governs it. Six operations are composed
+this way today: `ask_mail`, the [enrichment](message-enrichment.md) of an arriving message, the derivation of
+[a conversation's state](thread-state.md), the two halves of a [Discover run](discovery-run.md), and the reading of
+[a typed sentence into search filters](email-search.md#a-typed-sentence-becomes-filters-rather-than-a-search-of-its-own).
+Each supplies a name, an instruction, and a tool set, and `ask_mail` is the only one of the six that supplies a tool
+at all — an empty tool set being the capability rather than the absence of one.
 
 One composition rather than a chat call written beside each feature, because what makes an operation safe is a property
 of that shape rather than of its prose. An instruction cannot be reached from a tool result because of where each is

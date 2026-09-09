@@ -62,12 +62,16 @@ const readRoutes: readonly (readonly [string, unknown])[] = [
     ['/folders', deployment.troubledFolders],
     [`/threads/${mail.conversationId}`, mail.conversation],
     ['/emails/search?text=renewal', mail.searchResults],
+    ['/emails/search/phrasing', { readsPhrases: true }],
     ['/notifications?pageSize=20', notifications.notificationPage],
     ['/notifications/unread-count', notifications.unreadNotificationCount],
     ['/mutations', changes.mutationRecords],
 ];
 
 const writtenRoutes: readonly (readonly [string, unknown])[] = [
+    // The same path as the capability read above, which is what proves the two are told apart by the method rather
+    // than by the path — and that neither is answered with the search whose route is a prefix of both.
+    ['/emails/search/phrasing', mail.phraseReading],
     ['/mutations/flags', changes.flagsRecorded],
     ['/mutations/moves', changes.movesPartlyRecorded],
     ['/signals/ticket', changes.signalTicket],

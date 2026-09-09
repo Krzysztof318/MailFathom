@@ -449,6 +449,47 @@ of them.
 Every tool result carries one `MailboxFolderFreshness` entry per folder in scope, exactly as a listing does. Without it a
 caller cannot tell a folder that holds nothing matching from one whose synchronization has been failing for a week.
 
+## A typed sentence becomes filters rather than a search of its own
+
+Somebody looking for *unread mail from the supplier about the racking, since August* is stating four things a search
+already takes — a sender, a first day, an unread constraint, and words to rank by — and the only reason they cannot be
+typed that way is that a filter panel takes them one control at a time. So a deployment that declares a chat provider
+offers to read such a sentence, and **what it produces is an interpretation rather than an answer**: the ordinary
+filters above, plus the criteria the sentence left to rank by, handed back to be seen, corrected, and taken off one at
+a time before anything is searched.
+
+Nothing about the search itself changes, and that is the whole of the arrangement rather than a simplification of it.
+The reading happens on [a route of its own](../operations/client-endpoint.md#the-phrasing-routes), which searches
+nothing; the search that follows is the same `MailSearchBrowser` call a hand-built filter set produces, over the same
+scope, the same filters, the same rankings, and the same bounds. **No sentence, and nothing derived from one, reaches
+this use case** — what arrives is filters and query text a person could have typed themselves, which is what makes
+every filter removable and the result explicable.
+
+Four things follow from reading it that way:
+
+- **Constraints and criteria are separate**, because they promise different things. A constraint decides what may come
+  back and a criterion only decides the order, so taking a criterion off widens what ranks well rather than what can be
+  found. The criteria become the query text of the search, and removing the last one leaves the sentence itself ranking
+  — a search with no text at all is refused, and somebody who took every criterion off asked for a broader order rather
+  than for no search.
+- **A relative expression is resolved to concrete days, and the days are shown.** *Since August* is a first day on the
+  filter panel that can be moved, rather than an interpretation held somewhere a reader cannot see; it resolves against
+  the day the person typing is standing on rather than against the deployment's clock.
+- **The part nothing was made of is stated.** A sentence half of which was silently discarded is a search nobody can
+  correct, because nothing on the screen is wrong — so what the reading could not account for comes back quoted and is
+  drawn beside the filters.
+- **Its absence costs the search nothing.** A deployment with no chat provider, one whose operator turned the reading
+  off, and one whose provider is unreachable each serve the plain search over the words that were typed. The one thing
+  that is not silently absorbed is a spend ceiling, which is reported rather than fallen back from.
+
+The derivation is an agent like every other AI operation here — its own instruction, its own name, no tool at all, and
+the instruction envelope every agent carries. It opens no chat call of its own: the endpoint's declaration, the
+parameters, the deadline, and the `MailAnswering` allowance are the ones
+[Chat generation](chat-generation.md#bounds-every-call-carries) describes, and
+[AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
+is the switch. Nothing about the sentence reaches a log or telemetry on any path, read or unread, which is the same
+rule [Chat generation § What never reaches a log](chat-generation.md#what-never-reaches-a-log) states for a prompt.
+
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.SearchEmails` — the tool use case, its request, and its result.
@@ -467,6 +508,17 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 - `MailFathom.Application.Emails.Search.Attachments` — `IEmailAttachmentMatchReader`, the port that reads what a
   window's own files contributed, with `EmailAttachmentMatch` and `StoredEmailAttachmentMatches`, what it answers with;
   and `EmailAttachmentMatchWindow`, the one step both use cases read that port through and scan what it returned with.
+- `MailFathom.Application.Emails.Search.Phrasing` — `IMailSearchPhraseReader`, the port a deployment registers only
+  where it reads a sentence at all, with `MailSearchPhrase`, the sentence and the day it was typed on, and
+  `MailSearchPhraseReading` with `MailSearchPhraseFilters`, the interpretation it answers with. Nothing here searches:
+  the port is read before a search rather than inside one.
+- `MailFathom.AI.Search` — `MailSearchPhraseAgent`, the agent that reads a sentence, with
+  `MailSearchPhraseAgentComposition` and `MailSearchPhraseInstructions`, its composition and its instruction, and
+  `MailSearchPhraseDocumentReading`, the pure reading that turns whatever a model wrote into a reading or into nothing.
+- `MailFathom.Host.Configuration.Chat.MailSearchPhrasingOptions` — the switch that decides whether the port above is
+  registered, bound with the rest of the chat declaration and validated on start.
+- `MailFathom.Host.Api.ClientMailSearchPhraseEndpoint` — the two phrasing routes, their refusals, and the reading they
+  publish.
 - `MailFathom.Application.AiProviders` — `IAiProviderHealthReader` and `AiProviderHealthState`, the recorded outcome of
   the last provider call that the capability is read from. `MailFathom.Infrastructure.Observability` holds
   `AiProviderHealthTracker`, which is what records it, publishes the gauge, and logs a transition.

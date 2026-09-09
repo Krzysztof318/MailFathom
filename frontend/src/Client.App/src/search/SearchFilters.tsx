@@ -58,10 +58,14 @@ export function SearchFilters({
     ask,
     accounts,
     onNarrow,
+    onRemoveCriterion,
 }: {
     readonly ask: MailSearchAsk;
     readonly accounts: readonly MailAccount[];
     readonly onNarrow: (ask: MailSearchAsk) => void;
+
+    /** Takes one criterion off, which is a different act from removing a filter and is asked for separately. */
+    readonly onRemoveCriterion: (criterion: string) => void;
 }) {
     const { locale, translate } = useLocalization();
 
@@ -118,6 +122,35 @@ export function SearchFilters({
                         />
                     ))}
                 </ul>
+            )}
+
+            {/* What a sentence left to rank by, kept apart from the filters above and drawn differently, because they
+                are two different promises: a filter decides what may come back and a criterion only decides the order.
+                Folding them into one row would tell somebody that taking a criterion off widens what they can find,
+                which it does not — and that leaving one on excludes mail, which it also does not. */}
+            {ask.criteria.length === 0 ? null : (
+                <div className="flex flex-col gap-1">
+                    <p className="text-sm text-muted">{translate('search.criteria')}</p>
+
+                    <ul aria-label={translate('search.criteria')} className="flex flex-wrap items-center gap-2">
+                        {ask.criteria.map((criterion) => (
+                            <CriterionInForce
+                                key={criterion}
+                                criterion={criterion}
+                                onRemove={() => {
+                                    onRemoveCriterion(criterion);
+                                }}
+                            />
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* The part of the sentence nothing was made of, quoted back rather than dropped. Somebody whose search
+                found little needs to know which half of what they wrote was acted on: a sentence silently discarded is
+                a search they cannot correct, because there is nothing on the screen that is wrong. */}
+            {ask.unaccounted === null ? null : (
+                <p className="text-sm text-muted">{translate('search.unaccounted', { part: ask.unaccounted })}</p>
             )}
 
             <details className="text-sm">
@@ -284,6 +317,28 @@ function FilterInForce({ label, onRemove }: { readonly label: string; readonly o
             >
                 {/* Drawn rather than written, for the reason the list's own marks are drawn: a glyph is a string
                     somebody reads in one language, and what names this control is the label above. */}
+                <Icon name="close" className="size-3.5" />
+            </button>
+        </li>
+    );
+}
+
+// One criterion a sentence was read as leaving to rank by. It carries the same removal a filter chip does and none of
+// its emphasis: the filled chip above says "this excludes mail", and a criterion does not, so drawing them alike would
+// be the screen telling somebody something untrue about their own search.
+function CriterionInForce({ criterion, onRemove }: { readonly criterion: string; readonly onRemove: () => void }) {
+    const { translate } = useLocalization();
+
+    return (
+        <li className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-sm text-text">
+            {criterion}
+
+            <button
+                type="button"
+                aria-label={translate('search.removeCriterion', { criterion })}
+                className="rounded-sm px-1 leading-none transition hover:bg-hover"
+                onClick={onRemove}
+            >
                 <Icon name="close" className="size-3.5" />
             </button>
         </li>

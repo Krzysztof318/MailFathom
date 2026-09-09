@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Xml.Linq;
 using MailFathom.Application.Access;
+using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
@@ -222,6 +223,11 @@ public sealed class HostCompositionTests
             ],
             ["embedding chain declared"] = EmbeddingChain,
             ["chat declared"] = ChatEndpoint,
+            ["chat declared and sentences not read"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:SearchPhrasing:Enabled", "false"),
+            ],
             ["chat judging its own retrieval"] =
             [
                 .. EmbeddingChain,
@@ -652,6 +658,29 @@ public sealed class HostCompositionTests
         Assert.True(HealthProbe.Readiness.Selects(analyzer));
         Assert.False(HealthProbe.Startup.Selects(analyzer));
         Assert.False(HealthProbe.Liveness.Selects(analyzer));
+    }
+
+    /// <summary>
+    /// The search screen asks this deployment once whether it reads a typed sentence, and the answer is whether the
+    /// port was registered at all. Both halves are asserted together because the absent one is what a deployment with
+    /// no chat endpoint serves, and a registration that survived the switch would promise a description this operator
+    /// declined to pay for.
+    /// </summary>
+    [Theory]
+    [InlineData("chat declared", true)]
+    [InlineData("chat declared and sentences not read", false)]
+    [InlineData("probes only", false)]
+    public void Compose_TheSentenceReadingPort_IsRegisteredExactlyWhereTheDeploymentReadsOne(
+        string shape,
+        bool reads)
+    {
+        // Act
+        var services = ComposeServices(shape);
+
+        // Assert
+        Assert.Equal(
+            reads,
+            services.Any(registration => registration.ServiceType == typeof(IMailSearchPhraseReader)));
     }
 
     /// <summary>An opt-in nobody took reaches no analyzer, so it must not report unready for one it never deployed.</summary>
