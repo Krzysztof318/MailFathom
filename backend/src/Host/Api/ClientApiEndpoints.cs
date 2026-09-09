@@ -146,6 +146,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailMutations();
         api.MapClientCitations();
         api.MapClientDiscoveryRuns();
+        api.MapClientReplyDrafting();
         api.MapClientDrafts();
         api.MapClientOutbox();
         api.MapClientNotifications();

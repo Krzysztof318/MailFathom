@@ -640,11 +640,15 @@ question, so correcting a model the provider refused — the ordinary case, beca
 a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
 connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
 next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
-fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the five
+fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the six
 settings that decide which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
 `Chat:RelevanceFilter:Enabled` turns the second pass on, whether `Chat:Enrichment:Enabled` turns the arrival
-derivation on, whether `Chat:ThreadState:Enabled` turns the conversation derivation on, and whether
-`Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on. Renaming a declared alias
+derivation on, whether `Chat:ThreadState:Enabled` turns the conversation derivation on, whether
+`Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on, and whether
+`Chat:ReplyDrafting:Enabled` turns the drafting of a reply on. `Chat:ReplyDrafting:StyleFromSentMail` is a restart for
+a reason of its own: it decides nothing about which services exist and is instead read once as the drafting is
+registered, so a reload that changed it would go on reading the mail the composed deployment reads rather than the mail
+the operator has just said it may. Renaming a declared alias
 reloads, because the credential and the resilience circuit are both looked
 up by whatever the declaration in force calls it; going from no chat section to one, or the reverse, does not, and is
 refused with that message rather than silently ignored.
@@ -728,6 +732,36 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+
+### Drafting a reply — `Chat:ReplyDrafting`
+
+Writing a first version of the reply somebody is about to send, out of the conversation they are answering and the way
+their own account writes, so a composer opens on a draft they edit rather than on a blank field. A block inside `Chat`
+for the reason the blocks above are: it drafts with that endpoint and has nowhere to send a conversation without one.
+
+Off by default, and off is a supported deployment: the composer asks this deployment once whether it drafts at all, is
+told it does not, and offers nothing — every reply is written by hand exactly as before. Turning it on is a spend
+decision, and a smaller one than the derivations above: it costs one call per reply somebody deliberately asked for
+rather than one per message or conversation arriving.
+
+**Nothing it produces is sent, queued, or stored.** The draft comes back as text in the client, and saving it as a
+draft or sending it stays behind the person confirming those acts.
+
+**It competes with questions for one allowance**, exactly as the blocks above do: each drafting is admitted against and
+charged to the same `MailAnswering` period ceilings a question is. A deployment that has spent the period refuses the
+drafting rather than falling back to an empty composer, because somebody pressed a button for it.
+
+What one drafting reads is not configurable: the twenty most recent messages of the conversation, four thousand
+characters of each, and — where the second key is left on — six of the account's own recent sent messages at twelve
+hundred characters each. Those bound how long one drafting takes rather than describing a deployment.
+[Drafting a reply](../features/reply-drafting.md) describes what a draft carries, what backs each claim it makes, what
+reaches the provider, and what a drafting that produced nothing answers with.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:ReplyDrafting:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+| `Chat:ReplyDrafting:StyleFromSentMail` | bool | `true` | written off, no sent mail is read and the draft is written from the conversation alone. It changes what leaves the deployment rather than only what the draft reads like, which is why it is an operator's decision rather than a constant | restart |
+
 ### Reading a typed sentence into filters — `Chat:SearchPhrasing`
 
 Turning what somebody typed into the mail search field into the filters it states and the words it leaves to rank by,

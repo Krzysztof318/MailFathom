@@ -2785,6 +2785,112 @@
         ],
         "type": "object"
       },
+      "ClientReplyDraftClaimResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCitationRequest"
+            },
+            "type": "array"
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "supported",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "ClientReplyDraftRecipientResponse": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "displayName"
+        ],
+        "type": "object"
+      },
+      "ClientReplyDraftRequest": {
+        "properties": {
+          "answeredEmailId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "instruction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "selection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "answeredEmailId",
+          "selection",
+          "instruction"
+        ],
+        "type": "object"
+      },
+      "ClientReplyDraftResponse": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClientReplyDraftClaimResponse"
+            },
+            "type": "array"
+          },
+          "drafted": {
+            "type": "boolean"
+          },
+          "proposedRecipients": {
+            "items": {
+              "$ref": "#/components/schemas/ClientReplyDraftRecipientResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "drafted",
+          "body",
+          "claims",
+          "proposedRecipients"
+        ],
+        "type": "object"
+      },
+      "ClientReplyDraftingResponse": {
+        "properties": {
+          "draftsReplies": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "draftsReplies"
+        ],
+        "type": "object"
+      },
       "ClientResolvedCitationResponse": {
         "properties": {
           "attachment": {
@@ -12649,6 +12755,71 @@
                 }
               }
             },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/replies/drafting": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReplyDraftingResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientReplyDraftRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReplyDraftResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
             "description": "Not Found"
           }
         },

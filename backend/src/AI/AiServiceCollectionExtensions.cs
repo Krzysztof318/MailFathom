@@ -11,9 +11,11 @@ using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
+using MailFathom.AI.ReplyDrafts;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.Search;
 using MailFathom.AI.ThreadStates;
+using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
@@ -22,10 +24,13 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Egress;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -348,6 +353,50 @@ public static class AiServiceCollectionExtensions
 
             return new AnsweringEndpointIdentity(endpoint.Alias, endpoint.PublishedModelName);
         });
+
+        return services;
+    }
+
+    /// <summary>Registers the agent that drafts a reply, and the use case a composer reaches it through.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="derivesStyleFromSentMail">Whether a draft's manner is derived from the answering account's own recent sent mail.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the deployment declared a chat endpoint and turned drafting on, so the use case's absence
+    /// <em>is</em> the answer a composer gets: it offers the empty page somebody writes in rather than a button that
+    /// fails. That is why nothing stands in for it when this is not called — a stand-in answering "nothing drafted"
+    /// would have every caller wait on a provider-shaped call that a deployment with no provider can never make.
+    /// </para>
+    /// <para>
+    /// The use case is registered here rather than beside the other mail reads, because it is the one of them that is
+    /// meaningless without the writer this call registers: the two are one switch and are turned on together.
+    /// </para>
+    /// <para>
+    /// Both are scoped, because one request is one drafting: the ledger the call is charged to, the credential it
+    /// resolves, the transport it opens, and the scope its mail is read under all belong to that request.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddReplyDraftAgent(
+        this IServiceCollection services,
+        bool derivesStyleFromSentMail)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IReplyDraftWriter, ReplyDraftAgent>();
+        // Composed by hand rather than resolved, because one of its arguments is a decision an operator took rather
+        // than a service the container holds, and passing it here keeps every bound a drafting reads in the use case
+        // that answers for the spend.
+        services.AddScoped(provider => new MailReplyDrafting(
+            provider.GetRequiredService<IReplyDraftSourceReader>(),
+            provider.GetRequiredService<IReplyDraftWriter>(),
+            provider.GetRequiredService<MailboxScopeResolver>(),
+            provider.GetRequiredService<SensitiveContentEgressGuard>(),
+            provider.GetRequiredService<AccessAuthorization>(),
+            derivesStyleFromSentMail));
 
         return services;
     }

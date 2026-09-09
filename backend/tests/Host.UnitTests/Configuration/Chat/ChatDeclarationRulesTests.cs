@@ -292,6 +292,48 @@ public sealed class ChatDeclarationRulesTests
     }
 
     /// <summary>
+    /// Whether a reply is drafted is decided while the container is built, and the composer asks the deployment once.
+    /// A reload that flipped it would report the setting as taken while every composer went on offering a draft this
+    /// deployment had stopped writing, or withholding one it had started writing.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_ReplyDraftingTurnedOn_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.ReplyDrafting.Enabled = true;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(errors, error => error.StartsWith("Chat:ReplyDrafting:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
+    /// <summary>
+    /// The second switch is captured into the registration beside the first, so a reload that flipped it would leave
+    /// every draft written from the mail the composed deployment reads rather than from the mail the operator has just
+    /// said it may read — which is a privacy decision going unapplied rather than a preference going unheard.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_TheDraftingStyleSourceTurnedOff_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.ReplyDrafting.StyleFromSentMail = false;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:ReplyDrafting:StyleFromSentMail — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
+    /// <summary>
     /// Whether a sentence is read into filters is decided while the container is built, and the search screen asks the
     /// deployment once. A reload that flipped it would report the setting as taken while every field went on promising
     /// a description this deployment had stopped reading, or refusing one it had started reading.

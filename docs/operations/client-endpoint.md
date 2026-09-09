@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/ClientReplyDraftingEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -93,6 +93,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/drafts/{draftId}/attachments` | `mailfathom.mail.drafts.write` |
 | `DELETE /api/client/drafts/{draftId}/attachments/{attachmentId}` | `mailfathom.mail.drafts.write` |
 | `POST /api/client/drafts/{draftId}/send` | `mailfathom.mail.send` |
+| `GET /api/client/replies/drafting` | `mailfathom.mail.ask` |
+| `POST /api/client/replies/drafting` | `mailfathom.mail.ask` |
 | `GET /api/client/outbox` | `mailfathom.mail.send` |
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
@@ -1868,6 +1870,89 @@ outage tells an author their deployment did not answer when it answered precisel
 
 **Nothing has been transmitted when a send answers.** The message is queued, and the outbox routes below are where a
 client watches what becomes of it.
+
+### The reply drafting routes
+
+```http
+GET /api/client/replies/drafting
+```
+
+```json
+{ "draftsReplies": true }
+```
+
+```http
+POST /api/client/replies/drafting
+Content-Type: application/json
+
+{
+  "answeredEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "selection": "Could you confirm the racking is still 4 200 net?",
+  "instruction": "Confirm the price and offer Tuesday at ten."
+}
+```
+
+```json
+{
+  "drafted": true,
+  "body": "Yes — 4 200 net still stands, and Tuesday at ten works for us.",
+  "claims": [
+    {
+      "text": "The agreed price is 4 200 net.",
+      "supported": true,
+      "sources": [ { "kind": "email", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a8f" } ]
+    },
+    { "text": "Tuesday at ten is free.", "supported": false, "sources": [] }
+  ],
+  "proposedRecipients": [
+    { "address": "sales@example.test", "displayName": "Anna Kowalska" }
+  ]
+}
+```
+
+**What comes back is a proposal rather than a message.** Nothing on this route sends, queues, or writes to a mail
+server, and nothing is stored: the reply arrives as text in the composer, which its author edits, discards, or saves
+through [the drafts routes](#the-drafts-routes) above. Every irreversible act stays behind a person confirming it.
+
+**The read says whether this deployment drafts at all**, which is what decides whether a composer may offer the
+affordance before anybody presses it. It resolves a registration and calls no provider, so a client asks it once and
+holds the answer. `false` is what a deployment with no chat section answers and what one whose operator wrote
+[`Chat:ReplyDrafting:Enabled`](configuration-ai.md#drafting-a-reply--chatreplydrafting) off answers; the two are
+deliberately one answer, because what a client does about either is identical and naming which would publish a
+deployment's configuration to every signed-in browser.
+
+**The request names one message and states nothing else about it.** The conversation the draft is grounded in, the
+account whose manner it is written in, the subject, and the people it may propose are all read out of the stored copy
+that identifier resolves to, so a client can state none of them and can state none of them wrongly. `selection` is the
+part of the correspondence being answered and `instruction` is what the reply should say; both are optional, and a
+request carrying neither is the ordinary one.
+
+**`supported` is published beside the sources rather than left to a client to derive.** A claim carrying none is one
+the correspondence does not back, and it is kept and marked rather than dropped, because the sentence is already in the
+body somebody is about to send. Each source is spelled as [the citation route](#the-citation-route) spells a target, so
+following one is the same `POST /api/client/citations/resolution` a Discover answer's sources are followed through.
+
+**`proposedRecipients` are shown and never applied.** Every one of them is a person the conversation itself names,
+resolved inside the deployment, and the account's own sending address is never among them. A composer draws each as a
+proposal to accept, change, or remove.
+
+**`drafted: false` is the composer as it was rather than a failure.** It is what a deployment drafting no reply
+answers, and what this one answers while its provider is unreachable or wrote something unreadable; a client leaves the
+field empty and reports nothing. A message this user does not hold is `404`. The one exception is a spend ceiling: a
+deployment that has spent what its operator allows a provider answers `429`, because falling back there would leave
+somebody pressing a button the allowance has already been spent on.
+
+**Everything travels in a body**, which is why drafting is a `POST` for an operation that stores nothing: what somebody
+is asking a reply to say is as revealing as the correspondence it answers, and a query string is the part of a request
+that reaches an access log by default, here and on every proxy in front of this deployment. A body over 16 KiB is
+refused before it is read, a request naming no message and an over-long `selection` or `instruction` are refused with
+`400`, and a refusal never echoes what was sent.
+
+**Both routes are published under `mailfathom.mail.ask`** rather than under the reading grant, because that is what
+drafting does: the conversation and a sample of the account's own sent mail leave this deployment for a chat provider,
+and the call is charged to the same allowance a question is. A credential holding only `mailfathom.mail.read` is
+answered `403`. Nothing about a draft reaches a log or telemetry on either route.
+[Drafting a reply](../features/reply-drafting.md) holds what a draft is written from and what never leaves.
 
 ### The outbox routes
 
