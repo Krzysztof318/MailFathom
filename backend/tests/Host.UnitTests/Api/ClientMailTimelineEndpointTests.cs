@@ -203,6 +203,93 @@ public sealed class ClientMailTimelineEndpointTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A reading no derivation produces would otherwise narrow to nothing while reading as a list that is simply empty.</summary>
+    [Theory]
+    [InlineData("decision")]
+    [InlineData("commitment,significance")]
+    [InlineData("2")]
+    public async Task ReadTimelineAsync_AMarkThisSurfaceDoesNotPublish_IsRefused(string carriesMark)
+    {
+        // Act
+        var result = await this.ReadAsync(carriesMark: carriesMark);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+    }
+
+    /// <summary>A standing entry in the folder tree is these criteria and nothing else, so each published name reaches the query as the reading it names.</summary>
+    [Theory]
+    [InlineData(ClientMailTimelineEndpoint.SenseMark, EmailEnrichmentAspect.Sense)]
+    [InlineData(ClientMailTimelineEndpoint.SignificanceMark, EmailEnrichmentAspect.Significance)]
+    [InlineData(ClientMailTimelineEndpoint.CommitmentMark, EmailEnrichmentAspect.Commitment)]
+    public async Task ReadTimelineAsync_APublishedMark_NarrowsTheListToMailCarryingThatReading(
+        string carriesMark,
+        EmailEnrichmentAspect aspect)
+    {
+        // Act
+        var result = await this.ReadAsync(carriesMark: carriesMark);
+
+        // Assert
+        Assert.IsType<Ok<ClientMailTimelineResponse>>(result.Result);
+        await this.timeline.Received(1).ReadPageAsync(
+            Arg.Is<EmailTimelineFilter>(filter =>
+                filter != null && filter.Selection.Mark != null && filter.Selection.Mark.Aspect == aspect),
+            Arg.Any<EmailTimelinePosition?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The deadlines a week holds are the same criteria with a range on them rather than a query of their own.</summary>
+    [Fact]
+    public async Task ReadTimelineAsync_ACommitmentDueRange_NarrowsTheListToThatRange()
+    {
+        // Act
+        await this.ReadAsync(
+            carriesMark: ClientMailTimelineEndpoint.CommitmentMark,
+            markDueOnOrAfter: FirstJuly,
+            markDueBefore: FirstJuly.AddDays(7));
+
+        // Assert
+        await this.timeline.Received(1).ReadPageAsync(
+            Arg.Is<EmailTimelineFilter>(filter =>
+                filter != null
+                && filter.Selection.Mark != null
+                && filter.Selection.Mark.DueOnOrAfter == FirstJuly
+                && filter.Selection.Mark.DueBefore == FirstJuly.AddDays(7)),
+            Arg.Any<EmailTimelinePosition?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A request naming no reading narrows by none, so the list a screen opens on is unchanged by this filter existing.</summary>
+    [Fact]
+    public async Task ReadTimelineAsync_NoMarkNamed_NarrowsByNoReading()
+    {
+        // Act
+        await this.ReadAsync();
+
+        // Assert
+        await this.timeline.Received(1).ReadPageAsync(
+            Arg.Is<EmailTimelineFilter>(filter => filter != null && filter.Selection.Mark == null),
+            Arg.Any<EmailTimelinePosition?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A due range that selects nothing is a mistake in the request rather than a week with no deadlines in it.</summary>
+    [Fact]
+    public async Task ReadTimelineAsync_ADueRangeThatSelectsNothing_IsRefused()
+    {
+        // Act
+        var result = await this.ReadAsync(
+            carriesMark: ClientMailTimelineEndpoint.CommitmentMark,
+            markDueOnOrAfter: FirstJuly.AddDays(7),
+            markDueBefore: FirstJuly);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<ProblemHttpResult>(result.Result).StatusCode);
+    }
+
     /// <summary>Every fact a list row draws reaches the wire from one request, which is what the route exists for.</summary>
     [Fact]
     public void For_ARowOfTheList_CarriesEveryFactAListDraws()
@@ -379,7 +466,10 @@ public sealed class ClientMailTimelineEndpointTests
         string? order = null,
         string? direction = null,
         int? pageSize = null,
-        string? cursor = null)
+        string? cursor = null,
+        string? carriesMark = null,
+        DateTimeOffset? markDueOnOrAfter = null,
+        DateTimeOffset? markDueBefore = null)
     {
         this.timeline
             .ReadPageAsync(
@@ -403,6 +493,9 @@ public sealed class ClientMailTimelineEndpointTests
             direction,
             pageSize,
             cursor,
+            carriesMark,
+            markDueOnOrAfter,
+            markDueBefore,
             this.Browser(),
             TestContext.Current.CancellationToken);
     }

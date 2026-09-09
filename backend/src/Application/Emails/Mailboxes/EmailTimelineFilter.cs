@@ -66,10 +66,11 @@ public sealed record EmailTimelineFilter
     /// <param name="keyword">The keyword an email must carry, in any case, or <see langword="null" /> for any.</param>
     /// <param name="hasAttachments">Whether attachments are required, or <see langword="null" /> for either.</param>
     /// <param name="direction">The end of the timeline to read from.</param>
+    /// <param name="mark">The reading a derivation must have made about the email, or <see langword="null" /> when no reading is required.</param>
     /// <returns>The validated filter.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="direction" /> is not a defined member.</exception>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or the received range can select nothing.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or a range can select nothing.</exception>
     public static EmailTimelineFilter Create(
         MailboxScope scope,
         string? senderAddress,
@@ -81,7 +82,8 @@ public sealed record EmailTimelineFilter
         bool? isRemotelyFlagged,
         string? keyword,
         bool? hasAttachments,
-        EmailTimelineDirection direction) => ReadIn(
+        EmailTimelineDirection direction,
+        EmailMarkSelection? mark = null) => ReadIn(
         MailboxEmailSelection.Create(
             scope,
             senderAddress,
@@ -92,7 +94,8 @@ public sealed record EmailTimelineFilter
             isRemotelySeen,
             isRemotelyFlagged,
             keyword,
-            hasAttachments),
+            hasAttachments,
+            mark),
         direction);
 
     /// <summary>Reads an already validated selection from one end of the timeline.</summary>

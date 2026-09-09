@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -21,6 +22,8 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </summary>
 public sealed class StoredEmailSelectionPredicateCommandTests
 {
+    private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
+
     private static MailboxScope WholeMailbox { get; } = MailboxScope.Create(
         SyntheticMailUser.Deployment,
         [MailAccountId.Create("primary")],
@@ -123,6 +126,66 @@ public sealed class StoredEmailSelectionPredicateCommandTests
         Assert.DoesNotContain($"\"{nameof(StoredEmailEntity.Id)}\" = ANY", narrowing, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A standing entry in the folder tree is a list of mail a derivation left a reading on, and reading that in the
+    /// process would mean fetching every message the scope admits to drop most of them. The correlated existence
+    /// narrowing is what serves it from the mark table's own <c>(StoredEmailId, Aspect)</c> index instead.
+    /// </summary>
+    [Fact]
+    public void Matching_MarkFilter_AsksTheMarkTableWhetherOneSuchReadingExists()
+    {
+        // Act
+        var narrowing = NarrowingOf(SelectionWith(
+            mark: EmailMarkSelection.Create(EmailEnrichmentAspect.Commitment, null, null)));
+
+        // Assert
+        Assert.Contains("EXISTS (", narrowing, StringComparison.Ordinal);
+        Assert.Contains(nameof(EmailEnrichmentMarkEntity.Aspect), narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every criterion has to be met by one mark rather than by the message as a whole: a message carrying an undated
+    /// commitment and an unrelated dated one is not a message due this week. Two narrowings applied to the same
+    /// existence test is what says so, and separate ones would answer the wrong question off the same rows.
+    /// </summary>
+    [Fact]
+    public void Matching_MarkFilterWithADueRange_AsksOneExistenceTestForEveryCriterion()
+    {
+        // Act
+        var narrowing = NarrowingOf(SelectionWith(
+            mark: EmailMarkSelection.Create(EmailEnrichmentAspect.Commitment, FirstJuly, FirstJuly.AddDays(7))));
+
+        // Assert
+        Assert.Equal(1, Occurrences(narrowing, "EXISTS ("));
+        Assert.Contains($"\"{nameof(EmailEnrichmentMarkEntity.DueAt)}\" >= ", narrowing, StringComparison.Ordinal);
+        Assert.Contains($"\"{nameof(EmailEnrichmentMarkEntity.DueAt)}\" < ", narrowing, StringComparison.Ordinal);
+    }
+
+    /// <summary>A list nobody narrowed by a reading reads no derivation at all, which is what keeps the mark table out of an ordinary listing.</summary>
+    [Fact]
+    public void Matching_NoMarkNamed_LeavesTheMarkTableOutOfTheCommand()
+    {
+        // Act
+        var narrowing = NarrowingOf(SelectionWith());
+
+        // Assert
+        Assert.DoesNotContain("EXISTS (", narrowing, StringComparison.Ordinal);
+    }
+
+    private static int Occurrences(string command, string fragment)
+    {
+        var found = 0;
+        var index = command.IndexOf(fragment, StringComparison.Ordinal);
+
+        while (index >= 0)
+        {
+            found++;
+            index = command.IndexOf(fragment, index + fragment.Length, StringComparison.Ordinal);
+        }
+
+        return found;
+    }
+
     /// <summary>Generates what a scope alone narrows by, without opening a connection.</summary>
     private static string ScopeNarrowingOf(MailboxScope scope)
     {
@@ -167,7 +230,8 @@ public sealed class StoredEmailSelectionPredicateCommandTests
 
     private static MailboxEmailSelection SelectionWith(
         bool? isRemotelyFlagged = null,
-        string? keyword = null) => MailboxEmailSelection.Create(
+        string? keyword = null,
+        EmailMarkSelection? mark = null) => MailboxEmailSelection.Create(
         MailboxScope.NothingReadable,
         senderAddress: null,
         recipientAddress: null,
@@ -177,5 +241,6 @@ public sealed class StoredEmailSelectionPredicateCommandTests
         isRemotelySeen: null,
         isRemotelyFlagged,
         keyword,
-        hasAttachments: null);
+        hasAttachments: null,
+        mark);
 }

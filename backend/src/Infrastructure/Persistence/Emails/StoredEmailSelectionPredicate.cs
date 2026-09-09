@@ -85,7 +85,7 @@ internal static class StoredEmailSelectionPredicate
                 && EF.Functions.ILike(email.Subject, pattern, PatternEscapeCharacter));
         }
 
-        return MatchingReceivedRange(MatchingFlags(emails, selection), selection);
+        return MatchingMark(MatchingReceivedRange(MatchingFlags(emails, selection), selection), selection);
     }
 
     /// <summary>Narrows the stored emails to the mail a scope admits, whatever the caller then asked for.</summary>
@@ -246,6 +246,45 @@ internal static class StoredEmailSelectionPredicate
         }
 
         return emails;
+    }
+
+    /// <summary>Narrows the emails to the ones a derivation has already said something about.</summary>
+    /// <remarks>
+    /// <para>
+    /// One <c>EXISTS</c> over the marks rather than a clause per criterion, because the criteria describe a single
+    /// reading: <see cref="EmailMarkSelection" /> states that a message carrying an undated commitment and one due
+    /// tomorrow matches a range naming tomorrow, while a message whose only commitment is undated matches nothing.
+    /// Separate clauses would answer a different question that no reader could tell apart by looking at the result.
+    /// </para>
+    /// <para>
+    /// The subquery is anchored on the email, which is the column the marks are indexed by together with their aspect,
+    /// so a list already walking the emails in keyset order tests a handful of rows per candidate rather than scanning
+    /// the marks. An email no derivation has reached carries no derivation row at all and matches nothing, which is
+    /// also every email on a deployment that runs no enrichment.
+    /// </para>
+    /// <para>
+    /// Each bound is compared only where the caller named one, and an absent one is a parameter the predicate still
+    /// carries rather than a clause it drops — the three criteria have to be judged against one mark, so they cannot be
+    /// composed as separate queries the way the filters above are.
+    /// </para>
+    /// </remarks>
+    private static IQueryable<StoredEmailEntity> MatchingMark(
+        IQueryable<StoredEmailEntity> emails,
+        MailboxEmailSelection selection)
+    {
+        if (selection.Mark is not { } mark)
+        {
+            return emails;
+        }
+
+        var aspect = mark.Aspect;
+        var dueOnOrAfter = mark.DueOnOrAfter;
+        var dueBefore = mark.DueBefore;
+
+        return emails.Where(email => email.Enrichment != null && email.Enrichment.Marks.Any(stored =>
+            (aspect == null || stored.Aspect == aspect)
+            && (dueOnOrAfter == null || (stored.DueAt != null && stored.DueAt >= dueOnOrAfter))
+            && (dueBefore == null || (stored.DueAt != null && stored.DueAt < dueBefore))));
     }
 
     /// <summary>Builds the <c>ILIKE</c> pattern that matches a fragment anywhere in a subject.</summary>

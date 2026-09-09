@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
@@ -377,6 +378,24 @@ public sealed class MailboxEmailSelectionTests
     }
 
     /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
+    /// <summary>A list narrowed by a derived reading is a different walk, so a cursor cannot cross between the two.</summary>
+    [Fact]
+    public void CanonicalText_SelectionsDifferingOnlyInTheMarkTheyRequire_AreNotOneWalk()
+    {
+        // Act
+        var everything = SelectionWith().CanonicalText;
+        var commitments = SelectionWith(
+            mark: EmailMarkSelection.Create(EmailEnrichmentAspect.Commitment, null, null)).CanonicalText;
+        var dueThisWeek = SelectionWith(
+            mark: EmailMarkSelection.Create(
+                EmailEnrichmentAspect.Commitment,
+                FirstJuly,
+                FirstJuly.AddDays(7))).CanonicalText;
+
+        // Assert
+        Assert.Equal(3, new[] { everything, commitments, dueThisWeek }.Distinct().Count());
+    }
+
     private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
@@ -407,7 +426,8 @@ public sealed class MailboxEmailSelectionTests
         bool? isRemotelySeen = null,
         bool? isRemotelyFlagged = null,
         string? keyword = null,
-        bool? hasAttachments = null) => MailboxEmailSelection.Create(
+        bool? hasAttachments = null,
+        EmailMarkSelection? mark = null) => MailboxEmailSelection.Create(
         scope ?? MailboxScope.NothingReadable,
         senderAddress,
         recipientAddress,
@@ -417,5 +437,6 @@ public sealed class MailboxEmailSelectionTests
         isRemotelySeen,
         isRemotelyFlagged,
         keyword,
-        hasAttachments);
+        hasAttachments,
+        mark);
 }
