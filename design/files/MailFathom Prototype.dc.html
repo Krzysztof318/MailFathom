@@ -495,10 +495,15 @@
             <span style="flex:1;font-size:14px;font-weight:600">{{ moveTitle }}</span>
             <span onClick="{{ closeMove }}" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px" style-hover="cursor:pointer;background:var(--hover)">close</span>
           </div>
-          <sc-for list="{{ moveFolders }}" as="mf" hint-placeholder-count="5">
-            <div onClick="{{ mf.pick }}" style="{{ mf.style }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--muted)">folder</span>{{ mf.label }}</div>
+          <sc-for list="{{ moveGroups }}" as="mg" hint-placeholder-count="2">
+            <div style="{{ mg.wrapStyle }}">
+              <div style="{{ mg.headStyle }}"><span style="{{ mg.dotStyle }}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ mg.label }}</span></div>
+              <sc-for list="{{ mg.folders }}" as="mf" hint-placeholder-count="4">
+                <div onClick="{{ mf.pick }}" style="{{ mf.style }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--muted)">{{ mf.icon }}</span>{{ mf.label }}</div>
+              </sc-for>
+              <div onClick="{{ mg.newFolder }}" style="{{ mg.newFolderStyle }}" style-hover="cursor:pointer;background:var(--hover)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">create_new_folder</span>New folder here</div>
+            </div>
           </sc-for>
-          <div style="display:flex;align-items:center;gap:11px;margin-top:4px;padding:10px 13px;border-top:1px solid var(--line2);font-size:13px;color:var(--accent-d)" style-hover="cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">create_new_folder</span>New folder…</div>
         </div>
       </div>
     </sc-if>
@@ -549,14 +554,14 @@
           <sc-for list="{{ sideGroups }}" as="g" hint-placeholder-count="3">
             <div style="{{ g.wrapStyle }}">
               <sc-if value="{{ g.showHeader }}" hint-placeholder-val="{{ true }}">
-                <div onClick="{{ g.toggle }}" title="{{ g.title }}" style="{{ g.headStyle }}" style-hover="cursor:pointer;background:var(--hover)">
+                <div onClick="{{ g.toggle }}" onContextMenu="{{ g.ctxOpen }}" onTouchStart="{{ g.pressDown }}" onTouchEnd="{{ g.pressUp }}" onTouchMove="{{ g.pressUp }}" title="{{ g.title }}" style="{{ g.headStyle }}" style-hover="cursor:pointer;background:var(--hover)">
                   <span style="{{ g.dotStyle }}"></span>
                   <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.label }}</span>
                   <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)">{{ g.chevron }}</span>
                 </div>
               </sc-if>
               <sc-if value="{{ g.showDot }}" hint-placeholder-val="{{ false }}">
-                <div onClick="{{ g.toggle }}" title="{{ g.title }}" style="display:flex;align-items:center;justify-content:center;height:24px" style-hover="cursor:pointer"><span style="{{ g.dotStyle }}"></span></div>
+                <div onClick="{{ g.toggle }}" onContextMenu="{{ g.ctxOpen }}" onTouchStart="{{ g.pressDown }}" onTouchEnd="{{ g.pressUp }}" onTouchMove="{{ g.pressUp }}" title="{{ g.title }}" style="display:flex;align-items:center;justify-content:center;height:24px" style-hover="cursor:pointer"><span style="{{ g.dotStyle }}"></span></div>
               </sc-if>
               <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
                 <sc-for list="{{ g.folders }}" as="mb" hint-placeholder-count="3">
@@ -4438,15 +4443,31 @@ class Component extends DCLogic {
 
   askDel = (o) => this.setState({ confirmDel: o });
 
+  inTrash = () => /·Trash$/.test(this.state.folderKey || "acc1·Inbox");
+
   deleteThreads = (ids) => {
     const t = this.opTargets(ids);
     if (!t.length) return;
+    if (this.inTrash()) {
+      this.askDel({
+        title: t.length === 1 ? "Delete this thread permanently?" : "Delete " + this.countWord(t.length) + " permanently?",
+        text: "Already in Trash — deleting now removes " + this.countWord(t.length) + " together with attachments. This cannot be undone.",
+        label: "Delete permanently",
+        run: () => this.purgeThreads(t),
+      });
+      return;
+    }
     this.askDel({
       title: t.length === 1 ? "Delete this thread?" : "Delete " + this.countWord(t.length) + "?",
       text: "Moving to trash — " + this.countWord(t.length) + ". They disappear from trash after 30 days.",
       label: "Move to trash",
       run: () => this.doDeleteThreads(t),
     });
+  };
+
+  purgeThreads = (t) => {
+    this.setState(s => ({ deleted: (s.deleted || []).concat(t), lastOp: null, sel: [], mailPane: "list" }));
+    this.notify("Permanently deleted — " + this.countWord(t.length), false);
   };
 
   doDeleteThreads = (t) => {
@@ -4471,17 +4492,35 @@ class Component extends DCLogic {
     this.notify("Marked as unread — " + this.countWord(t.length), false);
   };
 
+  accountMenu = (key, label) => [
+    { icon: "create_new_folder", label: "New folder", run: () => this.addFolder(key, label) },
+    { icon: "mark_email_read", label: "Mark all as read", run: () => this.notify("All read in " + label, false) },
+  ];
+
+  addFolder = (key, label) => {
+    this.setState(s => {
+      const ex = Object.assign({}, s.extraFolders || {});
+      const list = (ex[key] || []).slice();
+      let name = "New folder", n = 1;
+      while (list.indexOf(name) >= 0) { n++; name = "New folder " + n; }
+      list.push(name);
+      ex[key] = list;
+      return { extraFolders: ex, accOpen: Object.assign({}, s.accOpen, { [key]: true }), moveFor: null, sideDrawer: s.sideDrawer };
+    });
+    this.notify("Folder created in " + label, false);
+  };
+
   openMove = (ids) => this.setState({ moveFor: this.opTargets(ids) });
   closeMove = () => this.setState({ moveFor: null });
 
-  moveThreads = (folder) => {
+  moveThreads = (folder, account) => {
     const t = this.state.moveFor || [];
     this.setState(s => {
       const moved = Object.assign({}, s.moved || {});
       t.forEach(id => { moved[id] = folder; });
       return { moved: moved, moveFor: null, sel: [], lastOp: { kind: "move", ids: t } };
     });
-    this.notify("Moved to “" + folder + "” — " + this.countWord(t.length), true);
+    this.notify("Moved to “" + folder + "”" + (account ? " in " + account : "") + " — " + this.countWord(t.length), true);
   };
 
   undoOp = () => {
@@ -5537,6 +5576,15 @@ class Component extends DCLogic {
     const emptyApp = false;
     const filterCount = [!!st.fUnread, !!st.fFlagged, !!st.fAttach, !!st.fRange || !!st.fFrom || !!st.fTo, (st.fSort || "Newest") !== "Newest"].filter(Boolean).length;
     const sideCollapsed = drawer ? false : (st.sideCollapsed !== undefined ? !!st.sideCollapsed : narrow);
+    const noop = () => {};
+    /* Every mailbox carries the same five standard folders in the same order. */
+    const STD_FOLDERS = (counts) => [
+      { icon: "inbox", label: "Inbox" },
+      { icon: "send", label: "Sent" },
+      { icon: "draft", label: "Drafts" },
+      { icon: "archive", label: "Archive" },
+      { icon: "delete", label: "Trash" },
+    ].map(mb => ({ icon: mb.icon, label: mb.label, count: (counts || {})[mb.label] || "" }));
     const sideW = drawer ? 0 : sideCollapsed ? 58 : 210;
     const listW = Math.max(232, Math.min(st.listW, w - railW - sideW - (narrow ? 300 : 420)));
     const composeTabActive = tabsMode && st.activeTab === "compose" && !!st.compose;
@@ -6271,32 +6319,21 @@ class Component extends DCLogic {
         ? "margin-top:12px;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:12px"
         : "margin-top:16px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:14px",
       sideGroups: [
-        { key: "all", label: "All accounts", title: "Global folders — two accounts", dot: "linear-gradient(135deg,var(--accent) 50%,#4d9aa8 50%)", folders: [
-          { icon: "all_inbox", label: "All", count: "12" },
-          { icon: "mark_email_unread", label: "Unread", count: "4" },
-          { icon: "star", label: "Important", count: "3" },
-        ] },
-        { key: "acc1", label: "Nordwind · work", title: "k.kowalska@nordwind.example", dot: "var(--accent)", folders: [
-          { icon: "inbox", label: "Inbox", count: "8", active: true },
-          { icon: "send", label: "Sent", count: "" },
-          { icon: "draft", label: "Drafts", count: "2" },
-          { icon: "archive", label: "Archive", count: "" },
-        ] },
-        { key: "acc2", label: "Personal mail", title: "kowalska.k@mail.example", dot: "#4d9aa8", folders: [
-          { icon: "inbox", label: "Inbox", count: "4" },
-          { icon: "send", label: "Sent", count: "" },
-          { icon: "delete", label: "Trash", count: "" },
-        ] },
+        { key: "all", label: "All accounts", title: "Unified folders — two accounts", dot: "linear-gradient(135deg,var(--accent) 50%,#4d9aa8 50%)", folders: STD_FOLDERS({ Inbox: "12", Drafts: "2" }) },
+        { key: "acc1", label: "Nordwind · work", title: "k.kowalska@nordwind.example", dot: "var(--accent)", folders: STD_FOLDERS({ Inbox: "8", Drafts: "2" }) },
+        { key: "acc2", label: "Personal mail", title: "kowalska.k@mail.example", dot: "#4d9aa8", folders: STD_FOLDERS({ Inbox: "4" }) },
       ].map(g => {
         const open = (st.accOpen || {})[g.key] !== false;
+        const press = g.key === "all" ? null : this.pressFor("account", g.key, g.label, this.accountMenu(g.key, g.label));
         return {
           label: g.label, title: g.title, open, chevron: open ? "expand_more" : "chevron_right",
           showHeader: !sideCollapsed, showDot: sideCollapsed,
+          ctxOpen: press ? press.ctx : noop, pressDown: press ? press.down : noop, pressUp: press ? press.up : noop,
           toggle: () => this.setState(s2 => ({ accOpen: Object.assign({}, s2.accOpen, { [g.key]: !((s2.accOpen || {})[g.key] !== false) }) })),
           wrapStyle: sideCollapsed ? "display:flex;flex-direction:column;gap:3px;padding-bottom:7px" : "display:flex;flex-direction:column;gap:2px;padding-bottom:9px",
           headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:5px 9px;border-radius:6px",
           dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
-          folders: g.folders.map(mb0 => {
+          folders: g.folders.concat(((st.extraFolders || {})[g.key] || []).map(n => ({ icon: "folder", label: n, count: "" }))).map(mb0 => {
             const fk = g.key + "·" + mb0.label;
             const mb = Object.assign({}, mb0, { active: (st.folderKey || "acc1·Inbox") === fk });
             return {
@@ -7029,9 +7066,26 @@ class Component extends DCLogic {
       moveOpen: !!(st.moveFor && st.moveFor.length),
       moveTitle: st.moveFor ? "Move " + this.countWord(st.moveFor.length) : "",
       closeMove: this.closeMove,
-      moveFolders: ["Cases", "Contracts", "Clients", "To decide", "Archive 2026"].map(f => ({
-        label: f, pick: () => this.moveThreads(f),
-        style: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "13px 14px" : "10px 13px") + ";border-radius:9px;font-size:14px;color:var(--text2)",
+      moveGroups: [
+        { key: "acc1", label: "Nordwind · work", dot: "var(--accent)", folders: [
+          { icon: "inbox", label: "Inbox" }, { icon: "archive", label: "Archive" },
+          { icon: "folder", label: "Cases" }, { icon: "folder", label: "Contracts" }, { icon: "folder", label: "Archive 2026" },
+        ] },
+        { key: "acc2", label: "Personal mail", dot: "#4d9aa8", folders: [
+          { icon: "inbox", label: "Inbox" }, { icon: "archive", label: "Archive" },
+          { icon: "folder", label: "Clients" }, { icon: "folder", label: "To decide" },
+        ] },
+      ].map(g => ({
+        label: g.label,
+        wrapStyle: "display:flex;flex-direction:column;gap:1px;padding-bottom:6px",
+        headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:8px 9px 5px",
+        dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
+        newFolder: () => this.addFolder(g.key, g.label),
+        newFolderStyle: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "11px 14px" : "8px 13px") + ";border-radius:9px;font-size:13px;color:var(--accent-d)",
+        folders: g.folders.concat(((st.extraFolders || {})[g.key] || []).map(n => ({ icon: "folder", label: n }))).map(mf => ({
+          icon: mf.icon, label: mf.label, pick: () => this.moveThreads(mf.label, g.label),
+          style: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "13px 14px" : "10px 13px") + ";border-radius:9px;font-size:14px;color:var(--text2)",
+        })),
       })),
       undoOp: this.undoOp,
       hideToast: this.hideToast,
