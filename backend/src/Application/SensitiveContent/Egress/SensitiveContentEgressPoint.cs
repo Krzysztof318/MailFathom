@@ -142,4 +142,20 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// </remarks>
     ClientThreadState = 9,
+
+    /// <summary>The reply the client API answers a drafting with: the text a person is about to make their own, and what it asserts.</summary>
+    /// <remarks>
+    /// <para>
+    /// Apart from the state beside it, although both are text this deployment composed out of somebody's correspondence
+    /// and both are scanned a second time on the way back. What separates them is what a reader does next: a state is
+    /// read, and a draft is edited and sent. A finding here is therefore a finding about text that was one keystroke
+    /// away from leaving under its author's own address, which is worth counting on its own.
+    /// </para>
+    /// <para>
+    /// It redacts rather than refusing, which is the posture of every client point and not of
+    /// <see cref="OutgoingMail" />. Nothing here is a message yet — it is a proposal in a composer, and a person who
+    /// sends what they were shown crosses that member afterwards, where the act is screened rather than rewritten.
+    /// </para>
+    /// </remarks>
+    ClientReplyDraft = 10,
 }

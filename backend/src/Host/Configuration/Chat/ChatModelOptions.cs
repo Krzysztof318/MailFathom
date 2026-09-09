@@ -186,6 +186,10 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>Present rather than nullable for the reason the two blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and off is the default and a supported deployment.</remarks>
     public ThreadStateOptions ThreadState { get; set; } = new();
 
+    /// <summary>Gets or sets whether a reply is drafted from the conversation it answers, and where its manner comes from.</summary>
+    /// <remarks>Present rather than nullable for the reason the blocks above are: its own <c>Enabled</c> is what says whether a drafting runs, and off is the default and a supported deployment.</remarks>
+    public ReplyDraftingOptions ReplyDrafting { get; set; } = new();
+
     /// <summary>Gets or sets whether a sentence typed into the search field is read into the filters it describes.</summary>
     /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default unlike any of them — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
     public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
@@ -215,7 +219,8 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
                 || this.Unauthenticated
                 || this.RelevanceFilter.Enabled
                 || this.Enrichment.Enabled
-                || this.ThreadState.Enabled)
+                || this.ThreadState.Enabled
+                || this.ReplyDrafting.Enabled)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

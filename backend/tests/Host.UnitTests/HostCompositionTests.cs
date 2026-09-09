@@ -250,6 +250,17 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:ThreadState:Enabled", "true"),
             ],
+            ["replies drafted from a conversation"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:ReplyDrafting:Enabled", "true"),
+            ],
+            ["replies drafted without a style read from sent mail"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:ReplyDrafting:Enabled", "true"),
+                new("Chat:ReplyDrafting:StyleFromSentMail", "false"),
+            ],
             ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
@@ -289,6 +300,7 @@ public sealed class HostCompositionTests
                 new("Chat:RelevanceFilter:Enabled", "true"),
                 new("Chat:Enrichment:Enabled", "true"),
                 new("Chat:ThreadState:Enabled", "true"),
+                new("Chat:ReplyDrafting:Enabled", "true"),
                 new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),

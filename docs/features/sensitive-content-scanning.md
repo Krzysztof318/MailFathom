@@ -105,8 +105,8 @@ switching a scanner on leaves everybody else's rows exactly where they were.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-ten, and the register is closed: an eleventh is a code change rather than a configuration one, which is what makes the
-list below answerable by reading it.
+eleven, and the register is closed: a twelfth is a code change rather than a configuration one, which is what makes
+the list below answerable by reading it.
 
 | Egress point | What crosses it |
 | --- | --- |
@@ -119,6 +119,7 @@ list below answerable by reading it.
 | `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
 | `client_citation_resolution` | The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands |
 | `client_thread_state` | The block the client API answers a conversation's state with: each statement a derivation wrote about where the exchange stands, and the name a commitment is owed by |
+| `client_reply_draft` | The reply the client API drafts: the body somebody is about to edit and send, and each claim it asserts. The addresses it proposes do not cross here, being values this deployment resolved out of its own store rather than text a producer wrote |
 | `attachment_download` | The extracted text of one attachment about to be streamed whole, on the signed link route and on the client's own attachment route alike — the one point whose subject is a file's own words rather than a message's |
 
 `client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
@@ -143,6 +144,11 @@ crosses there is not mail at all: it is a sentence a model wrote about the mail,
 reach it having been quoted rather than copied, and a finding here says a derivation repeated something a scanner had
 already caught upstream. It is also the one client point whose text was never in a message, which is what makes
 counting it separately worth the tag — a redaction rate mixed into the listing's would hide exactly that.
+
+`client_reply_draft` is apart from `client_thread_state` although both carry a model's own sentences rather than a
+message's: what crosses there is text a person is about to send under their own name, so a finding here is a credential
+about to leave the mailbox again rather than one quoted back onto a screen. Its bound is one report per draft rather
+than one per claim, because a draft is what a composer waits for.
 
 A [conversation](../operations/client-endpoint.md#the-conversation-route) shares the listing's tag rather than taking a
 tag of its own, because it publishes the same three values per message, to the same reader, in the same amounts. What it
@@ -193,7 +199,7 @@ instead, which is why `stopped` is a series either of them can produce and no ot
 [outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) states the difference
 in full and carries the download rule beneath it.
 
-A refusal at any of the nine fails the operation it guards, as [failing closed](#failing-closed) describes — the
+A refusal at any of them fails the operation it guards, as [failing closed](#failing-closed) describes — the
 question is not answered, the passages are not embedded, the listing is not served, the message is not returned, the
 send is not queued, the file is not served. What
 each guarded call found, refused, and cost is published; [telemetry § what guarding an egress point

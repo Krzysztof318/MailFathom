@@ -39,6 +39,7 @@ using MailFathom.Application.Emails.Extraction.Images;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.ReplyDrafts;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
@@ -131,6 +132,7 @@ using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Notifications;
 using MailFathom.Infrastructure.Persistence.Portraits;
 using MailFathom.Infrastructure.Persistence.Preferences;
+using MailFathom.Infrastructure.Persistence.ReplyDrafts;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Secrets;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -715,6 +717,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailPreviewReader, StoredEmailPreviewReader>();
         services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
         services.AddScoped<IStoredThreadStateReader, StoredThreadStateReader>();
+        // Registered whatever the deployment decided about drafting, because it reads stored mail and nothing else:
+        // what the switch decides is whether anything asks it, and the use case that would is registered with the agent.
+        services.AddScoped<IReplyDraftSourceReader, ReplyDraftSourceStore>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<IEmailAttachmentMatchReader, EmailAttachmentMatchReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();

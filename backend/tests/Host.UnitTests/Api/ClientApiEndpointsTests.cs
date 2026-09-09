@@ -174,6 +174,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.RecordRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.ExchangeRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientSessionTokenEndpoints.RevocationRoute}",
@@ -249,6 +251,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -272,6 +275,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientUserRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientSessionTokenEndpoints.ExchangeRoute} -> none",
                 $"POST {prefix}{ClientSessionTokenEndpoints.RevocationRoute} -> none",
                 $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -444,7 +448,7 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}";
 
-    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, or reads a sentence into a search, by the three routes they are served at.</summary>
+    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, reads a sentence into a search, or drafts a reply, by the four routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the writes above are named that way — but the grant is what
     /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.mail.ask</c> is what sends mail to a
@@ -457,14 +461,18 @@ public sealed class ClientApiEndpointsTests
     /// typed sentence into filters is the third and changes nothing at all — it answers with an interpretation the
     /// screen draws and the caller then searches with — and it is a <c>POST</c> for the first of those reasons alone,
     /// the sentence being exactly the value a request line would publish to every log in front of this deployment.
-    /// Naming the three keeps the claim narrow.
+    /// Drafting a reply is the fourth and changes nothing either: what it answers with is text in the composer, which
+    /// its author edits, discards, or saves through the drafting routes that do carry a write grant, and it is a
+    /// <c>POST</c> for that same first reason — what somebody asks a reply to say is as revealing as the
+    /// correspondence it answers. Naming the four keeps the claim narrow.
     /// </remarks>
     private static bool AsksAQuestionOfTheCallersOwnMail(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}");
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientReplyDraftingEndpoint.ReplyDraftingRoute}");
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

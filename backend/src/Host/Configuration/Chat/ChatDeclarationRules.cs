@@ -153,6 +153,18 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ThreadState)}:{nameof(ThreadStateOptions.Enabled)} — whether a conversation is read into a state decides which deriver the pass resolves, so turning it on or off needs a restart rather than a configuration reload.");
         }
 
+        if (candidate.ReplyDrafting.Enabled != composed.ReplyDrafting.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ReplyDrafting)}:{nameof(ReplyDraftingOptions.Enabled)} — whether a reply is drafted decides whether the drafting is registered at all, which is what a composer reads to know whether to offer one, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
+        if (candidate.ReplyDrafting.StyleFromSentMail != composed.ReplyDrafting.StyleFromSentMail)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ReplyDrafting)}:{nameof(ReplyDraftingOptions.StyleFromSentMail)} — where a draft's manner comes from is decided while the drafting is registered, so changing which mail one reads needs a restart rather than a configuration reload.");
+        }
+
         if (candidate.SearchPhrasing.Enabled != composed.SearchPhrasing.Enabled)
         {
             errors.Add(

@@ -871,6 +871,15 @@ internal static class HostComposition
                 builder.Services.AddMailSearchPhraseAgent();
             }
 
+            // The same arrangement again, for the reply a composer offers to draft: registered or not registered is the
+            // whole of the switch, so an instance that declined it serves a composer somebody writes in themselves and
+            // says it drafts nothing, rather than offering a button that fails. The second decision travels with the
+            // registration because it is about which mail is read rather than about whether anything is.
+            if (declaredChat.ReplyDrafting.Enabled)
+            {
+                builder.Services.AddReplyDraftAgent(declaredChat.ReplyDrafting.StyleFromSentMail);
+            }
+
             // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
             // AddInfrastructure below, because it decorates the retrieval that call registers. Scoped for the reason the
             // generation plan is: the two numbers it carries are a lookup's, and whether the pass runs at all is the part

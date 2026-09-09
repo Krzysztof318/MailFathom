@@ -43,6 +43,9 @@
 - name: A conversation's state
   href: thread-state.md
   description: How a correspondence is read once into what it settled, what it left open, what anybody undertook and how a document changed, what puts it back in the queue, and what a client draws where there is none.
+- name: Drafting a reply
+  href: reply-drafting.md
+  description: How a first version of a reply is written out of the conversation it answers and the way the account writes, what each claim it makes is backed by, and why nothing about it is sent or stored.
 - name: Chat generation
   href: chat-generation.md
   description: What a deployment declares to make a chat call, what one call is allowed to spend, and how an operator sees whether the provider is working.
