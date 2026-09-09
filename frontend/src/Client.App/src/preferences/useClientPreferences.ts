@@ -111,7 +111,7 @@ const heldForNobody: HeldPreferences = {
  * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
  * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
  * person the last person's answer.
- * @returns The settings in force, and the five ways of changing one.
+ * @returns The settings in force, and the six ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,

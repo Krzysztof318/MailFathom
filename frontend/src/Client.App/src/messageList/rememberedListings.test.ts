@@ -168,6 +168,14 @@ describe('rememberedListing', () => {
                 },
             },
         ],
+        [
+            'a due window carrying one bound, which the control that writes it puts in force as a pair',
+            { ...kept, filters: { ...kept.filters, markAspect: 'Commitment', markDueFrom: '2026-09-03T00:00' } },
+        ],
+        [
+            'a due window carrying only its end, for the same reason',
+            { ...kept, filters: { ...kept.filters, markAspect: 'Commitment', markDueTo: '2026-09-10T00:00' } },
+        ],
         ['a switch that is neither shown nor hidden', { ...kept, readingsShown: 'yes' }],
         ['a listing that is not a record', 'the inbox'],
     ])('opens at the leading end for a record carrying %s', (_, written) => {

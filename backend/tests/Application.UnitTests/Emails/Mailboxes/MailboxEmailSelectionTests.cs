@@ -377,7 +377,6 @@ public sealed class MailboxEmailSelectionTests
         Assert.Equal(3, new[] { whole, conversation, selection }.Distinct(StringComparer.Ordinal).Count());
     }
 
-    /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
     /// <summary>A list narrowed by a derived reading is a different walk, so a cursor cannot cross between the two.</summary>
     [Fact]
     public void CanonicalText_SelectionsDifferingOnlyInTheMarkTheyRequire_AreNotOneWalk()
@@ -396,6 +395,7 @@ public sealed class MailboxEmailSelectionTests
         Assert.Equal(3, new[] { everything, commitments, dueThisWeek }.Distinct().Count());
     }
 
+    /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
     private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();

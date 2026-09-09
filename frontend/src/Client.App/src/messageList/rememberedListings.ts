@@ -243,6 +243,14 @@ function filtersIn(value: unknown): MailListFilters | null {
         return null;
     }
 
+    // The due window is written and cleared as a pair — the one control that sets it puts both bounds in force or
+    // takes both off, and a standing view clears both — so a record carrying one of them is a record this client
+    // never wrote. Refused rather than read: an open-ended commitment filter nobody chose would narrow the folder
+    // while the panel drew the window as off, which is the case this file exists to keep out.
+    if ((markDueFrom === null) !== (markDueTo === null)) {
+        return null;
+    }
+
     // A span resolves to a start and no end the moment it is picked, so a record pairing one with a missing start or
     // with an end is a record this client never wrote. Both are refused rather than read: the panel draws neither
     // field while a span is lit, so a bound arriving that way would narrow the folder where nothing shows it.

@@ -59,7 +59,7 @@ export function Settings({
     /** Who the client is drawing, and the three ways this surface changes it. */
     readonly profile: OwnProfileInForce;
 
-    /** The settings that follow the person, of which this surface edits three. */
+    /** The settings that follow the person, of which this surface edits four. */
     readonly preferences: ClientPreferencesInForce;
 
     /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
