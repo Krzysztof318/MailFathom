@@ -104,13 +104,18 @@ const nothingRead: Answered = {
  * They stand while the accounts of the attempt now in flight are still being read, for the reason {@link Answered}
  * gives: a folder tree emptied on every re-read is a folder tree emptied every time an account finishes a run. An
  * answer for another address or another person is not kept, which is the same comparison that decides what is drawn.
+ *
+ * A grant that no longer reads mail keeps nothing either, and it is the one case that is not about who is reading. The
+ * attempt holding it asks for no accounts at all, so nothing later in it replaces what stands — a tree left up here
+ * would go on offering mail the deployment has begun refusing, for as long as that person stayed signed in.
  */
 function accountsStillStanding(
     previous: Answered,
     baseAddress: string,
     presenting: string,
+    readsMail: boolean,
 ): Pick<Answered, 'accounts' | 'readAt'> {
-    return previous.presentedAt === baseAddress && previous.presenting === presenting
+    return readsMail && previous.presentedAt === baseAddress && previous.presenting === presenting
         ? { accounts: previous.accounts, readAt: previous.readAt }
         : { accounts: null, readAt: null };
 }
@@ -256,6 +261,8 @@ export function useConnection(
 
             setReaching({ made: 0, presentedAt: baseAddress, presenting });
 
+            const readsMail = offers(session.value, 'readMail');
+
             // On the screen as soon as it is known rather than once the accounts beside it are: what it decides — the
             // spaces, the controls, the deployment's version — is answerable now, and holding it back would leave the
             // frame saying it is still reaching a deployment that has already answered.
@@ -265,7 +272,7 @@ export function useConnection(
             // the freshness line keeps the instant those were read at rather than blanking twice per run.
             setAnswered((previous) => ({
                 session,
-                ...accountsStillStanding(previous, baseAddress, presenting),
+                ...accountsStillStanding(previous, baseAddress, presenting, readsMail),
                 presentedAt: baseAddress,
                 presenting,
             }));
@@ -273,7 +280,7 @@ export function useConnection(
             // A credential that may not read mail is never asked for it. The refusal would be the service's to give
             // and it would arrive as a failure on a screen, where what is true is that the client is not offering
             // something rather than that something went wrong.
-            if (!offers(session.value, 'readMail')) {
+            if (!readsMail) {
                 return;
             }
 

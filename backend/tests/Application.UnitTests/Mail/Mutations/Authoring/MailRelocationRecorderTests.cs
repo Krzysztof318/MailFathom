@@ -336,7 +336,6 @@ public sealed class MailRelocationRecorderTests
         this.bindings.Bind(Account.Id, alias, remotePath);
     }
 
-    /// <summary>Maps a folder no run schedules, which is resolved against what the server advertises at the moment it is needed.</summary>
     /// <summary>A move a person watched themselves ask for must not sit under <i>moving to trash</i> until the interval is out.</summary>
     [Fact]
     public async Task RecordAsync_AMove_BringsTheAccountsNextSynchronizationRunForward()
@@ -355,6 +354,7 @@ public sealed class MailRelocationRecorderTests
         Assert.True(waiting.Token.IsCancellationRequested);
     }
 
+    /// <summary>Maps a folder no run schedules, which is resolved against what the server advertises at the moment it is needed.</summary>
     private void MapUnmirrored(MailFolderAlias alias, string remotePath)
     {
         this.mappings.With(

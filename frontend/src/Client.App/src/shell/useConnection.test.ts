@@ -180,6 +180,47 @@ describe('useConnection', () => {
         expect(result.current.readAt).toEqual(readAt);
     });
 
+    // The other half of keeping what was read: a grant that stopped reading mail asks for no accounts at all, so
+    // nothing later in the attempt replaces the tree that stands — and one left up goes on offering mail the
+    // deployment has begun refusing, for as long as that person stays signed in.
+    it('drops what it read once the grant it read under stops reading mail', async () => {
+        const readsNothing = answering({
+            service: 'MailFathom',
+            version: '0.8.7',
+            permissions: [],
+        });
+
+        let narrowed = false;
+        const narrowingTheGrant: DeploymentTransport = () => (request) => {
+            if (request.path.endsWith('/session')) {
+                return Promise.resolve(narrowed ? readsNothing : readsMail);
+            }
+
+            return Promise.resolve(oneAccount);
+        };
+
+        const { result } = renderHook(() =>
+            useConnection(baseAddress, firstPerson, narrowingTheGrant, nothingToDo, clock),
+        );
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        narrowed = true;
+
+        act(() => {
+            result.current.reread();
+        });
+
+        await waitFor(() => {
+            expect(result.current.accounts).toBeNull();
+        });
+
+        expect(result.current.readAt).toBeNull();
+        expect(result.current.session?.outcome).toBe('read');
+    });
+
     // The comparison that decides what is drawn is the address and the person, and only they: the previous user's
     // accounts and the previous user's grants must not stand while the next person's read is out.
     it('draws nothing of the last person once somebody else signs in', async () => {

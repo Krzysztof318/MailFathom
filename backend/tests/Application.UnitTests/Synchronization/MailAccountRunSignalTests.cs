@@ -98,6 +98,28 @@ public sealed class MailAccountRunSignalTests
         Assert.True(waiting.Token.IsCancellationRequested);
     }
 
+    /// <summary>The raise that ended a wait owns what is behind it from that moment, and the waiter still reads and ends that wait on the way out.</summary>
+    [Fact]
+    public void Dispose_AWaitARaiseAlreadyEnded_EndsWithoutDisturbingTheSignal()
+    {
+        // Arrange
+        var signal = new MailAccountRunSignal();
+        var waiting = signal.Register(Account, CancellationToken.None);
+        signal.BringForward(Account);
+
+        // Act
+        waiting.Dispose();
+
+        // Assert
+        Assert.True(waiting.Token.IsCancellationRequested);
+
+        signal.BringForward(Account);
+
+        using var next = signal.Register(Account, CancellationToken.None);
+
+        Assert.True(next.Token.IsCancellationRequested);
+    }
+
     /// <summary>A wait already over must not take the next one's, which would be a change waiting out the interval it was raised to avoid.</summary>
     [Fact]
     public void BringForward_AfterTheWaitItWouldHaveEndedWasDisposed_IsKeptForTheNextWait()

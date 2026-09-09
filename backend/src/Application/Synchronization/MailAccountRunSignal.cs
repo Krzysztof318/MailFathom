@@ -60,28 +60,41 @@ public sealed class MailAccountRunSignal
     /// </remarks>
     public sealed class Wait : IDisposable
     {
-        private readonly AccountWait waiting;
+        private readonly AccountWait? registration;
         private readonly CancellationTokenSource ending;
 
-        internal Wait(AccountWait waiting, CancellationTokenSource ending)
+        /// <summary>Holds one wait, and where it is registered decides what ends the source behind it.</summary>
+        /// <param name="registration">The account this wait is registered against, or <see langword="null" /> where a standing raise was spent instead of registering it — in which case nothing else can reach the source and this wait ends it itself.</param>
+        /// <param name="ending">The source the wait is made under.</param>
+        internal Wait(AccountWait? registration, CancellationTokenSource ending)
         {
-            this.waiting = waiting;
+            this.registration = registration;
             this.ending = ending;
+
+            // Read once rather than on demand: a raise that takes this wait disposes the source it took, and a token
+            // stays readable after its source is disposed while the source itself does not.
+            this.Token = ending.Token;
         }
 
         /// <summary>Gets the token the wait is made under, cancelled by a raise or by whatever it was linked to.</summary>
-        public CancellationToken Token => this.ending.Token;
+        public CancellationToken Token { get; }
 
         /// <inheritdoc />
         /// <remarks>
-        /// Taking the registration off is what makes the next raise a kept one rather than a cancellation of a source
+        /// Giving the registration back is what makes the next raise a kept one rather than a cancellation of a source
         /// nobody is waiting on — which would be a raise spent on nothing and a change waiting out the interval it was
-        /// raised to avoid.
+        /// raised to avoid. A raise that got there first owns the source instead, so this ends without disposing it.
         /// </remarks>
         public void Dispose()
         {
-            this.waiting.Unregister(this.ending);
-            this.ending.Dispose();
+            if (this.registration is null)
+            {
+                this.ending.Dispose();
+
+                return;
+            }
+
+            this.registration.Release(this.ending);
         }
     }
 
@@ -94,64 +107,70 @@ public sealed class MailAccountRunSignal
 
         internal void BringForward()
         {
-            CancellationTokenSource? waiting;
+            CancellationTokenSource? claimed;
 
             lock (this.gate)
             {
-                waiting = this.registered;
+                claimed = this.registered;
 
-                if (waiting is null)
+                if (claimed is null)
                 {
                     this.raised = true;
 
                     return;
                 }
 
-                // Taken off here rather than when it is disposed, so this raise is the one that ends this wait and a
-                // second raise arriving behind it is kept for the wait after rather than cancelling the same source.
+                // Taken off here rather than when the wait is disposed, so this raise is the one that ends this wait,
+                // a second raise arriving behind it is kept for the wait after rather than cancelling the same source,
+                // and the wait that held it stops owning it — which is what makes the two lines below safe outside the
+                // gate rather than a race against that wait's own disposal.
                 this.registered = null;
             }
 
-            // Cancelled outside the lock, because a cancellation callback runs on the thread that cancels and this one
-            // is on the path a person's own request returns through.
-            waiting.Cancel();
+            // Cancelled outside the gate, because a cancellation callback runs on the thread that cancels: this one is
+            // on the path a person's own request returns through, and a run woken here must not resume holding the
+            // account's gate.
+            claimed.Cancel();
+            claimed.Dispose();
         }
 
         internal Wait Register(CancellationToken stopping)
         {
             var ending = CancellationTokenSource.CreateLinkedTokenSource(stopping);
-            var alreadyRaised = false;
 
             lock (this.gate)
             {
-                if (this.raised)
-                {
-                    this.raised = false;
-                    alreadyRaised = true;
-                }
-                else
+                if (!this.raised)
                 {
                     this.registered = ending;
+
+                    return new Wait(this, ending);
                 }
+
+                this.raised = false;
             }
 
-            if (alreadyRaised)
-            {
-                ending.Cancel();
-            }
+            // Nothing holds this token yet, so spending the raise runs no callback, and nothing was registered, so no
+            // raise can reach the source: the wait it is handed to is the only thing that ends it.
+            ending.Cancel();
 
-            return new Wait(this, ending);
+            return new Wait(registration: null, ending);
         }
 
-        internal void Unregister(CancellationTokenSource ending)
+        internal void Release(CancellationTokenSource ending)
         {
             lock (this.gate)
             {
-                if (ReferenceEquals(this.registered, ending))
+                if (!ReferenceEquals(this.registered, ending))
                 {
-                    this.registered = null;
+                    // A raise claimed it and owns what becomes of it.
+                    return;
                 }
+
+                this.registered = null;
             }
+
+            ending.Dispose();
         }
     }
 }

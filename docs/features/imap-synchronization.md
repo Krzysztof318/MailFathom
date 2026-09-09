@@ -564,10 +564,13 @@ on a server without `MOVE` is a copy, a flag, and an expunge, and a process that
 mailbox nothing can interpret afterwards. A second run reads the record and continues from the stage it names, so the
 message ends up filed once whichever command the stop landed between.
 
-**Writing the record also ends the account's wait.** What issues the change is the account's ordinary synchronization
-run, so without that the change would sit until the interval was out — and on an account in push mode until the mail
-*server* reported something, which a change authored here never is. The raise carries nothing, because the run reads
-the records rather than the raise, and it is one per account rather than one per change, so a hundred messages filed at
+**A change somebody asked for also ends the account's wait** — a change recorded by the client's mutation routes or by
+`set_mail_flags`, and not the other two origins above. What issues any of them is the account's ordinary
+synchronization run, so a change nothing brought that run forward for sits until the interval is out, and on an account
+in push mode until the mail *server* reports something, which a change authored here never is. A rule's action and a
+spam verdict's keep that wait: both are recorded inside a pass that is already running, and the run that carries them
+is the next one whether or not anything ends the wait early. The raise carries nothing, because the run reads the
+records rather than the raise, and it is one per account rather than one per change, so a hundred messages filed at
 once bring a single run forward. It is a hint and not a queue entry: never awaited, never retried, and one lost delays
 a change to the interval rather than dropping it. One arriving while the account is mid-run is the ordinary case rather
 than a corner, since the record is usually written while a run is under way, so it is kept and spent by the wait that
