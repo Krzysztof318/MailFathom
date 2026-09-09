@@ -155,6 +155,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             ? await MailBodyProjection.ProduceAsync(
                 message,
                 htmlParts,
+                plainTextBody.Text,
                 bounds.RetainRemoteImageReferences,
                 EmailBodyCharacterAllowance.Of(bounds.MaxCharactersPerRepresentation, remainingCharacters).MaxCharacters,
                 bounds.RemainingInlineImageOctetsForRead,

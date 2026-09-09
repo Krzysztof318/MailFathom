@@ -216,7 +216,7 @@ internal sealed class MailBodyReducer
 
             case "table":
                 this.Flush(blocks, pending, context);
-                this.EmitTable(element, inside, blocks);
+                this.EmitTable(element, context, inside, blocks);
 
                 break;
 
@@ -519,9 +519,33 @@ internal sealed class MailBodyReducer
         }
     }
 
-    private void EmitTable(IElement element, MailReductionContext context, List<MailDocumentBlock> blocks)
+    /// <summary>Emits one table, which in mail is more often a box the sender laid out than a table of anything.</summary>
+    /// <param name="element">The table as the message wrote it.</param>
+    /// <param name="around">What the table itself sits inside, which a layout table's content is drawn under.</param>
+    /// <param name="inside">What the table asked for, which its cells inherit where it is a table of data.</param>
+    /// <param name="blocks">The blocks being built.</param>
+    /// <remarks>
+    /// A layout table is unwrapped rather than drawn, because a pane that draws one as a table draws a newsletter as a
+    /// bordered card inside a bordered card inside another. What the alignment on such a table said is dropped with it:
+    /// it described where the box it positioned sat, not how the words inside that box read, and carrying it into the
+    /// unwrapped content is what centres a whole message that was only ever centred as a column.
+    /// </remarks>
+    private void EmitTable(
+        IElement element,
+        MailReductionContext around,
+        MailReductionContext inside,
+        List<MailDocumentBlock> blocks)
     {
-        var table = MailTableReducer.Reduce(element, context, this);
+        if (MailTableReducer.IsLayout(element))
+        {
+            this.EmitRange(
+                blocks,
+                MailTableReducer.Unwrap(element, inside with { Alignment = around.Alignment }, this));
+
+            return;
+        }
+
+        var table = MailTableReducer.Reduce(element, inside, this);
 
         if (table is not null)
         {
@@ -762,7 +786,18 @@ internal sealed class MailBodyReducer
             merged[^1] = merged[^1] with { Text = merged[^1].Text.TrimEnd(' ') };
         }
 
-        return [.. merged.Where(run => run.Text.Length > 0)];
+        // The addresses a message wrote as words become links here rather than earlier, because splitting before the
+        // join would produce a run per fragment for the join to put back together — and because this is the last point
+        // at which the words of one block are all in hand, which is what makes the run bound the same bound the join
+        // is held to.
+        var expanded = MailTextLinks.Expanded(
+            [.. merged.Where(run => run.Text.Length > 0)],
+            this.Bounds.MaximumRunsPerBlock,
+            out var stoppedAtTheRunBound);
+
+        this.truncated |= stoppedAtTheRunBound;
+
+        return expanded;
     }
 
     private static bool SameFormatting(MailInlineRun left, MailInlineRun right) =>

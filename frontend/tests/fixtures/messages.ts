@@ -41,8 +41,18 @@ export const senderPictureHost = 'pictures.invalid';
 /** The address of the picture the newsletter asks for, retained only where the reader asked for the sender's pictures. */
 export const senderPicture = `https://${senderPictureHost}/mark.png`;
 
-/** The host the script inside the sender's markup fetches from, so a request to it is that script having run. */
+/**
+ * The host a script would fetch from if one ever reached this surface, so a request to it is that having happened.
+ *
+ * Nothing in the corpus writes one any more, which is the point: ADR 0024's fourth question grants both markup
+ * surfaces `allow-scripts`, so what keeps a message inert there is the representation carrying nothing executable
+ * rather than the frame refusing to run it. A corpus that served a script would therefore be serving something the
+ * service never produces, and the browser would run it — proving the flag rather than the promise.
+ */
 export const senderScriptHost = 'ranscript.invalid';
+
+/** Where the link inside the sender's markup goes, which is what a reader following one has to arrive at. */
+export const senderLink = 'https://offers.invalid/spring';
 
 function run(text: string, overrides: Readonly<Record<string, unknown>> = {}) {
     return { text, emphasis: 'None', foreground: null, link: null, ...overrides };
@@ -111,17 +121,20 @@ export function newsletterBlocks(pictureSource: string) {
  * The sender's own markup, as the self-contained representation serves it: pictures inlined and remote addresses gone,
  * unless the reader asked for this one message's pictures.
  *
- * It carries a script deliberately, which the representation itself never would. What that stands in for is the second
- * mechanism ADR 0024 keeps on this surface — the frame permits no script whatever the markup holds, so a representation
- * that ever stopped removing one would still not run it. The script fetches from a host of its own, so a browser says
- * whether it ran without anything having to read inside a frame it cannot reach into.
+ * It carries nothing executable, which is what the representation guarantees and — since ADR 0024's fourth question
+ * granted both markup surfaces `allow-scripts` — is the whole of what keeps a message inert on them. A corpus writing
+ * a script here would be serving what the service never serves, and the frame would run it.
+ *
+ * The link is what the granted flag buys: the frame permits script so a press can be reported out to the parent, and
+ * the words are wrapped in a `span` because that is where a press actually lands — a handler trusting the event's own
+ * target would find the element inside the anchor rather than the anchor.
  */
 export function senderMarkup(remoteImages: boolean): string {
     const picture = remoteImages ? senderPicture : transparentPicture;
 
     return (
         `<html><body><h1>${newsletterHeading}</h1>` +
-        `<script>new Image().src = "https://${senderScriptHost}/beacon.png";</script>` +
+        `<p><a href="${senderLink}"><span>Read the offers</span></a></p>` +
         `<img src="${picture}" alt="A mark">` +
         '</body></html>'
     );

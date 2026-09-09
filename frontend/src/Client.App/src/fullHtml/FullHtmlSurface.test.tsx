@@ -6,6 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { FullHtmlSurface } from './FullHtmlSurface';
 
 // The network boundary is the transport and it is the whole of what these tests fake, so the query the surface asks
@@ -99,13 +100,15 @@ async function drawing(
 ): Promise<(nowOnline: boolean) => void> {
     const surface = (hasNetwork: boolean) => (
         <LocalizationProvider>
-            <FullHtmlSurface
-                session={session}
-                transport={transport}
-                storedEmailId={messageId}
-                online={hasNetwork}
-                onClose={onClose}
-            />
+            <LinkOpenerContext value={() => Promise.resolve()}>
+                <FullHtmlSurface
+                    session={session}
+                    transport={transport}
+                    storedEmailId={messageId}
+                    online={hasNetwork}
+                    onClose={onClose}
+                />
+            </LinkOpenerContext>
         </LocalizationProvider>
     );
 

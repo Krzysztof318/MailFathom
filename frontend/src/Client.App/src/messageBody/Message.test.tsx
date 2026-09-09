@@ -2,11 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { StrictMode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import { Message } from './Message';
 import { useMessageBody } from './useMessageBody';
@@ -101,48 +102,51 @@ function readingOneMessage(storedEmailId = 'stub-message') {
     return render(reading(storedEmailId));
 }
 
-function reading(storedEmailId: string) {
+/** Everything a message is drawn inside of, which is what the composition root supplies around one. */
+function Screen({ children }: { readonly children: ReactNode }) {
     return (
         <StrictMode>
             <LocalizationProvider>
-                <ReadMessage storedEmailId={storedEmailId} />
+                <LinkOpenerContext value={() => Promise.resolve()}>{children}</LinkOpenerContext>
             </LocalizationProvider>
         </StrictMode>
+    );
+}
+
+function reading(storedEmailId: string) {
+    return (
+        <Screen>
+            <ReadMessage storedEmailId={storedEmailId} />
+        </Screen>
     );
 }
 
 /** The same message read as a conversation reads one, where the history it quoted is folded away. */
 function readingInAConversation() {
     return render(
-        <StrictMode>
-            <LocalizationProvider>
-                <ReadMessage storedEmailId="stub-message" quotedHistoryOnRequest />
-            </LocalizationProvider>
-        </StrictMode>,
+        <Screen>
+            <ReadMessage storedEmailId="stub-message" quotedHistoryOnRequest />
+        </Screen>,
     );
 }
 
 /** The same message, with somebody listening for its words having reached the screen. */
 function readingReported(onBodyDrawn: () => void, storedEmailId = 'stub-message') {
     return (
-        <StrictMode>
-            <LocalizationProvider>
-                <ReadMessage storedEmailId={storedEmailId} onBodyDrawn={onBodyDrawn} />
-            </LocalizationProvider>
-        </StrictMode>
+        <Screen>
+            <ReadMessage storedEmailId={storedEmailId} onBodyDrawn={onBodyDrawn} />
+        </Screen>
     );
 }
 
 /** The same message read by somebody whose messages are the sender's own markup, or the reduced text. */
 function readingUnder(embeddedHtmlMessages: boolean) {
     return (
-        <StrictMode>
-            <LocalizationProvider>
-                <EmbeddedHtmlMessagesContext value={embeddedHtmlMessages}>
-                    <ReadMessage storedEmailId="stub-message" />
-                </EmbeddedHtmlMessagesContext>
-            </LocalizationProvider>
-        </StrictMode>
+        <Screen>
+            <EmbeddedHtmlMessagesContext value={embeddedHtmlMessages}>
+                <ReadMessage storedEmailId="stub-message" />
+            </EmbeddedHtmlMessagesContext>
+        </Screen>
     );
 }
 

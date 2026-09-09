@@ -1077,17 +1077,56 @@ async function showTheSenderMarkup(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Show the HTML' }).click();
 }
 
-test('draws the sender own markup in a frame that permits neither script nor an origin', async ({ page }) => {
+test('draws the sender own markup in a frame that permits no origin and no way out of itself', async ({ page }) => {
     await openTheFirstMessage(page);
     await showTheSenderMarkup(page);
 
     const frame = page.locator(`iframe[title="${markupFrame}"]`);
 
-    await expect(frame).toHaveAttribute('sandbox', '');
+    // `allow-scripts` alone, which ADR 0024's fourth question settles: no `allow-same-origin`, so the framed document
+    // holds an opaque origin and reaches nothing of the page, and no `allow-popups` and no `allow-top-navigation`, so
+    // the only way a link leaves the frame is the report the next test follows. What holds *nothing in the message
+    // runs* is then the representation rather than the value asserted here, which is what the test below proves.
+    await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
     await expect(frame).toHaveAttribute('srcdoc', /This week at Example/);
 });
 
-test('runs nothing the markup carries, and reaches no host but its own until the reader asks', async ({ page }) => {
+test('opens a link the sender wrote out of the application, and navigates nothing', async ({ page }) => {
+    await openTheFirstMessage(page);
+    await showTheSenderMarkup(page);
+
+    const frame = page.frameLocator(`iframe[title="${markupFrame}"]`);
+    const asked: string[] = [];
+
+    // What the new context asked for rather than where it ended up. Nothing in this suite resolves, so the address the
+    // reader was taken to settles as a browser error page — the request is the observable act, exactly as it is in the
+    // remote-picture check above.
+    page.context().on('request', (request) => {
+        asked.push(request.url());
+    });
+
+    const opened = page.context().waitForEvent('page');
+
+    // The press lands on the `span` inside the anchor rather than on the anchor, which is where a real one lands and
+    // is what the script inside the frame reads the tree upwards for.
+    await frame.getByText('Read the offers').click();
+
+    // `window.open` with `noopener` gives the new context no opener, so it arrives on the context rather than as this
+    // page's popup. That it arrives at all is half the assertion: a frame granting no popup and no top navigation
+    // would otherwise have swallowed the press, which is what this surface did before #1797.
+    const context = await opened;
+
+    await expect.poll(() => asked).toContain(messages.senderLink);
+
+    // And the application is still where it was. A link that navigated the top-level context would have discarded the
+    // session and the message with it, which is the failure `allow-top-navigation` would have bought.
+    await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
+
+    await context.close();
+});
+
+test('carries nothing that runs, and reaches no host but its own until the reader asks', async ({ page }) => {
     const hosts = new Set<string>();
 
     page.on('request', (request) => {
@@ -1102,18 +1141,20 @@ test('runs nothing the markup carries, and reaches no host but its own until the
     // window is what the reader is looking at, and it is that one's promise being asserted.
     const surface = page.getByRole('region', { name: "The sender's own version of this message" });
 
-    // The script inside the frame fetches from a host of its own, so a request to it would be that script having run.
-    // The picture's host is the other half: the representation carries no address for it until the reader asks, so a
-    // frame that fetched one would be drawing markup this client composed rather than the one it was served. The
-    // sentence under the frame is the design project's own wording of that promise, which #1693 brought the surface to.
+    // The picture's host is what the anti-tracking promise is measured against: the representation carries no address
+    // for it until the reader asks, so a frame that fetched one would be drawing markup this client composed rather
+    // than the one it was served. The script host stands beside it as the shape of the other promise rather than as a
+    // proof of it — since #1797 the frame permits script, so what keeps a message inert is that the representation
+    // holds nothing executable, which is the service's own suite to prove and is why the corpus writes none. The
+    // sentence under the frame is the design project's own wording of both, which #1693 brought the surface to.
     await expect(surface.getByText(/scripts and remote content are blocked/)).toBeVisible();
     expect([...hosts]).not.toContain(messages.senderScriptHost);
     expect([...hosts]).not.toContain(messages.senderPictureHost);
 
     await surface.getByRole('button', { name: 'Load pictures from the sender' }).click();
 
-    // Asking is what makes the request, on this surface exactly as in the pane. The script is unaffected by it: the
-    // consent restores addresses and never restores anything that runs.
+    // Asking is what makes the request, on this surface exactly as in the pane. What it restores is addresses and
+    // nothing else: the consent widens what may be fetched and never widens what may run.
     await expect(surface.getByText(/their servers can tell it was opened/)).toBeVisible();
     await expect.poll(() => [...hosts]).toContain(messages.senderPictureHost);
     expect([...hosts]).not.toContain(messages.senderScriptHost);

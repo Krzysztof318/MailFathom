@@ -256,16 +256,21 @@ public sealed class MailBodyProjectionTests
         Assert.Equal(0, document.RemovedRemoteReferenceCount);
     }
 
-    /// <summary>A message with no markup at all is refused with the reason a reader can act on.</summary>
+    /// <summary>A message carrying no body at all is refused with the reason a reader can act on.</summary>
+    /// <remarks>
+    /// The refusal names what is missing rather than which representation is missing: a message that wrote no markup
+    /// but wrote words is drawn from the words, so the only message left with nothing to reduce is one that carried
+    /// neither.
+    /// </remarks>
     [Fact]
-    public async Task ProduceAsync_MessageWithNoHtmlPart_IsRefusedAsHavingNone()
+    public async Task ProduceAsync_MessageWithNoBodyAtAll_IsRefusedAsHavingNone()
     {
         // Arrange
         var content = MimeFixtures.StoredMessage(
             "From: sender@example.test",
             "Content-Type: text/plain; charset=utf-8",
             string.Empty,
-            "Just words.");
+            string.Empty);
 
         // Act
         var document = await DocumentOf(content);
@@ -433,6 +438,91 @@ public sealed class MailBodyProjectionTests
         // Assert
         Assert.Equal(1, document.RemovedRemoteReferenceCount);
         Assert.DoesNotContain("tracker.test", Sources(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A table that declares itself presentational is the sender's layout, so the reader is given its content.</summary>
+    [Fact]
+    public async Task ProduceAsync_TableDeclaringItselfPresentational_IsUnwrappedIntoWhatItHeld()
+    {
+        // Arrange
+        const string Markup = """
+            <table role="presentation"><tr><td><p>Readable</p></td></tr></table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        Assert.Equal([nameof(MailParagraphBlock)], document.Blocks.Select(block => block.GetType().Name));
+        Assert.Equal("Readable", TextOf(document));
+    }
+
+    /// <summary>A one-column wrapper around the next box is layout, however little it says about itself.</summary>
+    [Fact]
+    public async Task ProduceAsync_OneColumnTableWrappingAnotherTable_IsUnwrappedIntoWhatItHeld()
+    {
+        // Arrange
+        const string Markup = """
+            <table><tr><td><table><tr><td>Readable</td></tr></table></td></tr></table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        Assert.Equal([nameof(MailParagraphBlock)], document.Blocks.Select(block => block.GetType().Name));
+        Assert.Equal("Readable", TextOf(document));
+    }
+
+    /// <summary>A layout table is walked under the same bounds a drawn one is, so unwrapping buys no free walk.</summary>
+    /// <remarks>
+    /// A wrapper is layout by being nested alone, so the rows inside one are a stranger's choice — and removing the
+    /// border is a decision about how content is drawn rather than a reason to walk a shape this reduction would have
+    /// refused to draw.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_LayoutTableWithMoreRowsThanTheBound_StopsAtItAndSaysSo()
+    {
+        // Arrange
+        var rows = string.Concat(
+            Enumerable
+                .Range(0, MailDocumentBounds.Default.MaximumTableRows + 20)
+                .Select(number => $"<tr><td>Row {number.ToString(CultureInfo.InvariantCulture)}</td></tr>"));
+
+        // Act
+        var document = await DocumentOf($"<table role=\"presentation\">{rows}</table>");
+
+        // Assert
+        Assert.True(document.Truncated);
+        Assert.DoesNotContain(
+            $"Row {(MailDocumentBounds.Default.MaximumTableRows + 10).ToString(CultureInfo.InvariantCulture)}",
+            TextOf(document),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A one-column table of sentences is as likely to be a table somebody drew, so it stays one.</summary>
+    /// <remarks>
+    /// This is the boundary the layout rule is written against rather than an incidental case: unwrapping every
+    /// single-column table would take the border off a list of dates, a changelog, and a set of terms, none of which
+    /// the sender wrote as paragraphs.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_OneColumnTableOfWords_IsStillDrawnAsATable()
+    {
+        // Arrange
+        const string Markup = """
+            <table>
+              <tr><td>First</td></tr>
+              <tr><td>Second</td></tr>
+            </table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(document.Blocks));
+        Assert.Equal(2, table.Rows.Count);
     }
 
     /// <summary>A row asking not to be drawn is not drawn, which a table's own walk has to decide for itself.</summary>
