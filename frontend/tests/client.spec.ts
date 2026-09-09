@@ -854,22 +854,31 @@ test('keeps the folder tree as it was left, across a reload', async ({ page }) =
     await openSignedIn(page, '/#/mail');
 
     const tree = page.getByRole('tree', { name: 'Mailboxes and folders' });
-    const everyMailbox = tree.getByRole('treeitem', { name: /^All mailboxes/ });
-
-    await everyMailbox.click();
-    await page.keyboard.press('ArrowLeft');
-    await expect(everyMailbox).toHaveAttribute('aria-expanded', 'false');
-
     const nested = tree.getByRole('treeitem', { name: /^2024/ });
+
     await nested.click();
     await expect(nested).toHaveAttribute('aria-selected', 'true');
+
+    // The level the corpus nests that folder under, folded away with it. The corpus holds one mailbox, which is a
+    // user the tree offers no row spanning every mailbox to, so what folds here is a level of a folder's own path.
+    const above = tree.getByRole('treeitem', { name: /^Archive/ });
+
+    await above.click();
+    await page.keyboard.press('ArrowLeft');
+    await expect(above).toHaveAttribute('aria-expanded', 'false');
 
     await page.reload();
 
     // A reload is a cold start, so what somebody was looking at is kept where the credential is kept and read back the
     // same way. Only a real document reloaded proves it was written rather than held: a remount in jsdom re-reads the
     // same process's storage, and what this asks is that a browser wrote it.
-    await expect(tree.getByRole('treeitem', { name: /^All mailboxes/ })).toHaveAttribute('aria-expanded', 'false');
+    const foldedAgain = tree.getByRole('treeitem', { name: /^Archive/ });
+
+    await expect(foldedAgain).toHaveAttribute('aria-expanded', 'false');
+
+    // The scope outlives the fold that hid the row standing for it, which is the other half of what was left here.
+    await foldedAgain.click();
+    await page.keyboard.press('ArrowRight');
     await expect(tree.getByRole('treeitem', { name: /^2024/ })).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -980,7 +989,7 @@ test('describes an attached file before it is fetched, and fetches it only when 
 
     // The file reaches the person as a file rather than as a page, which is a browser event and nothing jsdom has.
     expect((await offered).suggestedFilename()).toBe('orders.csv');
-    await expect(page.getByText('orders.csv was downloaded.')).toBeVisible();
+    await expect(page.getByText('File downloaded')).toBeVisible();
 });
 
 test('opens an attached file inside the client rather than handing it to the machine', async ({ page }) => {
