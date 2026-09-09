@@ -162,6 +162,95 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
         Assert.Contains(StoredEmailId.Create(storedArriving.Id), awaitingEvaluation);
     }
 
+    /// <summary>
+    /// The provider filed its own copy of the same message, so the one MailFathom appended goes and the provider's
+    /// stays — recognized as this deployment's own like the copy it replaced.
+    /// </summary>
+    /// <remarks>
+    /// Nothing about this is settleable without a real server and a real database. Which of the two occurrences the
+    /// withdrawal reaches is decided by an <c>APPENDUID</c> the server issued and a <c>UID EXPUNGE</c> it honours, and
+    /// whether the duplicate is found at all is a correlated existence test PostgreSQL evaluates over the messages a
+    /// real synchronization stored. The folder is recreated first, so the two occurrences this test counts are the
+    /// only ones in it.
+    /// </remarks>
+    [Fact]
+    public async Task WithdrawDuplicatedSentCopiesAsync_AProviderThatFiledItsOwnCopy_LeavesTheProvidersAndTakesItsOwn()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+
+        await mailbox.RecreateFolderAsync(SyntheticMailAccount.OutgoingCopyFolderPath, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(
+            orchestration,
+            cancellationToken,
+            filesSentCopies: true);
+
+        await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.OutgoingCopyFolderAlias,
+            SyntheticMailAccount.OutgoingCopyFolderPath,
+            cancellationToken);
+
+        var subject = $"outgoing-duplicate-{Guid.NewGuid():N}";
+        var queued = await EnqueueAsync(services, subject, cancellationToken);
+
+        await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailOutboxPass>().RunAsync(
+                SyntheticMailAccount.Account,
+                token),
+            cancellationToken);
+
+        var filed = (await FindAsync(services, queued.Id, cancellationToken)).FindFiling(OutgoingMailFiling.Sent);
+        Assert.NotNull(filed);
+        Assert.Equal(OutgoingMailFilingStage.Confirmed, filed.Stage);
+
+        // The provider's own act: the same bytes, the same identity, appended beside the copy this deployment made.
+        await mailbox.AppendSubmittedCopyAsync(
+            SyntheticMailAccount.OutgoingCopyFolderPath,
+            MimeOf(subject),
+            cancellationToken);
+
+        await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
+                SyntheticMailAccount.Account,
+                FiledCopyFolder,
+                token),
+            cancellationToken);
+
+        // Act
+        var withdrawals = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<OutgoingMailFilingPass>().WithdrawDuplicatedSentCopiesAsync(
+                SyntheticMailAccount.Account,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(
+            OutgoingMailFilingOutcome.Withdrawn,
+            Assert.Single(withdrawals, entry => entry.OutgoingEmailId == queued.Id).Outcome);
+
+        // The independent witness: one occurrence of the message left in the folder, and it is not the one this
+        // deployment appended.
+        var remaining = Assert.Single(
+            await mailbox.ReadAsync(SyntheticMailAccount.OutgoingCopyFolderPath, cancellationToken),
+            message => message.Subject == subject);
+        Assert.NotEqual(filed.Placement.Uid, remaining.Uid);
+
+        var withdrawn = (await FindAsync(services, queued.Id, cancellationToken)).FindFiling(OutgoingMailFiling.Sent);
+        Assert.NotNull(withdrawn);
+        Assert.Equal(OutgoingMailFilingStage.Withdrawn, withdrawn.Stage);
+        Assert.NotNull(withdrawn.WithdrawnAt);
+
+        // The provider's copy carries the join the withdrawn one had, so nothing downstream reads the message the user
+        // sent as mail that arrived for them.
+        var stored = await ReadStoredAsync(services, cancellationToken);
+        Assert.All(
+            stored.Where(email => email.Subject == subject),
+            email => Assert.Equal(queued.Id.Value, email.FiledFromOutgoingEmailId));
+    }
+
     private static async Task<OutgoingEmailRecord> EnqueueAsync(
         OrchestratedMailFathomServices services,
         string subject,

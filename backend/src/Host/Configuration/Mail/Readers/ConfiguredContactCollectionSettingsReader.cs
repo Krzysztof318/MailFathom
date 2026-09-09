@@ -42,26 +42,36 @@ internal sealed class ConfiguredContactCollectionSettingsReader : IContactCollec
 
     /// <summary>Builds every account's collection settings once, keyed by the account identifier the lookups arrive with.</summary>
     /// <remarks>
-    /// The own addresses are read once for the whole deployment and handed to every account's policy, because a user
-    /// writing from one of their mailboxes to another is not a correspondent of themselves. An entry whose text is
+    /// The own addresses are read once per owner and handed to each of that person's accounts, because a user writing
+    /// from one of their mailboxes to another is not a correspondent of themselves. An entry whose text is
     /// unusable is skipped and two accounts configured under one identifier keep the first, both for the reason the
     /// trust policies do: startup validation refuses each of those, and a reload being rejected must not make an
-    /// arriving message throw.
+    /// arriving message throw. The accounts come from
+    /// <see cref="MailSynchronizationOptions.DeclaredAccountsByOwner" />, so a deployment that declares its mailboxes
+    /// under its served users collects what it configured rather than nothing, and the own addresses one account is
+    /// read against are that person's own rather than every served user's.
     /// </remarks>
-    private Dictionary<string, ContactCollectionSettings> ReadSettings()
-    {
-        var ownAddresses = this.ReadOwnAccountAddresses();
-
-        return (this.settings.Accounts ?? [])
-            .Select(static account => (
-                Id: MailSynchronizationOptions.TryReadAccountId(account.AccountId),
-                account.ContactCollection))
-            .Where(static account => account.Id is not null && account.ContactCollection is not null)
+    private Dictionary<string, ContactCollectionSettings> ReadSettings() =>
+        this.settings.DeclaredAccountsByOwner
+            .SelectMany(static owned => SettingsOf(owned))
+            .Where(static account => account.Id is not null)
             .GroupBy(static account => account.Id!, StringComparer.Ordinal)
             .ToDictionary(
                 static account => account.Key,
-                account => ReadContactCollection(account.First().ContactCollection!, ownAddresses),
+                static account => account.First().Settings,
                 StringComparer.Ordinal);
+
+    /// <summary>Builds the collection settings of the mailboxes one person owns, over the addresses those same mailboxes state.</summary>
+    private static IEnumerable<(string? Id, ContactCollectionSettings Settings)> SettingsOf(
+        IReadOnlyList<MailSynchronizationAccountOptions> owned)
+    {
+        var ownAddresses = ReadOwnAccountAddresses(owned);
+
+        return owned
+            .Where(static account => account.ContactCollection is not null)
+            .Select(account => (
+                MailSynchronizationOptions.TryReadAccountId(account.AccountId),
+                ReadContactCollection(account.ContactCollection!, ownAddresses)));
     }
 
     /// <summary>Reads one account's configured block as the settings collection runs under.</summary>
@@ -75,16 +85,17 @@ internal sealed class ConfiguredContactCollectionSettingsReader : IContactCollec
             Policy = ContactCollectionPolicy.Create(configured.ConfiguredExclusions, ownAddresses),
         };
 
-    /// <summary>Reads the mailboxes this deployment reads on its user's behalf.</summary>
+    /// <summary>Reads the mailboxes this deployment reads on one person's behalf.</summary>
     /// <remarks>
     /// Derived from each account's user name for the reason the trusted own domains are: it is the only mailbox
     /// identity an IMAP account states. An account whose user name is a bare login contributes nothing, which costs one
     /// address that would have been excluded — and the two headers collection reads leave the user out of both
     /// directions anyway, since an ordinary folder's author is a correspondent and a sent folder's recipients are.
     /// </remarks>
-    private IReadOnlyList<EmailAddress> ReadOwnAccountAddresses() =>
+    private static IReadOnlyList<EmailAddress> ReadOwnAccountAddresses(
+        IReadOnlyList<MailSynchronizationAccountOptions> owned) =>
     [
-        .. (this.settings.Accounts ?? [])
+        .. owned
             .Select(static account => EmailAddress.TryCreate(displayName: null, account.UserName, out var address)
                 ? address
                 : (EmailAddress?)null)

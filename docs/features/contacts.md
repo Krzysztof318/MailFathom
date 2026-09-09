@@ -1,6 +1,6 @@
 # Contacts
 
-<!-- describes: backend/src/Domain/Contacts/**, backend/src/Application/Contacts/**, backend/src/Infrastructure/Persistence/Contacts/**, backend/src/Infrastructure/Persistence/Entities/ContactEntity.cs, backend/src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, backend/src/Host/Api/Contact*.cs, backend/src/Cli/Commands/Contacts/**, backend/src/Cli/Administration/Contacts/**, backend/src/Mcp/Tools/Contacts/**, backend/src/Host/Configuration/Mail/ContactCollection*.cs, backend/src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
+<!-- describes: backend/src/Domain/Contacts/**, backend/src/Application/Contacts/**, backend/src/Infrastructure/Persistence/Contacts/**, backend/src/Infrastructure/Persistence/Entities/ContactEntity.cs, backend/src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, backend/src/Host/Api/Contact*.cs, backend/src/Cli/Commands/Contacts/**, backend/src/Cli/Administration/Contacts/**, backend/src/Mcp/Tools/Contacts/**, backend/src/Host/Configuration/Mail/ContactCollection*.cs, backend/src/Host/Configuration/Mail/Readers/ConfiguredContactCollectionSettingsReader.cs, backend/src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
 
 MailFathom holds a contact book of its own: people, the addresses they use, and what a user recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
@@ -176,8 +176,10 @@ Four things are never collected, and none of them can be switched off:
 - **A role mailbox**, by the names RFC 2142 reserves — `postmaster`, `abuse`, `info`, `support`, `sales`, and the rest —
   together with the `no-reply` family and the `-request`, `-bounces`, `-user`, `-admin`, `-subscribe`, and
   `-unsubscribe` list-administration suffixes.
-- **The account's own mailboxes**, derived from every configured account's user name, so a user writing from one of
-  their mailboxes to another is not recorded as a correspondent of themselves.
+- **The account's own mailboxes**, derived from the user name of every account its own owner declares, so a user writing
+  from one of their mailboxes to another is not recorded as a correspondent of themselves. The set stops at that person:
+  a deployment serving several users holds one such set per user, so somebody this deployment also serves is an ordinary
+  correspondent of the account they wrote to.
 - **An address the book already holds**, under either origin. That is a refusal rather than a merge: an address that
   belongs to somebody the user asserted is already answered for by that record, and adding it there would be collection
   editing what a user wrote down. A user who wants the address on that person puts it there themselves.

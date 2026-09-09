@@ -487,6 +487,41 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
+    /// <summary>Gets every mailbox this deployment declares, from both of the two places one may be declared.</summary>
+    /// <remarks>
+    /// A deployment declaring served users is refused a non-empty <see cref="Accounts" />, so exactly one of the two
+    /// halves is ever populated — and a per-account reader walking only the first answers nothing at all on such a
+    /// deployment, which reads as a mailbox configured with no folders, no trusted senders, and no contact collection
+    /// rather than as a reader that never looked. Every reader of the whole set therefore asks here, so *which
+    /// mailboxes exist* is one answer rather than one per reader.
+    /// </remarks>
+    internal IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts =>
+        this.DeclaredAccountsByOwner.SelectMany(static owned => owned);
+
+    /// <summary>Gets the declared mailboxes in the groups the person who owns them declared, one group per owner.</summary>
+    /// <remarks>
+    /// What a reader derives from an account's <em>neighbours</em> is asked through here rather than through
+    /// <see cref="DeclaredAccounts" />, because the two questions have different answers on a deployment serving more
+    /// than one user: this account's own mail domains and this account's own mailbox addresses are that user's, and
+    /// reading them across the flat set would recognize one user's correspondents inside another user's mailbox. The
+    /// deployment's own section is one group because the sole user such a deployment serves owns all of it.
+    /// </remarks>
+    internal IEnumerable<IReadOnlyList<MailSynchronizationAccountOptions>> DeclaredAccountsByOwner
+    {
+        get
+        {
+            if (this.Accounts is { Count: > 0 })
+            {
+                yield return this.Accounts;
+            }
+
+            foreach (var user in this.ServedUsers ?? [])
+            {
+                yield return user.MailAccounts;
+            }
+        }
+    }
+
     /// <summary>Reads the two keys a convergence pass is bounded by.</summary>
     /// <returns>The bounds the pass runs under.</returns>
     internal MailboxConvergenceOptions ToConvergenceOptions() => new()

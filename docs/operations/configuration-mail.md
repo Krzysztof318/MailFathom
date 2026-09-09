@@ -41,7 +41,7 @@ budget or the coordinator loop itself are marked *restart* below.
 | `MailSynchronization:MaxConsecutivePushFailures` | int | `3` | 1 – 100 | reload |
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 | `MailSynchronization:MaxSubscribedFolders` | int | `20` | 1 – 100; how many folders one push subscription may name on a server supporting `NOTIFY`, the rest synchronizing on the account's interval | reload |
-| `MailSynchronization:TrustOwnAccountDomains` | bool | `true` | Whether an author writing from a domain one of the configured accounts uses counts as trusted on every account. The set is read from each account's `UserName` where that is an address, so it needs no list of its own | reload; the next extraction judges against it |
+| `MailSynchronization:TrustOwnAccountDomains` | bool | `true` | Whether an author writing from a domain one of the configured accounts uses counts as trusted on the other accounts of the person who owns it. The set is read from each account's `UserName` where that is an address, so it needs no list of its own, and it is read per user rather than across the deployment: two people this deployment serves are two correspondents, so one's mail domain is not somebody the other recognizes | reload; the next extraction judges against it |
 | `MailSynchronization:VerifyDkimLocally` | bool | `true` | Whether extraction verifies a message's own DKIM signatures where no trusted `Authentication-Results` header was found. A fallback and never a supplement: an account whose server writes the header verifies nothing locally. It is the only path that makes an outbound DNS query | reload; the next extraction verifies against it |
 | `MailSynchronization:AssessMachineAuthorship` | bool | `true` | Whether extraction reads how much each message's own text reads as machine written. What the reading weighs is the project's and is not configurable; this decides only whether it runs | reload; the next extraction reads against it |
 
@@ -70,7 +70,7 @@ budget or the coordinator loop itself are marked *restart* below.
 | `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
 | `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
 | `…:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long this account's answering entries are kept | reload; the next account run erases against the new window |
-| `…:TrustedSenders` | list | empty | The authors this account recognizes on top of the deployment's own domains; each entry below | reload; the next extraction judges against it |
+| `…:TrustedSenders` | list | empty | The authors this account recognizes on top of the domains its own owner's accounts use; each entry below | reload; the next extraction judges against it |
 | `…:TrustedSenders:<n>:Domain` | string | unset | A domain this account recognizes. Exactly one of `Domain` and `Address` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
 | `…:TrustedSenders:<n>:Address` | string | unset | A single mailbox this account recognizes. It matches when the established author's domain is that address's own **and** the message's `From` displays exactly that address | reload |
 | `…:TrustedSenders:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on an address entry, where it could mean nothing | reload |
@@ -334,6 +334,7 @@ what it does not.
 | `…:Delivery:FromAddress` | string | unset (the account's `UserName` when it is a mailbox address) | A mailbox address; startup refuses an endpoint that resolves to none | reload |
 | `…:Delivery:FromDisplayName` | string | unset (the address alone) | The name recipients see this mailbox sign itself with; deliberately not the account's `DisplayName` | reload |
 | `…:Delivery:FileSentCopy` | bool | `true` | Whether a delivered message is appended to the folder this account maps to the `Sent` role | reload |
+| `…:Delivery:WithdrawDuplicateSentCopy` | bool | `true` | Whether that appended copy is taken back out once the provider files one of its own beside it | reload |
 
 **`Enabled` is off on every account of every deployment, and turning it on is the act that makes sending possible.** An
 installation upgrading into a release that can send therefore does not thereby become able to: the release meets a
@@ -346,10 +347,15 @@ account. What an enabled account may then write, and how much of it, is
 [`Deployment:ReadOnly`](configuration-runtime.md#deployment).
 
 `FileSentCopy` is on because a submission server files nothing: without it the user's own mail client shows a Sent
-folder that is empty however much this account sends. Turn it off for a provider that files the copy itself, which is
-the one case leaving it on produces two copies of every message.
-[The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states why
-this is configured rather than detected, and what an account that maps no `Sent` folder does instead.
+folder that is empty however much this account sends. `WithdrawDuplicateSentCopy` is what answers the provider that
+files the copy itself: the append still happens, and the copy this deployment made is taken back out once
+synchronization has actually met the provider's own beside it, so neither setting has to be decided in advance from
+what a provider is believed to do. Turning `WithdrawDuplicateSentCopy` off keeps both copies, and turning
+`FileSentCopy` off is the stronger form of the same decision — no copy is appended at all, at the cost of a mailbox
+with no record of the send should the provider turn out to file nothing.
+[The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states what
+is detected and what is not, the window a duplicate is recognized within, and what an account that maps no `Sent`
+folder does instead.
 
 The permitted mechanisms, both weakenings, and the certificate authority are **not** repeated here: they are one
 decision the account makes about itself in `TransportSecurity` above, and both endpoints are reached under it. What

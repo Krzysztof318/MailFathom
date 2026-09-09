@@ -26,16 +26,15 @@ internal static class ConfiguredMailFolders
     /// identity for it here would attach one folder's decision to a name no operator wrote.
     /// </para>
     /// <para>
-    /// Both places a mailbox is declared are read, exactly as <see cref="Rules.DeclaredMailAccounts.ReadFrom(MailSynchronizationOptions)" />
-    /// reads them: the deployment's own section, and each served user's accounts. A deployment declaring users is
-    /// refused a non-empty <c>MailSynchronization:Accounts</c>, so reading only the first leaves such a deployment with
-    /// no mapped folder at all — every folder unmapped, no folder visible to a tool, and mail it has already stored
-    /// reported as an empty mailbox.
+    /// Both places a mailbox is declared are read, through <see cref="MailSynchronizationOptions.DeclaredAccounts" />:
+    /// the deployment's own section, and each served user's accounts. A deployment declaring users is refused a
+    /// non-empty <c>MailSynchronization:Accounts</c>, so reading only the first leaves such a deployment with no mapped
+    /// folder at all — every folder unmapped, no folder visible to a tool, and mail it has already stored reported as
+    /// an empty mailbox.
     /// </para>
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(MailSynchronizationOptions settings) =>
-        Of((settings.Accounts ?? [])
-            .Concat(settings.ServedUsers?.SelectMany(static user => user.MailAccounts) ?? []));
+        Of(settings.DeclaredAccounts);
 
     /// <summary>Reads one set of account declarations as the pair of identity and participation the ports answer with.</summary>
     /// <param name="accounts">The declarations, which may be one user's own rather than the whole deployment's.</param>

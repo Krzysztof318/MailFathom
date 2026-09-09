@@ -35,10 +35,18 @@ namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 /// </remarks>
 internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguration<OutgoingEmailFilingEntity>
 {
-    /// <summary>What both filing indexes are filtered to, which is exactly the rows the join they serve can match.</summary>
+    /// <summary>What every filing index is filtered to, which is exactly the copies a folder may still hold.</summary>
+    /// <remarks>
+    /// The stage is the whole of it. A row is a candidate while it is confirmed and stops being one when it is
+    /// withdrawn, which is what keeps a mirror taken back out and an append the server never answered from sitting in
+    /// either structure for the life of the deployment. Having been met is deliberately not part of it: a provider that
+    /// files the sent copy itself puts a second occurrence of the same message in the same folder, and a row that
+    /// dropped out of the index on meeting the first would leave the second unrecognized — which is the user's own
+    /// outgoing mail read as mail that arrived for them. What that costs is an entry per standing copy rather than per
+    /// copy in flight, which is one entry per message the user kept and is the same order as the table itself.
+    /// </remarks>
     private const string JoinableFilingIndexFilter =
-        $"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL "
-        + $"AND \"{nameof(OutgoingEmailFilingEntity.Stage)}\" = '{nameof(OutgoingMailFilingStage.Confirmed)}'";
+        $"\"{nameof(OutgoingEmailFilingEntity.Stage)}\" = '{nameof(OutgoingMailFilingStage.Confirmed)}'";
 
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<OutgoingEmailFilingEntity> entity)
@@ -66,12 +74,9 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // token would not notice two passes settling one copy differently.
         entity.Property(filing => filing.ConcurrencyVersion).IsRowVersion();
 
-        // The join a synchronized batch runs, filtered to exactly the rows that join can still match. A copy is met
-        // once, and stamping it observed is what takes it out of both this structure and the work the join does;
-        // the stage is the other half of the same bound, because a row is only ever a candidate while it is
-        // confirmed. Without it a mirror withdrawn before any run saw it, and an append the server never answered,
-        // would each leave a row nothing can match sitting in both structures for the life of the deployment —
-        // which would make them grow with everything ever sent rather than with what is in flight.
+        // The join a synchronized batch runs, filtered to exactly the rows that join can still match. What bounds every
+        // structure here is the stage: a mirror withdrawn before any run saw it, and an append the server never
+        // answered, would each otherwise leave a row nothing can match sitting in them for the life of the deployment.
         entity.HasIndex(filing => new
         {
             filing.UserId,
@@ -90,6 +95,22 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
             filing.InternetMessageId,
         })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingMessageIdIndexName)
+            .HasFilter(JoinableFilingIndexFilter);
+
+        // The same rows read the other way round: not "is this discovery one of ours" but "which of this account's
+        // standing sent copies were appended recently enough to still be worth a look". The filing is in the key rather
+        // than the filter so one structure answers that for any kind, and the record's identity is behind the instant
+        // for the reason the claim's is — two copies appended in one instant need a total order for the sweep to be
+        // deterministic, and it is what lets the ordering be read rather than sorted.
+        entity.HasIndex(filing => new
+        {
+            filing.UserId,
+            filing.MailboxAccountId,
+            filing.Filing,
+            filing.AppendedAt,
+            filing.OutgoingEmailId,
+        })
+            .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingRecentByFilingIndexName)
             .HasFilter(JoinableFilingIndexFilter);
 
         entity.HasOne(filing => filing.OutgoingEmail)

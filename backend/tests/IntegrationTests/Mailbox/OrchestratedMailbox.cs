@@ -148,6 +148,27 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         await this.AppendAsync(folderPath, message, MessageFlags.None, cancellationToken);
     }
 
+    /// <summary>Appends the exact bytes of a message, as a provider filing its own copy of a submitted message does.</summary>
+    /// <param name="folderPath">The folder to append to.</param>
+    /// <param name="mime">The message as it was submitted, which carries the identity the submitted copy carries.</param>
+    /// <param name="cancellationToken">Cancels the append.</param>
+    /// <remarks>
+    /// It takes the bytes rather than composing a message, because what makes this a duplicate is that both copies
+    /// carry one <c>Message-ID</c> — a composed message would carry another and would be a second message rather than
+    /// a second occurrence of the same one. It carries <c>\Seen</c> for the same reason a provider's copy does: it is
+    /// mail the user sent rather than mail that arrived for them.
+    /// </remarks>
+    internal async Task AppendSubmittedCopyAsync(
+        string folderPath,
+        ReadOnlyMemory<byte> mime,
+        CancellationToken cancellationToken)
+    {
+        using var source = new MemoryStream(mime.ToArray(), writable: false);
+        using var message = await MimeMessage.LoadAsync(source, cancellationToken);
+
+        await this.AppendAsync(folderPath, message, MessageFlags.Seen, cancellationToken);
+    }
+
     /// <summary>Reads every message in a folder with the flags the server currently holds for it.</summary>
     /// <param name="folderPath">The folder to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>

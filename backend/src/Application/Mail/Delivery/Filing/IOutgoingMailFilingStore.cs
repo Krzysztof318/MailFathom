@@ -137,6 +137,33 @@ public interface IOutgoingMailFilingStore
         IReadOnlyCollection<string> internetMessageIds,
         CancellationToken cancellationToken);
 
+    /// <summary>Reads the sent copies this account filed that the folder now holds a second occurrence of.</summary>
+    /// <param name="account">The account whose filings are read.</param>
+    /// <param name="appendedSince">The earliest append a duplicate is still acted on for.</param>
+    /// <param name="limit">The greatest number of sends one pass withdraws a copy for.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The sends whose own filed copy the folder holds a duplicate of, which may be none.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
+    /// <remarks>
+    /// <para>
+    /// A row is answered for only where the server named the occurrence it appended: without that placement the two
+    /// occurrences carry one identity between them and nothing says which of them this system put there, so a
+    /// withdrawal would be as likely to take the provider's copy as its own. The second occurrence is recognized by the
+    /// identity the appended bytes carry, in the same folder and the same UID space, at a UID the placement does not
+    /// name — and only while the folder still holds it, because a copy the user has already deleted is no reason to
+    /// take the remaining one away from them.
+    /// </para>
+    /// <para>
+    /// Nothing here reads mail. A folder, a UID, and a <c>Message-ID</c> MailFathom minted itself are what the
+    /// comparison is made of, which is what lets a duplicate be found without the message.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<OutgoingEmailId>> ReadDuplicatedSentCopiesAsync(
+        MailAccountIdentity account,
+        DateTimeOffset appendedSince,
+        int limit,
+        CancellationToken cancellationToken);
+
     /// <summary>Writes down that synchronization has met the copy one filing put in a folder.</summary>
     /// <param name="session">The session the write joins, which is the one the discovered email is stored in.</param>
     /// <param name="outgoingEmailId">The record the copy was filed from.</param>

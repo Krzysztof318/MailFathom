@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260909155944_WidenFilingJoinIndexesToEveryConfirmedCopy")]
+    partial class WidenFilingJoinIndexesToEveryConfirmedCopy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2125,10 +2128,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "MailboxAccountId", "InternetMessageId")
                         .HasDatabaseName("ix_outgoing_email_filings_message_id")
-                        .HasFilter("\"Stage\" = 'Confirmed'");
-
-                    b.HasIndex("UserId", "MailboxAccountId", "Filing", "AppendedAt", "OutgoingEmailId")
-                        .HasDatabaseName("ix_outgoing_email_filings_recent_by_filing")
                         .HasFilter("\"Stage\" = 'Confirmed'");
 
                     b.HasIndex("UserId", "MailboxAccountId", "FolderPath", "PlacementUidValidity", "PlacementUid")

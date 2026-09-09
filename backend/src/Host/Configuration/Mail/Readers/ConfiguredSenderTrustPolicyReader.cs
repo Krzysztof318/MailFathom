@@ -44,38 +44,47 @@ internal sealed class ConfiguredSenderTrustPolicyReader : ISenderTrustPolicyRead
     /// fills in: the matcher already takes both halves, so the store arrives as a second list rather than as a second
     /// rule. An entry whose text is unusable is skipped rather than raised over, and two accounts configured under one
     /// identifier keep the first, both for the reason the folder mappings do — startup validation refuses each of
-    /// those, and a reload being rejected must not make a lookup throw.
+    /// those, and a reload being rejected must not make a lookup throw. The accounts come from
+    /// <see cref="MailSynchronizationOptions.DeclaredAccountsByOwner" />, so a deployment that declares its mailboxes
+    /// under its served users recognizes the senders it configured rather than nobody, and each person's own domains
+    /// are trusted inside their own mailboxes rather than inside everybody's.
     /// </remarks>
-    private Dictionary<string, SenderTrustPolicy> ReadPolicies()
-    {
-        IReadOnlyList<SenderDomain> ownAccountDomains =
-            this.settings.TrustOwnAccountDomains ? this.ReadOwnAccountDomains() : [];
-
-        return (this.settings.Accounts ?? [])
-            .Select(static account => (
-                Id: MailSynchronizationOptions.TryReadAccountId(account.AccountId),
-                account.ConfiguredTrustedSenders))
+    private Dictionary<string, SenderTrustPolicy> ReadPolicies() =>
+        this.settings.DeclaredAccountsByOwner
+            .SelectMany(owned => PoliciesOf(owned, this.settings.TrustOwnAccountDomains))
             .Where(static account => account.Id is not null)
             .GroupBy(static account => account.Id!, StringComparer.Ordinal)
             .ToDictionary(
                 static account => account.Key,
-                account => SenderTrustPolicy.Create(
-                    ownAccountDomains,
-                    account.First().ConfiguredTrustedSenders,
-                    storedTrustedSenders: []),
+                static account => account.First().Policy,
                 StringComparer.Ordinal);
+
+    /// <summary>Builds the policies of the mailboxes one person owns, over the domains those same mailboxes state.</summary>
+    private static IEnumerable<(string? Id, SenderTrustPolicy Policy)> PoliciesOf(
+        IReadOnlyList<MailSynchronizationAccountOptions> owned,
+        bool trustOwnAccountDomains)
+    {
+        IReadOnlyList<SenderDomain> ownAccountDomains = trustOwnAccountDomains ? ReadOwnAccountDomains(owned) : [];
+
+        return owned.Select(account => (
+            MailSynchronizationOptions.TryReadAccountId(account.AccountId),
+            SenderTrustPolicy.Create(
+                ownAccountDomains,
+                account.ConfiguredTrustedSenders,
+                storedTrustedSenders: [])));
     }
 
-    /// <summary>Reads the domains the configured accounts themselves send and receive under.</summary>
+    /// <summary>Reads the domains one person's own accounts send and receive under.</summary>
     /// <remarks>
     /// Derived from each account's user name, which is the only mailbox identity an IMAP account states: a server is
     /// reached at a host that is rarely the mail domain, and the account identifier is a key an operator invented. An
     /// account whose user name is a bare login rather than an address therefore contributes nothing, which is the
     /// honest answer — inventing a domain out of the host would recognize senders nobody named.
     /// </remarks>
-    private IReadOnlyList<SenderDomain> ReadOwnAccountDomains() =>
+    private static IReadOnlyList<SenderDomain> ReadOwnAccountDomains(
+        IReadOnlyList<MailSynchronizationAccountOptions> owned) =>
     [
-        .. (this.settings.Accounts ?? [])
+        .. owned
             .Select(static account => TryReadOwnDomain(account.UserName))
             .OfType<SenderDomain>()
             .Distinct(),

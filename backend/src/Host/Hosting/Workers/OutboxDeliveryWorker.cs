@@ -7,6 +7,7 @@ using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Host.Hosting.Workers;
@@ -234,6 +235,16 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
 
                     break;
 
+                // A sent copy withdrawn is the one ordinary ending worth a line: it is the only place this system takes
+                // a message the user can already see back out of their own folder, and an operator reading a folder
+                // that lost a message needs the act named. The outbox mirror reaching the same outcome is what its
+                // whole existence is for and says nothing.
+                case OutgoingMailFilingOutcome.Withdrawn
+                    when filing.Filing == OutgoingMailFiling.Sent:
+                    this.LogDuplicateSentCopyWithdrawn(accountId.Value, filing.FilingName);
+
+                    break;
+
                 case OutgoingMailFilingOutcome.Filed:
                 case OutgoingMailFilingOutcome.AlreadyFiled:
                 case OutgoingMailFilingOutcome.NotRequested:
@@ -269,6 +280,12 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "A copy of a message sent for account {AccountId} could not be filed as '{Filing}' [failure {FailureCode}]. The message was delivered and is never sent again, and nothing files the copy again on its own.")]
     private partial void LogCopyNotFiled(string accountId, string filing, int? failureCode);
+
+    /// <summary>Reports the copy this deployment took back out because the provider had filed its own.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The copy of a message sent for account {AccountId} filed as '{Filing}' was withdrawn, because the account's own mail server had filed a copy of the same message beside it. The provider's copy is what the folder keeps; set Delivery:WithdrawDuplicateSentCopy to false to keep both.")]
+    private partial void LogDuplicateSentCopyWithdrawn(string accountId, string filing);
 
     [LoggerMessage(
         Level = LogLevel.Information,

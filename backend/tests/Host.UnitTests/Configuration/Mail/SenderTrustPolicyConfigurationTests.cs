@@ -2,12 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -198,6 +201,43 @@ public sealed class SenderTrustPolicyConfigurationTests
         Assert.DoesNotContain(messages, message => message!.Contains("trusted sender", StringComparison.Ordinal));
     }
 
+    /// <summary>A mailbox declared under a served user is the whole of what such a deployment configures, so its list has to be read.</summary>
+    [Fact]
+    public void GetTrustPolicy_AnAccountDeclaredUnderAServedUser_RecognizesTheSendersItConfigured()
+    {
+        // Arrange
+        var account = AccountAt("work", "user@work.example");
+        account.TrustedSenders = [new TrustedSenderOptions { Domain = "partner.example" }];
+
+        // Act
+        var trust = UserDeclaring(account)
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
+            .Evaluate(WrittenBy("partner.example"), displayedSender: null);
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Trusted, trust.Level);
+    }
+
+    /// <summary>Two served users are two people, so one person's mail domain is not correspondence the other recognizes.</summary>
+    [Fact]
+    public void GetTrustPolicy_AnotherUsersAccountDomain_IsNotRecognizedInsideThisUsersMailbox()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions().WithServedUsers(
+        [
+            User(SyntheticMailUser.Deployment, AccountAt("work", "user@work.example")),
+            User(SyntheticMailUser.Another, AccountAt("theirs", "other@elsewhere.example")),
+        ]);
+
+        // Act
+        var trust = options
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
+            .Evaluate(WrittenBy("elsewhere.example"), AddressOf("other@elsewhere.example"));
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Unknown, trust.Level);
+    }
+
     /// <summary>Builds the verdict of a message whose displayed author the receiving server established.</summary>
     private static SenderAuthentication WrittenBy(string domain)
     {
@@ -217,6 +257,12 @@ public sealed class SenderTrustPolicyConfigurationTests
     {
         Accounts = [.. accounts],
     };
+
+    private static MailSynchronizationOptions UserDeclaring(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().WithServedUsers([User(SyntheticMailUser.Deployment, accounts)]);
+
+    private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
+        new(user, "a user this deployment serves", MailUserAccountSource.UserDocument, accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {
