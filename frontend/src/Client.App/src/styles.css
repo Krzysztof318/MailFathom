@@ -495,25 +495,32 @@
    threshold makes. Each is a duration and a curve together rather than two utilities on the element, for the reason
    the token block gives about motion being decided once — and the durations are here rather than in the theme because
    nothing else in the client is timed against them. `prefers-reduced-motion` removes all three by the rule at the foot
-   of this file, which leaves the panel arriving at where it was going without travelling there. */
+   of this file, which leaves the panel arriving at where it was going without travelling there.
+
+   `translate` is named beside `transform` because the two are separate properties and the panel uses both: a position
+   written as a `translate-y-*` or `-translate-x-*` utility is the `translate` property, while a position measured under
+   a finger and written as an inline style is a `transform`. A list naming only the second watches a property those
+   utilities never set, so the panel arrives at its open position in one frame — which is the whole of what a missing
+   motion looks like from the outside. */
 @utility motion-sheet {
-    /* `display` and `overlay` are in the list beside the transform because a dialog is taken out of the document and
-       off the top layer the moment it is closed, so a panel that travelled away without them would vanish instead. */
-    transition-property: transform, opacity, display, overlay;
+    /* `display` and `overlay` are in the list beside the two position properties because a dialog is taken out of the
+       document and off the top layer the moment it is closed, so a panel that travelled away without them would vanish
+       instead. */
+    transition-property: translate, transform, opacity, display, overlay;
     transition-duration: 300ms;
     transition-timing-function: var(--ease-sheet);
     transition-behavior: allow-discrete;
 }
 
 @utility motion-panel {
-    transition-property: transform, opacity, display, overlay;
+    transition-property: translate, transform, opacity, display, overlay;
     transition-duration: 260ms;
     transition-timing-function: var(--ease-panel);
     transition-behavior: allow-discrete;
 }
 
 @utility motion-spring {
-    transition-property: transform, opacity;
+    transition-property: translate, transform, opacity;
     transition-duration: 260ms;
     transition-timing-function: var(--ease-sheet);
 }

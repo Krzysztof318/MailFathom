@@ -603,8 +603,8 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
 
-    it('stages a file against the draft and draws what it is called and how large', async () => {
-        drawComposer();
+    it('holds a chosen file and draws what it is called and how large, without asking the deployment', async () => {
+        const { asked } = drawComposer();
 
         const file = new File(['0123'], 'invoice.pdf', { type: 'application/pdf' });
         const picker = document.querySelector<HTMLInputElement>('input[type=file]');
@@ -623,12 +623,13 @@ describe('Composer, a message of its own', () => {
 
         expect(staged.textContent).toContain('invoice.pdf');
         expect(within(staged).getByRole('button', { name: 'Remove invoice.pdf' })).toBeDefined();
+        expect(asked).toHaveLength(0);
     });
 
-    it('stages several chosen files against one draft rather than filing a draft for each', async () => {
-        // Where the octets went, which is the whole question: the draft one file is staged against is written by
-        // whichever save answers first, so uploads started together would each carry a draft of their own and every
-        // file but the last would hang off one nothing ever sends.
+    it('asks the deployment nothing until the message is filed, and then puts every file up against one draft', async () => {
+        // Where the octets went, and when. Choosing a file is not filing the message: nothing leaves the client until
+        // somebody presses save or send, and then every file goes up against the one draft that save wrote rather than
+        // against a draft apiece.
         const stagedAgainst: string[] = [];
 
         const uploadsEachFile: AttachmentUpload = (request) => {
@@ -661,6 +662,12 @@ describe('Composer, a message of its own', () => {
 
             return Promise.resolve();
         });
+
+        expect(await screen.findByRole('list', { name: 'Attached files' })).toBeDefined();
+        expect(stagedAgainst).toHaveLength(0);
+        expect(asked).toHaveLength(0);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
         await waitFor(() => {
             expect(stagedAgainst).toHaveLength(2);
@@ -716,9 +723,9 @@ describe('Composer, a message of its own', () => {
         expect(document.activeElement).toBe(last);
     });
 
-    it('does not put a removed file back when an older save answers after the removal', async () => {
-        // A save answers with the whole list the deployment held when it was asked, so one still in flight while a
-        // file is taken off would otherwise draw that file back onto a message that no longer carries it.
+    it('never puts up a file taken off while the save that would have was still writing the draft', async () => {
+        // The draft goes first and the files after it, so a file taken off inside that window is one the deployment
+        // never hears about — and one a save answering afterwards must not draw back onto a message without it.
         let releaseTheSave = (): void => undefined;
         const stagedAtTheDeployment = JSON.parse(draftBody({ attachments: [stagedFile] })) as unknown;
 
@@ -791,7 +798,7 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
     });
 
-    it('takes a staged file off the draft at the deployment as well as off the screen', async () => {
+    it('takes a chosen file off without asking a deployment that never had it', async () => {
         const { asked } = drawComposer();
 
         const picker = document.querySelector<HTMLInputElement>('input[type=file]');
@@ -806,18 +813,150 @@ describe('Composer, a message of its own', () => {
             return Promise.resolve();
         });
 
-        const staged = await screen.findByRole('list', { name: 'Attached files' });
+        const attached = await screen.findByRole('list', { name: 'Attached files' });
 
         await act(() => {
-            fireEvent.click(within(staged).getByRole('button', { name: 'Remove invoice.pdf' }));
+            fireEvent.click(within(attached).getByRole('button', { name: 'Remove invoice.pdf' }));
 
             return Promise.resolve();
         });
 
         expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
+        expect(asked).toHaveLength(0);
+    });
+
+    it('takes a file the deployment already holds off there as well', async () => {
+        // The one way a file is at the deployment while the composer is still open: a save writes the draft, puts the
+        // files up one at a time, and one of them does not arrive — which stops the save and leaves the composer
+        // standing over a message whose earlier files did.
+        const stagedAgainst: string[] = [];
+
+        const secondFileNeverArrives: AttachmentUpload = (request) => {
+            stagedAgainst.push(request.path);
+
+            return Promise.resolve(
+                stagedAgainst.length === 1
+                    ? { status: 200, body: JSON.stringify(stagedFile), headers: {} }
+                    : { status: 503, body: '', headers: {} },
+            );
+        };
+
+        const { asked } = drawComposer({ kind: 'new' }, {}, [work], true, secondFileNeverArrives);
+
+        const picker = document.querySelector<HTMLInputElement>('input[type=file]');
+
+        if (picker === null) {
+            throw new Error('The composer drew no file picker to attach with.');
+        }
+
+        await act(() => {
+            fireEvent.change(picker, {
+                target: { files: [new File(['0'], 'invoice.pdf'), new File(['1'], 'terms.pdf')] },
+            });
+
+            return Promise.resolve();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await waitFor(() => {
+            expect(stagedAgainst).toHaveLength(2);
+        });
+
+        const attached = await screen.findByRole('list', { name: 'Attached files' });
+
+        await act(() => {
+            fireEvent.click(within(attached).getByRole('button', { name: 'Remove invoice.pdf' }));
+
+            return Promise.resolve();
+        });
+
         expect(asked.some((request) => request.method === 'DELETE' && request.path.endsWith('/attachments/a1'))).toBe(
             true,
         );
+    });
+
+    it('takes a file off the deployment where it was taken off the message while it was going up', async () => {
+        // The author's act stands over an upload that was already in flight: what arrived is taken back off rather
+        // than left staged against a message that would then carry a file they removed.
+        let theFileArrives = (): void => undefined;
+        const stagedAgainst: string[] = [];
+
+        const holdsTheUpload: AttachmentUpload = (request) => {
+            stagedAgainst.push(request.path);
+
+            return new Promise((answer) => {
+                theFileArrives = () => {
+                    answer({ status: 200, body: JSON.stringify(stagedFile), headers: {} });
+                };
+            });
+        };
+
+        const { asked } = drawComposer({ kind: 'new' }, {}, [work], true, holdsTheUpload);
+
+        const picker = document.querySelector<HTMLInputElement>('input[type=file]');
+
+        if (picker === null) {
+            throw new Error('The composer drew no file picker to attach with.');
+        }
+
+        await act(() => {
+            fireEvent.change(picker, { target: { files: [new File(['0'], 'invoice.pdf')] } });
+
+            return Promise.resolve();
+        });
+
+        const attached = await screen.findByRole('list', { name: 'Attached files' });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await waitFor(() => {
+            expect(stagedAgainst).toHaveLength(1);
+        });
+
+        await act(() => {
+            fireEvent.click(within(attached).getByRole('button', { name: 'Remove invoice.pdf' }));
+
+            return Promise.resolve();
+        });
+
+        await act(() => {
+            theFileArrives();
+
+            return Promise.resolve();
+        });
+
+        await waitFor(() => {
+            expect(
+                asked.some((request) => request.method === 'DELETE' && request.path.endsWith('/attachments/a1')),
+            ).toBe(true);
+        });
+
+        expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
+    });
+
+    it('closes on discard without asking a deployment that is holding nothing', async () => {
+        const { asked, closed } = drawComposer();
+
+        writeWords('Never filed.');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+
+        await act(() => {
+            fireEvent.click(
+                within(screen.getByRole('dialog', { name: 'Discard this message?' })).getByRole('button', {
+                    name: 'Discard',
+                }),
+            );
+
+            return Promise.resolve();
+        });
+
+        await waitFor(() => {
+            expect(closed).toHaveBeenCalledTimes(1);
+        });
+
+        expect(asked).toHaveLength(0);
     });
 
     it('closes without asking where nothing has been written', async () => {

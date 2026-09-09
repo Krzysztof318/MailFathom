@@ -17,7 +17,6 @@ import {
     type MailFathomTransport,
     type MailSendRefusal,
     type MailSendWithdrawal,
-    type MailStagedAttachment,
 } from '@mailfathom/client-backend';
 import { useAttachmentUpload } from '../deployment/attachmentUpload';
 import { wireComposition, type Composition } from './composition';
@@ -27,15 +26,14 @@ import { wireComposition, type Composition } from './composition';
 // the files staged against it, and what became of a send are all the deployment's, and each act is a sequence with an
 // outcome rather than a value to render.
 //
-// **Attaching and sending both need a draft the deployment holds**, because a file is staged against one and a send is
-// queued from one. So each saves first where nothing has been saved yet, which is what makes the design's two controls
-// work without a third that says "save before attaching" — and it is still a save the person asked for, because
-// attaching and sending are both acts they asked for.
+// **Two acts file the message and no others do**: saving it, and sending it. Each writes the draft the deployment
+// holds and then puts up whatever files the author chose that have not reached it yet. Choosing a file is not one of
+// them — a file somebody picked is part of what they are writing, exactly as the words are, so it is held here until
+// one of those two acts says to file the message. That is what keeps attaching offered on a deployment nobody has
+// needed yet, and it is what leaves nothing behind for closing the composer to have to delete.
 
-// Which act asked for the write, which is not the same question as which request went out: attaching and sending both
-// write the draft first, and a refusal met there is the refusal that act met. Only two words exist for one because
-// only two are true of the person — they pressed save, or they pressed send — and an attach is a save with a file
-// behind it.
+// Which act asked for the write, which is what the refusal it meets is worded as. Only two words exist because only
+// two are true of the person: they pressed save, or they pressed send.
 type DraftAct = 'save' | 'send';
 
 /** What the composer is doing about the deployment, which is one piece of state rather than a set of flags. */
@@ -51,21 +49,44 @@ export type DraftStanding =
     | { readonly kind: 'refusedSave'; readonly refusal: MailSendRefusal }
     | { readonly kind: 'failed'; readonly reason: ClientFailureReason };
 
+/**
+ * One file the message carries, as the composer draws it.
+ *
+ * It says nothing about whether the deployment has it yet, because nothing on the screen says that either: a file is
+ * part of the message from the moment it was chosen, and where it currently sits is this hook's business.
+ */
+export interface AttachedFile {
+    /** This composer's own name for it, which never changes once the file is chosen. */
+    readonly attachmentId: string;
+
+    readonly fileName: string;
+    readonly sizeOctets: number;
+}
+
+/** One chosen file as this hook holds it: the file itself, and what the deployment calls it once it has it. */
+interface HeldFile {
+    readonly attachmentId: string;
+    readonly file: File;
+
+    /** What the deployment named it when it was staged, or `null` while the deployment does not have it. */
+    readonly stagedAs: string | null;
+}
+
 /** The draft the deployment holds for what is being written, and what a person does to it. */
 export interface DraftAtDeployment {
     readonly standing: DraftStanding;
 
-    /** The files staged against it, oldest first, which is nothing until one is attached. */
-    readonly staged: readonly MailStagedAttachment[];
+    /** The files the message carries, oldest first, which is nothing until one is chosen. */
+    readonly attached: readonly AttachedFile[];
 
-    /** Files the draft in the user's own drafts folder, creating it where nothing has been saved yet. */
+    /** Files the draft in the user's own drafts folder, putting up whatever was attached and not yet staged. */
     readonly save: (composition: Composition) => Promise<boolean>;
 
-    /** Stages one file against the draft, saving it first where nothing has been saved yet. */
-    readonly attach: (composition: Composition, file: File) => Promise<void>;
+    /** Takes a chosen file into the message. Nothing leaves the client: a save or a send is what puts it up. */
+    readonly attach: (file: File) => void;
 
-    /** Takes one staged file back off. */
-    readonly unstage: (attachmentId: string) => Promise<void>;
+    /** Takes one file back off, and off the deployment as well where it had already reached it. */
+    readonly detach: (attachmentId: string) => Promise<void>;
 
     /**
      * Queues the message, saving what has been written since first, and answers what it came to.
@@ -86,24 +107,33 @@ export interface DraftAtDeployment {
      */
     readonly withdraw: () => Promise<DraftStanding>;
 
-    /** Gives the draft up, taking its copies back out of the user's drafts folder. */
+    /**
+     * Gives the draft up, taking its copies back out of the user's drafts folder.
+     *
+     * It reaches the deployment only where the deployment is actually holding something, which after the rule at the
+     * head of this file is a send that was refused or failed. Closing a composer nothing was filed for asks nothing of
+     * anybody.
+     */
     readonly discard: () => Promise<boolean>;
 }
 
 export function useDraftAtDeployment(session: ClientSession, transport: MailFathomTransport): DraftAtDeployment {
     const upload = useAttachmentUpload();
     const [standing, setStanding] = useState<DraftStanding>({ kind: 'held' });
-    const [staged, setStaged] = useState<readonly MailStagedAttachment[]>([]);
+    const [attached, setAttached] = useState<readonly AttachedFile[]>([]);
 
     // The draft the deployment holds, as a ref rather than as state: two acts in the same turn have to see the
     // identifier the first of them wrote, and nothing on the screen is drawn from it.
     const draftId = useRef<string | null>(null);
 
-    // Which change to the staged files is the newest. A save answers with the whole list the deployment holds, so
-    // one that started before a file was taken off would put that file back on the screen when it lands afterwards —
-    // the deployment having discarded it already, and the screen then saying a message carries something it does not.
-    // Every act that changes the list takes a number on the way out and writes only while it is still the newest.
-    const staging = useRef(0);
+    // The files themselves, beside the state that draws them, for the reason the standing is kept twice: a save runs
+    // through them one at a time and each round has to see what the round before it recorded, and what somebody took
+    // off while a file was going up.
+    const held = useRef<readonly HeldFile[]>([]);
+
+    // What this composer calls the next file chosen. A counter rather than a random name because nothing outside this
+    // composer ever sees it and a test should not have to fix a generator to read the list.
+    const named = useRef(0);
 
     // The save in flight, if any. `saved` reads `draftId.current` and only writes it back once its own request has
     // answered, so two acts starting inside that window would each write a draft and strand whatever the loser staged
@@ -127,6 +157,17 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         setStanding(next);
 
         return next;
+    }
+
+    function holdFiles(next: readonly HeldFile[]): void {
+        held.current = next;
+        setAttached(
+            next.map(({ attachmentId, file }) => ({
+                attachmentId,
+                fileName: file.name,
+                sizeOctets: file.size,
+            })),
+        );
     }
 
     // An upload whose composer has gone is an upload nobody is waiting for, and letting it finish would stage a file
@@ -155,14 +196,13 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     }
 
     async function write(composition: Composition, asked: DraftAct): Promise<string | null> {
-        const held = draftId.current;
+        const draft = draftId.current;
         const wire = wireComposition(composition);
-        const at = ++staging.current;
 
         const answer =
-            held === null
+            draft === null
                 ? await writeMailDraft(session, transport, wire)
-                : await reviseMailDraft(session, transport, held, wire);
+                : await reviseMailDraft(session, transport, draft, wire);
 
         if (answer.outcome === 'failed') {
             hold({ kind: 'failed', reason: answer.failure.reason });
@@ -185,15 +225,72 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return null;
         }
 
-        const written = answer.value.draft;
+        draftId.current = answer.value.draft.draftId;
 
-        draftId.current = written.draftId;
+        return answer.value.draft.draftId;
+    }
 
-        if (at === staging.current) {
-            setStaged(written.attachments);
+    /**
+     * Puts up every file the deployment does not have yet, oldest first, and answers whether all of them arrived.
+     *
+     * One at a time, because each is a request of its own against one draft and a failure part way through has to stop
+     * the act rather than leave the rest going up behind a message that will not be sent. The list is re-read on every
+     * round rather than walked as a snapshot: a file somebody took off while it was going up is taken off the
+     * deployment too, so nothing they removed travels with the message.
+     */
+    async function stageHeld(draft: string): Promise<boolean> {
+        for (;;) {
+            const next = held.current.find((file) => file.stagedAs === null);
+
+            if (next === undefined) {
+                return true;
+            }
+
+            hold({ kind: 'attaching', fileName: next.file.name });
+
+            const abandoning = new AbortController();
+            uploading.current = abandoning;
+
+            const answer = await stageMailDraftAttachment(
+                session,
+                draft,
+                next.file.name,
+                // What the file declares itself to be, which is what the author's own system said. A file the system
+                // could not name is the general binary type, which is what the deployment reads a request declaring
+                // none as anyway.
+                next.file.type === '' ? 'application/octet-stream' : next.file.type,
+                (request) => upload(request, next.file, abandoning.signal),
+            );
+
+            uploading.current = null;
+
+            if (answer.outcome === 'failed') {
+                hold({ kind: 'failed', reason: answer.failure.reason });
+
+                return false;
+            }
+
+            if (held.current.some((file) => file.attachmentId === next.attachmentId)) {
+                holdFiles(
+                    held.current.map((file) =>
+                        file.attachmentId === next.attachmentId
+                            ? { ...file, stagedAs: answer.value.attachmentId }
+                            : file,
+                    ),
+                );
+            } else {
+                // Taken off while it was going up. The author's act stands, so what arrived is taken back off the
+                // deployment rather than left staged against a message that would then carry it — and a removal the
+                // deployment refused stops the act, because carrying on would send a file somebody took off.
+                const removed = await unstageMailDraftAttachment(session, transport, draft, answer.value.attachmentId);
+
+                if (removed.outcome === 'failed') {
+                    hold({ kind: 'failed', reason: removed.failure.reason });
+
+                    return false;
+                }
+            }
         }
-
-        return written.draftId;
     }
 
     // Every act ends by saying what happened, and a failure says which of the five it was rather than that something
@@ -207,9 +304,9 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     async function send(composition: Composition): Promise<DraftStanding> {
         hold({ kind: 'sending' });
 
-        const held = await saved(composition, 'send');
+        const draft = await saved(composition, 'send');
 
-        if (held === null) {
+        if (draft === null) {
             // The write said what stopped it and in the words of the send, so what this answers is that same
             // statement rather than a second, vaguer one made here. A stop asked while it was in flight goes with it:
             // it was asked about a message that never left.
@@ -218,7 +315,17 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return settledAs.current;
         }
 
-        const outcome = settled(await sendMailDraft(session, transport, held), (sent) => {
+        if (!(await stageHeld(draft))) {
+            // A message goes out whole or not at all: a file that did not arrive is one the reader would never know
+            // was meant to be there, so the send stops on it and the draft stays where the author can try again.
+            stopping.current = false;
+
+            return settledAs.current;
+        }
+
+        hold({ kind: 'sending' });
+
+        const outcome = settled(await sendMailDraft(session, transport, draft), (sent) => {
             if (!sent.queued) {
                 return { kind: 'refused', refusal: sent.refusal };
             }
@@ -259,12 +366,14 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
     return {
         standing,
-        staged,
+        attached,
 
         save: async (composition) => {
             hold({ kind: 'saving' });
 
-            if ((await saved(composition, 'save')) === null) {
+            const draft = await saved(composition, 'save');
+
+            if (draft === null || !(await stageHeld(draft))) {
                 return false;
             }
 
@@ -273,54 +382,32 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             return true;
         },
 
-        attach: async (composition, file) => {
-            hold({ kind: 'attaching', fileName: file.name });
+        attach: (file) => {
+            named.current += 1;
 
-            const held = await saved(composition, 'save');
-
-            if (held === null) {
-                return;
-            }
-
-            const abandoning = new AbortController();
-            uploading.current = abandoning;
-
-            const answer = await stageMailDraftAttachment(
-                session,
-                held,
-                file.name,
-                // What the file declares itself to be, which is what the author's own system said. A file the system
-                // could not name is the general binary type, which is what the deployment reads a request declaring
-                // none as anyway.
-                file.type === '' ? 'application/octet-stream' : file.type,
-                (request) => upload(request, file, abandoning.signal),
-            );
-
-            uploading.current = null;
-
-            settled(answer, (attachment) => {
-                setStaged((already) => [...already, attachment]);
-
-                return { kind: 'held' };
-            });
+            holdFiles([...held.current, { attachmentId: String(named.current), file, stagedAs: null }]);
         },
 
-        unstage: async (attachmentId) => {
-            const held = draftId.current;
+        detach: async (attachmentId) => {
+            const going = held.current.find((file) => file.attachmentId === attachmentId);
 
-            if (held === null) {
+            if (going === undefined) {
                 return;
             }
 
-            const at = ++staging.current;
+            // Off the screen first: the author asked for it, and what the deployment still holds is this hook's
+            // business rather than something they should watch happen.
+            holdFiles(held.current.filter((file) => file.attachmentId !== attachmentId));
 
-            settled(await unstageMailDraftAttachment(session, transport, held, attachmentId), () => {
-                if (at === staging.current) {
-                    setStaged((already) => already.filter((file) => file.attachmentId !== attachmentId));
-                }
+            const draft = draftId.current;
 
-                return { kind: 'held' };
-            });
+            if (going.stagedAs === null || draft === null) {
+                return;
+            }
+
+            settled(await unstageMailDraftAttachment(session, transport, draft, going.stagedAs), () => ({
+                kind: 'held',
+            }));
         },
 
         send,
@@ -331,13 +418,13 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
             // one it leaves behind because the identifier had not landed yet.
             await saving.current;
 
-            const held = draftId.current;
+            const draft = draftId.current;
 
-            if (held === null) {
+            if (draft === null) {
                 return true;
             }
 
-            const answer = await discardMailDraft(session, transport, held);
+            const answer = await discardMailDraft(session, transport, draft);
 
             if (answer.outcome === 'failed') {
                 // Said rather than swallowed: closing on a refused delete would tell somebody their words are gone

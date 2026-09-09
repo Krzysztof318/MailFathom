@@ -379,7 +379,8 @@ export const en = {
     'compose.cautionNoSubject': 'It goes out without a subject.',
     'compose.cautionNoWords': 'It goes out with nothing written in it.',
     'compose.discardQuestion': 'Discard this message?',
-    'compose.discardExplanation': 'What you have written goes, along with the draft your deployment is holding for it.',
+    'compose.discardExplanation':
+        'What you have written goes, along with any draft your deployment is already holding for it.',
     'compose.discardIsFinal': 'Nothing files it first, so there is no way back to these words.',
     'compose.discard': 'Discard',
     'compose.saving': 'Filing the draft…',
