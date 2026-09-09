@@ -146,6 +146,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftSendRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailTimelineEndpoint.MailTimelineRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchEndpoint.MailSearchRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
@@ -234,6 +236,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailTimelineEndpoint.MailTimelineRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -255,6 +258,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"POST {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagMutationsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
@@ -440,7 +444,7 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}";
 
-    /// <summary>Reports whether a route asks a question of the caller's own mail or stops one, by the two routes they are served at.</summary>
+    /// <summary>Reports whether a route asks a question of the caller's own mail, stops one, or reads a sentence into a search, by the three routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the writes above are named that way — but the grant is what
     /// makes them admissible, and it is a separately provisioned one: <c>mailfathom.mail.ask</c> is what sends mail to a
@@ -449,14 +453,18 @@ public sealed class ClientApiEndpointsTests
     /// in every access log between here and the client, and because a run outlives the request, so what the call
     /// produces is a run to come back to rather than a body. Stopping is a <c>DELETE</c> on that run, because what it
     /// changes is the run's own existence as work in progress. Nothing either of them changes reaches a mailbox: they
-    /// open and end a run this process holds and forgets, and the caller may only reach a run they started. Naming the
-    /// two keeps the claim narrow.
+    /// open and end a run this process holds and forgets, and the caller may only reach a run they started. Reading a
+    /// typed sentence into filters is the third and changes nothing at all — it answers with an interpretation the
+    /// screen draws and the caller then searches with — and it is a <c>POST</c> for the first of those reasons alone,
+    /// the sentence being exactly the value a request line would publish to every log in front of this deployment.
+    /// Naming the three keeps the claim narrow.
     /// </remarks>
     private static bool AsksAQuestionOfTheCallersOwnMail(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}");
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientDiscoveryRunEndpoints.DiscoveryRunRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute}");
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { longestSearchPage, type MailSearchQuery } from '@mailfathom/client-backend';
+import { longestSearchPage, type MailSearchPhraseReading, type MailSearchQuery } from '@mailfathom/client-backend';
 import { namedInScope, scopePointsAtJunk, type MailScope } from '../workspace/mailScope';
 
 // What a search is: the words that rank, and every filter that constrains. It is one value rather than a text field
@@ -22,8 +22,29 @@ import { namedInScope, scopePointsAtJunk, type MailScope } from '../workspace/ma
 
 /** The words a search ranks by, and every filter in force. */
 export interface MailSearchAsk {
-    /** What a person typed, which is the one part a search cannot be made without. */
+    /** What ranks this search, which is the one part a search cannot be made without. */
     readonly text: string;
+
+    /**
+     * The sentence this search was written out of, or `null` where somebody typed words and nothing read them.
+     *
+     * Held beside the search rather than replaced by it, because it is what a person wrote: it is what an
+     * interpretation is shown against, what a later search remembers, and what the search falls back to ranking by
+     * when every criterion has been taken off.
+     */
+    readonly phrase: string | null;
+
+    /**
+     * What a sentence was read as leaving to rank by, in the order it was read.
+     *
+     * These are not filters and are never drawn as ones: a criterion orders the results and excludes nothing, so
+     * taking one off widens what ranks well rather than what may come back. Empty for a plain word search, and for a
+     * sentence that was all constraint.
+     */
+    readonly criteria: readonly string[];
+
+    /** The part of the sentence nothing was made of, or `null` where all of it was read or nothing read it. */
+    readonly unaccounted: string | null;
 
     /** The account searched, by the identifier the accounts route names it with, or `null` for every account. */
     readonly account: string | null;
@@ -108,6 +129,9 @@ export function askIn(scope: MailScope, text: string): MailSearchAsk {
 
     return {
         text,
+        phrase: null,
+        criteria: [],
+        unaccounted: null,
         account,
         folder,
         includeJunk: scopePointsAtJunk(scope),
@@ -119,6 +143,68 @@ export function askIn(scope: MailScope, text: string): MailSearchAsk {
         flagged: null,
         hasAttachments: null,
     };
+}
+
+/**
+ * The search a sentence was read into, over the scope somebody was looking at.
+ *
+ * The reading's constraints land on the same filters a person builds by hand, so every one of them arrives as a chip
+ * they can see and take off — which is the whole promise this screen makes about a sentence. What it does not do is
+ * overwrite the scope: somebody searching inside a folder has said where to look, and a sentence naming a sender says
+ * who wrote it rather than where it is.
+ *
+ * @param scope What the client is looking at.
+ * @param typed The sentence the person wrote.
+ * @param reading What the deployment read it as.
+ * @returns The search to ask with.
+ */
+export function askFromPhrase(scope: MailScope, typed: string, reading: MailSearchPhraseReading): MailSearchAsk {
+    const plain = askIn(scope, typed);
+
+    if (!reading.read) {
+        return plain;
+    }
+
+    const { filters } = reading;
+
+    return {
+        ...plain,
+        text: rankedBy(reading.criteria, typed),
+        phrase: typed,
+        criteria: reading.criteria,
+        unaccounted: reading.unaccounted,
+        sender: filters.sender,
+        recipient: filters.recipient,
+        receivedFrom: filters.receivedFrom,
+        receivedTo: filters.receivedTo,
+        unread: filters.unread ? true : null,
+        flagged: filters.flagged ? true : null,
+        hasAttachments: filters.hasAttachments ? true : null,
+    };
+}
+
+/**
+ * The same search with one criterion taken off, which is what rewording an interpretation one press at a time is.
+ *
+ * Taking the last one off leaves the sentence itself ranking, rather than leaving a search with nothing to rank by:
+ * the deployment refuses a search with no text at all, and a person who removed every criterion asked for a broader
+ * order rather than for no search.
+ *
+ * @param ask The search in force.
+ * @param criterion The criterion to take off.
+ * @returns The search without it.
+ */
+export function withoutCriterion(ask: MailSearchAsk, criterion: string): MailSearchAsk {
+    const kept = ask.criteria.filter((held) => held !== criterion);
+
+    return { ...ask, criteria: kept, text: rankedBy(kept, ask.phrase ?? ask.text) };
+}
+
+// What a search ranks by: the criteria read out of a sentence, and the sentence itself where none survived. They are
+// joined rather than sent one at a time because the route ranks one text, and a criterion is the words mail itself
+// would carry rather than a query to run separately.
+function rankedBy(criteria: readonly string[], fallback: string): string {
+    return criteria.length === 0 ? fallback : criteria.join(' ');
 }
 
 /** Which filters are in force, in the order they are drawn. */

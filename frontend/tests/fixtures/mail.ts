@@ -414,3 +414,26 @@ export const conversation = {
     nextCursor: null,
     pageSize: 25,
 };
+
+/**
+ * What a typed sentence is read as, which is one interpretation rather than a reading of whatever was typed.
+ *
+ * The corpus states values and computes none, so this is the answer to every sentence. What it makes reachable is the
+ * screen: the constraints drawn as objects that can be taken off one at a time, the criteria drawn apart from them
+ * because they order the results and exclude nothing, and the part nothing was made of said rather than dropped. It is
+ * written against the mail above, so the sender it narrows to is one this corpus actually holds.
+ */
+export const phraseReading = {
+    read: true,
+    filters: {
+        sender: 'sales@nordwind.example',
+        recipient: null,
+        receivedFrom: '2026-08-01',
+        receivedTo: null,
+        unread: false,
+        flagged: false,
+        hasAttachments: false,
+    },
+    criteria: ['racking quotation'],
+    unaccounted: 'urgent',
+};

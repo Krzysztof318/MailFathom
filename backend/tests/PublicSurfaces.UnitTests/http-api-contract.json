@@ -1804,6 +1804,114 @@
         ],
         "type": "object"
       },
+      "ClientMailSearchPhraseFiltersResponse": {
+        "properties": {
+          "flagged": {
+            "type": "boolean"
+          },
+          "hasAttachments": {
+            "type": "boolean"
+          },
+          "receivedFrom": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "receivedTo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recipient": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sender": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sender",
+          "recipient",
+          "receivedFrom",
+          "receivedTo",
+          "unread",
+          "flagged",
+          "hasAttachments"
+        ],
+        "type": "object"
+      },
+      "ClientMailSearchPhraseRequest": {
+        "properties": {
+          "askedOn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phrase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "phrase",
+          "askedOn"
+        ],
+        "type": "object"
+      },
+      "ClientMailSearchPhraseResponse": {
+        "properties": {
+          "criteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ClientMailSearchPhraseFiltersResponse"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "unaccounted": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "read",
+          "filters",
+          "criteria",
+          "unaccounted"
+        ],
+        "type": "object"
+      },
+      "ClientMailSearchPhrasingResponse": {
+        "properties": {
+          "readsPhrases": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "readsPhrases"
+        ],
+        "type": "object"
+      },
       "ClientMailSearchResponse": {
         "properties": {
           "includedJunkMail": {
@@ -11448,6 +11556,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailSearchResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/emails/search/phrasing": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailSearchPhrasingResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailSearchPhraseRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailSearchPhraseResponse"
                 }
               }
             },

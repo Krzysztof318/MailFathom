@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -66,6 +66,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/folders` | `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
+| `GET /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
+| `POST /api/client/emails/search/phrasing` | `mailfathom.mail.ask` |
 | `GET /api/client/threads/{threadId}` | `mailfathom.mail.read` |
 | `GET /api/client/threads/{threadId}/state` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
@@ -717,6 +719,79 @@ no search waits on IMAP and none can set the remote `\Seen` flag.
 
 **A user with no mail account reads an empty `results` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403`.
+
+### The phrasing routes
+
+```http
+GET /api/client/emails/search/phrasing
+```
+
+```json
+{ "readsPhrases": true }
+```
+
+```http
+POST /api/client/emails/search/phrasing
+Content-Type: application/json
+
+{ "phrase": "unread mail from the supplier about the racking, since August", "askedOn": "2026-09-09" }
+```
+
+```json
+{
+  "read": true,
+  "filters": {
+    "sender": "sales@example.test",
+    "recipient": null,
+    "receivedFrom": "2026-08-01",
+    "receivedTo": null,
+    "unread": true,
+    "flagged": false,
+    "hasAttachments": false
+  },
+  "criteria": ["racking"],
+  "unaccounted": null
+}
+```
+
+**This route reads a sentence and searches nothing.** What comes back is an interpretation the client draws as objects
+somebody can see, change, and take off, and the search route above is then asked with whatever survived that. A route
+that searched as well would make the interpretation invisible, and an interpretation nobody can see is one nobody can
+correct.
+
+**The read says whether this deployment reads a sentence at all**, which is what decides whether a search field may
+offer to take one before anybody types. It resolves a registration and calls no provider, so a client asks it once and
+holds the answer. `false` is what a deployment with no chat section answers and what one whose operator wrote
+[`Chat:SearchPhrasing:Enabled`](configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing) off
+answers; the two are deliberately one answer, because what a client does about either is identical and naming which
+would publish a deployment's configuration to every signed-in browser.
+
+**`filters` are constraints and `criteria` are not**, and the two are separate on the wire because they are two
+different promises: a constraint decides what may come back and a criterion only decides the order, so taking a
+criterion off widens what ranks well rather than what can be found. `unaccounted` is the part of the sentence nothing
+was made of, quoted from it — said rather than dropped, because a sentence half of which was silently discarded is a
+search nobody can correct.
+
+**The two days are calendar days and `askedOn` is the client's own.** Every relative expression — *last quarter*,
+*since Tuesday* — is resolved against the day the person typing is standing on rather than against the deployment's
+clock, and the days it resolved to come back so they can be seen and moved.
+
+**`read: false` is the plain word search rather than a failure.** It is what a deployment reading no sentence answers,
+and what this one answers while its provider is unreachable or wrote something unreadable; a client searches the typed
+words and reports nothing. The one exception is a spend ceiling: a deployment that has spent what its operator allows a
+provider answers `429`, because falling back there would spend the search on a call already declined.
+
+**The sentence travels in a body**, which is why reading one is a `POST` for an operation that changes nothing: what
+somebody is looking for in their own mailbox is the most revealing value this surface carries, and a query string is
+the part of a request that reaches an access log by default — here and on every proxy in front of this deployment. A
+body over 4 KiB is refused before it is read, a blank or over-long sentence and an `askedOn` that is not `yyyy-mm-dd`
+are refused with `400`, and a refusal never echoes what was sent.
+
+**Both routes are published under `mailfathom.mail.ask`** rather than under the reading grant, because that is what
+they do: a sentence leaves this deployment for a chat provider and is charged to the same allowance a question is. A
+credential holding only `mailfathom.mail.read` is answered `403` and searches by words, which is the same search a
+deployment with no provider serves. Nothing about the sentence reaches a log or telemetry on either route.
+
 ### The conversation route
 
 ```http

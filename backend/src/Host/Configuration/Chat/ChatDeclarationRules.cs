@@ -153,6 +153,12 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ThreadState)}:{nameof(ThreadStateOptions.Enabled)} — whether a conversation is read into a state decides which deriver the pass resolves, so turning it on or off needs a restart rather than a configuration reload.");
         }
 
+        if (candidate.SearchPhrasing.Enabled != composed.SearchPhrasing.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.SearchPhrasing)}:{nameof(MailSearchPhrasingOptions.Enabled)} — whether a typed sentence is read into filters decides whether the reader is registered at all, which is what a search screen reads to know whether to offer a description, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
         return errors;
     }
 

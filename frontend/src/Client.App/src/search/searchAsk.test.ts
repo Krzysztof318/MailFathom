@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
+import type { MailSearchPhraseFilters, MailSearchPhraseReading } from '@mailfathom/client-backend';
 import { everything } from '../workspace/mailScope';
 import {
     addressFilter,
     askable,
+    askFromPhrase,
     askIn,
     askKey,
     inForce,
@@ -17,9 +19,24 @@ import {
     valueOf,
     widened,
     without,
+    withoutCriterion,
 } from './searchAsk';
 
 const anywhere = askIn(everything, 'quarterly figures');
+
+const noFilters: MailSearchPhraseFilters = {
+    sender: null,
+    recipient: null,
+    receivedFrom: null,
+    receivedTo: null,
+    unread: false,
+    flagged: false,
+    hasAttachments: false,
+};
+
+function readingOf(reading: Partial<MailSearchPhraseReading>): MailSearchPhraseReading {
+    return { read: true, filters: noFilters, criteria: [], unaccounted: null, ...reading };
+}
 
 describe('askIn', () => {
     it('searches every mailbox and folder where the client is looking at everything', () => {
@@ -55,6 +72,132 @@ describe('askIn', () => {
         [everything, false],
     ])('asks for junk in %o: %s', (scope, asked) => {
         expect(askIn(scope, 'invoice').includeJunk).toBe(asked);
+    });
+});
+
+describe('askFromPhrase', () => {
+    // Every constraint a sentence stated lands on the same filter a person builds by hand, which is what makes each of
+    // them a chip they can see and take off — the whole promise this screen makes about a typed sentence.
+    it('writes what a sentence stated onto the filters a person could have set themselves', () => {
+        const ask = askFromPhrase(
+            everything,
+            'unread mail from sales about racking last month',
+            readingOf({
+                filters: {
+                    ...noFilters,
+                    sender: 'sales@example.invalid',
+                    receivedFrom: '2026-08-01',
+                    receivedTo: '2026-08-31',
+                    unread: true,
+                },
+                criteria: ['racking quotation'],
+            }),
+        );
+
+        expect(ask).toStrictEqual(
+            expect.objectContaining({
+                sender: 'sales@example.invalid',
+                receivedFrom: '2026-08-01',
+                receivedTo: '2026-08-31',
+                unread: true,
+                flagged: null,
+                hasAttachments: null,
+            }),
+        );
+    });
+
+    it('ranks by what the sentence left to rank by rather than by the sentence itself', () => {
+        const ask = askFromPhrase(
+            everything,
+            'anything about the racking we ordered',
+            readingOf({
+                criteria: ['racking', 'order confirmation'],
+            }),
+        );
+
+        expect(ask.text).toBe('racking order confirmation');
+        expect(ask.criteria).toStrictEqual(['racking', 'order confirmation']);
+        expect(ask.phrase).toBe('anything about the racking we ordered');
+    });
+
+    // Saying so is the difference between a person correcting an interpretation and a person doubting their mailbox.
+    it('keeps the part of the sentence nothing was made of', () => {
+        const ask = askFromPhrase(
+            everything,
+            'the racking quote, urgent',
+            readingOf({
+                criteria: ['racking quote'],
+                unaccounted: 'urgent',
+            }),
+        );
+
+        expect(ask.unaccounted).toBe('urgent');
+    });
+
+    // Somebody searching inside a folder has said where to look, and a sentence naming a sender says who wrote it.
+    it('leaves the scope somebody was looking at exactly where it was', () => {
+        const ask = askFromPhrase(
+            { kind: 'folder', accountId: 'work', alias: 'Projects/Nordwind' },
+            'unread mail',
+            readingOf({
+                filters: { ...noFilters, unread: true },
+            }),
+        );
+
+        expect(ask).toStrictEqual(expect.objectContaining({ account: 'work', folder: 'Projects/Nordwind' }));
+    });
+
+    // A sentence is not unsearchable because nothing read it: the words are searched exactly as they are on a
+    // deployment that reads none.
+    it('searches the typed words where nothing read the sentence', () => {
+        const ask = askFromPhrase(everything, 'quarterly figures', readingOf({ read: false, criteria: ['ignored'] }));
+
+        expect(ask).toStrictEqual(askIn(everything, 'quarterly figures'));
+    });
+
+    // A sentence that was all constraint leaves nothing to rank by, and the route refuses a search with no text.
+    it('ranks by the sentence where every part of it became a filter', () => {
+        const ask = askFromPhrase(everything, 'unread mail', readingOf({ filters: { ...noFilters, unread: true } }));
+
+        expect(ask.text).toBe('unread mail');
+    });
+});
+
+describe('withoutCriterion', () => {
+    it('takes one criterion off and ranks by what is left', () => {
+        const ask = askFromPhrase(
+            everything,
+            'the racking we ordered',
+            readingOf({
+                criteria: ['racking', 'order confirmation'],
+            }),
+        );
+
+        const narrowed = withoutCriterion(ask, 'order confirmation');
+
+        expect(narrowed.criteria).toStrictEqual(['racking']);
+        expect(narrowed.text).toBe('racking');
+    });
+
+    // A person who removed every criterion asked for a broader order rather than for no search, and the deployment
+    // refuses a search carrying no text at all.
+    it('leaves the sentence itself ranking once the last criterion is off', () => {
+        const ask = askFromPhrase(everything, 'the racking we ordered', readingOf({ criteria: ['racking'] }));
+
+        expect(withoutCriterion(ask, 'racking').text).toBe('the racking we ordered');
+    });
+
+    it('leaves every filter where it was, a criterion being no filter at all', () => {
+        const ask = askFromPhrase(
+            everything,
+            'unread mail about racking',
+            readingOf({
+                filters: { ...noFilters, unread: true },
+                criteria: ['racking'],
+            }),
+        );
+
+        expect(withoutCriterion(ask, 'racking').unread).toBe(true);
     });
 });
 

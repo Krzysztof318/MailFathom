@@ -64,6 +64,7 @@ function message(id: string, position: number): MailThreadMessage {
             attachmentCount: 0,
             sizeOctets: 512,
             preview: null,
+            enrichment: null,
             threadMessageCount: null,
         },
         message: null,

@@ -19,6 +19,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.Emails.Search.Phrasing;
 using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
@@ -630,6 +631,65 @@ public sealed class AiServiceCollectionExtensionsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddDiscoveryRunAgents(null!));
+    }
+
+    /// <summary>
+    /// A sentence is read under the request that typed it, so the reader is resolved per scope like every other agent
+    /// that spends against a run's ledger: one reading is charged to the search that asked for it and to no other.
+    /// </summary>
+    [Fact]
+    public void AddMailSearchPhraseAgent_ResolvesTheReadingPortOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddMailSearchPhraseAgent();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IMailSearchPhraseReader>(),
+            otherScope.ServiceProvider.GetRequiredService<IMailSearchPhraseReader>());
+    }
+
+    /// <summary>The envelope is a seam a deployment fills, so the reader keeps one that is already registered.</summary>
+    [Fact]
+    public void AddMailSearchPhraseAgent_WhereAnInstructionEnvelopeIsAlreadyRegistered_KeepsIt()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var declared = Substitute.For<IAgentInstructionEnvelope>();
+        services.AddSingleton(declared);
+
+        // Act
+        services.AddMailSearchPhraseAgent();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(declared, provider.GetRequiredService<IAgentInstructionEnvelope>());
+    }
+
+    [Fact]
+    public void AddMailSearchPhraseAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddMailSearchPhraseAgent(null!));
     }
 
     /// <summary>

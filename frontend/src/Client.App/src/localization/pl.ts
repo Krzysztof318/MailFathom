@@ -522,6 +522,11 @@ export const pl: Catalogue = {
 
     'search.label': 'Znajdź wiadomość',
     'search.placeholder': 'Słowa z wiadomości, której szukasz',
+    'search.placeholderDescribed': 'Szukaj lub opisz, czego potrzebujesz',
+    'search.readingPhrase': 'Czytam wpisane zdanie…',
+    'search.criteria': 'Co ustala kolejność wyników',
+    'search.removeCriterion': 'Przestań brać pod uwagę: {criterion}',
+    'search.unaccounted': 'Z „{part}” nie zrobiliśmy nic, więc to nie jest częścią tego wyszukiwania.',
     'search.blank': 'Wpisz, czego szukasz.',
     'search.submit': 'Szukaj',
     'search.stop': 'Zakończ wyszukiwanie',

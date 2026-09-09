@@ -20,10 +20,14 @@ const work: MailAccount = {
 
 const anywhere = askIn(everything, 'invoice');
 
-function renderFilters(ask: MailSearchAsk, onNarrow: (ask: MailSearchAsk) => void = () => undefined): void {
+function renderFilters(
+    ask: MailSearchAsk,
+    onNarrow: (ask: MailSearchAsk) => void = () => undefined,
+    onRemoveCriterion: (criterion: string) => void = () => undefined,
+): void {
     render(
         <LocalizationProvider>
-            <SearchFilters ask={ask} accounts={[work]} onNarrow={onNarrow} />
+            <SearchFilters ask={ask} accounts={[work]} onNarrow={onNarrow} onRemoveCriterion={onRemoveCriterion} />
         </LocalizationProvider>,
     );
 }
@@ -77,6 +81,47 @@ describe('SearchFilters', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove the filter Only unread' }));
 
         expect(narrowed).toHaveBeenCalledWith({ ...anywhere, sender: 'somebody@example.invalid', unread: null });
+    });
+
+    // A criterion orders the results and excludes nothing, so it is drawn apart from the filters rather than among
+    // them: one list would tell somebody that taking a criterion off widens what they can find, which it does not.
+    it('draws what a sentence left to rank by apart from the filters it stated', () => {
+        renderFilters({ ...anywhere, criteria: ['racking quotation'], unread: true });
+
+        const ranking = within(screen.getByRole('list', { name: 'What this search is ranked by' })).getAllByRole(
+            'listitem',
+        );
+
+        expect(ranking.map((criterion) => criterion.textContent)).toStrictEqual([
+            expect.stringContaining('racking quotation') as unknown,
+        ]);
+        expect(filtersInForce().map((filter) => filter.textContent)).toStrictEqual([
+            expect.stringContaining('Only unread') as unknown,
+        ]);
+    });
+
+    it('takes one criterion off without touching the filters or the other criteria', () => {
+        const removed = vi.fn();
+
+        renderFilters({ ...anywhere, criteria: ['racking quotation', 'order confirmation'] }, () => undefined, removed);
+        fireEvent.click(screen.getByRole('button', { name: 'Stop ranking by order confirmation' }));
+
+        expect(removed).toHaveBeenCalledWith('order confirmation');
+    });
+
+    // Somebody whose search found little needs to know which half of what they wrote was acted on: a sentence silently
+    // discarded is a search they cannot correct, because nothing on the screen is wrong.
+    it('says which part of a sentence nothing was made of, rather than dropping it', () => {
+        renderFilters({ ...anywhere, criteria: ['racking quotation'], unaccounted: 'urgent' });
+
+        expect(screen.getByText(/Nothing was made of “urgent”/u)).toBeTruthy();
+    });
+
+    it('says nothing about ranking or leftovers for a search nothing read a sentence into', () => {
+        renderFilters(anywhere);
+
+        expect(screen.queryByRole('list', { name: 'What this search is ranked by' })).toBeNull();
+        expect(screen.queryByText(/Nothing was made of/u)).toBeNull();
     });
 
     it('adds a mailbox to search in', () => {

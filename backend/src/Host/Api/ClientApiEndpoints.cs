@@ -137,6 +137,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailFolders();
         api.MapClientMailTimeline();
         api.MapClientMailSearch();
+        api.MapClientMailSearchPhrasing();
         api.MapClientMailThread();
         api.MapClientMailThreadState();
         api.MapClientMailMessage();

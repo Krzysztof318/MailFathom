@@ -640,10 +640,11 @@ question, so correcting a model the provider refused — the ordinary case, beca
 a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
 connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
 next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
-fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the four
+fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the five
 settings that decide which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
 `Chat:RelevanceFilter:Enabled` turns the second pass on, whether `Chat:Enrichment:Enabled` turns the arrival
-derivation on, and whether `Chat:ThreadState:Enabled` turns the conversation derivation on. Renaming a declared alias
+derivation on, whether `Chat:ThreadState:Enabled` turns the conversation derivation on, and whether
+`Chat:SearchPhrasing:Enabled` turns the reading of a typed sentence on. Renaming a declared alias
 reloads, because the credential and the resilience circuit are both looked
 up by whatever the declaration in force calls it; going from no chat section to one, or the reverse, does not, and is
 refused with that message rather than silently ignored.
@@ -727,6 +728,31 @@ puts a conversation back in the queue, what withholds a derivation, and what rea
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+### Reading a typed sentence into filters — `Chat:SearchPhrasing`
+
+Turning what somebody typed into the mail search field into the filters it states and the words it leaves to rank by,
+so that *unread mail from the supplier about the racking, since August* arrives as a sender, a first day, an unread
+filter and a phrase rather than as a string matched literally. A block inside `Chat` for the reason the three above
+are: it reads with that endpoint and has nowhere to send a sentence without one.
+
+**On by default, unlike the three blocks above, and that is deliberate.** Each of those spends on mail arriving or
+already stored, without anybody asking for it; this spends one short call per search somebody deliberately started, and
+a deployment that declared a chat endpoint has already accepted that cost for a question. An operator who wants the
+endpoint for answering and not for searching writes `false` here.
+
+**A deployment that reads no sentence loses nothing.** The client asks this deployment once whether it reads one; where
+it does not — no chat section, or this written off — the search field offers the plain word search and every filter is
+built by hand exactly as before. The same is true while a provider is unreachable: the words somebody typed are
+searched as they stand rather than the search failing. The one failure that reaches a person is a spend ceiling, which
+is reported rather than searched around.
+
+**It competes with questions for one allowance**, exactly as message enrichment does: each reading is admitted against
+and charged to the same `MailAnswering` period ceilings a question is. The reading is one call carrying the sentence and
+the reader's own calendar day, with no tool and no mail, so a search costs the shortest exchange this deployment makes.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:SearchPhrasing:Enabled` | bool | `true` | reading a sentence requires a declared `Chat:Alias`; written off, or with no alias declared, the client is told this deployment reads none | restart |
 
 ## `MailAnswering`
 
