@@ -206,7 +206,7 @@ export function deploymentAnswering(
 }
 
 /** The whole preferences document, because the route answers all of it whether or not anything was ever set. */
-export function preferencesAnswering(telemetryEnabled: boolean): Answer {
+export function preferencesAnswering(telemetryEnabled: boolean, aiFiltersShown = true): Answer {
     return {
         status: 200,
         body: JSON.stringify({
@@ -215,6 +215,7 @@ export function preferencesAnswering(telemetryEnabled: boolean): Answer {
             openMailInTabs: false,
             markReadOnOpen: true,
             expandWholeThread: false,
+            aiFiltersShown,
             embeddedHtmlMessages: false,
         }),
     };
@@ -381,6 +382,7 @@ export function deploymentWorkingInTabs(): DeploymentTransport {
                     openMailInTabs: true,
                     markReadOnOpen: true,
                     expandWholeThread: false,
+                    aiFiltersShown: true,
                     embeddedHtmlMessages: false,
                 }),
             }),

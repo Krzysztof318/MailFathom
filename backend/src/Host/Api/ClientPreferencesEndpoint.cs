@@ -130,11 +130,12 @@ internal static class ClientPreferencesEndpoint
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn, or nothing for the unset answer.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline, or nothing for the unset answer.</param>
+/// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read, or nothing for the unset answer.</param>
 /// <remarks>
 /// <para>
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
-/// closed — it holds six preferences because six is what a client can state, not because a writer happened to send
-/// six. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
+/// closed — it holds seven preferences because seven is what a client can state, not because a writer happened to send
+/// seven. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
 /// whatever the row held.
 /// </para>
 /// <para>
@@ -151,7 +152,8 @@ internal sealed record ClientPreferencesRequest(
     bool? OpenMailInTabs = null,
     bool? MarkReadOnOpen = null,
     bool? ExpandWholeThread = null,
-    bool? EmbeddedHtmlMessages = null)
+    bool? EmbeddedHtmlMessages = null,
+    bool? AiFiltersShown = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
     /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme this build does not publish.</returns>
@@ -170,7 +172,8 @@ internal sealed record ClientPreferencesRequest(
             this.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
             this.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
             this.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
-            this.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages);
+            this.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages,
+            this.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown);
     }
 }
 
@@ -181,6 +184,7 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on the user's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn rather than at the one it was opened at.</param>
 /// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
+/// <param name="AiFiltersShown">Whether the folder tree carries the standing views of what a derivation read in the mail.</param>
 /// <remarks>
 /// Every preference is answered, whether or not the person ever set it, so a client renders one screen rather than one
 /// per combination of what happens to be stored. What it does not report is when anything was set or from where: this
@@ -193,7 +197,8 @@ internal sealed record ClientPreferencesResponse(
     bool OpenMailInTabs,
     bool MarkReadOnOpen,
     bool ExpandWholeThread,
-    bool EmbeddedHtmlMessages)
+    bool EmbeddedHtmlMessages,
+    bool AiFiltersShown)
 {
     /// <summary>Describes one person's preferences on the wire.</summary>
     /// <param name="preferences">What they set.</param>
@@ -209,6 +214,7 @@ internal sealed record ClientPreferencesResponse(
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
-            preferences.EmbeddedHtmlMessages);
+            preferences.EmbeddedHtmlMessages,
+            preferences.AiFiltersShown);
     }
 }

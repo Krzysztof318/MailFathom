@@ -416,5 +416,6 @@ public sealed class MailTimelineBrowser
         request.IsRemotelyFlagged,
         keyword: null,
         request.HasAttachments,
-        request.Order);
+        request.Order,
+        EmailMarkSelection.Create(request.CarriesMarkOfAspect, request.MarkDueOnOrAfter, request.MarkDueBefore));
 }

@@ -15,6 +15,7 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 /// <param name="MarkReadOnOpen">What they said about opening a message marking it read, or nothing where they never said.</param>
 /// <param name="ExpandWholeThread">What they said about a conversation opening expanded, or nothing where they never said.</param>
 /// <param name="EmbeddedHtmlMessages">What they said about a message drawing the sender's own markup, or nothing where they never said.</param>
+/// <param name="AiFiltersShown">What they said about the tree carrying the standing views, or nothing where they never said.</param>
 /// <remarks>
 /// <para>
 /// Sparse, and every member is therefore optional: a key the document does not carry reads as that preference's own
@@ -39,7 +40,8 @@ internal sealed record ClientPreferencesDocument(
     bool? OpenMailInTabs,
     bool? MarkReadOnOpen,
     bool? ExpandWholeThread,
-    bool? EmbeddedHtmlMessages)
+    bool? EmbeddedHtmlMessages,
+    bool? AiFiltersShown)
 {
     /// <summary>How the column is written and read, which is fixed here rather than inherited from a host's own options.</summary>
     /// <remarks>
@@ -68,7 +70,8 @@ internal sealed record ClientPreferencesDocument(
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
             preferences.ExpandWholeThread,
-            preferences.EmbeddedHtmlMessages);
+            preferences.EmbeddedHtmlMessages,
+            preferences.AiFiltersShown);
 
         return JsonSerializer.Serialize(document, StoredFormat);
     }
@@ -91,6 +94,7 @@ internal sealed record ClientPreferencesDocument(
             document.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
             document.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
             document.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
-            document.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages);
+            document.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages,
+            document.AiFiltersShown ?? ClientPreferences.Unset.AiFiltersShown);
     }
 }

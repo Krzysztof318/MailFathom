@@ -63,9 +63,11 @@ public sealed record MailboxEmailSelection
         bool? isRemotelySeen,
         bool? isRemotelyFlagged,
         string? keyword,
-        bool? hasAttachments)
+        bool? hasAttachments,
+        EmailMarkSelection? mark)
     {
         this.Scope = scope;
+        this.Mark = mark;
         this.SenderNormalizedAddress = senderNormalizedAddress;
         this.RecipientNormalizedAddress = recipientNormalizedAddress;
         this.SubjectFragment = subjectFragment;
@@ -141,6 +143,14 @@ public sealed record MailboxEmailSelection
     /// </remarks>
     public bool? HasAttachments { get; }
 
+    /// <summary>Gets the reading a derivation must have made about an email, or <see langword="null" /> when no reading is required.</summary>
+    /// <remarks>
+    /// It narrows by what an enrichment pass already stored rather than by anything the message carries, which is why it
+    /// is a criterion of its own rather than another flag: an email a derivation has never reached matches none of it,
+    /// and so does every email on a deployment that runs no enrichment.
+    /// </remarks>
+    public EmailMarkSelection? Mark { get; }
+
     /// <summary>Gets the injective text of every field, which whatever wraps this selection identifies it by.</summary>
     /// <remarks>
     /// Every field is written, absent ones included, so a filter added to this type in future changes the text of
@@ -160,9 +170,15 @@ public sealed record MailboxEmailSelection
     /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</param>
     /// <param name="keyword">The keyword an email must carry, in any case, or <see langword="null" /> for any.</param>
     /// <param name="hasAttachments">Whether attachments are required, or <see langword="null" /> for either.</param>
+    /// <param name="mark">The reading a derivation must have made about the email, or <see langword="null" /> when no reading is required.</param>
     /// <returns>The validated selection.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or the received range can select nothing.</exception>
+    /// <remarks>
+    /// The reading is optional in the signature because only a screen drawing MailFathom's own marks ever asks for one,
+    /// and every other read model narrows by none: an omitted argument here says the same thing a <see langword="null" />
+    /// says for each of the filters above it.
+    /// </remarks>
     public static MailboxEmailSelection Create(
         MailboxScope scope,
         string? senderAddress,
@@ -173,7 +189,8 @@ public sealed record MailboxEmailSelection
         bool? isRemotelySeen,
         bool? isRemotelyFlagged,
         string? keyword,
-        bool? hasAttachments)
+        bool? hasAttachments,
+        EmailMarkSelection? mark = null)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
@@ -196,7 +213,8 @@ public sealed record MailboxEmailSelection
             isRemotelySeen,
             isRemotelyFlagged,
             ComparableKeyword(keyword),
-            hasAttachments);
+            hasAttachments,
+            mark);
     }
 
     /// <summary>Writes one value with its own length in front of it, so nothing a caller supplies can imitate a separator.</summary>
@@ -281,7 +299,7 @@ public sealed record MailboxEmailSelection
 
     private string ComputeCanonicalText() => string.Join(
         CanonicalFieldSeparator,
-        LengthPrefixed("f2"),
+        LengthPrefixed("f3"),
         CanonicalList(this.Scope.AccountIds.Select(static accountId => accountId.Value)),
 
         // Both halves of a folder are written, because the pair is what the query narrows by: one role selects a
@@ -312,7 +330,13 @@ public sealed record MailboxEmailSelection
         // Already the comparison form, so nothing is folded again here: two requests that wrote one keyword in
         // different cases are one walk, and they reached this text as one value rather than as two.
         CanonicalOptionalText(this.Keyword),
-        LengthPrefixed(CanonicalFlag(this.HasAttachments)));
+        LengthPrefixed(CanonicalFlag(this.HasAttachments)),
+
+        // The reading a derivation made, written as the criterion it is rather than folded away when nobody named one.
+        // It removes rows from the middle of an ordering exactly as the flags above it do, and it is why this text opens
+        // f3 rather than f2 — a cursor issued before it existed names a row in a result set this reading no longer
+        // produces.
+        LengthPrefixed(this.Mark?.CanonicalText ?? CanonicalAbsentValue));
 
     /// <summary>Writes an optional free-text filter, marking whether one was named ahead of what it said.</summary>
     /// <remarks>

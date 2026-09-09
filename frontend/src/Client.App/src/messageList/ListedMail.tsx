@@ -42,6 +42,9 @@ export function ListedMailProvider({ children }: { readonly children: ReactNode 
         takeFocus: () => {
             mailbox.current?.takeFocus();
         },
+        stand: (view) => {
+            mailbox.current?.stand(view);
+        },
         listing: (list) => {
             mailbox.current = list;
         },

@@ -704,6 +704,7 @@ test('states the whole preferences document to the deployment when one of them i
         markReadOnOpen: true,
         expandWholeThread: false,
         embeddedHtmlMessages: false,
+        aiFiltersShown: true,
     });
 });
 

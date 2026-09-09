@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { act, fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
@@ -434,6 +434,20 @@ describe('MessageList', () => {
         ).toBeDefined();
     });
 
+    it('says a folder narrowed by a reading may simply not have been read, rather than saying nothing matched', async () => {
+        renderList(answering(pageOf([])));
+
+        await screen.findByText('There is no mail in this folder.');
+        openFilters();
+        fireEvent.click(screen.getByRole('button', { name: 'Why this may matter' }));
+
+        expect(
+            await screen.findByText(
+                'No message in this folder carries the reading the list is narrowed to. Either none of them does, or MailFathom has not read this folder yet.',
+            ),
+        ).toBeDefined();
+    });
+
     it('says the machine is offline rather than reporting a deployment that did not answer', () => {
         renderList(answering(wholeFolder), { online: false });
 
@@ -640,6 +654,30 @@ describe('MessageList', () => {
         drawn.unmount();
 
         expect(asked.at(-1)).toBeNull();
+    });
+
+    // The tree draws the standing views and the list is what holds a folder's filters, so pressing one there is an ask
+    // rather than a second way of reading mail: what arrives here is the same narrowing the panel writes.
+    it('reads the folder again narrowed to what a standing view stands on when the tree asks for one', async () => {
+        const asked: (ListedMailbox | null)[] = [];
+        const listed = {
+            ...nothingListed,
+            listing: (list: ListedMailbox | null) => {
+                asked.push(list);
+            },
+        };
+        const { transport, requests } = recording(wholeFolder);
+
+        render(<ListedMailContext value={listed}>{listUnder(transport)}</ListedMailContext>);
+
+        await rows();
+        act(() => {
+            asked.at(-1)?.stand('needsDecision');
+        });
+
+        await waitFor(() => {
+            expect(requests.at(-1)?.path).toContain('carriesMark=Significance');
+        });
     });
 
     // The bar above the list hands focus back before it clears the selection and disappears, and the row the keyboard

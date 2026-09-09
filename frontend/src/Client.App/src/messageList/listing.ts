@@ -4,6 +4,7 @@
 
 import {
     longestTimelinePage,
+    type MailEnrichmentAspect,
     type MailTimelineOrder,
     type MailTimelinePageDirection,
     type MailTimelineQuery,
@@ -47,6 +48,26 @@ export interface MailListFilters {
 
     /** The end of the received range as a local `YYYY-MM-DDTHH:mm`, exclusive, or `null` for no end. */
     readonly receivedTo: string | null;
+
+    /**
+     * The reading a derivation must have left on the message, or `null` to keep mail whatever it read.
+     *
+     * It narrows by what MailFathom already derived and derives nothing itself: a deployment that has read nothing
+     * answers this as a list with no mail in it, which is a folder narrowed to nothing rather than a failure.
+     */
+    readonly markAspect: MailEnrichmentAspect | null;
+
+    /**
+     * The start of the range a commitment falls due in, as a local `YYYY-MM-DDTHH:mm`, inclusive, or `null`.
+     *
+     * Resolved to a wall-clock minute the moment the window is picked rather than each time the list is read, for the
+     * reason {@link MailListFilters.dateRange} gives: a window reckoned afresh would silently become a different
+     * filter at midnight, and the cursor the reader is holding is issued under the filters.
+     */
+    readonly markDueFrom: string | null;
+
+    /** The end of that range as a local `YYYY-MM-DDTHH:mm`, exclusive, or `null` for no end. */
+    readonly markDueTo: string | null;
 }
 
 /** How one folder is being read. */
@@ -66,6 +87,9 @@ export const openingListing: MailListing = {
         dateRange: null,
         receivedFrom: null,
         receivedTo: null,
+        markAspect: null,
+        markDueFrom: null,
+        markDueTo: null,
     },
 };
 
@@ -106,6 +130,9 @@ export function queryFor(
         hasAttachments: listing.filters.hasAttachments,
         receivedOnOrAfter: instantAt(listing.filters.receivedFrom),
         receivedBefore: instantAt(listing.filters.receivedTo),
+        carriesMark: listing.filters.markAspect,
+        markDueOnOrAfter: instantAt(listing.filters.markDueFrom),
+        markDueBefore: instantAt(listing.filters.markDueTo),
         order: listing.order,
         direction,
         pageSize: rowsPerPage,
@@ -120,8 +147,14 @@ export function narrowed(filters: MailListFilters): boolean {
         filters.flagged !== null ||
         filters.hasAttachments !== null ||
         filters.receivedFrom !== null ||
-        filters.receivedTo !== null
+        filters.receivedTo !== null ||
+        narrowedByReading(filters)
     );
+}
+
+/** Whether the list is narrowed by what a derivation read, which is what a standing view in the tree puts in force. */
+export function narrowedByReading(filters: MailListFilters): boolean {
+    return filters.markAspect !== null || filters.markDueFrom !== null || filters.markDueTo !== null;
 }
 
 /**
@@ -131,7 +164,9 @@ export function narrowed(filters: MailListFilters): boolean {
  * than two about a pair of fields. Reading the mail the folder holds in another order is counted with them: it is not a
  * narrowing, but it is a reason the message somebody expected at the top is not there, which is the same surprise the
  * count exists to answer. Including junk is deliberately not counted — it widens the list, so it can never be why a
- * folder looks emptier than the reader expects.
+ * folder looks emptier than the reader expects. What a derivation read counts once however many of its three criteria
+ * are in force, on the same reading as the received range: a standing view in the tree is one decision somebody took,
+ * and reporting it as two would say the folder was being kept from them twice over.
  *
  * @param listing How the reader has asked the folder to be read.
  * @returns The count of narrowings and orderings the reader has chosen.
@@ -143,6 +178,7 @@ export function narrowingsInForce(listing: MailListing): number {
         listing.filters.hasAttachments !== null,
         listing.filters.receivedFrom !== null || listing.filters.receivedTo !== null,
         listing.order !== openingListing.order,
+        narrowedByReading(listing.filters),
     ];
 
     return chosen.filter(Boolean).length;
@@ -166,6 +202,63 @@ export function narrowedToRange(filters: MailListFilters, range: MailListDateRan
     }
 
     return { ...filters, dateRange: range, receivedFrom: localMinute(startOf(range, now)), receivedTo: null };
+}
+
+/** The standing views of the mailbox the folder tree offers, each of them a set of criteria and nothing else. */
+export type StandingView = 'needsDecision' | 'commitments' | 'deadlinesThisWeek';
+
+/** Every standing view, in the order the design project draws them under the tree. */
+export const standingViews: readonly StandingView[] = ['needsDecision', 'commitments', 'deadlinesThisWeek'];
+
+/**
+ * The filters a folder is read with once one of the standing views is asked for.
+ *
+ * A view is a shortcut to criteria rather than a second way of asking for mail: what it puts in force is written into
+ * the same filters the panel draws, so the reader can see each of them, take one off, and change another. Everything
+ * the reader had already narrowed by stays — a view says what MailFathom read, and says nothing about whether they
+ * were also reading only unread mail.
+ *
+ * `needsDecision` stands on the significance a derivation recorded, which is the reading that says why a message may
+ * matter at all. There is no *decision* among the three readings MailFathom stores, so a view that claimed to be one
+ * would be naming something nothing produces.
+ *
+ * @param filters What the list is narrowed to now.
+ * @param view The view the reader asked for.
+ * @param now The instant they asked for it at.
+ * @returns The filters with that view's criteria in force.
+ */
+export function narrowedToView(filters: MailListFilters, view: StandingView, now: Date): MailListFilters {
+    const cleared: MailListFilters = { ...filters, markDueFrom: null, markDueTo: null };
+
+    switch (view) {
+        case 'needsDecision':
+            return { ...cleared, markAspect: 'Significance' };
+        case 'commitments':
+            return { ...cleared, markAspect: 'Commitment' };
+        case 'deadlinesThisWeek':
+            return narrowedToThisWeek({ ...cleared, markAspect: 'Commitment' }, now);
+    }
+}
+
+/**
+ * The filters a folder is read with once the commitments falling due this week are asked for.
+ *
+ * The window is the reader's own week rather than a rolling seven days: it opens at the start of today and closes at
+ * the start of the eighth day, so a commitment due later today is in it and one due at midnight next Monday is not.
+ * Resolved here, at the moment somebody picked it, for the reason {@link narrowedToRange} resolves a span there.
+ *
+ * @param filters What the list is narrowed to now.
+ * @param now The instant the reader asked for it at.
+ * @returns The filters with that window in force.
+ */
+export function narrowedToThisWeek(filters: MailListFilters, now: Date): MailListFilters {
+    const opens = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    return {
+        ...filters,
+        markDueFrom: localMinute(opens),
+        markDueTo: localMinute(new Date(opens.getFullYear(), opens.getMonth(), opens.getDate() + 7)),
+    };
 }
 
 /**

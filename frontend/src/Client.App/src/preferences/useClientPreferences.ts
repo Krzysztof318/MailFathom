@@ -66,6 +66,14 @@ export interface ClientPreferencesInForce {
      */
     readonly embeddedHtmlMessages: boolean;
 
+    /**
+     * Whether the folder tree carries the standing views of what a derivation read in the mail.
+     *
+     * Unset reads as on, which is the tree the design project draws: the section is one somebody turns off rather than
+     * one they go looking for, and a deployment deriving nothing answers each view as a folder narrowed to no mail.
+     */
+    readonly aiFiltersShown: boolean;
+
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
 
@@ -74,6 +82,7 @@ export interface ClientPreferencesInForce {
     readonly chooseTelemetry: (telemetryEnabled: boolean) => void;
     readonly chooseThreadExpansion: (expandWholeThread: boolean) => void;
     readonly chooseMessageView: (embeddedHtmlMessages: boolean) => void;
+    readonly chooseAiFilters: (aiFiltersShown: boolean) => void;
 }
 
 // What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
@@ -102,7 +111,7 @@ const heldForNobody: HeldPreferences = {
  * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
  * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
  * person the last person's answer.
- * @returns The settings in force, and the five ways of changing one.
+ * @returns The settings in force, and the six ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,
@@ -223,6 +232,7 @@ export function useClientPreferences(
         telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
         expandWholeThread: inForce.preferences.expandWholeThread,
         embeddedHtmlMessages: inForce.preferences.embeddedHtmlMessages,
+        aiFiltersShown: inForce.preferences.aiFiltersShown,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
@@ -239,6 +249,9 @@ export function useClientPreferences(
         },
         chooseMessageView: (embeddedHtmlMessages) => {
             state({ ...composedFrom(), embeddedHtmlMessages });
+        },
+        chooseAiFilters: (aiFiltersShown) => {
+            state({ ...composedFrom(), aiFiltersShown });
         },
     };
 }

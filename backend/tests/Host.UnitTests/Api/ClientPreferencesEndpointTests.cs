@@ -23,7 +23,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
-    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true, true);
+    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true, true, false);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_HandsThemWhatTheySet()
@@ -46,6 +46,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.False(preferences.MarkReadOnOpen);
         Assert.True(preferences.ExpandWholeThread);
         Assert.True(preferences.EmbeddedHtmlMessages);
+        Assert.False(preferences.AiFiltersShown);
     }
 
     /// <summary>A first run is a screen rather than an error, so every preference is answered whether or not it was ever set.</summary>
@@ -70,6 +71,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.True(preferences.MarkReadOnOpen);
         Assert.False(preferences.ExpandWholeThread);
         Assert.False(preferences.EmbeddedHtmlMessages);
+        Assert.True(preferences.AiFiltersShown);
     }
 
     /// <summary>The row is one only this deployment writes, so a reader learns what to do about it and nothing about what it held.</summary>
@@ -104,7 +106,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(false, "dark", true, false, true, true),
+            new ClientPreferencesRequest(false, "dark", true, false, true, true, false),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -132,7 +134,7 @@ public sealed class ClientPreferencesEndpointTests
         // Assert
         await store.Received(1).SaveAsync(
             SyntheticMailUser.Deployment,
-            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false),
+            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false, true),
             Arg.Any<CancellationToken>());
     }
 
@@ -198,7 +200,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Act
         var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false}""",
             WebFormat);
 
         // Assert
@@ -229,6 +231,19 @@ public sealed class ClientPreferencesEndpointTests
 
         // Assert
         Assert.False(request!.Stated()!.EmbeddedHtmlMessages);
+    }
+
+    /// <summary>The seventh preference binds like the six beside it, and a body written before it existed draws the standing views rather than hiding them.</summary>
+    [Fact]
+    public void Deserialize_ABodyOmittingTheStandingViews_StatesThemAsDrawn()
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true}""",
+            WebFormat);
+
+        // Assert
+        Assert.True(request!.Stated()!.AiFiltersShown);
     }
 
     /// <summary>The document is closed, so a body stating the message view under a name this build does not publish is refused rather than stored.</summary>

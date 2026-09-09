@@ -23,12 +23,14 @@ function inForce(
         openMailInTabs: false,
         markReadOnOpen: true,
         expandWholeThread: false,
+        aiFiltersShown: true,
         embeddedHtmlMessages,
         chooseTheme: () => undefined,
         chooseTelemetry: () => undefined,
         chooseTabMode: () => undefined,
         chooseThreadExpansion: () => undefined,
         chooseMessageView,
+        chooseAiFilters: () => undefined,
     };
 }
 

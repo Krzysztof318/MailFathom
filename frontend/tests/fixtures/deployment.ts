@@ -63,6 +63,7 @@ export const clientPreferences = {
     markReadOnOpen: true,
     expandWholeThread: false,
     embeddedHtmlMessages: false,
+    aiFiltersShown: true,
 };
 
 /** The mailbox everything else in the corpus belongs to, up to date and with nothing to say about itself. */

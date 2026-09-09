@@ -51,7 +51,7 @@ describe('ListedMailProvider', () => {
         const listed = held();
         const everything = vi.fn();
 
-        listed.listing({ selectAll: everything, takeFocus: () => undefined });
+        listed.listing({ selectAll: everything, takeFocus: () => undefined, stand: () => undefined });
         listed.selectAll();
 
         listed.listing(null);
@@ -60,11 +60,24 @@ describe('ListedMailProvider', () => {
         expect(everything).toHaveBeenCalledOnce();
     });
 
+    it('puts a standing view in force through the list that registered it, and nowhere once it has left', () => {
+        const listed = held();
+        const stood = vi.fn();
+
+        listed.listing({ selectAll: () => undefined, takeFocus: () => undefined, stand: stood });
+        listed.stand('commitments');
+
+        listed.listing(null);
+        listed.stand('commitments');
+
+        expect(stood).toHaveBeenCalledExactlyOnceWith('commitments');
+    });
+
     it('hands focus to the list that registered it, and to nothing at all once no list is on the screen', () => {
         const listed = held();
         const focused = vi.fn();
 
-        listed.listing({ selectAll: () => undefined, takeFocus: focused });
+        listed.listing({ selectAll: () => undefined, takeFocus: focused, stand: () => undefined });
         listed.takeFocus();
 
         listed.listing(null);

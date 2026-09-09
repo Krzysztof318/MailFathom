@@ -36,6 +36,9 @@ export interface ClientPreferences {
 
     /** Whether an open message draws the sender's own markup inline rather than the reduced text this client reduces to. */
     readonly embeddedHtmlMessages: boolean;
+
+    /** Whether the folder tree carries the standing views of what a derivation read in the mail. */
+    readonly aiFiltersShown: boolean;
 }
 
 /**
@@ -51,12 +54,13 @@ export const unsetClientPreferences: ClientPreferences = {
     markReadOnOpen: true,
     expandWholeThread: false,
     embeddedHtmlMessages: false,
+    aiFiltersShown: true,
 };
 
 /**
  * The most of one preferences answer this package reads before refusing it.
  *
- * The document is six scalars, so this is far above anything the deployment will legitimately send and far below
+ * The document is seven scalars, so this is far above anything the deployment will legitimately send and far below
  * anything worth buffering. It is the same order the write route bounds its request body at, for the same reason:
  * what the bound guards against is an answer that was never a preferences document.
  */
@@ -142,13 +146,15 @@ function parsePreferences(body: string): ClientPreferences | null {
     const markReadOnOpen = record['markReadOnOpen'];
     const expandWholeThread = record['expandWholeThread'];
     const embeddedHtmlMessages = record['embeddedHtmlMessages'];
+    const aiFiltersShown = record['aiFiltersShown'];
 
     if (
         typeof telemetryEnabled !== 'boolean' ||
         typeof openMailInTabs !== 'boolean' ||
         typeof markReadOnOpen !== 'boolean' ||
         typeof expandWholeThread !== 'boolean' ||
-        typeof embeddedHtmlMessages !== 'boolean'
+        typeof embeddedHtmlMessages !== 'boolean' ||
+        typeof aiFiltersShown !== 'boolean'
     ) {
         return null;
     }
@@ -157,7 +163,15 @@ function parsePreferences(body: string): ClientPreferences | null {
         return null;
     }
 
-    return { telemetryEnabled, theme, openMailInTabs, markReadOnOpen, expandWholeThread, embeddedHtmlMessages };
+    return {
+        telemetryEnabled,
+        theme,
+        openMailInTabs,
+        markReadOnOpen,
+        expandWholeThread,
+        embeddedHtmlMessages,
+        aiFiltersShown,
+    };
 }
 
 function isThemePreference(value: unknown): value is ClientThemePreference {

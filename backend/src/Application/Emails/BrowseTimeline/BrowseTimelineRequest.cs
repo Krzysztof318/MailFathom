@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -42,6 +43,21 @@ public sealed record BrowseTimelineRequest
 
     /// <summary>Gets whether attachments are required, or <see langword="null" /> for either.</summary>
     public bool? HasAttachments { get; init; }
+
+    /// <summary>Gets the reading a derivation must have made about the message, or <see langword="null" /> for any.</summary>
+    /// <remarks>
+    /// This and the two bounds below are the standing views of a mailbox the folder tree offers, and they read what an
+    /// enrichment pass already stored rather than deriving anything: a list narrowed by one is the mail somebody has
+    /// already said this about. A deployment running no enrichment therefore answers with no mail rather than with a
+    /// refusal, which is the honest answer to a question about marks nothing made.
+    /// </remarks>
+    public EmailEnrichmentAspect? CarriesMarkOfAspect { get; init; }
+
+    /// <summary>Gets the inclusive start of the range a commitment falls due in, or <see langword="null" /> for no start.</summary>
+    public DateTimeOffset? MarkDueOnOrAfter { get; init; }
+
+    /// <summary>Gets the exclusive end of that range, or <see langword="null" /> for no end.</summary>
+    public DateTimeOffset? MarkDueBefore { get; init; }
 
     /// <summary>Gets the inclusive start of the received range, or <see langword="null" /> for no start.</summary>
     public DateTimeOffset? ReceivedOnOrAfter { get; init; }

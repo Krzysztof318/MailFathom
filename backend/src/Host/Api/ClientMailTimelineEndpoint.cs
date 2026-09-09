@@ -60,6 +60,19 @@ internal static class ClientMailTimelineEndpoint
     /// <summary>The <c>direction</c> value that reads the page before the cursor.</summary>
     internal const string BackwardDirection = "backward";
 
+    // The three readings a request may narrow by, spelled as this surface already publishes them on a row's own
+    // `enrichment.marks`. A caller therefore hands back the value it read rather than translating between two
+    // spellings of one closed set, which is what a second spelling on the same route would have made it do.
+
+    /// <summary>The <c>carriesMark</c> value naming the reading that says what a message is about.</summary>
+    internal const string SenseMark = "Sense";
+
+    /// <summary>The <c>carriesMark</c> value naming the reading that says why a message may matter.</summary>
+    internal const string SignificanceMark = "Significance";
+
+    /// <summary>The <c>carriesMark</c> value naming the reading that carries a commitment, which is the one that may carry a date.</summary>
+    internal const string CommitmentMark = "Commitment";
+
     /// <summary>Maps the route into the client group, so it inherits the group's requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
@@ -85,6 +98,9 @@ internal static class ClientMailTimelineEndpoint
     /// <param name="direction">Whether the page lies <c>forward</c> of the cursor or <c>backward</c> of it.</param>
     /// <param name="pageSize">How many rows the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the leading end of the list.</param>
+    /// <param name="carriesMark">The reading a derivation must have made about the message, or <see langword="null" /> for any.</param>
+    /// <param name="markDueOnOrAfter">The inclusive start of the range a commitment falls due in, or <see langword="null" /> for no start.</param>
+    /// <param name="markDueBefore">The exclusive end of that range, or <see langword="null" /> for no end.</param>
     /// <param name="timeline">Reads the page, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, <c>400</c> naming what was wrong with the request, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
@@ -107,6 +123,9 @@ internal static class ClientMailTimelineEndpoint
         [FromQuery] string? direction,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
+        [FromQuery] string? carriesMark,
+        [FromQuery] DateTimeOffset? markDueOnOrAfter,
+        [FromQuery] DateTimeOffset? markDueBefore,
         [FromServices] MailTimelineBrowser timeline,
         CancellationToken cancellationToken)
     {
@@ -132,6 +151,11 @@ internal static class ClientMailTimelineEndpoint
             return Refuse("The account or the folder names a value this deployment does not issue.");
         }
 
+        if (!TryReadMarkAspect(Named(carriesMark), out var carriedAspect))
+        {
+            return Refuse($"A mark names one of '{SenseMark}', '{SignificanceMark}', and '{CommitmentMark}'.");
+        }
+
         var request = new BrowseTimelineRequest
         {
             Accounts = accounts,
@@ -146,6 +170,9 @@ internal static class ClientMailTimelineEndpoint
             PageDirection = pageDirection,
             PageSize = pageSize,
             Cursor = cursor,
+            CarriesMarkOfAspect = carriedAspect,
+            MarkDueOnOrAfter = markDueOnOrAfter,
+            MarkDueBefore = markDueBefore,
         };
 
         try
@@ -210,6 +237,30 @@ internal static class ClientMailTimelineEndpoint
         _ when NamesTheSame(direction, BackwardDirection) => TimelinePageDirection.Backward,
         _ => null,
     };
+
+    /// <summary>Reads the reading a derivation must have made, reporting whether the request named one this surface publishes.</summary>
+    /// <param name="carriesMark">The mark named, or <see langword="null" /> where the request narrowed by none.</param>
+    /// <param name="aspect">The reading named, or <see langword="null" /> where the request narrowed by none.</param>
+    /// <returns>Whether the request is one this route can answer.</returns>
+    /// <remarks>
+    /// Two answers rather than one, because absence and a name nobody publishes are different requests: a list narrowed
+    /// by no mark is the ordinary list, and a list narrowed by a word this deployment never issued is a screen asking
+    /// for something it will not get — answering the second with the first would draw the whole mailbox under a filter
+    /// somebody believes is in force. A closed mapping rather than parsing the enum, for the reason the order is one.
+    /// </remarks>
+    private static bool TryReadMarkAspect(string? carriesMark, out EmailEnrichmentAspect? aspect)
+    {
+        aspect = carriesMark switch
+        {
+            null => null,
+            _ when NamesTheSame(carriesMark, SenseMark) => EmailEnrichmentAspect.Sense,
+            _ when NamesTheSame(carriesMark, SignificanceMark) => EmailEnrichmentAspect.Significance,
+            _ when NamesTheSame(carriesMark, CommitmentMark) => EmailEnrichmentAspect.Commitment,
+            _ => null,
+        };
+
+        return carriesMark is null || aspect is not null;
+    }
 
     /// <summary>Reports whether a caller wrote one of this surface's published names.</summary>
     private static bool NamesTheSame(string written, string published) =>

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { MailTimelineOrder, MailTimelinePageDirection } from '@mailfathom/client-backend';
+import type { MailEnrichmentAspect, MailTimelineOrder, MailTimelinePageDirection } from '@mailfathom/client-backend';
 import { scopeKey, type MailScope } from '../workspace/mailScope';
 import {
     dateRanges,
@@ -219,11 +219,35 @@ function filtersIn(value: unknown): MailListFilters | null {
     const receivedFrom = record['receivedFrom'] ?? null;
     const receivedTo = record['receivedTo'] ?? null;
 
+    // Read as narrowing by no reading where the record predates the standing views, which is a record this client
+    // wrote before the tree offered them rather than one somebody edited.
+    const markAspect = record['markAspect'] ?? null;
+    const markDueFrom = record['markDueFrom'] ?? null;
+    const markDueTo = record['markDueTo'] ?? null;
+
     if (!isWanted(unread) || !isWanted(flagged) || !isWanted(hasAttachments) || typeof includeJunk !== 'boolean') {
         return null;
     }
 
     if (!isRange(dateRange) || !isMinute(receivedFrom) || !isMinute(receivedTo)) {
+        return null;
+    }
+
+    if (!isAspect(markAspect) || !isMinute(markDueFrom) || !isMinute(markDueTo)) {
+        return null;
+    }
+
+    // The same test the due window is composed under, for the reason the received pair is held to the control's:
+    // a window selecting nothing is one the deployment refuses, and reading one back would put the folder on it.
+    if (!selectableRange(markDueFrom, markDueTo)) {
+        return null;
+    }
+
+    // The due window is written and cleared as a pair — the one control that sets it puts both bounds in force or
+    // takes both off, and a standing view clears both — so a record carrying one of them is a record this client
+    // never wrote. Refused rather than read: an open-ended commitment filter nobody chose would narrow the folder
+    // while the panel drew the window as off, which is the case this file exists to keep out.
+    if ((markDueFrom === null) !== (markDueTo === null)) {
         return null;
     }
 
@@ -241,11 +265,28 @@ function filtersIn(value: unknown): MailListFilters | null {
         return null;
     }
 
-    return { unread, flagged, hasAttachments, includeJunk, dateRange, receivedFrom, receivedTo };
+    return {
+        unread,
+        flagged,
+        hasAttachments,
+        includeJunk,
+        dateRange,
+        receivedFrom,
+        receivedTo,
+        markAspect,
+        markDueFrom,
+        markDueTo,
+    };
 }
 
 function isWanted(value: unknown): value is boolean | null {
     return value === null || typeof value === 'boolean';
+}
+
+// The three readings a derivation records, which is the closed set the deployment answers a row with and the only
+// values it narrows a list by. Anything else is a record this client never wrote.
+function isAspect(value: unknown): value is MailEnrichmentAspect | null {
+    return value === null || value === 'Sense' || value === 'Significance' || value === 'Commitment';
 }
 
 function isRange(value: unknown): value is MailListDateRange | null {

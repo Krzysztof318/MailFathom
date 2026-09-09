@@ -21,6 +21,9 @@ const leadingPage: MailTimelineQuery = {
     hasAttachments: null,
     receivedOnOrAfter: null,
     receivedBefore: null,
+    carriesMark: null,
+    markDueOnOrAfter: null,
+    markDueBefore: null,
     order: 'newestFirst',
     direction: 'forward',
     pageSize: 50,
@@ -124,6 +127,31 @@ describe('timelineQueryString', () => {
 
         expect(asked).toContain('receivedOnOrAfter=');
         expect(asked).not.toContain('receivedBefore');
+    });
+
+    it('carries the reading a derivation must have left, spelled as this surface publishes it on a row', () => {
+        expect(timelineQueryString({ ...leadingPage, carriesMark: 'Significance' })).toContain(
+            'carriesMark=Significance',
+        );
+    });
+
+    it('carries the range a commitment falls due in as the two instants that bound it', () => {
+        const asked = timelineQueryString({
+            ...leadingPage,
+            carriesMark: 'Commitment',
+            markDueOnOrAfter: '2026-09-03T00:00:00.000Z',
+            markDueBefore: '2026-09-10T00:00:00.000Z',
+        });
+
+        expect(asked).toContain('markDueOnOrAfter=2026-09-03T00%3A00%3A00.000Z');
+        expect(asked).toContain('markDueBefore=2026-09-10T00%3A00%3A00.000Z');
+    });
+
+    it('leaves out what a derivation read where the list is not narrowed by it', () => {
+        const asked = timelineQueryString(leadingPage);
+
+        expect(asked).not.toContain('carriesMark');
+        expect(asked).not.toContain('markDue');
     });
 
     it('escapes the cursor a previous page answered with', () => {
