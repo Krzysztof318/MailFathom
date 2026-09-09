@@ -458,6 +458,45 @@ Only a message that yielded text has rows here, and deleting a message cascades 
 
 `stored_emails.AttachmentTextDerivedAt` is what takes a message out of the walk that reads attachments. It is written in the same statement as the rows above and the passages cut from them: a message stamped without its readings would never be offered to a parser again, and readings without the stamp would be taken a second time on the next run — and, for a picture, paid for again.
 
+## Where a conversation stands
+
+`email_thread_states` holds one row per conversation a derivation has settled, keyed on the surviving thread — one
+state per conversation, so the key is the thread. Beside `DerivedAt` and the `xmin` row version it carries `Coverage`,
+one of `WholeThread` or `ThreadTooLarge` as text of at most 64 characters, and the pair `DerivedFromMessageCount` and
+`DerivedFromLatestArrival` describing the shape of the conversation the derivation was made from.
+
+**That pair is what stops a state going stale silently.** A conversation has no row of its own that changes when a
+message joins it — a thread is the relation its messages declare — so the count and the newest arrival are compared
+against the conversation as it stands to decide whether the stored state still describes it. A conversation whose shape
+has moved is owed a derivation again; writing the new state takes it out of the selection. [A conversation's
+state](../features/thread-state.md#when-it-runs-and-what-puts-a-conversation-back) records what each half catches and
+the one membership change the pair does not.
+
+**The row existing is what takes the conversation out of the pass's selection**, which is why nothing is written for a
+derivation that was withheld: a spent period allowance or an unreachable provider would otherwise remove a conversation
+from the queue for a condition that lasts an hour. A `ThreadTooLarge` row is a settled record rather than a withholding,
+so a conversation past the bound leaves the queue instead of heading every pass forever.
+
+`email_thread_state_entries` holds the statements, a row each rather than four sets of columns on the state: the four
+aspects are the same shape and a conversation carries any number of each, so columns would have fixed a count per
+aspect in advance and a fifth aspect would have been a schema change rather than a value. `Aspect` is one of
+`Agreement`, `OpenQuestion`, `Commitment`, or `VersionDifference`, stored as text of at most 64 characters rather than
+as an ordinal. `Text` is bounded at 240 characters and `OwedBy` at 120, and both were shortened before they reached
+here rather than refused. `OwedBy` and `DueAt` are null on every aspect but a commitment, and on a commitment the
+conversation named nobody or no date for.
+
+`Ordinal` is stored rather than derived, because the order is the producer's own — it names what matters most first —
+and a row order is not a property a table has. It is per aspect, and the index over the conversation, the aspect and
+the ordinal is what reads the statements of one aspect back in the order they were written.
+
+`Sources` is a `uuid[]` of the messages a statement rests on, in the order the producer named them, rather than a table
+of its own: a statement's sources are read whole with it and never joined to, so a row per citation would have bought a
+join and a second ordinal to preserve an order the array already carries. What a query still does with it is ask which
+statements cite a message, which `= ANY` answers. A statement with no source is refused by the application before it
+reaches here, which is the one thing the block exists to rule out.
+
+Both tables cascade from the conversation, so erasing a correspondence removes the block with it.
+
 ## What a derivation concluded about a message
 
 `email_enrichments` holds one row per message a derivation has settled, keyed on `StoredEmailId` alone — one derivation

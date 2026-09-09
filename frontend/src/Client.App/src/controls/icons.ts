@@ -61,6 +61,7 @@ export const iconNames = [
     'inbox',
     'key',
     'info',
+    'insights',
     'label_important',
     'language',
     'link',

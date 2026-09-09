@@ -5,11 +5,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
     readMailThread,
+    readMailThreadState,
     type ClientFailure,
     type ClientFailureReason,
+    type ClientResult,
     type ClientSession,
     type MailFathomTransport,
     type MailThreadPage,
+    type MailThreadState,
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
@@ -21,6 +24,7 @@ import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { arrivalMark, arrivesAt, holdsMessage, messagesOf, type Arrival } from './threadOpening';
 import { ThreadMessage } from './ThreadMessage';
+import { ThreadState } from './ThreadState';
 
 // A conversation, which is the unit people actually think in and the one mail screen no folder is the scope of: the
 // question is in the inbox, the answer is in the sent folder, and the service reads across both. What this screen owns
@@ -112,6 +116,15 @@ export function Thread({
     const panelsHidden = workspace.panelsHidden;
 
     const [pages, setPages] = useState<readonly MailThreadPage[]>([]);
+
+    // Where the conversation stands, as the deployment derived it, and `null` while the block is still being read. It
+    // is a read of its own rather than part of the conversation's pages: the deployment wrote it behind an account run
+    // and serves it from a route of its own, so a conversation of eight pages still costs one read of it.
+    const [derivation, setDerivation] = useState<ClientResult<MailThreadState | null> | null>(null);
+
+    // The message a statement's source was followed to, and which press followed it. The press is part of the value so
+    // that following the same source twice is two view changes rather than one: focus is placed on each of them.
+    const [followed, setFollowed] = useState<{ readonly storedEmailId: string; readonly press: number } | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
     const [asked, setAsked] = useState(false);
     const [connected, setConnected] = useState(online);
@@ -217,6 +230,39 @@ export function Thread({
         };
     }, [session, transport, conversation.threadId, reading, wantedCursor]);
 
+    // Where the conversation stands is read once per conversation, because that is what it is: a record the deployment
+    // wrote behind an account run rather than something composed while this screen waits. A machine with no network
+    // reads nothing and the block says it is still reading, which is what the frame above already explains.
+    useEffect(() => {
+        if (!online) {
+            return;
+        }
+
+        let listening = true;
+
+        void readMailThreadState(session, transport, conversation.threadId).then((result) => {
+            if (listening) {
+                setDerivation(result);
+            }
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport, conversation.threadId, online]);
+
+    // Following a statement's source is a view change, so focus goes to the message it named. It is placed here rather
+    // than in the press because the message may be one the history was hiding, and the element does not exist until
+    // the render that showed it. The sheet a phone follows a source from closes in an effect of its own, and a child's
+    // effects run before its parent's, so the focus this places is the one that stands.
+    useEffect(() => {
+        if (followed === null) {
+            return;
+        }
+
+        regions.current.get(followed.storedEmailId)?.focus();
+    }, [followed]);
+
     // Arriving in a conversation is a view change, so focus goes to the message it opened at rather than staying on
     // whatever opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser
     // scrolls what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
@@ -267,6 +313,11 @@ export function Thread({
         revise({ conversation: null, selection: storedEmailId });
     }
 
+    function followSource(storedEmailId: string): void {
+        setHistoryShown(true);
+        setFollowed((last) => ({ storedEmailId, press: (last?.press ?? 0) + 1 }));
+    }
+
     // Offline is its own sentence rather than a failure worded politely, and it is said only where there is nothing to
     // draw instead: a conversation already on the screen is the truest thing anybody has, and the frame above already
     // says the machine has no network.
@@ -311,9 +362,20 @@ export function Thread({
         );
     }
 
+    // A state this deployment could not answer for is drawn as nothing at all rather than as a second failure line: the
+    // block stands beside the conversation rather than inside it, and a reader who came to read the mail can act on
+    // neither the absence nor the reason. What a read that answered with nothing draws is the absence itself, which is
+    // a state the block says in a sentence.
+    const derived = derivation?.outcome === 'read' ? derivation.value : null;
+    const stateBlock =
+        derivation?.outcome === 'failed' ? undefined : (
+            <ThreadState state={derived} reading={derivation === null} messages={held} onFollowSource={followSource} />
+        );
+
     return (
         <Conversation
             onClose={close}
+            state={stateBlock}
             header={
                 // The head goes with the panels where the composition has two of them, which is the design's own
                 // arithmetic: `showThreadHead` is off under the *fullscreen* control except in a single pane, where
@@ -518,10 +580,15 @@ function pageWanted(
 function Conversation({
     onClose,
     header,
+    state,
     children,
 }: {
     readonly onClose: () => void;
     readonly header?: ReactNode;
+
+    /** Where the conversation stands, which stands across the column between its head and its messages. */
+    readonly state?: ReactNode;
+
     readonly children: ReactNode;
 }) {
     const { translate } = useLocalization();
@@ -540,6 +607,8 @@ function Conversation({
             </div>
 
             {header}
+
+            {state}
 
             <div className="flex flex-col gap-3 px-5.5 py-4.5">{children}</div>
         </section>

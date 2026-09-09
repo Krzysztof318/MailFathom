@@ -897,6 +897,11 @@ internal static class HostComposition
         builder.Services.AddEmailEnrichmentAgent(
             declaredChat?.IsConfigured is true && declaredChat.Enrichment.Enabled);
 
+        // And again for a conversation's state, which needs the same two decisions and reports the absence of either
+        // the same way.
+        builder.Services.AddThreadStateAgent(
+            declaredChat?.IsConfigured is true && declaredChat.ThreadState.Enabled);
+
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
                 .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

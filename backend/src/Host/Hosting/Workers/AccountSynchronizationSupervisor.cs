@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.AttachmentText;
 using MailFathom.Application.Emails.AttachmentText.Limits;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Enrichment;
+using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -309,6 +310,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
                 await this.ReadAttachmentsOfCutMailAsync(runSettings, workUnitToken);
                 await this.DeriveMarksOfCutMailAsync(runSettings, workUnitToken);
+                await this.DeriveStatesOfChangedThreadsAsync(runSettings, workUnitToken);
                 await this.ReportRunToItsUserAsync(
                     runSettings,
                     scheduledFolders.Length,
@@ -927,6 +929,56 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogMarkDerivationFailed(exception, this.account.Id.Value);
+        }
+    }
+
+    /// <summary>Derives what a conversation this run changed has settled, what it is still asking, and what it owes.</summary>
+    /// <remarks>
+    /// <para>
+    /// Behind the marks, because a state is read from the messages a conversation holds and the stages in front of this
+    /// one are what decide which messages those are: a message this run relocated, tombstoned, or has yet to finish
+    /// evaluating is one the selection deliberately does not admit, and running earlier would derive a state over a
+    /// conversation about to change underneath it.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run, for the reason the passes above it do not: what it reads is already stored, and
+    /// the one remote thing it reaches is a chat endpoint bounded by its own resilience budget rather than the mail
+    /// server this account's backoff is about.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A derivation that failed is logged and resumed by the next run rather than putting the account into backoff; the remarks hold why the one remote step it takes is bounded elsewhere.")]
+    private async Task DeriveStatesOfChangedThreadsAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<ThreadStateDerivationPass>()
+                .RunAsync(this.account, cancellationToken);
+
+            if (!report.IsEmpty)
+            {
+                this.LogThreadStatesDerived(
+                    this.account.Id.Value,
+                    report.DerivedThreadCount,
+                    report.StatedThreadCount,
+                    report.TooLargeThreadCount,
+                    report.StoppedBy,
+                    report.ThreadsRemain);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogThreadStateDerivationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -1655,6 +1707,23 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Deriving the marks of the cut mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not derived stays outstanding for the next run.")]
     private partial void LogMarkDerivationFailed(Exception exception, string accountId);
+
+    /// <summary>Reports one account's conversation states in counts alone; no statement, subject, or participant may reach a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Derived the state of {DerivedThreadCount} conversations of account {AccountId}, {StatedThreadCount} of which carry at least one statement and {TooLargeThreadCount} of which are recorded as too large to read in one bound; what stopped the pass early was {StoppedBy}, empty where it ran to its own bound, and conversations remain: {ThreadsRemain}.")]
+    private partial void LogThreadStatesDerived(
+        string accountId,
+        int derivedThreadCount,
+        int statedThreadCount,
+        int tooLargeThreadCount,
+        ThreadStateWithholding? stoppedBy,
+        bool threadsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Deriving the states of the changed conversations of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not derived stays outstanding for the next run.")]
+    private partial void LogThreadStateDerivationFailed(Exception exception, string accountId);
 
     /// <summary>Reports one account run's share of a whole-mailbox classification run, in counts and the profile alone.</summary>
     [LoggerMessage(

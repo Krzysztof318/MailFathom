@@ -248,6 +248,42 @@ const conversationRows = [
 ];
 
 /**
+ * Where that conversation stands, as a deployment that turned the derivation on would have written it down.
+ *
+ * Three statements, one of each aspect a correspondence of this kind produces, each resting on the message that says
+ * it — which is what the block is for, and what a capture of the screen has to show. A version difference is absent
+ * because nothing in this exchange carries a document.
+ */
+export const conversationState = {
+    threadId: conversationId,
+    coverage: 'WholeThread',
+    derivedAt: '2026-08-31T08:20:00+00:00',
+    entries: [
+        {
+            aspect: 'Agreement',
+            text: 'The deeper bays, with the fixings and the delivery inside the same figure.',
+            owedBy: null,
+            dueAt: null,
+            sources: [{ kind: 'email', email: conversationRows[2]?.id ?? '' }],
+        },
+        {
+            aspect: 'OpenQuestion',
+            text: 'Whether the yard can be spared for a morning on the ninth.',
+            owedBy: null,
+            dueAt: null,
+            sources: [{ kind: 'email', email: conversationRows[4]?.id ?? '' }],
+        },
+        {
+            aspect: 'Commitment',
+            text: 'Confirm the dates on Monday.',
+            owedBy: 'Iris Marlow',
+            dueAt: '2026-09-01T08:00:00+00:00',
+            sources: [{ kind: 'email', email: conversationRows[3]?.id ?? '' }],
+        },
+    ],
+};
+
+/**
  * One conversation, long enough that a screen collapses it.
  *
  * The screen shows the latest message and folds every earlier one behind a control naming how many there are, so a

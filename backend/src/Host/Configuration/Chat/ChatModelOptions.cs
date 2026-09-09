@@ -182,6 +182,10 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>Present rather than nullable for the reason the block above is: its own <c>Enabled</c> is what says whether the derivation runs, and off is the default and a supported deployment.</remarks>
     public EmailEnrichmentOptions Enrichment { get; set; } = new();
 
+    /// <summary>Gets or sets whether a conversation is read into the state a client draws beside it.</summary>
+    /// <remarks>Present rather than nullable for the reason the two blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and off is the default and a supported deployment.</remarks>
+    public ThreadStateOptions ThreadState { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the alias because it is the one member with no usable default: a section an operator began writing but left without a name is not a declaration, and a section they never wrote has none either.</remarks>
     public bool IsConfigured => this.Alias.Trim().Length > 0;
@@ -206,7 +210,8 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
                 || this.EntraCredential is not null
                 || this.Unauthenticated
                 || this.RelevanceFilter.Enabled
-                || this.Enrichment.Enabled)
+                || this.Enrichment.Enabled
+                || this.ThreadState.Enabled)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

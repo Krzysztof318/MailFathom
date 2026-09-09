@@ -181,6 +181,7 @@ public sealed class ClientApiEndpointsTests
                         $"{ClientEndpointOptions.RoutePrefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route}")
                     .Order(StringComparer.Ordinal),
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadEndpoint.MailThreadRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute}",
             ],
             routes);
     }
@@ -247,6 +248,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientUserRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientMailThreadStateEndpoint.MailThreadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientDiscoveryRunEndpoints.DiscoveryRunsRoute} -> {MailFathomPermission.MailAsk.Name}",
                 $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",

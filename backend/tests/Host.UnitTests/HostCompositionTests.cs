@@ -239,6 +239,11 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:Enrichment:Enabled", "true"),
             ],
+            ["conversations read into a state"] =
+            [
+                .. ChatEndpoint,
+                new("Chat:ThreadState:Enabled", "true"),
+            ],
             ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
@@ -277,6 +282,7 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
                 new("Chat:Enrichment:Enabled", "true"),
+                new("Chat:ThreadState:Enabled", "true"),
                 new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),

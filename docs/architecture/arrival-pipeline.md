@@ -1,6 +1,6 @@
 # The arrival pipeline
 
-<!-- describes: backend/src/Application/Synchronization/MailboxSynchronizer.cs, backend/src/Application/Emails/Chunking/MailChunkingPass.cs, backend/src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Threads/EmailThreadAssembly.cs, backend/src/Application/Spam/Gating/**, backend/src/Application/Spam/Runs/SpamClassificationPass.cs, backend/src/Application/Spam/SpamClassificationArrivals.cs, backend/src/Application/Contacts/Collection/MailContactCollector.cs, backend/src/Application/Spam/EmailSpamClassificationHandler.cs, backend/src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, backend/src/Application/Emails/Enrichment/MailEnrichmentPass.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: backend/src/Application/Synchronization/MailboxSynchronizer.cs, backend/src/Application/Emails/Chunking/MailChunkingPass.cs, backend/src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, backend/src/Application/Emails/Threads/EmailThreadAssembly.cs, backend/src/Application/Spam/Gating/**, backend/src/Application/Spam/Runs/SpamClassificationPass.cs, backend/src/Application/Spam/SpamClassificationArrivals.cs, backend/src/Application/Contacts/Collection/MailContactCollector.cs, backend/src/Application/Spam/EmailSpamClassificationHandler.cs, backend/src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, backend/src/Application/Emails/Enrichment/MailEnrichmentPass.cs, backend/src/Application/Emails/ThreadStates/ThreadStateDerivationPass.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
 Nine features decide what happens to a message between the moment synchronization fetches it and the moment
 everything derived from it exists. Each of them documents its own half, and none of them can state the order, because
@@ -207,7 +207,7 @@ without any stored state having to say it was once withheld. What the outcome do
 the gate's answer as each message arrives, because work that never starts leaves no other trace and a mailbox held
 behind classification would otherwise read exactly like a mailbox with no mail in it.
 
-## Why enrichment is the last stage of all
+## Why enrichment is the last stage a message goes through
 
 A mark cites passages, so a message enriched before it was cut would have nothing to rest its evidence on — that alone
 puts it behind the cut. It is behind the attachment reading for a harder reason than it looks: a derivation is taken
@@ -235,6 +235,13 @@ rather than to the wrong text.
 A pass ends early rather than walking the batch whenever a derivation is withheld, because every reason one is withheld
 — an operator who has not turned it on, a spent period allowance, an unreachable provider — outlives one message and
 would be met again by the next.
+
+**One pass runs behind it, and its subject is a correspondence rather than a message.** Deriving
+[where a conversation stands](../features/thread-state.md) reads the messages an exchange holds, so it goes last for
+the reason enrichment goes last among the message stages: a conversation whose newest message is still being relocated,
+tombstoned, or evaluated is one whose state would be derived over a shape about to change. It selects by the shape of
+the conversation rather than by a message never derived from, which is why a message arriving into a settled exchange
+puts that exchange back in the queue and nothing else does.
 
 ## Why the cut is not part of the commit
 
@@ -365,5 +372,6 @@ has a scanner switched on.
 | The boundary rules a cut obeys, and what a passage of an attachment carries | [Message chunks](../features/message-chunks.md) |
 | What a document attachment is read with, and what a read reports | [Attachment text extraction](../features/attachment-text-extraction.md) |
 | What a message is about, why it may matter, and what backs each mark | [Message enrichment](../features/message-enrichment.md) |
+| What a correspondence settled, left open, and undertook | [A conversation's state](../features/thread-state.md) |
 | Offering, embedding, and what a ceiling does | [Automatic embedding](../features/automatic-embedding.md) |
 | Reaching mail the live path missed | [Embedding backfill](../features/embedding-backfill.md) |

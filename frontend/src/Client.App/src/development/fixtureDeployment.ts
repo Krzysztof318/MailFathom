@@ -390,7 +390,10 @@ function draftAnswer(route: string, request: ClientRequest): ClientResponse | nu
  */
 function messageAnswer(route: string, asked: URLSearchParams): ClientResponse | null {
     if (route.startsWith('/threads/')) {
-        return answering(mail.conversation);
+        // The conversation and where it stands are two reads of one correspondence, and the corpus answers both: a
+        // deployment that had derived nothing would draw the absence instead, which is a state of the block rather
+        // than the one worth serving as the example.
+        return answering(route.endsWith('/state') ? mail.conversationState : mail.conversation);
     }
 
     if (!route.startsWith('/messages/')) {

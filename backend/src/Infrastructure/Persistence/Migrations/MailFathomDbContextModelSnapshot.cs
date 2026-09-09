@@ -709,6 +709,79 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_thread_identifiers", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntity", b =>
+                {
+                    b.Property<Guid>("EmailThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("Coverage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("DerivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DerivedFromLatestArrival")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DerivedFromMessageCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("EmailThreadId")
+                        .HasName("pk_email_thread_states");
+
+                    b.ToTable("email_thread_states", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntryEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Aspect")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EmailThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OwedBy")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.PrimitiveCollection<Guid[]>("Sources")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmailThreadId", "Aspect", "Ordinal");
+
+                    b.ToTable("email_thread_state_entries", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3016,6 +3089,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", "EmailThread")
+                        .WithOne()
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntity", "EmailThreadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EmailThread");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntryEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntity", "ThreadState")
+                        .WithMany("Entries")
+                        .HasForeignKey("EmailThreadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_email_thread_state_entries_states");
+
+                    b.Navigation("ThreadState");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.JobEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
@@ -3323,6 +3419,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", b =>
                 {
                     b.Navigation("Signals");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadStateEntity", b =>
+                {
+                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>

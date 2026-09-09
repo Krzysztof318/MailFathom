@@ -105,7 +105,7 @@ switching a scanner on leaves everybody else's rows exactly where they were.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-nine, and the register is closed: a tenth is a code change rather than a configuration one, which is what makes the
+ten, and the register is closed: an eleventh is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -118,6 +118,7 @@ list below answerable by reading it.
 | `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them. A conversation crosses here too, for its messages and for the display names its participant list names |
 | `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
 | `client_citation_resolution` | The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands |
+| `client_thread_state` | The block the client API answers a conversation's state with: each statement a derivation wrote about where the exchange stands, and the name a commitment is owed by |
 | `attachment_download` | The extracted text of one attachment about to be streamed whole, on the signed link route and on the client's own attachment route alike — the one point whose subject is a file's own words rather than a message's |
 
 `client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
@@ -136,6 +137,12 @@ surface a finding crossed.
 was looking for, so what crosses there is chosen by the query rather than by where a message sits in a folder, and a
 redaction rate averaging the two would describe neither. It is also the point whose cost is paid per result and per
 extract rather than per row.
+
+`client_thread_state` is apart from `client_mail_listing` although both are read from the same screen, because what
+crosses there is not mail at all: it is a sentence a model wrote about the mail, so a credential a message carried can
+reach it having been quoted rather than copied, and a finding here says a derivation repeated something a scanner had
+already caught upstream. It is also the one client point whose text was never in a message, which is what makes
+counting it separately worth the tag — a redaction rate mixed into the listing's would hide exactly that.
 
 A [conversation](../operations/client-endpoint.md#the-conversation-route) shares the listing's tag rather than taking a
 tag of its own, because it publishes the same three values per message, to the same reader, in the same amounts. What it

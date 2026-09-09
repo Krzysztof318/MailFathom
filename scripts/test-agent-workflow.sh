@@ -9235,6 +9235,7 @@ mail.ts searchResults GET /api/client/emails/search
 mail.ts noSearchResults GET /api/client/emails/search
 mail.ts conversationRows - -
 mail.ts conversation GET /api/client/threads/{threadId}
+mail.ts conversationState GET /api/client/threads/{threadId}/state
 messages.ts run GET /api/client/messages/{storedEmailId}/body
 messages.ts newsletterBlocks GET /api/client/messages/{storedEmailId}/body
 messages.ts newsletterBody GET /api/client/messages/{storedEmailId}/body

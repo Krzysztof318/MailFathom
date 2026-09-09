@@ -174,6 +174,12 @@ function deploymentAnswering(...pages: readonly string[]): MailFathomTransport {
     return (request) => {
         asked.push(request);
 
+        // A conversation reads where it stands beside its pages, and this deployment has derived none: the block
+        // draws its absence and the answers below stay the pages the test named.
+        if (request.path.endsWith('/state')) {
+            return Promise.resolve({ status: 404, body: '', headers: {} });
+        }
+
         if (request.path.includes('/body')) {
             return Promise.resolve({ status: 200, body: bodyAsWords(request.path), headers: {} });
         }
@@ -265,6 +271,11 @@ function recordingMarkings(): { marking: ReadMarking; opened: MessageOpened[] } 
 
 function bodiesAsked(): string[] {
     return asked.filter((request) => request.path.includes('/body')).map((request) => request.path);
+}
+
+/** What was asked of the conversation itself. Where it stands is read beside it and is not a read of the messages. */
+function conversationsAsked(): readonly ClientRequest[] {
+    return asked.filter((request) => !request.path.endsWith('/state'));
 }
 
 describe('Thread', () => {
@@ -412,8 +423,8 @@ describe('Thread', () => {
         await screen.findByText('The whole of what one says.');
 
         expect(bodiesAsked()).toHaveLength(0);
-        expect(asked).toHaveLength(1);
-        expect(asked[0]?.path).toContain('content=true');
+        expect(conversationsAsked()).toHaveLength(1);
+        expect(conversationsAsked()[0]?.path).toContain('content=true');
     });
 
     // ADR 0026 marks read every body the conversation drew, which is one rule rather than two — and the conversation
@@ -705,6 +716,10 @@ describe('Thread', () => {
         const failingMidSearch: MailFathomTransport = (request) => {
             asked.push(request);
 
+            if (request.path.endsWith('/state')) {
+                return Promise.resolve({ status: 404, body: '', headers: {} });
+            }
+
             if (request.path.includes('/body')) {
                 return Promise.resolve({ status: 200, body: bodyAsWords(request.path), headers: {} });
             }
@@ -744,6 +759,10 @@ describe('Thread', () => {
         let served = 0;
         const transport: MailFathomTransport = (request) => {
             asked.push(request);
+
+            if (request.path.endsWith('/state')) {
+                return Promise.resolve({ status: 404, body: '', headers: {} });
+            }
 
             if (request.path.includes('/body')) {
                 return Promise.resolve({ status: 200, body: bodyAsWords(request.path), headers: {} });
@@ -787,5 +806,53 @@ describe('Thread', () => {
             screen.getByText('This machine is offline, so this conversation cannot be opened.', { exact: false }),
         ).toBeDefined();
         expect(screen.queryByText('This conversation could not be read: unavailable.')).toBeNull();
+    });
+    // Where the conversation stands is a read of its own, and following one of its statements is a view change: the
+    // history the message was hiding is shown and focus lands on the message the statement rested on.
+    it('reads where the conversation stands and reveals the message a statement rests on', async () => {
+        theColumnStandsBesideTheList();
+
+        const derived: MailFathomTransport = (request) => {
+            asked.push(request);
+
+            if (request.path.endsWith('/state')) {
+                return Promise.resolve({
+                    status: 200,
+                    body: JSON.stringify({
+                        threadId,
+                        coverage: 'WholeThread',
+                        derivedAt: '2026-09-08T09:00:00+00:00',
+                        entries: [
+                            {
+                                aspect: 'Agreement',
+                                text: 'The response time stays at two hours.',
+                                owedBy: null,
+                                dueAt: null,
+                                sources: [{ kind: 'email', email: 'one' }],
+                            },
+                        ],
+                    }),
+                    headers: {},
+                });
+            }
+
+            if (request.path.includes('/body')) {
+                return Promise.resolve({ status: 200, body: bodyAsWords(request.path), headers: {} });
+            }
+
+            return Promise.resolve({
+                status: 200,
+                body: pageOf(['one', 'two'], {}, { one: { senderDisplayName: 'Karolina Nowak' } }),
+                headers: {},
+            });
+        };
+
+        drawing(derived);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'message 1 · Karolina' }));
+
+        await waitFor(() => {
+            expect(document.activeElement?.textContent).toContain('The whole of what one says.');
+        });
     });
 });

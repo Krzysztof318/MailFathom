@@ -211,6 +211,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.ClientMailSearch => "client_mail_search",
         SensitiveContentEgressPoint.ClientCitationResolution => "client_citation_resolution",
         SensitiveContentEgressPoint.AttachmentDownload => "attachment_download",
+        SensitiveContentEgressPoint.ClientThreadState => "client_thread_state",
         _ => "unknown",
     };
 
