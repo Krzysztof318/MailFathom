@@ -21,7 +21,7 @@ const kept: Workspace = {
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
-    askScope: { kind: 'account', accountId: 'work' },
+    askScopeKey: 'account:work',
     askedBefore: [{ question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } }],
     recentSearches: ['quarterly figures'],
 };
@@ -44,10 +44,32 @@ describe('rememberWorkspace', () => {
 
     // The one part of the workspace that is mail rather than a name for one, so it is the one part a store never sees.
     it('keeps no part of the message somebody had selected', () => {
-        rememberWorkspace({ ...kept, fragment: 'the part of the message somebody pointed at' });
+        rememberWorkspace({
+            ...kept,
+            fragment: { messageId: 'AAMkAD-42', text: 'the part of the message somebody pointed at' },
+        });
 
         expect(window.sessionStorage.getItem(storageKey)).not.toContain('somebody pointed at');
         expect(rememberedWorkspace().fragment).toBeNull();
+    });
+
+    // The same rule reaching the one other place a passage could get into the store. What somebody asked is theirs and
+    // is kept; the words they highlighted to ask it are somebody's mail and are not.
+    it('keeps a question asked about a passage under the message rather than under the words', () => {
+        rememberWorkspace({
+            ...kept,
+            askedBefore: [
+                {
+                    question: 'when did they say it would arrive',
+                    scope: { kind: 'fragment', messageId: 'AAMkAD-42', text: 'by the end of the month' },
+                },
+            ],
+        });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('by the end of the month');
+        expect(rememberedWorkspace().askedBefore).toEqual([
+            { question: 'when did they say it would arrive', scope: { kind: 'message', messageId: 'AAMkAD-42' } },
+        ]);
     });
 
     // A consent given for one message after being told what a stranger's markup can carry, which is why a reload finds
@@ -183,19 +205,19 @@ describe('rememberedWorkspace', () => {
     // its own: it is one this client wrote, so it opens on what was kept, asking about whatever is on the screen and
     // with nothing offered back.
     it('reads a workspace kept before the field held a scope and a history as one holding neither', () => {
-        const { askScope, askedBefore, ...before } = kept;
+        const { askScopeKey, askedBefore, ...before } = kept;
 
         stored(before);
 
-        expect(rememberedWorkspace()).toEqual({ ...kept, askScope: null, askedBefore: [] });
-        expect(askScope).not.toBeNull();
+        expect(rememberedWorkspace()).toEqual({ ...kept, askScopeKey: null, askedBefore: [] });
+        expect(askScopeKey).not.toBeNull();
         expect(askedBefore).toHaveLength(1);
     });
 
     it('opens on the mailbox the field was pointed at and the questions asked under it', () => {
         stored(kept);
 
-        expect(rememberedWorkspace().askScope).toEqual({ kind: 'account', accountId: 'work' });
+        expect(rememberedWorkspace().askScopeKey).toBe('account:work');
         expect(rememberedWorkspace().askedBefore).toEqual([
             { question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } },
         ]);

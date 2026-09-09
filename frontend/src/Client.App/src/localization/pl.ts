@@ -63,6 +63,8 @@ export const pl: Catalogue = {
     'scope.allMailboxes': 'Wszystkie skrzynki',
     'scope.everyMailbox': '{folder} we wszystkich skrzynkach',
     'scope.folderIn': '{folder} w skrzynce {mailbox}',
+    'scope.selectedText': 'Zaznaczony fragment',
+    'scope.message': 'Ta wiadomość',
     'scope.thread': 'Ta korespondencja',
     'scope.selection.one': '{count} zaznaczona wiadomość',
     'scope.selection.few': '{count} zaznaczone wiadomości',
@@ -837,7 +839,6 @@ export const pl: Catalogue = {
         'Ta wiadomość zawiera część winmail.dat, którą zapisano bez otwierania, więc to, co się w niej znajduje, nie jest wymienione powyżej.',
 
     'scope.fragment': 'Pytanie dotyczy zaznaczonego fragmentu tej wiadomości: „{fragment}”',
-    'scope.wholeMessage': 'Pytaj o całą wiadomość',
 
     'blocking.progress': 'Jak daleko zaszła operacja',
     'blocking.progressReading': '{percentage} — nie zamykaj tego okna',

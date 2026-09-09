@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -788,10 +789,24 @@ describe('ReadingPane following a cited file', () => {
 });
 
 describe('ReadingPane selection', () => {
+    // The message being read is `workspace.selection` in the application — `App.tsx` hands the pane that very value —
+    // and the passage in scope is read against it, so the harness sets it rather than leaving the pane drawing a
+    // message the workspace has never heard of.
+    function Opened(): null {
+        const { revise } = useWorkspace();
+
+        useEffect(() => {
+            revise({ selection: messageId });
+        }, [revise]);
+
+        return null;
+    }
+
     function readingBeside(): void {
         render(
             <LocalizationProvider>
                 <WorkspaceProvider>
+                    <Opened />
                     <LinkOpenerContext value={() => Promise.resolve()}>
                         <AttachmentExchangeContext value={deliversNothing}>
                             <OpenAttachmentContext value={() => undefined}>
@@ -816,8 +831,8 @@ describe('ReadingPane selection', () => {
         await screen.findByText('The invoice is attached.');
 
         expect(
-            screen.queryByText('Asking about the part of this message you selected: “The invoice is attached.”'),
-        ).toBeNull();
+            screen.queryAllByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+        ).toHaveLength(0);
     });
 
     it('carries the words somebody selected into the scope the next question is asked under', async () => {
@@ -828,8 +843,10 @@ describe('ReadingPane selection', () => {
         fireEvent.mouseUp(words);
 
         expect(
-            await screen.findByText('Asking about the part of this message you selected: “The invoice is attached.”'),
-        ).toBeDefined();
+            await screen.findAllByText(
+                'Asking about the part of this message you selected: “The invoice is attached.”',
+            ),
+        ).toHaveLength(2);
     });
 
     it('gives back the whole message as the scope when that is asked for', async () => {
@@ -838,11 +855,15 @@ describe('ReadingPane selection', () => {
 
         select(words);
         fireEvent.mouseUp(words);
-        fireEvent.click(await screen.findByRole('button', { name: 'Ask about the whole message instead' }));
+        await screen.findAllByText('Asking about the part of this message you selected: “The invoice is attached.”');
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
+            target: { value: `message:${messageId}` },
+        });
 
         expect(
-            screen.queryByText('Asking about the part of this message you selected: “The invoice is attached.”'),
-        ).toBeNull();
+            screen.queryAllByText('Asking about the part of this message you selected: “The invoice is attached.”'),
+        ).toHaveLength(0);
     });
 
     // Opening a message is its words having reached the pane, and where it stands travels with it, because the folder

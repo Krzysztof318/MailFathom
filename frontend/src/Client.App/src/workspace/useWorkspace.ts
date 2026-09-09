@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
-import type { AskedQuestion } from './askScope';
+import type { AskedQuestion, SelectedFragment } from './askScope';
 import { everything, type MailScope } from './mailScope';
 import type { CitedAttachment, OpenedAttachment } from './openAttachment';
 import type { OpenConversation } from './openConversation';
@@ -100,8 +100,12 @@ export interface Workspace {
      * It is the words a person selected rather than a position in anything, because what the intent field does with it
      * is quote it: a range would have to be resolved against a document that is drawn again on every read, and against
      * the same message read a second time under a different ask.
+     *
+     * It names the message the words were taken from as well as the words, because a passage is a scope of its own and
+     * the message around it is the next one out — a fragment that could not say which message it belonged to could
+     * neither be widened to that message nor be told apart from one taken out of a different one.
      */
-    readonly fragment: string | null;
+    readonly fragment: SelectedFragment | null;
 
     /**
      * The messages the person has picked out, in the order the list draws them.
@@ -116,17 +120,17 @@ export interface Workspace {
     readonly question: string;
 
     /**
-     * The mailbox the intent field was pointed at, or `null` where the field asks about what the mail space is showing.
+     * What the intent field was pointed at, by its key, or `null` where the field asks about what the mail space shows.
      *
      * Beside the scope the list is read under rather than instead of it, because the two answer different questions:
      * one says what is drawn, and the other what the next question is about. Widening a question after an answer that
-     * was too narrow is exactly the second changing while the first does not, so a person who asks again about every
-     * mailbox keeps the folder they were reading and the messages they had picked out.
+     * was too narrow, and narrowing it to the paragraph in front of somebody, are both exactly the second changing
+     * while the first does not — so either keeps the folder they were reading and the messages they had picked out.
      *
-     * Only what the field itself offers ever reaches it — every mailbox at once, or one of them — and
-     * `workspace/askScope.ts` is where it is read against what is on the screen.
+     * A key rather than the scope, because it means nothing except against what the field is offering: `askScope.ts`
+     * resolves it there and falls back to the screen where the thing it named has gone.
      */
-    readonly askScope: MailScope | null;
+    readonly askScopeKey: string | null;
 
     /**
      * What was asked before, newest first, each with the scope it was asked under.
@@ -170,7 +174,7 @@ export const emptyWorkspace: Workspace = {
     fragment: null,
     selected: [],
     question: '',
-    askScope: null,
+    askScopeKey: null,
     askedBefore: [],
     recentSearches: [],
 };

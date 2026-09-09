@@ -65,7 +65,10 @@ describe('IntentField', () => {
     it('says every mailbox is in scope until one is chosen', () => {
         renderField();
 
-        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
+            'value',
+            'everything',
+        );
         expect(screen.getByRole('option', { name: 'All mailboxes' })).toBeDefined();
     });
 
@@ -135,58 +138,92 @@ function fieldStanding(as: Partial<Workspace>, accounts: readonly MailAccount[] 
 }
 
 describe('IntentField scope', () => {
-    it('says nothing about a fragment while the whole message is the scope', () => {
-        renderField();
+    it('says nothing about a passage while the whole message is the scope', () => {
+        fieldStanding({ selection: 'AAMkAD-42' });
 
-        expect(screen.queryByRole('button', { name: 'Ask about the whole message instead' })).toBeNull();
+        expect(screen.queryByRole('option', { name: 'The part you selected' })).toBeNull();
+        expect(screen.getByRole('option', { name: 'This message', selected: true })).toBeDefined();
     });
 
-    it('quotes the words a question would be asked about, rather than saying a fragment exists', () => {
-        fieldStanding({ fragment: 'the part of the message somebody pointed at' });
+    it('quotes the words a question would be asked about, rather than saying a passage exists', () => {
+        fieldStanding({
+            selection: 'AAMkAD-42',
+            fragment: { messageId: 'AAMkAD-42', text: 'the part of the message somebody pointed at' },
+        });
 
-        expect(
-            screen.getByText(
-                'Asking about the part of this message you selected: “the part of the message somebody pointed at”',
-            ),
-        ).toBeDefined();
+        // Drawn beside the control and said to a reader who cannot see it, which is why the sentence is on the screen
+        // twice: being told only that something was narrowed to, and not what, is the disclosure this field prevents.
+        const quoted =
+            'Asking about the part of this message you selected: \u201Cthe part of the message somebody pointed at\u201D';
+
+        expect(screen.getAllByText(quoted)).toHaveLength(2);
+        expect(screen.getByRole('status')).toHaveProperty('textContent', quoted);
     });
 
-    it('gives the whole message back as the scope when that is asked for', () => {
-        fieldStanding({ fragment: 'the part of the message somebody pointed at' });
+    // Widening away from a passage is the same control every other scope is chosen with, and it must not take the
+    // highlight off the message: the reader is still looking at the words they selected.
+    it('gives the whole message back as the scope without unselecting the words', () => {
+        const reported = fieldStanding({
+            selection: 'AAMkAD-42',
+            fragment: { messageId: 'AAMkAD-42', text: 'the part of the message somebody pointed at' },
+        });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole message instead' }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
+            target: { value: 'message:AAMkAD-42' },
+        });
 
-        expect(screen.queryByRole('button', { name: 'Ask about the whole message instead' })).toBeNull();
-    });
-
-    // Widening the scope takes the control that did it off the screen, so where focus lands is the behaviour:
-    // left to the browser it falls to the document, which is where reading from a keyboard silently stops.
-    it('puts focus on the question when the control that widened the scope goes', () => {
-        fieldStanding({ fragment: 'the part of the message somebody pointed at' });
-
-        fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole message instead' }));
-
-        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toBe(document.activeElement);
+        expect(screen.queryByText(/Asking about the part of this message/)).toBeNull();
+        expect(reported().fragment).toEqual({
+            messageId: 'AAMkAD-42',
+            text: 'the part of the message somebody pointed at',
+        });
     });
 
     it('names the correspondence being read as what the question is about', () => {
         fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
 
-        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
+            'value',
+            'thread:thread-1',
+        );
         expect(screen.getByRole('option', { name: 'This correspondence' })).toBeDefined();
     });
 
     it('counts the messages picked out, which are narrower than the correspondence holding them', () => {
         fieldStanding({ conversation: { threadId: 'thread-1', openAt: null }, selected: ['one', 'two', 'three'] });
 
-        expect(screen.getByRole('option', { name: '3 selected messages' })).toBeDefined();
-        expect(screen.queryByRole('option', { name: 'This correspondence' })).toBeNull();
+        expect(screen.getByRole('option', { name: '3 selected messages', selected: true })).toBeDefined();
+        expect(screen.getByRole('option', { name: 'This correspondence' })).toBeDefined();
     });
 
     it('names the folder and the mailbox it is in', () => {
         fieldStanding({ scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' } });
 
         expect(screen.getByRole('option', { name: 'Invoices in Work' })).toBeDefined();
+    });
+
+    // Four scopes at once, and the person has to be able to reach any of them without deselecting anything: this is
+    // the case the issue describes and the one the ladder exists for.
+    it('offers the folder, the correspondence, the messages ticked and the passage all at once', () => {
+        fieldStanding({
+            scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' },
+            conversation: { threadId: 'thread-1', openAt: null },
+            selection: 'AAMkAD-42',
+            selected: ['AAMkAD-42', 'AAMkAD-43'],
+            fragment: { messageId: 'AAMkAD-42', text: 'by the end of the month' },
+        });
+
+        for (const name of [
+            'The part you selected',
+            '2 selected messages',
+            'This correspondence',
+            'This message',
+            'Invoices in Work',
+            'Work',
+            'All mailboxes',
+        ]) {
+            expect(screen.getByRole('option', { name })).toBeDefined();
+        }
     });
 
     // The whole point of the field owning a scope of its own: widening a question must not move the list out from
@@ -203,17 +240,57 @@ describe('IntentField scope', () => {
 
         expect(reported().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'Invoices' });
         expect(reported().selected).toEqual(['one']);
-        expect(reported().askScope).toEqual({ kind: 'everything' });
+        expect(reported().askScopeKey).toBe('everything');
     });
 
-    // The list the control renders drops the mailbox the mail space is already showing, so that it is not offered
-    // twice. A reader who names a mailbox here and then walks the folder tree to it is the case where those two meet,
-    // and the control has to keep saying what the question is about rather than falling blank between them.
+    // Narrowing is the other half of the same promise, and it is the half a field offering only mailboxes could not
+    // keep: the list still shows the folder and the rows stay ticked while the question is about one message.
+    it('narrows to one message without changing what the mail space is showing', () => {
+        const reported = fieldStanding({
+            scope: { kind: 'folder', accountId: 'work', alias: 'Invoices' },
+            selection: 'AAMkAD-42',
+            selected: ['AAMkAD-42', 'AAMkAD-43'],
+        });
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
+            target: { value: 'message:AAMkAD-42' },
+        });
+
+        expect(reported().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'Invoices' });
+        expect(reported().selected).toEqual(['AAMkAD-42', 'AAMkAD-43']);
+        expect(screen.getByRole('option', { name: 'This message', selected: true })).toBeDefined();
+    });
+
+    // What is in scope is what is read and sent, so the words beside the question and the scope the run is started
+    // with are asserted as one value rather than trusted to have stayed in step.
+    it('records the scope it was showing when the question is asked', () => {
+        const reported = fieldStanding({
+            selection: 'AAMkAD-42',
+            fragment: { messageId: 'AAMkAD-42', text: 'by the end of the month' },
+        });
+
+        expect(screen.getByRole('option', { name: 'The part you selected', selected: true })).toBeDefined();
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'when did they say it would arrive' },
+        });
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(reported().askedBefore).toEqual([
+            {
+                question: 'when did they say it would arrive',
+                scope: { kind: 'fragment', messageId: 'AAMkAD-42', text: 'by the end of the month' },
+            },
+        ]);
+    });
+
+    // A reader who names a mailbox here and then walks the folder tree to it is where the named scope and the screen's
+    // own meet, and the control has to keep saying what the question is about rather than falling blank between them.
     it('keeps saying what is in scope when the mail space arrives at the mailbox the field was pointed at', () => {
-        fieldStanding(
-            { askScope: { kind: 'account', accountId: 'home' }, scope: { kind: 'account', accountId: 'home' } },
-            [workAccount, homeAccount],
-        );
+        fieldStanding({ askScopeKey: 'account:home', scope: { kind: 'account', accountId: 'home' } }, [
+            workAccount,
+            homeAccount,
+        ]);
 
         expect(screen.getByRole('option', { name: 'Home', selected: true })).toBeDefined();
     });
@@ -225,10 +302,10 @@ describe('IntentField scope', () => {
             target: { value: 'account:home' },
         });
         fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
-            target: { value: '' },
+            target: { value: 'everything' },
         });
 
-        expect(reported().askScope).toBeNull();
+        expect(reported().askScopeKey).toBeNull();
     });
 });
 
