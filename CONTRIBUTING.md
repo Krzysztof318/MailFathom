@@ -34,12 +34,14 @@ Two things are unchanged by whoever or whatever typed the code:
 MailFathom is developed and run on Linux.
 
 - The .NET SDK version pinned in [`global.json`](global.json). `latestFeature` roll-forward applies, so a later feature band of that same major and minor version works and a different major or minor version does not.
+- Node and pnpm, at the versions [`frontend/package.json`](frontend/package.json) names in `engines` and `packageManager`. The SDK does not bring them, and corepack no longer ships with Node, which is why the pnpm version is stated in that manifest rather than left to a shim. **Check `node --version` against that floor yourself** — nothing sets `engine-strict`, there is no `.nvmrc`, and pnpm installs against an older Node without a word.
+- A browser, if you touch a screen: `pnpm --dir frontend exec playwright install chromium`, roughly 300 MB, and `--with-deps` when it installs but refuses to start, which is a missing system library rather than a Playwright fault. `pnpm install` does not bring it, no gate installs it, and three things want it — the browser suite, driving the running client, and the design-parity capture. **ImageMagick** joins it for the capture comparison, which probes for the version 7 `magick` binary and will not accept a version 6 that only provides `convert`.
 - Docker, for the PostgreSQL container the local orchestration starts.
-- Optionally the Aspire CLI and `dotnet-ef`, which only some workflows need.
+- Optionally the Aspire CLI and `dotnet-ef`, which only some workflows need, and — only if you build the desktop or Android head — a Rust toolchain and the platform packages [`docs/operations/local-development.md`](docs/operations/local-development.md) lists for it.
 
 [`docs/operations/local-development.md`](docs/operations/local-development.md) is the full setup: tool versions and install commands, running the app model, development secrets, and the migration workflow. Read it once before your first change.
 
-**`frontend/` needs Node and pnpm rather than the .NET SDK.** It is a pnpm workspace of React and TypeScript, and [`frontend/README.md`](frontend/README.md) is its page; the commands below fetch the server's solution alone, whose dependencies are permissive throughout.
+**`frontend/` is a pnpm workspace of React and TypeScript**, and [`frontend/README.md`](frontend/README.md) is its page. Install both toolchains whichever stack you mean to touch: a change to a file above them — `global.json` is the example — reaches both, so a machine holding one fails a gate on work nobody would have called cross-stack.
 
 ## From a clone to a green run
 
@@ -50,8 +52,15 @@ git remote add upstream https://github.com/Krzysztof318/MailFathom.git
 git fetch upstream main
 dotnet restore backend/MailFathom.slnx
 dotnet build backend/MailFathom.slnx --no-restore
-dotnet test backend/MailFathom.slnx --no-build
+dotnet test --solution backend/MailFathom.slnx --no-build
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run test
 ```
+
+**The test run takes `--solution` rather than a path.** This repository configures Microsoft Testing Platform, and that runner refuses a positional solution — it prints `Specifying a solution for 'dotnet test' should be via '--solution'` and exits zero while doing it, which is how a first run reads as green having tested nothing.
+
+**Type these rather than reaching for the fast loop**, which is the next section: both gates pick their stack from the paths your branch changed, so on a clean clone they reach neither and say so. That is a true statement about a diff and no statement at all about whether your machine can build MailFathom.
 
 **The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `Krzysztof318/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
 
@@ -79,7 +88,15 @@ not started is a queue rather than a failure to chase, and every push waits agai
 pushes never start one.
 ```
 
-The board paragraph is the only one worth checking rather than copying, because the maintainer grants read or write on project `4` whenever they decide to, and a fork is no evidence either way. Ask, once, with the `project` scope on your `gh` credentials:
+**Ask what your credentials may actually do here before you copy any of it**, because a remote is evidence about that and not the answer. One call says what you may do in this repository:
+
+```bash
+gh api repos/Krzysztof318/MailFathom --jq '.permissions'
+```
+
+`push` and `triage` both `false` with `pull` alone `true` is the ordinary contributor's answer, and it is what decides the three things the block above is about: the `type:*` and stack labels, the milestone, and pushing a branch here. Your pull request still crosses from your fork, so nothing about contributing is closed by it. A `null` means the call went out unauthenticated — a public repository answers a read for anybody — so that is `gh` to fix rather than an answer to write down.
+
+The board paragraph is the other one worth checking rather than copying, because the maintainer grants read or write on project `4` whenever they decide to, and a fork is no evidence either way. Ask, once, with the `project` scope on your `gh` credentials:
 
 ```bash
 gh api graphql -f query='{ user(login: "Krzysztof318") { projectV2(number: 4) { viewerCanUpdate } } }'
@@ -97,16 +114,16 @@ A `NOT_FOUND` from a credential that does carry the scope is the paragraph as wr
 
 A verification loop that stops for your consent on every `dotnet` and every `scripts/…` invocation is a conversation rather than a loop, and the usual repair — allowing everything once — gives away the boundary worth keeping. Configure the permissions where your agent keeps them, in Claude Code's `.claude/settings.local.json`, in Codex's `~/.codex/config.toml`, or wherever yours reads. What is portable is the list, not the file:
 
-- **allow** `dotnet` and everything under `scripts/` except `run-integration-tests.sh`, which starts containers and belongs in the last bullet, read-only Git (`status`, `diff`, `log`, `show`, `ls-files`, `rev-parse`, `merge-base`, `branch`, `fetch`, `add`), read-only `gh` (`pr list`, `pr view`, `pr diff`, `issue list`, `issue view`, `auth status`), and ordinary reading (`ls`, `cat`, `head`, `tail`, `wc`, `grep`, `rg`, `find`);
-- **if your agent sandboxes the filesystem**, allow the writes a .NET build makes outside the checkout whether or not anybody asked for them: `~/.nuget`, `~/.local/share/NuGet`, `~/.dotnet`, `~/.templateengine`, `~/.aspnet`, `~/.microsoft`, `~/.aspire`, and your temporary directory. Denied, they fail the restore, which reads as a broken repository rather than as a permission;
-- **if it sandboxes the network**, allow `nuget.org` and `pkgs.dev.azure.com` for packages, `dot.net`, `aka.ms`, `*.microsoft.com`, and `dotnetcli.blob.core.windows.net` for the SDK, `github.com` and `*.githubusercontent.com` for `gh`, and `mcr.microsoft.com` with the Docker registries for the PostgreSQL image, plus binding on the loopback for the local app model;
+- **allow** `dotnet`, `node`, `pnpm`, and everything under `scripts/` except `run-integration-tests.sh`, which starts containers and belongs in the last bullet, read-only Git (`status`, `diff`, `log`, `show`, `ls-files`, `rev-parse`, `merge-base`, `branch`, `fetch`, `add`), read-only `gh` (`pr list`, `pr view`, `pr diff`, `issue list`, `issue view`, `auth status`), and ordinary reading (`ls`, `cat`, `head`, `tail`, `wc`, `grep`, `rg`, `find`). Both gates run the client flow themselves, so allowing `scripts/` without `pnpm` stops a gate halfway through rather than at its start;
+- **if your agent sandboxes the filesystem**, allow the writes both builds make outside the checkout whether or not anybody asked for them: `~/.nuget`, `~/.local/share/NuGet`, `~/.dotnet`, `~/.templateengine`, `~/.aspnet`, `~/.microsoft`, `~/.aspire`, and your temporary directory on the .NET side, and `~/.local/share/pnpm`, `~/.local/state/pnpm`, `~/.cache/pnpm`, and `~/.npm` on the client's — plus `~/.cache/ms-playwright` if you run the browser suite. Denied, they fail the restore, which reads as a broken repository rather than as a permission;
+- **if it sandboxes the network**, allow `nuget.org` and `pkgs.dev.azure.com` for packages, `registry.npmjs.org` for the client's, `dot.net`, `aka.ms`, `*.microsoft.com`, and `dotnetcli.blob.core.windows.net` for the SDK, `github.com` and `*.githubusercontent.com` for `gh`, and `mcr.microsoft.com` with the Docker registries for the PostgreSQL image, plus binding on the loopback for the local app model and for the client's development and preview servers;
 - **leave everything in the other direction to you**: pushing, force-pushing, merging, deleting a branch, and running the integration suite are decisions rather than steps.
 
 `.claude/settings.local.json` is gitignored here, and everything else on that list lives outside the clone, so none of it can arrive in a pull request.
 
 ## The verification loop
 
-While you work, run the fast loop instead of the three `dotnet` commands above:
+Once your branch has changed something, run the fast loop instead of the commands above:
 
 ```bash
 bash scripts/verify-fast.sh
@@ -236,6 +253,8 @@ Every file in this repository carries the same three lines, and a new file is no
 A `.json` file carries no header. A `package.json` is strict JSON and has no comment syntax at all; a `tsconfig.json` does take a comment, since `tsc` parses it as JSONC, but that is one tool's parser rather than a form the header is written in.
 
 `scripts/test-agent-workflow.sh` fails when one of those is missing, so a forgotten header is a red check rather than a review comment. It reads the expected text out of `.editorconfig`, which means the header is one decision written in one place no matter how many forms it takes.
+
+**The fast loop will not tell you.** That script runs in the full gate and nowhere else, and neither eslint nor either formatter has a rule for the header — so a new client file without one builds, lints, type-checks, and passes `verify-fast.sh` cleanly, then stops the last gate before your commit. Adding a file is the moment to type the header, not the moment to rely on a check.
 
 **Do not modify it, and do not add anything of your own beside it.** No second copyright line, no `@author` tag, no "modified by", no name, initials, handle, or contact detail in a comment, a file, or a header anywhere in the tree. A pull request that adds one is asked to remove it before review continues. The one `author` a skill's `metadata` block names is the copyright holder the header already states, spelled the way that format expects it; it is the same single record, not a second one, and it stays that name whoever edits the skill.
 
