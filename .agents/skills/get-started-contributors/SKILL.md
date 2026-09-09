@@ -21,9 +21,11 @@ what the project is and what its licence asks, and then the setup itself. `start
 assumes all of this already holds; this skill is what makes it hold.
 
 It is written for a contributor working through a fork, which is how every step below reads unless it says otherwise.
-One step differs for the owner's checkout by which repository `origin` names, and it is marked **Owner's checkout**.
-Everywhere else what a step does is decided by what step 3's probes answered rather than by a remote, because access is
-a grant somebody makes and a remote is only evidence about it.
+Two steps differ for the owner's checkout, each marked **Owner's checkout**, and both turn on the same test root
+`AGENTS.md` defines the role by: which repository `origin` names. Everywhere else what a step does is decided by what
+step 3's probes answered rather than by a remote, because access is a grant somebody makes and a remote is only
+evidence about it. Keep the two apart — a remote says which clone this is and a probe says what may be done in it, and
+the place they are most easily swapped is the role file in step 5, which says so at the point it matters.
 
 Nothing here edits a tracked file. One step writes a file the repository ignores, one writes a file that belongs to the
 agent harness, one writes this skill's own record under `.git/`, and the rest install software or report.
@@ -515,11 +517,19 @@ offer to go deeper on any one of them instead of expanding all six.
    `CONTRIBUTING.md` § *Tell your agent it is working in a fork* carries the same block, and the two are one text:
    change either and change both.
 
-   **Where `permissions.push` came back `true`, the file is unnecessary**, because every rule in `AGENTS.md` applies
-   and there is nothing an agent would get wrong. That is the owner's checkout, and it is also a collaborator the
-   maintainer has granted write to. What decides it is the probe rather than which repository `origin` names: a clone
-   of MailFathom made without write access gets the file like any other contributor, once step 4's repair has pointed
-   `origin` at a fork.
+   **Owner's checkout:** the file is unnecessary, because every rule in `AGENTS.md` applies and there is nothing an
+   agent would get wrong. **What decides that is `origin` naming `Krzysztof318/MailFathom`** — the same test step 4
+   uses, and the one root `AGENTS.md` § *The two roles this contract is written for* defines the role by.
+
+   **`permissions.push` does not decide it, and this is the one place the two answers must not be swapped.** A
+   collaborator the maintainer granted write to, whose `origin` is still their own fork, probes as push-capable and is
+   the *fork role* all the same: their branch keeps the name they gave it, their push goes to the fork, and the base
+   the gates measure against is `upstream/main`. Skipping the file there would leave a session that never invokes
+   `start-task` assuming it may push to `Krzysztof318/MailFathom` directly and name a branch `agent/<short-description>`,
+   which is exactly the guess this file exists to prevent — so that state gets the block above like any other
+   contributor. The other direction resolves through step 4 rather than here: a clone of MailFathom whose probe said
+   `push: false` has already repointed `origin` at a fork by the time this step runs, and is then an ordinary
+   contributor with an ordinary role file.
 
    **Refresh:** read what is on disk and rewrite only where it differs from the block above and from what step 3 just
    answered. Both are reasons to rewrite it and they arrive separately — the wording moves when this skill or
@@ -691,7 +701,7 @@ Client extras: <the Playwright browser and ImageMagick — installed, already pr
 Role: <which repository origin is, and what resolved it>
 May and may not: <what the repository probe and the board probe answered, and the rows of the table each one decided>
 Base remote: <name and URL, or the command that added it>
-Local role file: <path written, left unchanged, or not applicable because permissions.push came back true>
+Local role file: <path written, left unchanged, or not applicable because origin names Krzysztof318/MailFathom>
 Harness permissions: <what was allowed, and where — or what was added to what was already there>
 Verification: <the result of both stacks' commands, or skipped with the reason>
 Setup record: <path written, and the base commit it now names>
