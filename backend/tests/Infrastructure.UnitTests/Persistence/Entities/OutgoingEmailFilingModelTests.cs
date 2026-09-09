@@ -38,10 +38,11 @@ public sealed class OutgoingEmailFilingModelTests
     }
 
     /// <summary>
-    /// Both indexes serve one join, and the join matches a confirmed row nothing has met yet. Filtering on only half of
-    /// that would leave every mirror withdrawn before a run saw it, and every append the server never answered, sitting
-    /// in both structures for the life of the deployment — so their size would follow everything ever sent rather than
-    /// what is in flight.
+    /// Both indexes serve one join, and the join matches a confirmed row whether or not a run has met it already.
+    /// Dropping the stage would leave every mirror withdrawn before a run saw it, and every append the server never
+    /// answered, sitting in both structures for the life of the deployment; adding the meeting back would drop a copy
+    /// out of them the moment it was recognized, which is what would leave the second occurrence of the same message —
+    /// the one a provider filed itself — read as mail somebody sent the user.
     /// </summary>
     [Theory]
     [InlineData(PersistenceConstraintNames.OutgoingEmailFilingPlacementIndexName, "PlacementUid")]
@@ -56,7 +57,7 @@ public sealed class OutgoingEmailFilingModelTests
         // Assert — the account a filing names is the pair, so the join narrows on the user before the identifier.
         Assert.Equal(["UserId", "MailboxAccountId"], index.Properties.Take(2).Select(property => property.Name));
         Assert.Equal(expectedLastColumn, index.Properties[^1].Name);
-        Assert.Equal("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'", index.GetFilter());
+        Assert.Equal("\"Stage\" = 'Confirmed'", index.GetFilter());
     }
 
     private static IIndex FindFilingIndex(string indexName)

@@ -919,7 +919,8 @@ outgoing message into one of this account's own folders, tagged with the account
 `mailfathom.mail.filing.outcome`, whose values are `filed`, `already_filed`,
 `not_requested`, `destination_unavailable`, `outcome_unknown`, `failed`, and `withdrawn`. Most of them are ordinary:
 `not_requested` is an account that files no copy, `already_filed` is a settlement asked for twice, and `withdrawn` is a
-mirror going away because its message left. Two are worth a dashboard. `destination_unavailable` is a deployment whose
+copy going away — a mirror because its message left, or a sent copy because the account's own provider filed one of its
+own beside it, which is the one the `sent` place names. Two are worth a dashboard. `destination_unavailable` is a deployment whose
 `Sent` folder mapping resolves to nothing, so every message it sends goes unrecorded in the mailbox — a configuration
 answer rather than a server one. And `outcome_unknown` means the same here as it does above and for the same reason:
 the append may or may not have reached the folder, nothing will attempt it again, and repeating it would put a second

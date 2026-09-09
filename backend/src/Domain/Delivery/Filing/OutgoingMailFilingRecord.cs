@@ -126,11 +126,20 @@ public sealed record OutgoingMailFilingRecord
 
     /// <summary>Gets whether this row is one a discovery may still be attributed to.</summary>
     /// <remarks>
-    /// A confirmed append that nothing has met yet, and nothing else. An issued one names no copy anybody can point at,
-    /// and an observed one has already answered for its discovery — which is what keeps a folder recreated under reused
-    /// UIDs from being attributed to a filing that was met long ago.
+    /// <para>
+    /// A confirmed append, and nothing else. An issued one names no copy anybody can point at, and a withdrawn one is
+    /// not at <see cref="OutgoingMailFilingStage.Confirmed" /> either, so the copy that has been taken back out of the
+    /// folder answers for no discovery made after it went.
+    /// </para>
+    /// <para>
+    /// Having been met once does not close the row, because one message can genuinely occur twice in the same folder:
+    /// a provider that files the sent copy itself puts its own beside the one this system appended, and both are the
+    /// user's own outgoing message. Attributing only the first would leave the second scored, classified, and reacted
+    /// to as mail somebody sent them. The identity being compared is the one MailFathom minted and is unguessable, so
+    /// a second match is another occurrence of the same message rather than a different message resembling it.
+    /// </para>
     /// </remarks>
-    private bool IsJoinable => this.Stage == OutgoingMailFilingStage.Confirmed && this.ObservedAt is null;
+    private bool IsJoinable => this.Stage == OutgoingMailFilingStage.Confirmed;
 
     private bool NamesFolder(RemoteFolderPath discoveredFolderPath) =>
         this.FolderPath.NamesSameFolderAs(discoveredFolderPath);

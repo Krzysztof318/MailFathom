@@ -151,6 +151,40 @@ public sealed class OutgoingMailFilingConfigurationTests
         Assert.True(filesSentCopy);
     }
 
+    /// <summary>An account that says nothing ends with one copy of each message it sent, whatever its provider does.</summary>
+    [Fact]
+    public void WithdrawsDuplicateSentCopy_AnAccountThatSaysNothing_TakesItsOwnCopyBackOut()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount());
+
+        // Act
+        var withdrawsDuplicate = options.Readers.OutgoingMailFilingPolicies.WithdrawsDuplicateSentCopy(Primary);
+
+        // Assert
+        Assert.True(withdrawsDuplicate);
+    }
+
+    /// <summary>Turning it off keeps both copies, which is the account whose provider files something worth keeping.</summary>
+    [Fact]
+    public void WithdrawsDuplicateSentCopy_AnAccountThatTurnsItOff_KeepsBothCopies()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.Delivery = new MailAccountDeliveryOptions
+        {
+            Host = "smtp.example.test",
+            WithdrawDuplicateSentCopy = false,
+        };
+
+        // Act
+        var withdrawsDuplicate =
+            OptionsFor(account).Readers.OutgoingMailFilingPolicies.WithdrawsDuplicateSentCopy(Primary);
+
+        // Assert
+        Assert.False(withdrawsDuplicate);
+    }
+
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
         new() { Accounts = [account] };
 
