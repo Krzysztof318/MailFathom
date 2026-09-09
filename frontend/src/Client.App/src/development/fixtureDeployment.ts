@@ -420,7 +420,6 @@ function messageAnswer(route: string, asked: URLSearchParams): ClientResponse | 
     return answering({ ...message, storedEmailId });
 }
 
-/** What a request body states, where it states an object at all. */
 // The passages a citation request named, in the order it named them, which is what the answer is paired against. A
 // body this cannot read answers no citations at all, which the client refuses as an answer it cannot pair — the same
 // thing a deployment answering nonsense would produce.
@@ -436,6 +435,7 @@ function fragmentsIn(body: string | undefined): readonly string[] {
         .filter((fragment): fragment is string => typeof fragment === 'string');
 }
 
+/** What a request body states, where it states an object at all. */
 function recordIn(body: string | undefined): Record<string, unknown> | null {
     if (body === undefined) {
         return null;

@@ -88,9 +88,19 @@ function timelineRow(at: number) {
         attachmentCount: at % 5 === 0 ? 1 : 0,
         sizeOctets: 4_096,
         preview: `The opening of message ${String(at)}.`,
-        enrichment: derivedReading(at),
         threadMessageCount: null,
     };
+}
+
+/**
+ * One row of a folder, which is a row plus what a derivation concluded about the message.
+ *
+ * Apart from {@link timelineRow} because the search route publishes no derivation at all — not the field answering
+ * nothing, the field absent — and a search result is that same row with two fields added. A corpus that carried one
+ * into a search answer would be stating the service answering with something it never answers.
+ */
+function folderRow(at: number) {
+    return { ...timelineRow(at), enrichment: derivedReading(at) };
 }
 
 /**
@@ -106,7 +116,7 @@ const conversationRowPosition = 3;
 // as a constant because what it is built from is declared further down this file.
 function conversationTimelineRow() {
     return {
-        ...timelineRow(conversationRowPosition),
+        ...folderRow(conversationRowPosition),
         id: rackingQuote.id,
         threadId: conversationId,
         threadMessageCount: conversationRows.length,
@@ -131,7 +141,7 @@ export function timelinePage(from: number) {
 
     return {
         emails: Array.from({ length: rows }, (_, at) =>
-            start + at === conversationRowPosition ? conversationTimelineRow() : timelineRow(start + at),
+            start + at === conversationRowPosition ? conversationTimelineRow() : folderRow(start + at),
         ),
         nextCursor: start + rows >= mailboxSize ? null : String(start + rows),
         previousCursor: start === 0 ? null : String(start),
@@ -194,6 +204,9 @@ const rackingQuote = {
  *
  * The file the first of them cites is the one the newsletter message in `messages.ts` actually carries, at the position
  * that message publishes it at, because a citation nothing behind it answers for is a coordinate a reader cannot follow.
+ *
+ * No row here carries a derivation, and that is the route rather than a gap in the corpus: the search endpoint
+ * publishes no such field at all, which is why these are built from `timelineRow` rather than from `folderRow`.
  */
 export const searchResults = {
     results: [

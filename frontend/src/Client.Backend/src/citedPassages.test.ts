@@ -181,6 +181,28 @@ describe('readCitedPassages', () => {
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
+    it('refuses words attached to an outcome that resolved to none, rather than drawing them', async () => {
+        const attached = {
+            outcome: 'PrivateSource',
+            fragment: { fragmentId: 'first', ordinal: 0, text: 'What this sign-in may not read.' },
+        };
+
+        const answer = await readCitedPassages(session, answering(resolving([attached])), storedEmailId, ['first']);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses a resolution that says it resolved and names no passage', async () => {
+        const answer = await readCitedPassages(
+            session,
+            answering(resolving([{ outcome: 'Resolved', fragment: null }])),
+            storedEmailId,
+            ['first'],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
     it('refuses an outcome this client does not know, rather than drawing a conclusion from it', async () => {
         const answer = await readCitedPassages(
             session,

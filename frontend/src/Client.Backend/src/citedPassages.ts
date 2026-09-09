@@ -33,9 +33,11 @@ const outcomes: readonly CitedPassageOutcome[] = ['Resolved', 'Unresolvable', 'P
 /**
  * How many citations one request follows, which is the deployment's own bound rather than a preference.
  *
- * A request naming more is refused with a `400`, so the client holds the same number and asks within it. A mark rests
- * on at most four passages and a message carries at most three marks, so one message's whole evidence is within it and
- * no screen here has to page.
+ * A request naming more is refused with a `400`, so the client holds the same number and asks within it. It is below
+ * what one message can name rather than above it: a message carries at most three marks and a mark rests on at most
+ * four passages, so twelve distinct passages are reachable and the first ten of them — after the marks' own repeats
+ * are folded together — are what a caller may follow. A caller that means to draw the rest says so in its own words
+ * rather than asking twice; `Client.App/src/messageRows/ReadingsAsked.tsx` is the one that does.
  */
 export const mostCitedPassages = 10;
 
@@ -163,6 +165,16 @@ function parseResolution(value: unknown, passage: string): CitedPassage | null {
     }
 
     const fragment = record['fragment'] ?? null;
+    const resolved = outcome === 'Resolved';
+
+    // The outcome and the passage beside it are one answer rather than two, so an answer whose halves disagree is
+    // refused rather than reconciled. It is the privacy half that makes this a refusal rather than a tidiness: a
+    // deployment answering `PrivateSource` and attaching the words anyway would have those words drawn, because what
+    // a screen shows is the passage it was handed and the outcome is what it says where there is none.
+    if (resolved === (fragment === null)) {
+        return null;
+    }
+
     if (fragment === null) {
         return { passage, outcome: outcome as CitedPassageOutcome, ordinal: null, text: null };
     }
