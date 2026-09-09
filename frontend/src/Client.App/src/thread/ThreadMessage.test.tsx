@@ -95,6 +95,7 @@ function message(overrides: Partial<MailThreadMessage> = {}): MailThreadMessage 
             attachmentCount: 0,
             sizeOctets: 1_024,
             preview: 'The figures you asked for are attached.',
+            enrichment: null,
             threadMessageCount: null,
         },
         message: described,

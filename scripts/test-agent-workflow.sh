@@ -9234,6 +9234,9 @@ mail.ts rackingQuote GET /api/client/emails
 mail.ts searchResults GET /api/client/emails/search
 mail.ts noSearchResults GET /api/client/emails/search
 mail.ts conversationRows - -
+mail.ts derivedReading GET /api/client/emails
+mail.ts folderRow GET /api/client/emails
+mail.ts citationResolutions POST /api/client/citations/resolution
 mail.ts conversation GET /api/client/threads/{threadId}
 mail.ts conversationState GET /api/client/threads/{threadId}/state
 messages.ts run GET /api/client/messages/{storedEmailId}/body

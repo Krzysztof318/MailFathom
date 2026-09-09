@@ -290,6 +290,10 @@ function answerFor(
         return answering(mail.timelinePage(asked.get('direction') === 'backward' ? cursor - mail.rowsPerPage : cursor));
     }
 
+    if (route === '/citations/resolution') {
+        return answering(mail.citationResolutions(fragmentsIn(request.body)));
+    }
+
     if (route === '/preferences') {
         if (request.method === 'POST') {
             state.preferences = recordIn(request.body) ?? state.preferences;
@@ -417,6 +421,21 @@ function messageAnswer(route: string, asked: URLSearchParams): ClientResponse | 
     const message = markupOnly ? messages.markupOnlyMessage : messages.newsletterMessage;
 
     return answering({ ...message, storedEmailId });
+}
+
+// The passages a citation request named, in the order it named them, which is what the answer is paired against. A
+// body this cannot read answers no citations at all, which the client refuses as an answer it cannot pair — the same
+// thing a deployment answering nonsense would produce.
+function fragmentsIn(body: string | undefined): readonly string[] {
+    const citations = recordIn(body)?.['citations'];
+
+    if (!Array.isArray(citations)) {
+        return [];
+    }
+
+    return citations
+        .map((citation) => (citation as Record<string, unknown> | null)?.['fragment'])
+        .filter((fragment): fragment is string => typeof fragment === 'string');
 }
 
 /** What a request body states, where it states an object at all. */

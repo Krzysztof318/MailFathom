@@ -20,10 +20,16 @@ const inbox: MailScope = { kind: 'folder', accountId: 'work', alias: 'INBOX' };
 const kept: RememberedListing = {
     order: 'oldestFirst',
     filters: { ...openingListing.filters, unread: true },
+    readingsShown: true,
     cursor: 'the-cursor-that-page-was-read-with',
     readAs: 'backward',
     rowInPage: 17,
 };
+
+// A copy of a record with one field left out, which is how a body written before a field existed is stated.
+function without(record: Record<string, unknown>, field: string): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(record).filter(([named]) => named !== field));
+}
 
 function stored(value: unknown): void {
     window.sessionStorage.setItem(storageKey, JSON.stringify(value));
@@ -86,6 +92,7 @@ describe('rememberedListing', () => {
     it('opens a folder nobody has read at its leading end, newest first', () => {
         expect(rememberedListing(deployment, inbox)).toStrictEqual({
             ...openingListing,
+            readingsShown: true,
             cursor: null,
             readAs: 'forward',
             rowInPage: 0,
@@ -144,6 +151,7 @@ describe('rememberedListing', () => {
                 },
             },
         ],
+        ['a switch that is neither shown nor hidden', { ...kept, readingsShown: 'yes' }],
         ['a listing that is not a record', 'the inbox'],
     ])('opens at the leading end for a record carrying %s', (_, written) => {
         stored({ [keyFor(inbox)]: written });
@@ -160,6 +168,18 @@ describe('rememberedListing', () => {
         rememberListing(deployment, inbox, narrowed);
 
         expect(rememberedListing(deployment, inbox)).toStrictEqual(narrowed);
+    });
+
+    it('draws the readings for a folder kept before the switch existed', () => {
+        stored({ [keyFor(inbox)]: without({ ...kept }, 'readingsShown') });
+
+        expect(rememberedListing(deployment, inbox).readingsShown).toBe(true);
+    });
+
+    it('reads back a folder somebody turned the readings off in, so the switch outlives leaving it', () => {
+        rememberListing(deployment, inbox, { ...kept, readingsShown: false });
+
+        expect(rememberedListing(deployment, inbox)).toStrictEqual({ ...kept, readingsShown: false });
     });
 
     it('refuses a store holding more folders than it keeps rather than reading part of it', () => {

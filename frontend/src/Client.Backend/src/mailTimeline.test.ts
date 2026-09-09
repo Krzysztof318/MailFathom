@@ -162,7 +162,12 @@ describe('readMailTimeline', () => {
 
         expect(result).toStrictEqual({
             outcome: 'read',
-            value: { emails: [message], nextCursor: 'after', previousCursor: 'before', pageSize: 50 },
+            value: {
+                emails: [{ ...message, enrichment: null }],
+                nextCursor: 'after',
+                previousCursor: 'before',
+                pageSize: 50,
+            },
         });
     });
 
@@ -237,10 +242,43 @@ describe('readMailTimeline', () => {
         ['a negative size', bodyOf([{ ...message, sizeOctets: -1 }])],
         ['a conversation holding no message at all', bodyOf([{ ...message, threadMessageCount: 0 }])],
         ['a conversation size that is not whole', bodyOf([{ ...message, threadMessageCount: 2.5 }])],
+        ['a derivation that is not a record', bodyOf([{ ...message, enrichment: 'derived' }])],
+        ['a derivation that does not say when it ran', bodyOf([{ ...message, enrichment: { marks: [] } }])],
     ])('refuses %s rather than reading a page with a hole in it', async (_, body) => {
         const result = await readMailTimeline(session, answering({ status: 200, body }), leadingPage);
 
         expect(result).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('reads what a derivation concluded about a message onto the row that stands for it', async () => {
+        const enrichment = {
+            derivedAt: '2026-08-31T09:41:00+00:00',
+            marks: [
+                {
+                    aspect: 'Commitment',
+                    text: 'An answer is owed by Friday.',
+                    reason: 'The sender asks for confirmation before the end of the week.',
+                    dueAt: '2026-09-04T16:00:00+00:00',
+                    source: 'Model',
+                    origin: 'agents/reader',
+                    evidence: ['fragment-1'],
+                },
+            ],
+        };
+
+        const transport = answering({ status: 200, body: bodyOf([{ ...message, enrichment }]) });
+
+        const result = await readMailTimeline(session, transport, leadingPage);
+
+        expect(result.outcome === 'read' && result.value.emails[0]?.enrichment).toStrictEqual(enrichment);
+    });
+
+    it('reads a message no derivation has reached as carrying none', async () => {
+        const transport = answering({ status: 200, body: bodyOf([{ ...message, enrichment: null }]) });
+
+        const result = await readMailTimeline(session, transport, leadingPage);
+
+        expect(result.outcome === 'read' && result.value.emails[0]?.enrichment).toBeNull();
     });
 
     it('refuses a row carrying more recipients than a message has', async () => {

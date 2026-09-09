@@ -18,6 +18,7 @@ import {
     type ClientSession,
     type MailAccount,
     type MailFathomTransport,
+    type MailTimelineEntry,
 } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
@@ -27,8 +28,11 @@ import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
 import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useComposing } from '../composer/useComposing';
+import { MessageReading } from '../messageRows/MessageReading';
+import { leadingReading, readingsOf } from '../messageRows/messageReadings';
 import { MessageRow } from '../messageRows/MessageRow';
 import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
+import { ReadingsAsked, type AskedReadings } from '../messageRows/ReadingsAsked';
 import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, scopeReaches, type MailScope } from '../workspace/mailScope';
@@ -116,6 +120,11 @@ export function MessageList({
     const [opening, setOpening] = useState(() => rememberedListing(session.baseAddress, scope));
 
     const [listing, setListing] = useState<MailListing>(opening);
+
+    // Whether this folder's rows say what MailFathom made of each message. Beside the listing rather than inside it,
+    // because the listing is what a cursor was issued under and this changes neither the order nor a filter: turning
+    // the sentences off leaves the reader on the row they were on instead of at the top of the folder.
+    const [readingsShown, setReadingsShown] = useState(opening.readingsShown);
     const [held, setHeld] = useState<HeldTimeline>(nothingHeld);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
 
@@ -132,6 +141,9 @@ export function MessageList({
     const [pressed, setPressed] = useState<{ readonly row: number; readonly at: MenuPoint } | null>(null);
     const [questioned, setQuestioned] = useState<readonly ActedMessage[]>([]);
 
+    // The readings being checked, which outlive the menu they were asked from for the reason a question does.
+    const [askedReadings, setAskedReadings] = useState<AskedReadings | null>(null);
+
     // Whether the reader has been put back where they were. State rather than a ref, because what depends on it is what
     // the list asks the deployment for, and that is worked out during render: a list restored into a page it opened
     // from a cursor spends the commit before the scroller is moved with its window at the leading end of that page,
@@ -142,6 +154,7 @@ export function MessageList({
     const scroller = useRef<HTMLDivElement>(null);
     const deleting = useRef<HTMLDialogElement>(null);
     const filing = useRef<HTMLDialogElement>(null);
+    const checking = useRef<HTMLDialogElement>(null);
     const elements = useRef(new Map<number, HTMLLIElement>());
     const dragging = useRef(false);
     const wantsFocus = useRef(false);
@@ -235,7 +248,7 @@ export function MessageList({
             const position = positionOfRow(held, leadingRow(scrollTop, rowHeight));
 
             if (position !== null) {
-                rememberListing(session.baseAddress, scope, { ...listing, ...position });
+                rememberListing(session.baseAddress, scope, { ...listing, readingsShown, ...position });
             }
         }
 
@@ -246,7 +259,7 @@ export function MessageList({
             window.clearTimeout(timer);
             window.removeEventListener('pagehide', keep);
         };
-    }, [held, scrollTop, rowHeight, listing, scope, session.baseAddress]);
+    }, [held, scrollTop, rowHeight, listing, readingsShown, scope, session.baseAddress]);
 
     // The two measurements the window is arithmetic over, taken after the browser has laid the list out rather than
     // written down as numbers here. One element each, on a commit that has already happened: the row height is a token
@@ -395,7 +408,7 @@ export function MessageList({
     function readWith(chosen: MailListing): void {
         // The cursor belongs to the order and the filters it was issued under, so changing either starts the list at
         // its leading end rather than continuing from a cursor the deployment would refuse.
-        const restarted = { ...chosen, cursor: null, readAs: 'forward' as const, rowInPage: 0 };
+        const restarted = { ...chosen, readingsShown, cursor: null, readAs: 'forward' as const, rowInPage: 0 };
 
         // Written down here rather than left to the effect below, because how a folder is read is a choice somebody
         // made rather than a position they drifted to: leaving the moment after making it keeps it.
@@ -412,6 +425,52 @@ export function MessageList({
         // the new one's last row under a screen of blank space, with no scroll left to fire the event that would
         // correct it.
         setScrollTop(0);
+    }
+
+    // Turning the readings on or off for this folder, which reads no page: the rows already held stop saying what
+    // MailFathom made of them, or start, and the reader stays on the row they were on. Written down on the press for
+    // the reason `readWith` writes there — this is a choice somebody made rather than a position they drifted to, and
+    // leaving the moment after making it keeps it.
+    function drawReadings(shown: boolean): void {
+        setReadingsShown(shown);
+
+        const position = positionOfRow(held, leadingRow(scrollTop, rowHeight));
+
+        rememberListing(session.baseAddress, scope, {
+            ...listing,
+            readingsShown: shown,
+            ...(position ?? { cursor: opening.cursor, readAs: opening.readAs, rowInPage: opening.rowInPage }),
+        });
+    }
+
+    // What the row says about the message, which is the leading reading of it and nothing where the folder is drawn
+    // plainly. `undefined` rather than an empty element for a row with nothing to say: the row keeps the space either
+    // way, and what changes is whether the line is announced at all.
+    function readingOn(email: MailTimelineEntry): ReactNode {
+        if (!readingsShown) {
+            return undefined;
+        }
+
+        const mark = leadingReading(email.enrichment);
+
+        return mark === null ? undefined : <MessageReading mark={mark} />;
+    }
+
+    // Opening what MailFathom made of one message, offered only where it made something of it. It is reached from the
+    // row's menu because the row is an `option` of a listbox and holds no focusable descendant of its own —
+    // `messageRows/ReadingsAsked.tsx` holds the whole of that reasoning.
+    function checkingReadings(email: MailTimelineEntry): (() => void) | undefined {
+        const marks = readingsOf(email.enrichment);
+
+        if (marks.length === 0) {
+            return undefined;
+        }
+
+        return () => {
+            setAskedReadings({ storedEmailId: email.id, subject: email.subject, marks });
+            closeMenu();
+            checking.current?.showModal();
+        };
     }
 
     function reveal(row: number): void {
@@ -660,7 +719,9 @@ export function MessageList({
             <ListSettings
                 listing={listing}
                 junkAskable={scope.kind !== 'folder' && scope.kind !== 'role'}
+                readingsShown={readingsShown}
                 onRead={readWith}
+                onDrawReadings={drawReadings}
             />
 
             {/* How many messages are picked out is said once, on the selection bar above this column, which is where
@@ -721,6 +782,7 @@ export function MessageList({
                                     open={workspace.selection === email.id}
                                     selected={workspace.selected.includes(email.id)}
                                     focusable={row === focusedRow}
+                                    note={readingOn(email)}
                                     onOpen={() => {
                                         open(row);
                                     }}
@@ -775,6 +837,7 @@ export function MessageList({
                         select(withToggled(workspace.selected, pressedRow.id));
                     }}
                     onAsk={ask}
+                    onCheckReadings={checkingReadings(pressedRow)}
                     onClose={closeMenu}
                 />
             )}
@@ -782,6 +845,10 @@ export function MessageList({
             {/* The two questions an act from that menu stands behind. Here rather than in the menu, because the menu is
                 gone the moment an item is chosen and the question is what is left standing. */}
             <ActQuestions messages={questioned} deleting={deleting} filing={filing} />
+
+            {/* Where a reading is checked, standing here for the same reason: the menu it is reached from is gone the
+                moment the item is chosen. */}
+            <ReadingsAsked asked={askedReadings} session={session} transport={transport} dialog={checking} />
         </div>
     );
 }

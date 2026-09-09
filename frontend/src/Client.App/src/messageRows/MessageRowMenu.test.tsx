@@ -50,11 +50,13 @@ function menuUnder({
     composing = writing,
     onSelect = vi.fn(),
     onAsk = vi.fn(),
+    onCheckReadings,
 }: {
     acts?: MailboxActs;
     composing?: Composing;
     onSelect?: () => void;
     onAsk?: (act: 'delete' | 'move', messages: readonly ActedMessage[]) => void;
+    onCheckReadings?: () => void;
 } = {}): void {
     render(
         <LocalizationProvider>
@@ -66,6 +68,7 @@ function menuUnder({
                         at={{ x: 20, y: 30 }}
                         onSelect={onSelect}
                         onAsk={onAsk}
+                        onCheckReadings={onCheckReadings}
                         onClose={vi.fn()}
                     />
                 </MailboxActsContext>
@@ -149,6 +152,29 @@ describe('MessageRowMenu', () => {
         fireEvent.click(screen.getByRole('menuitem', { name: 'Move…' }));
 
         expect(asked).toHaveBeenCalledWith('move', messages);
+    });
+
+    it('draws no way to check a reading for a message that carries none', () => {
+        menuUnder();
+
+        expect(screen.queryByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeNull();
+    });
+
+    it('offers checking a reading at the foot, below the acts that change the mailbox', () => {
+        menuUnder({ onCheckReadings: vi.fn() });
+
+        expect(drawn().at(-1)).toBe('Check what MailFathom made of it');
+    });
+
+    it('opens the readings rather than acting on the message', () => {
+        const checked = vi.fn();
+        const performed = vi.fn();
+
+        menuUnder({ acts: actsWhere(() => null, performed), onCheckReadings: checked });
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Check what MailFathom made of it' }));
+
+        expect(checked).toHaveBeenCalledOnce();
+        expect(performed).not.toHaveBeenCalled();
     });
 
     it('starts a conversation about the message where one was asked for', () => {

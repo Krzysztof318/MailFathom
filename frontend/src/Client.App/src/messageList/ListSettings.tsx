@@ -8,6 +8,7 @@ import type { MailTimelineOrder } from '@mailfathom/client-backend';
 import { CheckControl } from '../controls/CheckControl';
 import { chip } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
+import { Switch } from '../controls/Switch';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useListHeadRow } from '../mailSpace/listHeadRow';
@@ -65,11 +66,26 @@ const noRangeTyped: TypedRange = { receivedFrom: null, receivedTo: null };
 export function ListSettings({
     listing,
     junkAskable,
+    readingsShown,
     onRead,
+    onDrawReadings,
 }: {
     readonly listing: MailListing;
     readonly junkAskable: boolean;
+
+    /** Whether this folder's rows draw what MailFathom made of each message. */
+    readonly readingsShown: boolean;
+
     readonly onRead: (listing: MailListing) => void;
+
+    /**
+     * Turns the readings on or off for this folder, which reads no page and moves nobody's place in one.
+     *
+     * Its own call rather than a field of the listing above, because the listing is what a cursor was issued under:
+     * this changes neither the order nor a filter, so a reader who turns the sentences off keeps the row they were on
+     * instead of being returned to the top of the folder.
+     */
+    readonly onDrawReadings: (shown: boolean) => void;
 }) {
     const { translate } = useLocalization();
 
@@ -191,6 +207,22 @@ export function ListSettings({
                                 }}
                             />
                         ) : null}
+                    </div>
+
+                    {/* What the rows say about the messages, which is not one of the narrowings above and is drawn
+                        apart from them: a filter decides which mail is in the folder and this decides what each row
+                        says about the mail that is, so counting it among the narrowings in force would tell somebody
+                        their folder was being kept from them. A switch rather than a filter chip for the same reason,
+                        and it reads no page — the folder stays where it is and the rows stop saying it. */}
+                    <div className="flex flex-col gap-1.25 border-t border-line-soft pt-2">
+                        <p className={sectionLabel}>{translate('list.readings')}</p>
+
+                        <label className="flex cursor-pointer items-center gap-2 text-sm text-text-soft">
+                            <Switch on={readingsShown} onChange={onDrawReadings} />
+                            {translate('list.showReadings')}
+                        </label>
+
+                        <p className="text-sm text-faint text-pretty">{translate('list.readingsExplained')}</p>
                     </div>
 
                     {/* Radio buttons rather than pressable chips, for the reason `shell/Preferences.tsx` gives about the

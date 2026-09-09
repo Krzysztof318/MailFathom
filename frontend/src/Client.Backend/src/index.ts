@@ -19,7 +19,20 @@ export {
     type DeploymentSession,
     type MailFathomPermission,
 } from './deploymentSession';
+export {
+    citedPassagesRoute,
+    mostCitedPassages,
+    readCitedPassages,
+    type CitedPassage,
+    type CitedPassageOutcome,
+} from './citedPassages';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
+export {
+    type MailEnrichment,
+    type MailEnrichmentAspect,
+    type MailEnrichmentMark,
+    type MailEnrichmentSource,
+} from './mailEnrichment';
 export {
     mailBodyRoute,
     readMailBody,

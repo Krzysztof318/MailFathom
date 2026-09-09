@@ -38,6 +38,7 @@ export function MessageRowMenu({
     at,
     onSelect,
     onAsk,
+    onCheckReadings,
     onClose,
 }: {
     readonly email: MailTimelineEntry;
@@ -53,6 +54,15 @@ export function MessageRowMenu({
     /** Raises the question an act stands behind, over the messages it is about. */
     readonly onAsk: (act: ActAsked, messages: readonly ActedMessage[]) => void;
 
+    /**
+     * Opens what MailFathom made of this message, with the evidence behind each reading.
+     *
+     * This menu is where checking a reading is reached from, and that is a platform constraint rather than a choice:
+     * the row is an `option` of a listbox and holds no focusable descendant, so the sentence on it cannot be a control
+     * of its own. Absent where the message carries no reading, and absent on a list that offers no menu at all.
+     */
+    readonly onCheckReadings?: (() => void) | undefined;
+
     readonly onClose: () => void;
 }) {
     const { translate } = useLocalization();
@@ -63,7 +73,7 @@ export function MessageRowMenu({
         <ContextMenu
             header={email.subject ?? translate('list.noSubject')}
             at={at}
-            items={rowItems({ email, messages, acts, composing, translate, onSelect, onAsk })}
+            items={rowItems({ email, messages, acts, composing, translate, onSelect, onAsk, onCheckReadings })}
             onClose={onClose}
         />
     );
@@ -78,6 +88,7 @@ function rowItems({
     translate,
     onSelect,
     onAsk,
+    onCheckReadings,
 }: {
     readonly email: MailTimelineEntry;
     readonly messages: readonly ActedMessage[];
@@ -86,6 +97,7 @@ function rowItems({
     readonly translate: Translate;
     readonly onSelect: () => void;
     readonly onAsk: (act: ActAsked, messages: readonly ActedMessage[]) => void;
+    readonly onCheckReadings: (() => void) | undefined;
 }): readonly ContextMenuItem[] {
     const answering: readonly ContextMenuItem[] = composing.offered
         ? [
@@ -121,5 +133,18 @@ function rowItems({
             },
         }));
 
-    return [{ icon: 'check_box', label: translate('mail.selectMessages'), choose: onSelect }, ...answering, ...mailbox];
+    // Where a reading is checked. It stands at the foot rather than among the acts, because it changes nothing about
+    // the mailbox: what it opens is an explanation of a sentence the row is drawing, and putting it beside archiving
+    // and deleting would read as a sixth thing that happens to the message.
+    const readings: readonly ContextMenuItem[] =
+        onCheckReadings === undefined
+            ? []
+            : [{ icon: 'auto_awesome', label: translate('reading.check'), choose: onCheckReadings }];
+
+    return [
+        { icon: 'check_box', label: translate('mail.selectMessages'), choose: onSelect },
+        ...answering,
+        ...mailbox,
+        ...readings,
+    ];
 }

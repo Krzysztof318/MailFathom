@@ -27,6 +27,49 @@ export const rowsPerPage = 100;
 /** The conversation every corpus message that belongs to one belongs to. */
 export const conversationId = '00000000-0000-4000-8000-0000000000c0';
 
+/**
+ * What a derivation concluded about the rows that carry one.
+ *
+ * Not every row, and that is deliberate — a corpus whose every message carried a reading could not show the state a
+ * message no derivation reached is drawn in, which is an ordinary row rather than a gap. The first row carries none so
+ * that a check reaching a row by what it is about still matches on the mail alone.
+ *
+ * @param at Which position in the answer, which decides whether it carries one at all and what it says. A folder page
+ * counts rows and a conversation counts messages, and the derivation is the same shape on both.
+ */
+function derivedReading(at: number) {
+    if (at % 4 !== 1) {
+        return null;
+    }
+
+    const owed = at % 8 === 1;
+
+    return {
+        derivedAt: '2026-08-31T09:42:00+00:00',
+        marks: [
+            owed
+                ? {
+                      aspect: 'Commitment',
+                      text: 'An answer is owed before the end of the week.',
+                      reason: 'The message asks for confirmation and names a day.',
+                      dueAt: '2026-09-04T16:00:00+00:00',
+                      source: 'Model',
+                      origin: 'agents/reader',
+                      evidence: [`fragment-${String(at)}-1`],
+                  }
+                : {
+                      aspect: 'Sense',
+                      text: 'A delivery note for an order already placed.',
+                      reason: 'The sender names an order number the message is about.',
+                      dueAt: null,
+                      source: 'DeterministicRule',
+                      origin: 'rules/delivery-note',
+                      evidence: [`fragment-${String(at)}-1`, `fragment-${String(at)}-2`],
+                  },
+        ],
+    };
+}
+
 function timelineRow(at: number) {
     return {
         id: `message-${String(at)}`,
@@ -51,6 +94,17 @@ function timelineRow(at: number) {
 }
 
 /**
+ * One row of a folder, which is a row plus what a derivation concluded about the message.
+ *
+ * Apart from {@link timelineRow} because the search route publishes no derivation at all — not the field answering
+ * nothing, the field absent — and a search result is that same row with two fields added. A corpus that carried one
+ * into a search answer would be stating the service answering with something it never answers.
+ */
+function folderRow(at: number) {
+    return { ...timelineRow(at), enrichment: derivedReading(at) };
+}
+
+/**
  * Where in the folder the one row standing for a correspondence sits.
  *
  * A folder whose every row is a single message draws none of the count the design puts on a row that stands for an
@@ -63,7 +117,7 @@ const conversationRowPosition = 3;
 // as a constant because what it is built from is declared further down this file.
 function conversationTimelineRow() {
     return {
-        ...timelineRow(conversationRowPosition),
+        ...folderRow(conversationRowPosition),
         id: rackingQuote.id,
         threadId: conversationId,
         threadMessageCount: conversationRows.length,
@@ -88,11 +142,36 @@ export function timelinePage(from: number) {
 
     return {
         emails: Array.from({ length: rows }, (_, at) =>
-            start + at === conversationRowPosition ? conversationTimelineRow() : timelineRow(start + at),
+            start + at === conversationRowPosition ? conversationTimelineRow() : folderRow(start + at),
         ),
         nextCursor: start + rows >= mailboxSize ? null : String(start + rows),
         previousCursor: start === 0 ? null : String(start),
         pageSize: rowsPerPage,
+    };
+}
+
+/**
+ * What following a mark's evidence answers with, one resolution per citation and in the order they were asked about.
+ *
+ * The last of several is left unresolvable deliberately: a corpus that resolved every passage could not show the state
+ * a reading whose message has been re-cut since is drawn in, which is a sentence saying so rather than a blank.
+ *
+ * @param fragments The passages the request named, which the answer is paired against by position.
+ */
+export function citationResolutions(fragments: readonly string[]) {
+    return {
+        citations: fragments.map((fragment, at) =>
+            at > 0 && at === fragments.length - 1
+                ? { outcome: 'Unresolvable', fragment: null }
+                : {
+                      outcome: 'Resolved',
+                      fragment: {
+                          fragmentId: fragment,
+                          ordinal: at,
+                          text: 'Please confirm the bays you want before the end of the week.',
+                      },
+                  },
+        ),
     };
 }
 
@@ -126,6 +205,9 @@ const rackingQuote = {
  *
  * The file the first of them cites is the one the newsletter message in `messages.ts` actually carries, at the position
  * that message publishes it at, because a citation nothing behind it answers for is a coordinate a reader cannot follow.
+ *
+ * No row here carries a derivation, and that is the route rather than a gap in the corpus: the search endpoint
+ * publishes no such field at all, which is why these are built from `timelineRow` rather than from `folderRow`.
  */
 export const searchResults = {
     results: [
@@ -289,6 +371,11 @@ export const conversationState = {
  * The screen shows the latest message and folds every earlier one behind a control naming how many there are, so a
  * conversation of two would draw the collapsed history and prove nothing about it. Five is the shortest one where the
  * fold is worth reading: four messages behind the control, in both folders the exchange ran through.
+ *
+ * Each message carries what a derivation concluded about it, because the thread route publishes a message in the same
+ * shape a list row is published in — the field and all — and a corpus that left it off would be stating this route
+ * answering like the search route, which is the one route that genuinely publishes no derivation. Only one of the five
+ * carries a reading, for the reason {@link derivedReading} gives about a folder page.
  */
 export const conversation = {
     threadId: conversationId,
@@ -313,6 +400,7 @@ export const conversation = {
             attachmentCount: 0,
             sizeOctets: 3_120,
             preview: row.preview,
+            enrichment: derivedReading(position),
             threadMessageCount: conversationRows.length,
         },
     })),
