@@ -4,7 +4,7 @@
 
 import { useId, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { MailTimelineOrder } from '@mailfathom/client-backend';
+import type { MailEnrichmentAspect, MailTimelineOrder } from '@mailfathom/client-backend';
 import { CheckControl } from '../controls/CheckControl';
 import { chip } from '../controls/chrome';
 import { Icon } from '../controls/Icon';
@@ -15,6 +15,7 @@ import { useListHeadRow } from '../mailSpace/listHeadRow';
 import {
     dateRanges,
     narrowedToRange,
+    narrowedToThisWeek,
     narrowingsInForce,
     openingListing,
     selectableRange,
@@ -50,6 +51,17 @@ const rangeNames: Readonly<Record<MailListDateRange, MessageKey>> = {
 };
 
 const orders: readonly MailTimelineOrder[] = ['newestFirst', 'oldestFirst'];
+
+// What each of the three readings a derivation records is called where a reader picks one. The set is closed and this
+// table is exhaustive by its own type, so a reading added to the wire arrives here as a compiler error rather than as
+// a chip with no name.
+const readingNames: Readonly<Record<MailEnrichmentAspect, MessageKey>> = {
+    Sense: 'reading.sense',
+    Significance: 'reading.significance',
+    Commitment: 'reading.commitment',
+};
+
+const readings: readonly MailEnrichmentAspect[] = ['Sense', 'Significance', 'Commitment'];
 
 // The pill every choice in the panel is drawn as, and the tint it takes while it is the one in force. Stated once
 // because the toggles, the orders, and the offered spans are the same control drawn three times, and a chip that is on
@@ -310,6 +322,50 @@ export function ListSettings({
                                 {translate('list.rangeSelectsNothing')}
                             </p>
                         )}
+                    </div>
+
+                    {/* What a derivation read, which is what a standing view in the tree puts in force. It is drawn
+                        here rather than only in the tree because that is what makes a view a shortcut to criteria:
+                        somebody who pressed one can see exactly what it set, take one criterion off, and change
+                        another, in the same place every other narrowing is. Pressable rather than radio buttons, for
+                        the reason the offered spans are — each reading can be taken off again by pressing it. */}
+                    <div className="flex flex-col gap-1.25">
+                        <p className={sectionLabel}>{translate('list.readingNarrowing')}</p>
+
+                        <div className="flex flex-wrap gap-1.5">
+                            {readings.map((offered) => (
+                                <button
+                                    key={offered}
+                                    type="button"
+                                    aria-pressed={filters.markAspect === offered}
+                                    className={`${choice} ${filters.markAspect === offered ? chosen : ''}`}
+                                    onClick={() => {
+                                        narrow({ markAspect: filters.markAspect === offered ? null : offered });
+                                    }}
+                                >
+                                    {translate(readingNames[offered])}
+                                </button>
+                            ))}
+
+                            <button
+                                type="button"
+                                aria-pressed={filters.markDueFrom !== null}
+                                className={`${choice} ${filters.markDueFrom === null ? '' : chosen}`}
+                                onClick={() => {
+                                    onRead({
+                                        ...listing,
+                                        filters:
+                                            filters.markDueFrom === null
+                                                ? narrowedToThisWeek(filters, new Date())
+                                                : { ...filters, markDueFrom: null, markDueTo: null },
+                                    });
+                                }}
+                            >
+                                {translate('list.dueThisWeek')}
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-faint text-pretty">{translate('list.readingNarrowingExplained')}</p>
                     </div>
 
                     <div className="flex items-center gap-2.5 border-t border-line-soft pt-2">

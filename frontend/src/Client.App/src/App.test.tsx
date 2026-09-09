@@ -21,6 +21,7 @@ import {
     goTo,
     heldSession,
     openingAt,
+    preferencesAnswering,
     renderApp,
     resetsBetweenTests,
     routesAsked,
@@ -113,6 +114,28 @@ describe('App', () => {
 
         expect(await screen.findByRole('tab', { name: 'Quarterly invoice' })).toBeDefined();
         expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    // The section is the reader's to remove, and what removes it is a preference the deployment holds — so this is the
+    // one assertion that the answer reaches the tree rather than stopping at the hook that read it.
+    it('draws the standing views under the tree for a person who has not taken them out of it', async () => {
+        renderApp(servedFrom, heldSession, deploymentAnswering(undefined, accepted, preferencesAnswering(true)));
+        await framed();
+
+        await goTo('Mail');
+
+        expect(await screen.findByRole('region', { name: 'AI filters' })).toBeDefined();
+    });
+
+    it('draws no standing views at all for a person who took the section out of the tree', async () => {
+        renderApp(servedFrom, heldSession, deploymentAnswering(undefined, accepted, preferencesAnswering(true, false)));
+        await framed();
+
+        await goTo('Mail');
+
+        await screen.findByText('Folders');
+
+        expect(screen.queryByRole('region', { name: 'AI filters' })).toBeNull();
     });
 
     it('says nothing is open to a person working in tabs who has opened none', async () => {

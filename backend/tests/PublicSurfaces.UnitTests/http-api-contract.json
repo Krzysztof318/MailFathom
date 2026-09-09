@@ -2705,6 +2705,12 @@
       "ClientPreferencesRequest": {
         "additionalProperties": false,
         "properties": {
+          "aiFiltersShown": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "embeddedHtmlMessages": {
             "type": [
               "null",
@@ -2746,6 +2752,9 @@
       },
       "ClientPreferencesResponse": {
         "properties": {
+          "aiFiltersShown": {
+            "type": "boolean"
+          },
           "embeddedHtmlMessages": {
             "type": "boolean"
           },
@@ -2771,7 +2780,8 @@
           "openMailInTabs",
           "markReadOnOpen",
           "expandWholeThread",
-          "embeddedHtmlMessages"
+          "embeddedHtmlMessages",
+          "aiFiltersShown"
         ],
         "type": "object"
       },

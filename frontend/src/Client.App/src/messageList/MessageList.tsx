@@ -54,7 +54,7 @@ import {
     type TimelineRead,
 } from './heldTimeline';
 import { ListSettings } from './ListSettings';
-import { narrowed, queryFor, type MailListing } from './listing';
+import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
@@ -377,6 +377,13 @@ export function MessageList({
                 } else {
                     row.focus();
                 }
+            },
+
+            // A standing view in the tree is a shortcut to filters on the folder in front of the reader, so it lands
+            // here as any other filter change does — the same restart, the same remembered listing, and the criteria
+            // then drawn in the panel where every other narrowing is.
+            stand: (view) => {
+                readWith({ ...listing, filters: narrowedToView(listing.filters, view, new Date()) });
             },
         });
 
@@ -858,11 +865,16 @@ function identityOf(email: { readonly id: string }): string {
 }
 
 /**
- * Why a folder is showing nothing, which is four different sentences rather than one.
+ * Why a folder is showing nothing, which is five different sentences rather than one.
  *
  * A folder nothing has been taken into yet is the one a reader would otherwise read as empty and act on — so it is told
  * apart from a folder that genuinely holds nothing, from one whose account stopped synchronizing, and from a list the
  * reader has narrowed to nothing themselves.
+ *
+ * A list narrowed by what a derivation read is the fifth, and it is its own sentence because the reader cannot tell
+ * the two apart from the mail: nothing here derives anything, so an empty answer is either mail carrying no such
+ * reading or a deployment that has derived nothing over this folder at all — and a client that said only "nothing
+ * matches" would leave somebody correcting a filter that was never the reason.
  */
 function emptyReason(accounts: readonly MailAccount[], scope: MailScope, listing: MailListing): MessageKey {
     const named = accountInScope(scope);
@@ -874,6 +886,10 @@ function emptyReason(accounts: readonly MailAccount[], scope: MailScope, listing
 
     if (inScope.some((account) => needsAttention(account.synchronizationState))) {
         return 'list.emptyWhileFailing';
+    }
+
+    if (narrowedByReading(listing.filters)) {
+        return 'list.nothingRead';
     }
 
     return narrowed(listing.filters) ? 'list.nothingMatches' : 'list.emptyFolder';

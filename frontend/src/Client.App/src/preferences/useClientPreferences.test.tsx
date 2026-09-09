@@ -21,7 +21,7 @@ const anna = 'anna';
 const bartek = 'bartek';
 
 // The whole document, because the route answers with nothing less and the package refuses an answer missing a field.
-// The three preferences no control in this hook's own tests moves are defaulted rather than named at each call, so
+// The four preferences no control in this hook's own tests moves are defaulted rather than named at each call, so
 // only the tests that are about one of them say anything about it.
 function stored(preferences: {
     telemetryEnabled: boolean;
@@ -29,11 +29,13 @@ function stored(preferences: {
     openMailInTabs: boolean;
     markReadOnOpen?: boolean;
     expandWholeThread?: boolean;
+    aiFiltersShown?: boolean;
     embeddedHtmlMessages?: boolean;
 }): string {
     return JSON.stringify({
         markReadOnOpen: true,
         expandWholeThread: false,
+        aiFiltersShown: true,
         embeddedHtmlMessages: false,
         ...preferences,
     });
@@ -185,6 +187,54 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            aiFiltersShown: true,
+            embeddedHtmlMessages: false,
+        });
+    });
+
+    it('answers the standing views as drawn before anything has been read, the tree offering them by default', () => {
+        const { transport } = recording(stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: true }));
+        const { result } = reading(transport);
+
+        expect(result.current.preferences.aiFiltersShown).toBe(true);
+    });
+
+    it('answers the standing views as gone once the person has taken them out of the tree', async () => {
+        const { transport } = recording(
+            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, aiFiltersShown: false }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.aiFiltersShown).toBe(false);
+        });
+    });
+
+    it('states the whole document when the standing views are the decision that changed', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: false, theme: 'light', openMailInTabs: false }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.theme.choice).toBe('light');
+        });
+
+        act(() => {
+            result.current.preferences.chooseAiFilters(false);
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(2);
+        });
+
+        expect(JSON.parse(requests[1]?.body ?? '')).toStrictEqual({
+            telemetryEnabled: false,
+            theme: 'light',
+            openMailInTabs: false,
+            markReadOnOpen: true,
+            expandWholeThread: false,
+            aiFiltersShown: false,
             embeddedHtmlMessages: false,
         });
     });
@@ -213,6 +263,7 @@ describe('useClientPreferences', () => {
                 openMailInTabs: false,
                 markReadOnOpen: true,
                 expandWholeThread: false,
+                aiFiltersShown: true,
                 embeddedHtmlMessages: false,
             });
         });
@@ -268,6 +319,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            aiFiltersShown: true,
             embeddedHtmlMessages: false,
         });
     });
@@ -335,6 +387,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            aiFiltersShown: true,
             embeddedHtmlMessages: false,
         });
     });
@@ -367,6 +420,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: false,
             markReadOnOpen: true,
             expandWholeThread: false,
+            aiFiltersShown: true,
             embeddedHtmlMessages: false,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');

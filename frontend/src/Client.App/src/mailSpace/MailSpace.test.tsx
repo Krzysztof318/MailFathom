@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect } from 'react';
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
@@ -342,9 +342,11 @@ describe('MailSpace, wide', () => {
 
         const filters = screen.getByRole('region', { name: 'AI filters' });
 
-        expect(filters.querySelectorAll('button[aria-disabled="true"]').length).toBe(3);
-        expect(filters.textContent).toBe('');
-        expect(screen.getByRole('button', { name: 'Needs a decision — not built yet' })).toBeDefined();
+        // What the fold drops is the heading over the three entries. Each entry keeps its name, because a rail drawn
+        // as three unnamed symbols is three controls nobody reading with anything but their eyes can tell apart.
+        expect(within(filters).getAllByRole('button')).toHaveLength(3);
+        expect(within(filters).getByRole('button', { name: 'Needs a decision' })).toBeDefined();
+        expect(filters.querySelector('p')).toBeNull();
     });
 
     it('draws every action of the toolbar, each saying in its own name why it cannot act here', () => {
@@ -383,12 +385,16 @@ describe('MailSpace, wide', () => {
         );
     });
 
-    it('offers the three AI filters as what the product will have rather than as working controls', () => {
+    it('offers the three standing views the design draws, in the order it draws them', () => {
         renderSpace(desktop);
 
         const filters = screen.getByRole('region', { name: 'AI filters' });
 
-        expect(filters.querySelectorAll('button[aria-disabled="true"]').length).toBe(3);
+        expect(
+            within(filters)
+                .getAllByRole('button')
+                .map((entry) => entry.textContent),
+        ).toStrictEqual(['Needs a decision', 'Commitments', 'Deadlines this week']);
     });
 });
 

@@ -407,6 +407,9 @@ describe('what the whole of this package records', () => {
             direction: 'forward',
             receivedOnOrAfter: null,
             receivedBefore: null,
+            carriesMark: null,
+            markDueOnOrAfter: null,
+            markDueBefore: null,
         });
         await readMailSearch(session, refusing, {
             ...window,

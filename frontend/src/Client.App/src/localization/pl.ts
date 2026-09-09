@@ -199,6 +199,10 @@ export const pl: Catalogue = {
         'Gdy okno nie jest przed Tobą, to urządzenie mówi, ile rzeczy przyszło i jakiego rodzaju — nigdy od kogo ani w jakiej sprawie.',
     'settings.systemNotificationsRefused':
         'Ta przeglądarka ma zablokowane powiadomienia z tej strony. Zezwól na nie w jej własnych ustawieniach witryny, a przełącznik znów zadziała.',
+    'settings.mailbox': 'Skrzynka',
+    'settings.aiFilters': 'Pokazuj filtry AI w drzewie katalogów',
+    'settings.aiFiltersExplanation':
+        'Trzy stałe widoki skrzynki, oparte na tym, co MailFathom już wyczytał. Wyłączenie usuwa sekcję z drzewa i niczego nie zmienia w samej poczcie.',
     'settings.privacy': 'Prywatność',
     'settings.telemetryWithheld': 'Nie wysyłaj danych telemetrycznych',
     'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',
@@ -242,6 +246,7 @@ export const pl: Catalogue = {
     'aiFilters.needsDecision': 'Wymaga decyzji',
     'aiFilters.commitments': 'Zobowiązania',
     'aiFilters.deadlinesThisWeek': 'Terminy w tym tygodniu',
+    'aiFilters.entryTitle': 'Filtr AI: {view}',
 
     'mail.toolbar': 'Działania na poczcie',
     'mail.compose': 'Nowa wiadomość',
@@ -470,6 +475,8 @@ export const pl: Catalogue = {
     'list.partiallyFailed': 'Części tego folderu nie udało się odczytać: {reason}.',
     'list.emptyFolder': 'W tym folderze nie ma poczty.',
     'list.nothingMatches': 'Żadna wiadomość w tym folderze nie pasuje do zawężenia listy.',
+    'list.nothingRead':
+        'Żadna wiadomość w tym folderze nie ma odczytu, po którym zawężasz listę. Albo naprawdę żadna go nie ma, albo MailFathom jeszcze nie przeczytał tego folderu.',
     'list.notSynchronizedYet':
         'Do tego wdrożenia nie pobrano jeszcze niczego z tej skrzynki, więc nie ma czego pokazać. Folder nie jest pusty — nie został odczytany.',
     'list.emptyWhileFailing':
@@ -509,6 +516,11 @@ export const pl: Catalogue = {
     'list.showReadings': 'Pokazuj odczyt przy każdym wierszu',
     'list.readingsExplained':
         'Jedno zdanie o wiadomości, pod tematem. Ustawienie dotyczy tego folderu, a wyłączenie go niczego nie zmienia w samej poczcie.',
+
+    'list.readingNarrowing': 'Co wyczytał MailFathom',
+    'list.dueThisWeek': 'Termin w tym tygodniu',
+    'list.readingNarrowingExplained':
+        'Zostawia pocztę, którą MailFathom już tak odczytał. Teraz niczego nie czyta, więc folder, do którego jeszcze nie dotarł, nie pokaże tu żadnej wiadomości.',
 
     'reading.sense': 'O co tu chodzi',
     'reading.significance': 'Dlaczego to może być ważne',

@@ -60,14 +60,18 @@ internal static class ClientMailTimelineEndpoint
     /// <summary>The <c>direction</c> value that reads the page before the cursor.</summary>
     internal const string BackwardDirection = "backward";
 
+    // The three readings a request may narrow by, spelled as this surface already publishes them on a row's own
+    // `enrichment.marks`. A caller therefore hands back the value it read rather than translating between two
+    // spellings of one closed set, which is what a second spelling on the same route would have made it do.
+
     /// <summary>The <c>carriesMark</c> value naming the reading that says what a message is about.</summary>
-    internal const string SenseMark = "sense";
+    internal const string SenseMark = "Sense";
 
     /// <summary>The <c>carriesMark</c> value naming the reading that says why a message may matter.</summary>
-    internal const string SignificanceMark = "significance";
+    internal const string SignificanceMark = "Significance";
 
     /// <summary>The <c>carriesMark</c> value naming the reading that carries a commitment, which is the one that may carry a date.</summary>
-    internal const string CommitmentMark = "commitment";
+    internal const string CommitmentMark = "Commitment";
 
     /// <summary>Maps the route into the client group, so it inherits the group's requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>

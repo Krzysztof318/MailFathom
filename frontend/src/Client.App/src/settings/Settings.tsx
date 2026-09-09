@@ -284,6 +284,11 @@ function Application({
             <ThreadExpansion preferences={preferences} />
             <MessageViewWarning preferences={preferences} />
 
+            <Divider />
+
+            <SectionName>{translate('settings.mailbox')}</SectionName>
+            <AiFiltersSection preferences={preferences} />
+
             <SystemNotifications />
 
             <Divider />
@@ -398,6 +403,24 @@ function ThreadExpansion({ preferences }: { readonly preferences: ClientPreferen
             </span>
 
             <Switch on={preferences.expandWholeThread} onChange={preferences.chooseThreadExpansion} />
+        </label>
+    );
+}
+
+// Whether the folder tree carries the standing views of what MailFathom read. Turning it off removes the section
+// rather than emptying it, which is what the switch says: the views are three sets of filter criteria, and a tree
+// carrying a heading over nothing would read as three views that had failed rather than as a section nobody wanted.
+function AiFiltersSection({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
+    const { translate } = useLocalization();
+
+    return (
+        <label className="flex cursor-pointer items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25 transition hover:bg-hover">
+            <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+                {translate('settings.aiFilters')}
+                <span className="text-xs text-muted">{translate('settings.aiFiltersExplanation')}</span>
+            </span>
+
+            <Switch on={preferences.aiFiltersShown} onChange={preferences.chooseAiFilters} />
         </label>
     );
 }

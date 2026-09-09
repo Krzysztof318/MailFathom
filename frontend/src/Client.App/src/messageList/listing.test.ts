@@ -6,12 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { everything, type MailScope } from '../workspace/mailScope';
 import {
     narrowed,
+    narrowedByReading,
     narrowedToRange,
+    narrowedToThisWeek,
+    narrowedToView,
     narrowingsInForce,
     openingListing,
     queryFor,
     rowsPerPage,
     selectableRange,
+    standingViews,
     type MailListing,
 } from './listing';
 
@@ -106,6 +110,33 @@ describe('queryFor', () => {
 
         expect(queryFor(everything, { ...openingListing, filters }, null, 'forward').receivedOnOrAfter).toBeNull();
     });
+
+    it('asks for the reading a derivation must have left, which is the whole of what a standing view is', () => {
+        const filters = { ...openingListing.filters, markAspect: 'Significance' as const };
+
+        expect(queryFor(everything, { ...openingListing, filters }, null, 'forward').carriesMark).toBe('Significance');
+    });
+
+    it('asks for the due window as the two instants the reader’s own wall clock names', () => {
+        const filters = {
+            ...openingListing.filters,
+            markAspect: 'Commitment' as const,
+            markDueFrom: '2026-09-03T00:00',
+            markDueTo: '2026-09-10T00:00',
+        };
+        const query = queryFor(everything, { ...openingListing, filters }, null, 'forward');
+
+        expect(query.markDueOnOrAfter).toBe(new Date(2026, 8, 3).toISOString());
+        expect(query.markDueBefore).toBe(new Date(2026, 8, 10).toISOString());
+    });
+
+    it('asks for no reading where nothing a derivation left is what the list is narrowed by', () => {
+        const query = queryFor(everything, openingListing, null, 'forward');
+
+        expect(query.carriesMark).toBeNull();
+        expect(query.markDueOnOrAfter).toBeNull();
+        expect(query.markDueBefore).toBeNull();
+    });
 });
 
 describe('narrowed', () => {
@@ -130,6 +161,33 @@ describe('narrowed', () => {
             expect(narrowed({ ...openingListing.filters, ...range })).toBe(true);
         },
     );
+
+    it.each([{ markAspect: 'Sense' as const }, { markDueFrom: '2026-09-03T00:00' }, { markDueTo: '2026-09-10T00:00' }])(
+        'reports a list narrowed by what a derivation read: %o',
+        (criterion) => {
+            expect(narrowed({ ...openingListing.filters, ...criterion })).toBe(true);
+        },
+    );
+});
+
+describe('narrowedByReading', () => {
+    it('reports a list nobody has narrowed by anything a derivation left', () => {
+        expect(narrowedByReading(openingListing.filters)).toBe(false);
+    });
+
+    it('does not read a received range as one, so an empty folder is not blamed on a derivation', () => {
+        const filters = { ...openingListing.filters, receivedFrom: '2026-08-01T00:00' };
+
+        expect(narrowedByReading(filters)).toBe(false);
+    });
+
+    it.each([
+        { markAspect: 'Commitment' as const },
+        { markDueFrom: '2026-09-03T00:00' },
+        { markDueTo: '2026-09-10T00:00' },
+    ])('reports %o', (criterion) => {
+        expect(narrowedByReading({ ...openingListing.filters, ...criterion })).toBe(true);
+    });
 });
 
 describe('narrowingsInForce', () => {
@@ -143,6 +201,17 @@ describe('narrowingsInForce', () => {
 
     it('counts a range as one however many of its two ends are set', () => {
         const filters = { ...openingListing.filters, receivedFrom: '2026-08-01T00:00', receivedTo: '2026-09-01T00:00' };
+
+        expect(narrowingsInForce({ ...openingListing, filters })).toBe(1);
+    });
+
+    it('counts what a derivation read as one however many of its three criteria are in force', () => {
+        const filters = {
+            ...openingListing.filters,
+            markAspect: 'Commitment' as const,
+            markDueFrom: '2026-09-03T00:00',
+            markDueTo: '2026-09-10T00:00',
+        };
 
         expect(narrowingsInForce({ ...openingListing, filters })).toBe(1);
     });
@@ -168,10 +237,13 @@ describe('narrowingsInForce', () => {
                 dateRange: 'today',
                 receivedFrom: '2026-09-03T00:00',
                 receivedTo: null,
+                markAspect: 'Commitment',
+                markDueFrom: '2026-09-03T00:00',
+                markDueTo: '2026-09-10T00:00',
             },
         };
 
-        expect(narrowingsInForce(listing)).toBe(5);
+        expect(narrowingsInForce(listing)).toBe(6);
     });
 });
 
@@ -230,5 +302,77 @@ describe('selectableRange', () => {
         [null, null, true],
     ])('reads %s to %s as a range that can select something: %s', (from, to, selects) => {
         expect(selectableRange(from, to)).toBe(selects);
+    });
+});
+
+describe('narrowedToView', () => {
+    // A Thursday mid-afternoon, so that a window reckoned from the instant rather than from the start of the reader's
+    // day would be visibly wrong rather than off by an hour.
+    const pickedAt = new Date(2026, 8, 3, 15, 42);
+
+    it.each([
+        ['needsDecision', 'Significance'],
+        ['commitments', 'Commitment'],
+        ['deadlinesThisWeek', 'Commitment'],
+    ] as const)('stands %s on the %s a derivation recorded', (view, aspect) => {
+        expect(narrowedToView(openingListing.filters, view, pickedAt).markAspect).toBe(aspect);
+    });
+
+    it('bounds the deadlines to the reader’s own week, opening today and closing on the eighth day', () => {
+        const inForce = narrowedToView(openingListing.filters, 'deadlinesThisWeek', pickedAt);
+
+        expect(inForce.markDueFrom).toBe('2026-09-03T00:00');
+        expect(inForce.markDueTo).toBe('2026-09-10T00:00');
+    });
+
+    it.each(['needsDecision', 'commitments'] as const)('bounds %s by no due window at all', (view) => {
+        const inForce = narrowedToView(openingListing.filters, view, pickedAt);
+
+        expect(inForce.markDueFrom).toBeNull();
+        expect(inForce.markDueTo).toBeNull();
+    });
+
+    it('replaces the window a previous view put in force, so two views are never half in force at once', () => {
+        const week = narrowedToView(openingListing.filters, 'deadlinesThisWeek', pickedAt);
+        const inForce = narrowedToView(week, 'needsDecision', pickedAt);
+
+        expect(inForce.markAspect).toBe('Significance');
+        expect(inForce.markDueFrom).toBeNull();
+        expect(inForce.markDueTo).toBeNull();
+    });
+
+    it('leaves every narrowing the reader had already chosen where it was', () => {
+        const filters = { ...openingListing.filters, unread: true, receivedFrom: '2026-08-01T00:00' };
+        const inForce = narrowedToView(filters, 'commitments', pickedAt);
+
+        expect(inForce.unread).toBe(true);
+        expect(inForce.receivedFrom).toBe('2026-08-01T00:00');
+    });
+
+    it('writes what it puts in force into the filters the panel draws, so each criterion can be taken off there', () => {
+        for (const view of standingViews) {
+            expect(narrowedByReading(narrowedToView(openingListing.filters, view, pickedAt))).toBe(true);
+        }
+    });
+});
+
+describe('narrowedToThisWeek', () => {
+    it('opens the window at the start of the reader’s day rather than at the instant they pressed', () => {
+        const inForce = narrowedToThisWeek(openingListing.filters, new Date(2026, 8, 3, 23, 59));
+
+        expect(inForce.markDueFrom).toBe('2026-09-03T00:00');
+    });
+
+    it('runs the window across a month’s end in the reader’s own calendar', () => {
+        const inForce = narrowedToThisWeek(openingListing.filters, new Date(2026, 8, 28, 9, 0));
+
+        expect(inForce.markDueFrom).toBe('2026-09-28T00:00');
+        expect(inForce.markDueTo).toBe('2026-10-05T00:00');
+    });
+
+    it('leaves the reading the list is narrowed by where it was, being a window rather than a view', () => {
+        const filters = { ...openingListing.filters, markAspect: 'Sense' as const };
+
+        expect(narrowedToThisWeek(filters, new Date(2026, 8, 3)).markAspect).toBe('Sense');
     });
 });

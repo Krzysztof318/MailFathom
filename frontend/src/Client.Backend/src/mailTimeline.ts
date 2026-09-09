@@ -4,7 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
-import { parseEnrichment, type MailEnrichment } from './mailEnrichment';
+import { parseEnrichment, type MailEnrichment, type MailEnrichmentAspect } from './mailEnrichment';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
@@ -57,6 +57,25 @@ export interface MailTimelineQuery {
 
     /** The exclusive end of the received range as an instant, or `null` for no end. */
     readonly receivedBefore: string | null;
+
+    /**
+     * The reading a derivation must have left on the message, or `null` to narrow by none.
+     *
+     * The same value a row publishes in {@link MailTimelineEntry.enrichment}, so what narrows the list is what the
+     * list was drawing rather than a second spelling of the same closed set.
+     */
+    readonly carriesMark: MailEnrichmentAspect | null;
+
+    /**
+     * The inclusive start of the range the commitment falls due in, as an instant, or `null` for no start.
+     *
+     * A bound selects dated commitments alone, whichever reading is named beside it: a mark carrying no date meets
+     * neither bound, so a range asked for on its own is a list of what MailFathom read a date out of.
+     */
+    readonly markDueOnOrAfter: string | null;
+
+    /** The exclusive end of that range as an instant, or `null` for no end. */
+    readonly markDueBefore: string | null;
 
     readonly order: MailTimelineOrder;
     readonly direction: MailTimelinePageDirection;
@@ -214,6 +233,9 @@ export function timelineQueryString(query: MailTimelineQuery): string {
         ['folder', query.folder],
         ['receivedOnOrAfter', query.receivedOnOrAfter],
         ['receivedBefore', query.receivedBefore],
+        ['carriesMark', query.carriesMark],
+        ['markDueOnOrAfter', query.markDueOnOrAfter],
+        ['markDueBefore', query.markDueBefore],
     ] as const) {
         if (named !== null) {
             asked.push(`${name}=${encodeURIComponent(named)}`);

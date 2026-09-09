@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Configuration/Endpoints/TransportHttpsEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientSessionTokenEndpoints.cs, backend/src/Host/Security/Sessions/**, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailThreadStateEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ClientMailSearchPhraseEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Infrastructure/Security/Transport/BrowserOriginPolicy.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Startup/ClientResponseCompression.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientUserRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Api/ClientPreferencesEndpoint.cs, backend/src/Host/Configuration/UserSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Api/ClientCitationEndpoint.cs, backend/src/Host/Api/ClientDiscoveryRunEndpoints.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -541,11 +541,24 @@ leading end and answering with the leading page would read as having scrolled to
 | `hasAttachments` | `true`, `false` | both |
 | `receivedOnOrAfter` | A timestamp, inclusive | no start |
 | `receivedBefore` | A timestamp, exclusive | no end |
+| `carriesMark` | `Sense`, `Significance`, `Commitment` | any reading, and mail with none |
+| `markDueOnOrAfter` | A timestamp, inclusive | no start |
+| `markDueBefore` | A timestamp, exclusive | no end |
 | `sort` | `receivedAt` | `receivedAt` |
 | `order` | `newestFirst`, `oldestFirst` | `newestFirst` |
 | `direction` | `forward`, `backward` | `forward` |
 | `pageSize` | 1 to 100 | 25 |
 | `cursor` | A cursor a previous page returned | the leading end of the list |
+
+**The three `mark` parameters narrow by what an enrichment already derived, and derive nothing.** `carriesMark` keeps
+the mail one of this deployment's own readings was recorded on, spelled exactly as `enrichment.marks[].aspect` publishes
+it on a row of this same route, so a client hands back the value it read rather than translating between two spellings
+of one closed set. `markDueOnOrAfter` and `markDueBefore` bound the instant a mark falls due at, which only a
+`Commitment` carries, and every criterion is met by one mark rather than by the message as a whole — a message whose
+`Sense` mark is old and whose `Commitment` is due tomorrow answers `carriesMark=Commitment&markDueBefore=…` and not
+`carriesMark=Sense&markDueBefore=…`. A deployment that has read nothing answers each of them with an empty page: that
+is a list narrowed to no mail rather than a failure, and nothing here asks for a reading to be produced. A range whose
+end falls on or before its start is refused with `400` like every other, rather than answered empty.
 
 **A value this deployment cannot honour is refused with `400`, never ignored.** `sort=subject` is the case worth
 naming: the list is ordered by the column the timeline indexes are ordered by, and a screen that asked for something
@@ -1663,21 +1676,23 @@ and somebody who set the client up the way they work should not have to set it u
   "openMailInTabs": false,
   "markReadOnOpen": true,
   "expandWholeThread": false,
-  "embeddedHtmlMessages": false
+  "embeddedHtmlMessages": false,
+  "aiFiltersShown": true
 }
 ```
 
-**It holds six preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+**It holds seven preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
 what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
 than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; whether
-opening a conversation draws every message in it rather than the one it was opened at; and whether an open message
-draws the sender's own markup rather than the reduced text. Each of them says how
+opening a conversation draws every message in it rather than the one it was opened at; whether an open message
+draws the sender's own markup rather than the reduced text; and whether the client offers the standing views of the
+mailbox beneath its folder tree. Each of them says how
 somebody wants to work, which is why it belongs to the person. The language does not, and stays on the device: it is
 resolved for somebody who has not signed in and may never get a session. Neither does the width a person drags the
 message list to, which describes the screen in front of them.
 
 **Unset reads as telemetry on, the theme following the machine, tabs off, marking read on, a conversation opening at
-the message it was opened at, and a message read as the reduced text.** A person who has set nothing is answered a
+the message it was opened at, a message read as the reduced text, and the standing views drawn.** A person who has set nothing is answered a
 document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
 before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
 the sign-in screen — and what this answers replaces that device value once a session exists.
@@ -1706,6 +1721,14 @@ asks for rather than only what is drawn: a client in the reduced view never asks
 representation, so turning this on is what puts `fullHtml=true` on
 [the body route](#the-message-body-route). A message whose markup this deployment holds none of, or served cut short, falls
 back to the reduced tree with the reason named rather than to an empty frame.
+
+**`aiFiltersShown` decides whether the client draws the standing views beneath the folder tree.** With it unset or on,
+the tree carries a section offering three of them — the mail a significance was recorded on, the mail a commitment was,
+and the commitments falling due this week. Each is a shortcut to the `carriesMark`, `markDueOnOrAfter` and
+`markDueBefore` parameters above and to nothing else, so what a view puts in force stands in the list's own filter
+control where any other narrowing does, and can be taken off or changed there one criterion at a time. With it off the
+section is gone rather than empty, and nothing else changes: the criteria are still reachable from that control, and no
+list this deployment answers is narrowed differently.
 
 **A write states the whole document.** It is a closed set rather than a patch: a key nothing binds is refused rather
 than stored, a theme this deployment does not publish is refused naming the three that are, and a preference the body

@@ -46,6 +46,7 @@ divergence neither copy would look wrong for on its own.
 | `IsRemotelyFlagged` | The remote `\Flagged` state to require | either state |
 | `Keyword` | One keyword the email must carry, compared without regard to case | any keyword |
 | `HasAttachments` | Whether attachments are required | either |
+| `Mark` | The reading an enrichment must have left, and the range a commitment falls due in | any reading, and mail with none |
 | `IncludeJunkMail` | Whether the account's junk folder takes part | it does not |
 | `Direction` | Which end of the timeline to read from | `NewestFirst` |
 | `PageSize` | How many emails the page returns | the default of 25 |
@@ -100,6 +101,15 @@ and its result would read as an answer about the mailbox.
   bound, so naming either one excludes undated mail. Each bound names an instant, so it may be written at any UTC offset
   and the offset chosen changes neither what is selected nor which walk a cursor belongs to: `2026-07-01T10:00:00+02:00`
   and `2026-07-01T08:00:00Z` are one range asked for twice.
+- **A mark selection** narrows by what an enrichment already recorded and derives nothing: it names one
+  `EmailEnrichmentAspect` and, for a commitment, the range that commitment falls due in. Naming none of the three is
+  naming no such filter, and an aspect no build publishes is refused with `ArgumentOutOfRangeException` at the boundary
+  that read it rather than carried in as a value nothing can match. A due range whose end is not after its start is
+  refused with `51002 MailboxQueryFilterInvalid`, for the reason the received range is. Every criterion is met by **one
+  mark** rather than by the message as a whole, so a message whose `Sense` mark is old and whose `Commitment` falls due
+  tomorrow answers a commitment narrowed to tomorrow and does not answer a sense narrowed to it — the predicate is one
+  correlated existence test over the mark table, served by that table's own `(StoredEmailId, Aspect)` index. A
+  deployment that has derived nothing selects nothing, which is a narrowed list rather than a failure.
 - **The scope** accepts at most 64 accounts and 64 folders, counting what a request names rather than what is left
   after deduplication — that is what lets the limit be enforced while the caller's list is read instead of after it has
   been materialized. Both lists are then deduplicated and ordered, so two spellings of one scope are one query with one
@@ -601,7 +611,7 @@ mirrored or not and withheld or not, is [the administrative status route](../ope
   participant a header names, and `EmailThreadCursor`, whose boundary is a message rather than a position. It owns none
   of the threading: membership, the bound and the order come from `MailFathom.Application.Emails.Threads`, which the MCP
   content read publishes a conversation through as well.
-- `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor,
+- `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection`, `EmailMarkSelection` beside it, the timeline filter that wraps them, the cursor,
   the page size, and the query failures shared with the other read models. `MailboxScopeResolver` is here too: it
   resolves the accounts a read runs against and refuses one this deployment does not serve, and it is a collaborator
   rather than a step inside the use case because the refusal is an access decision every read model has to make

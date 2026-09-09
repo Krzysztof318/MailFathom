@@ -31,6 +31,7 @@ const settings: ClientPreferencesInForce = {
     markReadOnOpen: true,
     telemetryEnabled: true,
     expandWholeThread: false,
+    aiFiltersShown: true,
     embeddedHtmlMessages: false,
     notStated: false,
     chooseTheme: () => undefined,
@@ -38,6 +39,7 @@ const settings: ClientPreferencesInForce = {
     chooseTelemetry: () => undefined,
     chooseThreadExpansion: () => undefined,
     chooseMessageView: () => undefined,
+    chooseAiFilters: () => undefined,
 };
 
 const nobody: OwnProfileInForce = {

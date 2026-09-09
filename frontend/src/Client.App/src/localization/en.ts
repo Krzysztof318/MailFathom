@@ -197,6 +197,10 @@ export const en = {
         'When the window is not in front of you, this machine says how much arrived and of what kind — never who wrote or what about.',
     'settings.systemNotificationsRefused':
         'This browser has been told to block notifications from here. Allow them in its own site settings, and this switch will work again.',
+    'settings.mailbox': 'Mailbox',
+    'settings.aiFilters': 'Show the AI filters in the folder tree',
+    'settings.aiFiltersExplanation':
+        'Three standing views of the mailbox, over what MailFathom already read. Turning them off takes the section out of the tree and changes nothing about the mail.',
     'settings.privacy': 'Privacy',
     'settings.telemetryWithheld': 'Do not send telemetry',
     'settings.telemetryExplanation': 'Error diagnostics and usage statistics stay on this device.',
@@ -240,6 +244,7 @@ export const en = {
     'aiFilters.needsDecision': 'Needs a decision',
     'aiFilters.commitments': 'Commitments',
     'aiFilters.deadlinesThisWeek': 'Deadlines this week',
+    'aiFilters.entryTitle': 'AI filter: {view}',
 
     'mail.toolbar': 'Mail actions',
     'mail.compose': 'New message',
@@ -465,6 +470,8 @@ export const en = {
     'list.partiallyFailed': 'Part of this folder could not be read: {reason}.',
     'list.emptyFolder': 'There is no mail in this folder.',
     'list.nothingMatches': 'No message in this folder matches what the list is narrowed to.',
+    'list.nothingRead':
+        'No message in this folder carries the reading the list is narrowed to. Either none of them does, or MailFathom has not read this folder yet.',
     'list.notSynchronizedYet':
         'Nothing has been taken into this deployment from this mailbox yet, so there is nothing to show. The folder is not empty — it has not been read.',
     'list.emptyWhileFailing':
@@ -504,6 +511,11 @@ export const en = {
     'list.showReadings': 'Show a reading on each row',
     'list.readingsExplained':
         'One sentence per message, under the subject. It is kept for this folder, and turning it off changes nothing about the mail itself.',
+
+    'list.readingNarrowing': 'What MailFathom read',
+    'list.dueThisWeek': 'Due this week',
+    'list.readingNarrowingExplained':
+        'Keeps the mail MailFathom already read this way. It reads nothing now, so a folder it has not reached shows none of its mail here.',
 
     'reading.sense': 'What this is about',
     'reading.significance': 'Why this may matter',

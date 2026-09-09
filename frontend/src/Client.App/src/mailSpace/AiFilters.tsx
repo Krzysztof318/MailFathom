@@ -2,23 +2,43 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
-import { PlannedControl } from '../controls/PlannedControl';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { standingViews, type StandingView } from '../messageList/listing';
+import { useListedMail } from '../messageList/useListedMail';
+import { useAiFiltersShown } from '../preferences/aiFilters';
 
-// The section the design project draws under the mailbox tree: three views of the mailbox that MailFathom's own
-// reading of the mail would produce. That reading is stage 3's, so what stands here is the room for it, drawn as the
-// placeholders every unbuilt control in this client is drawn as.
+// The section the design project draws under the mailbox tree: three standing views of the mailbox, over what
+// MailFathom's own reading of the mail already produced.
+//
+// Each entry is a shortcut to filter criteria and nothing else. Pressing one narrows the list in front of the reader
+// by what a derivation recorded, exactly as the filter panel does, and the criteria then stand in that panel where
+// every other narrowing stands — removable one at a time and changeable there. There is no second way of asking the
+// deployment for mail behind these, and nothing here derives anything: what a view can find is what MailFathom already
+// read, so a deployment that has read nothing answers each of them with a folder narrowed to no mail.
+//
+// The design draws no reaction and no lit state on these entries — only the folder rows above them carry one — so
+// nothing here draws a view as being in force. What says so is the filter panel's own count and the criteria in it,
+// which is where the design does draw what a list is narrowed by.
 
-const filters: readonly { readonly icon: IconName; readonly label: MessageKey }[] = [
-    { icon: 'pending_actions', label: 'aiFilters.needsDecision' },
-    { icon: 'handshake', label: 'aiFilters.commitments' },
-    { icon: 'schedule', label: 'aiFilters.deadlinesThisWeek' },
-];
+const views: Readonly<Record<StandingView, { readonly icon: IconName; readonly label: MessageKey }>> = {
+    needsDecision: { icon: 'pending_actions', label: 'aiFilters.needsDecision' },
+    commitments: { icon: 'handshake', label: 'aiFilters.commitments' },
+    deadlinesThisWeek: { icon: 'schedule', label: 'aiFilters.deadlinesThisWeek' },
+};
 
 export function AiFilters({ folded }: { readonly folded: boolean }) {
     const { translate } = useLocalization();
+    const listed = useListedMail();
+    const shown = useAiFiltersShown();
+
+    // Turned off is the section gone rather than a heading with nothing under it: what it says when it is off is
+    // nothing at all, and a heading over three missing entries would say the views had failed.
+    if (!shown) {
+        return null;
+    }
 
     return (
         <section
@@ -31,14 +51,26 @@ export function AiFilters({ folded }: { readonly folded: boolean }) {
                 <p className="px-2.75 text-xs tracking-widest text-muted uppercase">{translate('aiFilters.heading')}</p>
             )}
 
-            {filters.map((filter) => (
-                <PlannedControl
-                    key={filter.icon}
-                    label={translate(filter.label)}
-                    icon={filter.icon}
-                    shape={folded ? 'symbol' : 'labelled'}
-                    className={folded ? 'self-center' : 'justify-start'}
-                />
+            {standingViews.map((view) => (
+                <button
+                    key={view}
+                    type="button"
+                    title={translate('aiFilters.entryTitle', { view: translate(views[view].label) })}
+                    className={`flex cursor-pointer items-center rounded-md text-sm text-text-soft transition hover:bg-hover ${
+                        folded ? 'justify-center self-center px-1.75 py-1.5' : 'gap-2.5 px-2.75 py-1.25'
+                    }`}
+                    onClick={() => {
+                        listed.stand(view);
+                    }}
+                >
+                    <Icon name={views[view].icon} className={folded ? 'size-5.75 text-muted' : 'size-4.5 text-muted'} />
+
+                    {folded ? (
+                        <span className="sr-only">{translate(views[view].label)}</span>
+                    ) : (
+                        <span className="min-w-0 flex-1 truncate text-start">{translate(views[view].label)}</span>
+                    )}
+                </button>
             ))}
         </section>
     );

@@ -243,6 +243,106 @@ describe('ListSettings', () => {
         expect(screen.queryByLabelText('Include junk')).toBeNull();
     });
 
+    it.each([
+        ['What this is about', 'Sense'],
+        ['Why this may matter', 'Significance'],
+        ['What is committed to', 'Commitment'],
+    ])('narrows the list to the %s a derivation recorded', (named, aspect) => {
+        const read = vi.fn<(listing: MailListing) => void>();
+
+        renderSettings(openingListing, read);
+        openFilters();
+        fireEvent.click(screen.getByRole('button', { name: named }));
+
+        expect(read.mock.calls[0]?.[0].filters.markAspect).toBe(aspect);
+    });
+
+    it('draws the reading in force as chosen, which is what a standing view pressed in the tree looks like here', () => {
+        const filters = { ...openingListing.filters, markAspect: 'Significance' as const };
+
+        renderSettings({ ...openingListing, filters });
+        openFilters();
+
+        expect(screen.getByRole('button', { name: 'Why this may matter' }).getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByRole('button', { name: 'What is committed to' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('takes the reading off again when the one in force is pressed, so a view can be removed one criterion at a time', () => {
+        const read = vi.fn<(listing: MailListing) => void>();
+        const filters = { ...openingListing.filters, markAspect: 'Commitment' as const };
+
+        renderSettings({ ...openingListing, filters }, read);
+        openFilters();
+        fireEvent.click(screen.getByRole('button', { name: 'What is committed to' }));
+
+        expect(read.mock.calls[0]?.[0].filters.markAspect).toBeNull();
+    });
+
+    it('bounds the commitments to the reader’s own week, reckoned from the start of their day', () => {
+        const read = vi.fn<(listing: MailListing) => void>();
+
+        renderSettings(openingListing, read);
+        openFilters();
+        fireEvent.click(screen.getByRole('button', { name: 'Due this week' }));
+
+        expect(read.mock.calls[0]?.[0].filters.markDueFrom).toBe('2026-09-03T00:00');
+        expect(read.mock.calls[0]?.[0].filters.markDueTo).toBe('2026-09-10T00:00');
+    });
+
+    it('takes the due window off again, leaving the reading it was set beside in force', () => {
+        const read = vi.fn<(listing: MailListing) => void>();
+        const filters = {
+            ...openingListing.filters,
+            markAspect: 'Commitment' as const,
+            markDueFrom: '2026-09-03T00:00',
+            markDueTo: '2026-09-10T00:00',
+        };
+
+        renderSettings({ ...openingListing, filters }, read);
+        openFilters();
+        fireEvent.click(screen.getByRole('button', { name: 'Due this week' }));
+
+        const narrowed = read.mock.calls[0]?.[0];
+
+        expect(narrowed?.filters.markDueFrom).toBeNull();
+        expect(narrowed?.filters.markDueTo).toBeNull();
+        expect(narrowed?.filters.markAspect).toBe('Commitment');
+    });
+
+    it('counts what a standing view put in force among the narrowings, so the control says the list is narrowed', () => {
+        const filters = {
+            ...openingListing.filters,
+            markAspect: 'Commitment' as const,
+            markDueFrom: '2026-09-03T00:00',
+            markDueTo: '2026-09-10T00:00',
+        };
+
+        renderSettings({ ...openingListing, filters });
+        openFilters();
+
+        expect(screen.getByText('Active filters: 1')).toBeTruthy();
+    });
+
+    it('clears what a standing view put in force with every other narrowing', () => {
+        const read = vi.fn<(listing: MailListing) => void>();
+        const filters = {
+            ...openingListing.filters,
+            markAspect: 'Commitment' as const,
+            markDueFrom: '2026-09-03T00:00',
+            markDueTo: '2026-09-10T00:00',
+        };
+
+        renderSettings({ ...openingListing, filters }, read);
+        openFilters();
+        fireEvent.click(screen.getByText('Clear filters'));
+
+        const cleared = read.mock.calls[0]?.[0];
+
+        expect(cleared?.filters.markAspect).toBeNull();
+        expect(cleared?.filters.markDueFrom).toBeNull();
+        expect(cleared?.filters.markDueTo).toBeNull();
+    });
+
     it('leaves what the reader chose about junk alone when the narrowings are cleared', () => {
         const read = vi.fn<(listing: MailListing) => void>();
         const filters = { ...openingListing.filters, unread: true, includeJunk: true };

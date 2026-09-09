@@ -23,6 +23,7 @@ const settings: ClientPreferencesInForce = {
     markReadOnOpen: true,
     telemetryEnabled: true,
     expandWholeThread: false,
+    aiFiltersShown: true,
     embeddedHtmlMessages: false,
     notStated: false,
     chooseTheme: () => undefined,
@@ -30,6 +31,7 @@ const settings: ClientPreferencesInForce = {
     chooseTelemetry: () => undefined,
     chooseThreadExpansion: () => undefined,
     chooseMessageView: () => undefined,
+    chooseAiFilters: () => undefined,
 };
 
 const named: OwnProfileInForce = {
@@ -447,6 +449,30 @@ describe('Settings', () => {
         openApplication();
 
         expect(screen.getByRole('switch', { name: /Expand the whole thread/u })).toHaveProperty('checked', true);
+    });
+
+    it('draws the AI filters in the tree as shown, which is what a person who has stated nothing gets', () => {
+        renderSettings();
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Show the AI filters/u })).toHaveProperty('checked', true);
+    });
+
+    it('hands the AI-filters switch to what holds the preference', () => {
+        const chooseAiFilters = vi.fn();
+        renderSettings({ preferences: { ...settings, chooseAiFilters } });
+        openApplication();
+
+        fireEvent.click(screen.getByRole('switch', { name: /Show the AI filters/u }));
+
+        expect(chooseAiFilters).toHaveBeenCalledWith(false);
+    });
+
+    it('draws the AI-filters switch as off where the person took the section out of the tree', () => {
+        renderSettings({ preferences: { ...settings, aiFiltersShown: false } });
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Show the AI filters/u })).toHaveProperty('checked', false);
     });
 
     it('offers no system-notification switch where the head offered no such operation', () => {

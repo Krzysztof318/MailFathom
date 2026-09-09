@@ -151,6 +151,23 @@ describe('rememberedListing', () => {
                 },
             },
         ],
+        ['a reading this surface does not publish', { ...kept, filters: { ...kept.filters, markAspect: 'Mood' } }],
+        [
+            'a due bound the window control never wrote',
+            { ...kept, filters: { ...kept.filters, markAspect: 'Commitment', markDueFrom: 'next Monday' } },
+        ],
+        [
+            'a due window whose end precedes its start, which the deployment refuses rather than answers',
+            {
+                ...kept,
+                filters: {
+                    ...kept.filters,
+                    markAspect: 'Commitment',
+                    markDueFrom: '2026-09-10T00:00',
+                    markDueTo: '2026-09-03T00:00',
+                },
+            },
+        ],
         ['a switch that is neither shown nor hidden', { ...kept, readingsShown: 'yes' }],
         ['a listing that is not a record', 'the inbox'],
     ])('opens at the leading end for a record carrying %s', (_, written) => {
@@ -168,6 +185,28 @@ describe('rememberedListing', () => {
         rememberListing(deployment, inbox, narrowed);
 
         expect(rememberedListing(deployment, inbox)).toStrictEqual(narrowed);
+    });
+
+    it('reads back the standing view a folder was left narrowed to, so returning to it finds the criteria', () => {
+        const standing = {
+            ...kept,
+            filters: {
+                ...kept.filters,
+                markAspect: 'Commitment' as const,
+                markDueFrom: '2026-09-03T00:00',
+                markDueTo: '2026-09-10T00:00',
+            },
+        };
+
+        rememberListing(deployment, inbox, standing);
+
+        expect(rememberedListing(deployment, inbox)).toStrictEqual(standing);
+    });
+
+    it('narrows by no reading for a folder kept before the tree offered the standing views', () => {
+        stored({ [keyFor(inbox)]: { ...kept, filters: without({ ...kept.filters }, 'markAspect') } });
+
+        expect(rememberedListing(deployment, inbox).filters.markAspect).toBeNull();
     });
 
     it('draws the readings for a folder kept before the switch existed', () => {
