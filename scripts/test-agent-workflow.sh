@@ -8791,12 +8791,19 @@ no_two_tracked_paths_differ_only_by_case() {
 #
 # The listing is written rather than fetched here for the same reason: what is under test is the
 # comparison, and a fixture listing states the etags a server would have.
+#
+# The screen source it names is one of the real ones, because what the script mirrors is a list
+# written into it rather than a pattern. That couples this fixture to that list on purpose: renaming
+# a mirrored screen is a refresh that edits the list, and a test still naming the old one is the
+# reminder that both halves move together.
+mirrored_test_screen="MailFathom Toasts.dc.html"
+
 write_design_listing() {
   local target="$1" prototype_etag="$2" runtime_etag="${3:-200}"
 
   cat >"$target" <<LISTING
 [
-  { "path": "Screen.dc.html", "size": 6, "etag": "$prototype_etag" },
+  { "path": "$mirrored_test_screen", "size": 6, "etag": "$prototype_etag" },
   { "path": "avatars/somebody.png", "size": 4, "etag": "100" },
   { "path": "support.js", "size": 3, "etag": "$runtime_etag" }
 ]
@@ -8815,12 +8822,12 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
   # than text and no screen is built from it.
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     plan "$work/listing.json") >"$output"
-  assert_contains 'Screen.dc.html' "$output"
+  assert_contains "$mirrored_test_screen" "$output"
   assert_contains 'support.js' "$output"
   assert_excludes 'avatars/somebody.png' "$output"
 
   mkdir -p "$repository_root/design/files"
-  printf 'screen' >"$repository_root/design/files/Screen.dc.html"
+  printf 'screen' >"$repository_root/design/files/$mirrored_test_screen"
   printf 'run' >"$repository_root/design/files/support.js"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output"
@@ -8831,6 +8838,17 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
     plan "$work/listing.json") >"$output"
   assert_contains 'Nothing moved' "$output"
 
+  # A file the project gained that the list does not name is reported and not read. This repository
+  # is public and the project is not, so a screen arriving upstream is somebody's decision to copy
+  # rather than a file that turns up in the next refresh because its name ends in `.html`.
+  jq '. + [{ "path": "Unlisted.dc.html", "size": 5, "etag": "400" }]' \
+    "$work/listing.json" >"$work/listing-unlisted.json"
+  (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
+    plan "$work/listing-unlisted.json") >"$output"
+  assert_contains 'new       Unlisted.dc.html' "$output"
+  assert_contains 'the mirror does not carry them' "$output"
+  assert_contains 'none — nothing that moved is on the mirrored list' "$output"
+
   local stamp
   stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
 
@@ -8838,7 +8856,7 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
   write_design_listing "$work/listing.json" "301"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     plan "$work/listing.json") >"$output"
-  assert_contains 'changed   Screen.dc.html' "$output"
+  assert_contains "changed   $mirrored_test_screen" "$output"
   assert_excludes 'avatars/somebody.png' "$output"
 
   # The runtime is read like a screen source and stamped unlike one. It is mirrored because an
@@ -8869,7 +8887,7 @@ the_design_mirror_refuses_a_transcription_that_lost_a_window() {
 
   # A windowed read that dropped or doubled a window arrives as a file of the wrong length, and the
   # size the project itself states is the only check available that costs no second read of it.
-  printf 'scree' >"$repository_root/design/files/Screen.dc.html"
+  printf 'scree' >"$repository_root/design/files/$mirrored_test_screen"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output" 2>&1; then
     printf 'The mirror recorded a screen source of the wrong length\n' >&2
@@ -8886,7 +8904,7 @@ the_design_mirror_refuses_a_transcription_that_lost_a_window() {
   fi
 
   # A mirrored file that never arrived is the same failure said differently.
-  rm -f "$repository_root/design/files/Screen.dc.html"
+  rm -f "$repository_root/design/files/$mirrored_test_screen"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output" 2>&1; then
     printf 'The mirror recorded a screen source that is not there\n' >&2
@@ -9025,7 +9043,7 @@ MANIFEST
 MANIFEST
   fi
 
-  printf 'screen' >"$repository_root/design/files/Screen.dc.html"
+  printf 'screen' >"$repository_root/design/files/$mirrored_test_screen"
   printf 'run' >"$repository_root/design/files/support.js"
   write_design_listing "$test_directory/parity-listing.json" "300"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
@@ -9039,8 +9057,8 @@ write_parity_pairing() {
 {
   "stamp": "$stamp",
   "screens": {
-    "first": { "file": "Screen.dc.html", "properties": { "theme": null }, "steps": [] },
-    "second": { "file": "Screen.dc.html", "properties": { "theme": null }, "steps": [] }
+    "first": { "file": "$mirrored_test_screen", "properties": { "theme": null }, "steps": [] },
+    "second": { "file": "$mirrored_test_screen", "properties": { "theme": null }, "steps": [] }
   }
 }
 PAIRING

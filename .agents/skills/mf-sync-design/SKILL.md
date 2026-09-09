@@ -80,11 +80,15 @@ Four steps, and an unchanged project stops at the second having written nothing 
      bash scripts/design-mirror.sh decode "design/files/<path>"
      ```
 
-   The mirror copies every `.html` screen source and `support.js`, the generated runtime that boots them — without it an
-   artboard renders nothing at all, which is what `scripts/capture-design.sh` needs it for. The project's assets and its
-   thumbnail are not read: they are images rather than text, several megabytes of them would be committed and
-   re-committed at every refresh, and a screen is built from the source rather than from them. The manifest covers
-   **every** file, so one appearing or disappearing is still visible in the diff.
+   The mirror copies the files named in the list at the top of `scripts/design-mirror.sh` — the screen sources, and
+   `support.js`, the generated runtime that boots them, without which an artboard renders nothing at all, which is what
+   `scripts/capture-design.sh` needs it for. **Nothing else is read, and a file the project has gained is not added to
+   that list by a session.** `plan` reports it as having appeared and says so in as many words; whether a public
+   repository carries it is the owner's decision, and the answer arrives as an edit to that list rather than as a file
+   that turned up in a refresh. The project's assets and its thumbnail are the standing case for leaving one out: they
+   are images rather than text, several megabytes of them would be committed and re-committed at every refresh, and a
+   screen is built from the source rather than from them. The manifest covers **every** file, so one appearing or
+   disappearing is still visible in the diff.
 
 4. **Record.** `bash scripts/design-mirror.sh record "$WORK_DIR/listing.json"` writes the manifest and checks every
    mirrored file against the byte count the project states. A mismatch is a transcription that dropped or doubled a

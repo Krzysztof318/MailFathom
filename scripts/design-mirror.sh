@@ -49,18 +49,35 @@ design_directory="$repository_root/design"
 manifest="$design_directory/manifest.json"
 mirror="$(realpath -m -- "$design_directory/files")"
 
-# A screen source is an HTML file, and everything else the project holds is an asset, a copied
-# slide-deck starter or a thumbnail. Mirroring is therefore one rule rather than a list nobody
-# updates: the manifest still covers every file, so an asset appearing or disappearing stays visible
-# without several megabytes of it being committed and re-committed at every refresh.
-is_screen_source='(.path | endswith(".html"))'
+# What the mirror carries is a named list rather than a pattern. The repository is public and the
+# project is not, so which of its files are copied into a public tree is a decision somebody takes,
+# once, by editing the list below — a file the project gains is reported by `plan` as having appeared
+# and is then left alone, instead of arriving in the next refresh because its name happened to end in
+# `.html`. The manifest still covers every file, so nothing becomes invisible by being left out.
+#
+# Adding a screen to the mirror is one line here. Removing one is the same line, deleted.
+mirrored_screen_sources=(
+  "MailFathom Mail Search.html"
+  "MailFathom Notification Gesture.dc.html"
+  "MailFathom Prototype.dc.html"
+  "MailFathom Result Blocks.dc.html"
+  "MailFathom Sign-in.dc.html"
+  "MailFathom Toasts.dc.html"
+)
 
 # The generated runtime is mirrored beside them, and it is the one file that is not a screen source
 # and is still read. An artboard is a component that runtime boots rather than a document a browser
 # draws, so a mirror without it renders nothing at all — which is what `scripts/capture-design.sh`
 # needs it for. It is text, so it travels the way a screen source does; the project's images are not
 # text and none of them is mirrored.
-is_runtime='(.path == "support.js")'
+mirrored_runtime=(
+  "support.js"
+)
+
+as_json_array() { printf '%s\n' "$@" | jq -R . | jq -s -c .; }
+
+is_screen_source="(.path | IN($(as_json_array "${mirrored_screen_sources[@]}")[]))"
+is_runtime="(.path | IN($(as_json_array "${mirrored_runtime[@]}")[]))"
 
 is_mirrored="($is_screen_source or $is_runtime)"
 
@@ -129,7 +146,7 @@ case "$command" in
     listing="$(read_listing "${2:-}")"
 
     if [[ ! -f "$manifest" ]]; then
-      printf 'No manifest yet — every screen source and the runtime have to be read:\n'
+      printf 'No manifest yet — every file the mirrored list names has to be read:\n'
       jq -r "map(select($is_mirrored)) | .[] | \"  read  \(.path)\"" <<<"$listing"
       exit 0
     fi
@@ -154,7 +171,20 @@ case "$command" in
       | \$now
       | map(select($is_mirrored))
       | map(select((\$before[.path] | not) or (\$before[.path].etag != .etag)))
-      | if length == 0 then \"  none — what moved is neither a screen source nor the runtime\" else .[] | \"  \(.path)\" end" -r
+      | if length == 0 then \"  none — nothing that moved is on the mirrored list\" else .[] | \"  \(.path)\" end" -r
+
+    # A file the project gained that the list does not name is reported rather than copied. Saying so
+    # here is what keeps the omission a decision somebody can revisit instead of one nobody notices:
+    # the alternative is a reader comparing the `new` lines above against the list by eye.
+    unlisted="$(jq -n --argjson was "$(cat "$manifest")" --argjson now "$listing" "
+      (\$was | INDEX(.path)) as \$before
+      | \$now
+      | map(select((\$before[.path] | not) and (($is_mirrored) | not)))
+      | .[] | \"  \(.path)\"" -r)"
+    if [[ -n "$unlisted" ]]; then
+      printf '\nThese appeared and the mirror does not carry them. Add one to the list in this script\n'
+      printf 'if it should be copied:\n%s\n' "$unlisted"
+    fi
     ;;
 
   record)

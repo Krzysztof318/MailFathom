@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MailFathom — Wyszukiwanie poczty</title>
+<title>MailFathom — Mail search</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  /* Barwy MailFathom pochodzą z ikony produktu, a nie z palety przykładowej: te same wartości,
-     które niesie frontend/src/Client.App/src/styles.css. */
+  /* MailFathom colours come from the product icon, not a sample palette: the same values
+     that frontend/src/Client.App/src/styles.css carries. */
   :root {
     color-scheme: light;
     --fathom-950: #010d33; --fathom-800: #0028a0; --fathom-600: #0048e0;
@@ -69,8 +69,8 @@
   .line2 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
   .subject { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .preview { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Trzecia linia. Wiersz jest jeden — folder i wyniki rysują ten sam — a wysokość rezerwuje ją zawsze,
-     więc wiersz, który ma coś do powiedzenia, jest tym samym wierszem, a nie wyższym. */
+  /* Third line. There is one row shape — folder and results draw the same one — and the height always
+     reserves it, so a row with something to say is the same row, not a taller one. */
   .why { height: 16px; overflow: hidden; font-size: 12px; color: var(--faint); }
   .why mark { background: none; color: var(--accent-strong); font-weight: 600; }
   .foot { padding: 8px 12px; font-size: 13px; color: var(--faint); }
@@ -88,125 +88,125 @@
 <div class="sheet">
 
   <header style="display:flex;flex-direction:column;gap:10px">
-    <h1>Wyszukiwanie poczty</h1>
+    <h1>Mail search</h1>
     <p class="lede">
-      Znajdowanie wiadomości stoi na górze poczty, którą ktoś właśnie ogląda, a nie na osobnym ekranie: jedna kolumna,
-      jeden kształt wiersza i nic, do czego trzeba przejść i wrócić. Wyszukiwanie obejmuje zakres, na który ktoś patrzy,
-      a ten zakres jest skopiowany na nie jako filtry — widoczne i możliwe do zdjęcia.
+      Finding a message sits on top of the mail someone is already looking at, not on a separate screen: one column,
+      one row shape, and nothing you have to navigate to and back from. The search covers the scope someone is looking at,
+      and that scope is copied onto it as filters — visible and removable.
     </p>
     <p class="note">
-      Pole przyjmuje dziś słowa i nic więcej. Kolumna poczty w prototypie obiecuje w tym miejscu także opis tego,
-      czego ktoś potrzebuje — to jest praca etapu 3, który pisze filtry ze zdania i ląduje na tym ekranie zamiast go
-      zastępować. Dopóki nie wyląduje, pole obiecuje to, co robi: pole proponujące opis nad serwerem, który umie
-      dopasować tylko słowa, zawodzi człowieka dokładnie w chwili, gdy mu zaufał. Prototyp trzeba w tym jednym miejscu
-      poprawić do <em>Słowa z wiadomości, której szukasz</em>.
+      Today the field takes words and nothing more. The mail column in the prototype also promises a description of
+      what someone needs here — that is stage 3 work, which writes filters from a sentence and lands on this screen
+      instead of replacing it. Until it lands, the field promises what it does: a field inviting a description on top of
+      a server that can only match words fails the person exactly when they trusted it. In this one place the prototype
+      needs to be corrected to <em>Words from the message you are looking for</em>.
     </p>
   </header>
 
   <div class="gallery">
 
     <section class="state">
-      <h2>Wyniki</h2>
+      <h2>Results</h2>
       <div class="column">
         <div class="head">
           <div class="row-actions">
-            <div class="pill" style="flex:1;color:var(--text)">faktura sierpień</div>
-            <button class="btn" type="button">Szukaj</button>
-            <button class="btn" type="button">Zakończ</button>
+            <div class="pill" style="flex:1;color:var(--text)">invoice august</div>
+            <button class="btn" type="button">Search</button>
+            <button class="btn" type="button">Done</button>
           </div>
           <ul class="chips">
-            <li class="chip">Skrzynka: Praca <button aria-label="Usuń filtr Skrzynka: Praca">✕</button></li>
-            <li class="chip">Folder: Odebrane <button aria-label="Usuń filtr Folder: Odebrane">✕</button></li>
-            <li class="chip">Tylko z załącznikami <button aria-label="Usuń filtr Tylko z załącznikami">✕</button></li>
+            <li class="chip">Mailbox: Work <button aria-label="Remove filter Mailbox: Work">✕</button></li>
+            <li class="chip">Folder: Inbox <button aria-label="Remove filter Folder: Inbox">✕</button></li>
+            <li class="chip">With attachments only <button aria-label="Remove filter With attachments only">✕</button></li>
           </ul>
-          <div class="fold">▸ Zawęź to wyszukiwanie</div>
+          <div class="fold">▸ Narrow this search</div>
         </div>
         <div class="rows">
           <div class="row open">
-            <div class="line1"><span class="who">Hanna Wiśniewska</span><span class="org">nordwind.example</span><span class="when">27 sie</span></div>
-            <div class="line2"><span class="subject">Faktura 2026/08/114</span><span class="preview">Przesyłam w załączeniu fakturę za…</span></div>
-            <div class="why">Dlaczego to pasuje: <mark>Faktura</mark> za <mark>sierpień</mark>, numer 114</div>
+            <div class="line1"><span class="who">Hanna Wiśniewska</span><span class="org">nordwind.example</span><span class="when">27 Aug</span></div>
+            <div class="line2"><span class="subject">Invoice 2026/08/114</span><span class="preview">Attached is the invoice for…</span></div>
+            <div class="why">Why this matches: <mark>invoice</mark> for <mark>August</mark>, number 114</div>
           </div>
           <div class="row">
-            <div class="line1"><span class="who">Biuro rachunkowe</span><span class="org">kontor.example</span><span class="when">21 sie</span></div>
-            <div class="line2"><span class="subject">Rozliczenie miesiąca</span><span class="preview">Komplet dokumentów do zamknięcia…</span></div>
-            <div class="why">Pasują te słowa i to, czego dotyczy ta wiadomość.</div>
+            <div class="line1"><span class="who">Accounting office</span><span class="org">kontor.example</span><span class="when">21 Aug</span></div>
+            <div class="line2"><span class="subject">Monthly settlement</span><span class="preview">Full set of documents for the close…</span></div>
+            <div class="why">Both the words and what this message is about match.</div>
           </div>
           <div class="row">
-            <div class="line1"><span class="who">Marek Zieliński</span><span class="org">nordwind.example</span><span class="when">14 sie</span></div>
-            <div class="line2"><span class="subject">Płatność przeszła</span><span class="preview">Potwierdzam, przelew wyszedł wczoraj.</span></div>
-            <div class="why">Znalezione po znaczeniu, a nie po tych słowach.</div>
+            <div class="line1"><span class="who">Marek Zieliński</span><span class="org">nordwind.example</span><span class="when">14 Aug</span></div>
+            <div class="line2"><span class="subject">Payment went through</span><span class="preview">Confirming, the transfer went out yesterday.</span></div>
+            <div class="why">Found by meaning, not by these words.</div>
           </div>
         </div>
-        <div class="foot">To wszystko, co znalazło to wyszukiwanie.</div>
+        <div class="foot">That is everything this search found.</div>
       </div>
       <p class="note">
-        Wiersz jest wierszem listy folderu, a nie drugim kształtem: trzecia linia, którą wysokość wiersza rezerwuje
-        zawsze, niesie tu powód dopasowania. Wyimek pokazuje dopasowane słowa, bo to człowiek może sprawdzić sam;
-        zdanie zastępuje go tylko tam, gdzie serwer nie wyciął żadnego.
+        The row is the folder list row, not a second shape: the third line, which the row height always reserves,
+        carries the reason for the match here. The excerpt shows the matched words, because a person can check those
+        themselves; a sentence replaces it only where the server extracted none.
       </p>
     </section>
 
     <section class="state">
-      <h2>Pusto</h2>
+      <h2>Empty</h2>
       <div class="column">
         <div class="head">
           <div class="row-actions">
-            <div class="pill" style="flex:1;color:var(--text)">umowa najmu</div>
-            <button class="btn" type="button">Szukaj</button>
-            <button class="btn" type="button">Zakończ</button>
+            <div class="pill" style="flex:1;color:var(--text)">lease agreement</div>
+            <button class="btn" type="button">Search</button>
+            <button class="btn" type="button">Done</button>
           </div>
           <ul class="chips">
-            <li class="chip">Folder: Odebrane <button aria-label="Usuń filtr Folder: Odebrane">✕</button></li>
-            <li class="chip">Przyszło 1 sierpnia 2026 lub później <button aria-label="Usuń filtr daty">✕</button></li>
+            <li class="chip">Folder: Inbox <button aria-label="Remove filter Folder: Inbox">✕</button></li>
+            <li class="chip">Arrived on or after 1 August 2026 <button aria-label="Remove date filter">✕</button></li>
           </ul>
         </div>
         <div class="empty">
-          <p>Żadna wiadomość nie pasuje do tego wyszukiwania.</p>
-          <button class="btn" type="button">Przeszukaj zamiast tego całą pocztę</button>
+          <p>No message matches this search.</p>
+          <button class="btn" type="button">Search all mail instead</button>
         </div>
       </div>
       <p class="note">
-        Pusto nigdy nie jest pustym panelem: obok stoi zakres, który to pusto wyprodukował, i jedno naciśnięcie, które
-        je poszerza. Wyszukiwanie zawężone czymś, czego nikt nie widzi, czyta się jak skrzynka, która zgubiła pocztę.
+        Empty is never an empty panel: next to it stands the scope that produced the emptiness, and one press that
+        widens it. A search narrowed by something nobody can see reads like a mailbox that lost the mail.
       </p>
     </section>
 
     <section class="state">
-      <h2>Czekanie, awaria, tylko słowa</h2>
+      <h2>Waiting, failure, words only</h2>
       <div class="column">
         <div class="head">
-          <div class="pill" style="color:var(--text)">faktura sierpień</div>
+          <div class="pill" style="color:var(--text)">invoice august</div>
         </div>
-        <div class="waiting">Przeszukiwanie twojej poczty…</div>
+        <div class="waiting">Searching your mail…</div>
         <div class="banner">
-          Ten serwer nie wyszukuje po znaczeniu, więc te wyniki zawierają wpisane przez ciebie słowa i nic, co
-          zostałoby znalezione wyłącznie po znaczeniu.
+          This server does not search by meaning, so these results contain the words you typed and nothing that
+          would have been found by meaning alone.
         </div>
         <div class="banner">
-          Nie udało się przeprowadzić tego wyszukiwania: nie można się w tej chwili połączyć z serwerem.
+          This search could not be run: the server cannot be reached right now.
         </div>
         <div class="recent">
-          <span class="note" style="width:100%">Wcześniej wyszukiwane</span>
-          <button class="btn" type="button">faktura sierpień</button>
-          <button class="btn" type="button">umowa najmu</button>
-          <button class="btn" type="button">od hanny</button>
-          <button class="btn" type="button">Zapomnij je</button>
+          <span class="note" style="width:100%">Recent searches</span>
+          <button class="btn" type="button">invoice august</button>
+          <button class="btn" type="button">lease agreement</button>
+          <button class="btn" type="button">from hanna</button>
+          <button class="btn" type="button">Forget them</button>
         </div>
       </div>
       <p class="note">
-        Serwer, który nie umie szukać po znaczeniu, mówi to osobno od tego, czego nie wolno pytającemu: pierwsze
-        jest brakiem serwera, drugie odmową wobec człowieka. Wcześniejsze wyszukiwania żyją wyłącznie w stanie
-        klienta i znikają razem z poświadczeniem — żadna wpisana fraza nie trafia do logu ani do telemetrii.
+        A server that cannot search by meaning says so separately from what the asker is not allowed to see: the first
+        is a shortcoming of the server, the second a refusal towards a person. Recent searches live only in client
+        state and disappear with the credential — no typed phrase reaches a log or telemetry.
       </p>
     </section>
 
   </div>
 
   <footer class="note">
-    Ten ekran jest zaimplementowany w <code>frontend/src/Client.App/src/search/</code>. Zawężenie po folderze oferuje
-    dziś role folderów, a nie całe drzewo kont — folder spoza ról trafia na wyszukiwanie przez to, na co ktoś patrzył,
-    i stoi na nim jako filtr do zdjęcia.
+    This screen is implemented in <code>frontend/src/Client.App/src/search/</code>. Narrowing by folder currently
+    offers folder roles rather than the whole account tree — a folder outside those roles reaches the search through
+    whatever someone was looking at, and stands on it as a removable filter.
   </footer>
 
 </div>

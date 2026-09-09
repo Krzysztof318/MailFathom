@@ -1,52 +1,52 @@
 {
-  "stamp": "25200f246227ea7e",
+  "stamp": "099857782525a732",
   "screens": {
     "sign-in": {
-      "file": "MailFathom Logowanie.dc.html",
+      "file": "MailFathom Sign-in.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "expect": {
-            "text": "Połącz skrzynkę"
+            "text": "Connect your mailbox"
           }
         }
       ]
     },
     "mail-list": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "click": {
-            "text": "Poczta"
+            "text": "Mail"
           }
         }
       ]
     },
     "mail-thread": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "click": {
-            "text": "Poczta"
+            "text": "Mail"
           }
         },
         {
           "click": {
-            "text": "Aneks do umowy — podpisy"
+            "text": "Contract addendum — signatures"
           }
         }
       ]
     },
     "settings-profile": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -58,7 +58,7 @@
         },
         {
           "click": {
-            "text": "settingsUstawienia"
+            "text": "settingsSettings"
           }
         },
         {
@@ -69,7 +69,7 @@
       ]
     },
     "settings-application": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -81,7 +81,7 @@
         },
         {
           "click": {
-            "text": "settingsUstawienia"
+            "text": "settingsSettings"
           }
         },
         {
@@ -91,13 +91,13 @@
         },
         {
           "expect": {
-            "text": "JĘZYK"
+            "text": "LANGUAGE"
           }
         }
       ]
     },
     "notifications": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
@@ -109,20 +109,20 @@
         },
         {
           "expect": {
-            "text": "Powiadomienia"
+            "text": "Notifications"
           }
         }
       ]
     },
     "account-menu": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "click": {
-            "text": "Poczta"
+            "text": "Mail"
           }
         },
         {
@@ -132,25 +132,25 @@
         },
         {
           "expect": {
-            "text": "settingsUstawienia"
+            "text": "settingsSettings"
           }
         }
       ]
     },
     "full-html": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "click": {
-            "text": "Poczta"
+            "text": "Mail"
           }
         },
         {
           "click": {
-            "text": "Aneks do umowy — podpisy"
+            "text": "Contract addendum — signatures"
           }
         },
         {
@@ -160,30 +160,30 @@
         },
         {
           "click": {
-            "text": "Pokaż HTML"
+            "text": "Show HTML"
           }
         },
         {
           "expect": {
-            "text": "lockPodgląd izolowany — skrypty i zdalne treści są zablokowane"
+            "text": "lockIsolated preview — scripts and remote content are blocked"
           }
         }
       ]
     },
     "full-html-ask": {
-      "file": "MailFathom Prototyp.dc.html",
+      "file": "MailFathom Prototype.dc.html",
       "properties": {
         "theme": null
       },
       "steps": [
         {
           "click": {
-            "text": "Poczta"
+            "text": "Mail"
           }
         },
         {
           "click": {
-            "text": "Aneks do umowy — podpisy"
+            "text": "Contract addendum — signatures"
           }
         },
         {
@@ -193,7 +193,7 @@
         },
         {
           "expect": {
-            "text": "Pokazać pełny HTML?"
+            "text": "Show the full HTML?"
           }
         }
       ]

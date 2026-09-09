@@ -13,8 +13,8 @@ loop that judges a client screen runs in any clone.
 
 | Path | What it is |
 |---|---|
-| `files/` | The project's screen sources, byte for byte, and `support.js`, the generated runtime that boots them. An artboard is a component that runtime renders rather than a document a browser draws, so a mirror without it renders nothing |
-| `manifest.json` | Every file the project holds — path, size, and the server's own opaque `etag` — including the images that are deliberately not copied. It is what a refresh compares against, and what makes an asset appearing or disappearing visible |
+| `files/` | The screen sources named in `scripts/design-mirror.sh`, byte for byte, and `support.js`, the generated runtime that boots them. An artboard is a component that runtime renders rather than a document a browser draws, so a mirror without it renders nothing |
+| `manifest.json` | Every file the project holds — path, size, and the server's own opaque `etag` — including everything deliberately not copied. It is what a refresh compares against, and what makes a file appearing or disappearing visible |
 | `state-inventory.md` | Every screen, the states it has, what reveals each one, and the states no rendered preview reaches. **This is what a screen is built from**; the sources under `files/` are what it was extracted from |
 | `parity.json` | Which artboard each screen in `frontend/design-parity/screens.json` is drawn on, the properties it takes, and what is pressed to reach it. `scripts/capture-design.sh` reads it |
 
@@ -22,8 +22,11 @@ Both `state-inventory.md` and `parity.json` record the **stamp** — a digest of
 they were written. `bash scripts/design-mirror.sh stamp` prints the mirror's own, and a disagreement means one of them
 is describing an older design.
 
-The project's images are not copied. They are megabytes no screen is built from, and the manifest still records them, so
-one arriving or leaving is visible without any of them being committed.
+**What is copied is a named list rather than a pattern**, and that list lives in `scripts/design-mirror.sh`. This
+repository is public and the project is not, so which of its files reach a public tree is a decision somebody takes by
+editing that list — a file the project gains is reported by a refresh as having appeared and is then left alone. The
+images are the standing case: megabytes no screen is built from. The manifest still records every file, so one arriving
+or leaving is visible without any of them being committed.
 
 ## How it is kept current
 
