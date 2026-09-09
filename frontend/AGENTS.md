@@ -14,14 +14,16 @@ all of it implements, and it is required reading before a change to the stack it
 
 ## Where a screen comes from
 
-The client is built UX-first, and what a screen looks like is settled outside this repository: in a design project read
-through an MCP server, which a session reads and never writes to. **A change that alters what a screen looks like opens
-by reading that design rather than by designing a screen in the session**, and `$read-design` is the step —
+The client is built UX-first, and what a screen looks like is settled in a design project the maintainer draws by hand
+and reads through an MCP server, which a session reads and never writes to. **A change that alters what a screen looks
+like opens by reading that design rather than by designing a screen in the session**, and `$read-design` is the step —
 [Agent workflow](../docs/operations/agent-workflow.md#skills) describes what it does and what it refuses.
 
-What it produces is a local mirror of the design's screen sources and a state inventory extracted from them, both under
-`artifacts/design/`, which is gitignored and never staged: a design is not repository content, and no file here
-describes what a screen looks like. **The inventory is what a screen is built from; a rendered preview is not.** A
+What it reads is [`design/`](../design/README.md): the project's screen sources copied byte for byte and a state
+inventory extracted from them, tracked like everything else here, so a clone with no access to that project reads
+exactly what one with access reads. `$mf-sync-design` is the only thing that writes it, and a refresh arrives as a pull
+request of its own rather than inside a client change. **The inventory is what a screen is built from; a rendered
+preview is not.** A
 preview shows the one state it was clicked into, while the source states every screen, every variant and every reaction
 at once — so the empty state, the failing state, the state that only exists under a coarse pointer, and the state no
 click reaches at all are each invisible in a picture, and a screen built from one is built from a partial reading of a
@@ -40,8 +42,8 @@ the comparison is made by a tool rather than by eye.** Three scripts are the who
 order.
 
 1. `bash scripts/capture-design.sh --out <directory> --screen <id>` captures the design side. It serves the mirror out
-   of `artifacts/design/files/` — the screen sources and the runtime that boots them, which is why the mirror carries
-   that one generated file beside them.
+   of `design/files/` — the screen sources and the runtime that boots them, which is why the mirror carries that one
+   generated file beside them.
 2. `bash scripts/capture-client.sh --out <directory> --screen <id>` captures the client side, served from the fixture
    corpus under `frontend/tests/fixtures/` so a capture shows example mail and never somebody's.
 3. `bash scripts/compare-captures.sh <directory>` compares each pair and reports the result.
@@ -51,9 +53,10 @@ What makes the pair a pair is that both scripts read one manifest,
 compared, and the compositions it is compared at — the design project's own four sizes, three of them under a coarse
 pointer. A comparison across two widths, two pointers or two device pixel ratios proves nothing while looking exactly
 like one that proves something, so neither side is given a viewport of its own to get wrong. The manifest describes the
-client and carries no design content, which is what lets it live in a public tree; the design half of the pairing —
-which artboard a screen is drawn on and what reaches it — is design content and sits beside the mirror in
-`artifacts/design/parity.json`, which `$read-design` writes and `.gitignore` covers.
+client and says nothing about the design; the design half of the pairing — which artboard a screen is drawn on and what
+reaches it — describes the design and sits beside the mirror in `design/parity.json`, which `$mf-sync-design` writes and
+which records the stamp it was written against, so a pairing left behind by a refresh stops a capture rather than
+silently pointing at an artboard that has moved.
 
 What the manifest names is the screens the client **implements**. A space the rail still draws as a placeholder is not
 a parity question: the difference would be the whole frame, every time, and acting on it means building the screen
@@ -71,10 +74,10 @@ Nothing is tolerated by default, and a tolerance is not a way of making a report
 exist for a difference whose class has been named and explained — an unmirrored asset the design references, say, which
 the design capture reports by path for exactly that reason — never for the report as a whole.
 
-Captures go to the session's scratch directory or under `artifacts/`, and the scripts refuse anywhere else. Both sides
-are material that does not belong in a public tree: the design side is the source of truth for screens that have not
-shipped, and the client side is a capture of a running client. What travels out of a session is the report and a
-description of what was seen.
+Captures go to the session's scratch directory or under `artifacts/`, and the scripts refuse anywhere else. A capture is
+generated rather than authored — the design side is a rasterisation of files already in the tree, and the client side is
+a picture of a running client, which shows whatever mail it was signed in to. What travels out of a session is the
+report and a description of what was seen.
 
 ## What the toolchain already decides
 

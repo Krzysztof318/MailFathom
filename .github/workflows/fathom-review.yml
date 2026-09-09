@@ -1038,6 +1038,33 @@ jobs:
             | jq -s --argjson limit "$file_limit" '.[0:$limit]' \
             > "$REVIEW_DIRECTORY/files.json"
 
+          # The one class of changed file a review has nothing to say about. `design/files/` is the
+          # design project's screen sources and its generated runtime copied byte for byte, and
+          # `scripts/design-mirror.sh record` checks each of them against the size the project
+          # states — so nobody here wrote a line of them, an edit to one is caught by that check
+          # rather than by a reader's judgement, and a single artboard is more added lines than a
+          # large change. Left in, they would take groups of the reader matrix, spend the coverage
+          # ledger on files the ledger cannot mean anything about, and push the files somebody did
+          # write past the ceiling above.
+          #
+          # It is dropped here rather than filtered in each reader, so one decision reaches the
+          # groups, the anchors, the head content and the coverage at once. Everything else under
+          # `design/` stays: the manifest, the state inventory, the pairing and the page are written
+          # in this repository and are read like anything else. The count joins the truncation notes
+          # because a reader of the review has to know the difference between a file nobody looked
+          # at and a file nobody was meant to.
+          mirrored_design="$(jq 'map(select(.filename | startswith("design/files/"))) | length' \
+            "$REVIEW_DIRECTORY/files.json")"
+
+          if (( mirrored_design > 0 )); then
+            jq 'map(select(.filename | startswith("design/files/") | not))' \
+              "$REVIEW_DIRECTORY/files.json" > "$REVIEW_DIRECTORY/files.reviewable.json"
+            mv "$REVIEW_DIRECTORY/files.reviewable.json" "$REVIEW_DIRECTORY/files.json"
+
+            printf '%s mirrored design sources under design/files/ are not reviewed: they are the design project copied byte for byte, and nothing in this repository writes them.\n' \
+              "$mirrored_design" >> "$REVIEW_DIRECTORY/truncation.txt"
+          fi
+
           # The lines a review comment may anchor to, taken from the same patches the review is
           # judged against, so the reviewer chooses an anchor that exists instead of guessing one
           # from a diff that may have moved on. Every added or context line on the right side of a
@@ -1302,9 +1329,12 @@ jobs:
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
-          if (( changed_files > collected_files )); then
+          # The mirrored design sources dropped above are not files the ceiling cut, and their own
+          # note already says where they went. Counting them here would report a truncation that did
+          # not happen on every pull request that refreshes the mirror.
+          if (( changed_files - mirrored_design > collected_files )); then
             printf 'The pull request changes %s files and this review covers the first %s.\n' \
-              "$changed_files" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
+              "$(( changed_files - mirrored_design ))" "$collected_files" >> "$REVIEW_DIRECTORY/truncation.txt"
           fi
 
           echo "Collected ${collected_files} changed files and ${fetched} head-content files."

@@ -2532,10 +2532,20 @@ case "$endpoint" in
     # contract about it is a pull request wide enough to cross it.
     response="$(
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
+        --argjson mirrored "${FAKE_MIRRORED_DESIGN_FILE_COUNT:-0}" \
         '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
-         | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end'
+         | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end
+         | . + [range($mirrored)
+                | {filename: "design/files/Artboard\(.).dc.html", previous_filename: null,
+                   status: "modified", additions: 6000, deletions: 5000,
+                   patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | . + (if $mirrored > 0 then
+                  [{filename: "design/state-inventory.md", previous_filename: null,
+                    status: "modified", additions: 4, deletions: 2,
+                    patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+                else [] end)'
     )"
     ;;
   */pulls/*/reviews*)
@@ -2644,6 +2654,9 @@ run_fathom_review_collect() {
   # what moved since the previous one. A push is the ordinary case, and the narrowing contracts are
   # the ones that name the other.
   local explicit="${5:-false}"
+  # How many mirrored design sources the pull request carries beside the changed files above. The
+  # ordinary case is none, so every other contract here measures a collection the drop never touched.
+  local mirrored_design_file_count="${6:-0}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2668,6 +2681,7 @@ run_fathom_review_collect() {
     export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
     export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
+    export FAKE_MIRRORED_DESIGN_FILE_COUNT="$mirrored_design_file_count"
     export_api_retry_environment
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
     export EXPLICIT="$explicit"
@@ -2718,6 +2732,32 @@ fathom_review_stops_reading_head_content_when_its_window_is_gone() {
     "$collect_review_directory/truncation.txt"
   assert_contains '0 of them have content here' "$collect_review_directory/truncation.txt"
   [[ ! -e "$collect_review_directory/head/backend/src/Sample.cs" ]]
+}
+
+# The design mirror is the design project's own screen sources copied byte for byte, and a review has
+# nothing to say about them: nobody here writes a line of them, and one artboard is more added lines
+# than a large change. Left in, they would take groups of the reader matrix and spend the coverage
+# ledger on files it cannot mean anything about — so they are dropped where the collection is frozen,
+# once, ahead of the anchors, the head content and the groups that all read it. The note is what keeps
+# a reader of the review able to tell a file nobody looked at from one nobody was meant to.
+#
+# The drop is one directory rather than the tree above it, which the same collection proves: the state
+# inventory beside the mirror is written in this repository, as the manifest, the pairing and the page
+# are, and a prefix match on `design/` would take all four with it and leave a refresh nobody read.
+fathom_review_never_reads_the_mirrored_design() {
+  local output_file="$test_directory/fathom-review-collect-design-output"
+
+  run_fathom_review_collect "$output_file" 120 120 1 false 2
+
+  assert_json '["backend/src/Sample.cs","design/state-inventory.md"]' \
+    '[.[].filename] | sort' "$collect_review_directory/files.json"
+  assert_json '["backend/src/Sample.cs","design/state-inventory.md"]' \
+    '[.[].filename] | sort' "$collect_review_directory/lines.json"
+  assert_contains '2 mirrored design sources under design/files/ are not reviewed' \
+    "$collect_review_directory/truncation.txt"
+  # The drop is not the file ceiling, and saying so twice would report a truncation that never
+  # happened on every pull request that refreshes the mirror.
+  assert_excludes 'this review covers the first' "$collect_review_directory/truncation.txt"
 }
 
 # The window is a ceiling like every other one in the step, so an ordinary collection never reaches
@@ -8494,8 +8534,16 @@ every_browser_asset_carries_the_license_header() {
     # the same sense a resolved lock file is, and a header typed into one would be lost at the next regeneration.
     # Everything else under that roof is ours and is covered, so a regeneration that starts writing a fourth template
     # file fails here — which is where the answer to whose file it is belongs.
+    #
+    # `design/files/` is the second, and it is excluded for a stronger reason than authorship: those files are the
+    # design project's screen sources copied byte for byte, and `scripts/design-mirror.sh record` checks each one
+    # against the byte count the project itself states. Three lines of header would fail that check on every file at
+    # every refresh, so the mirror carries none and `AGENTS.md` states the exemption beside the rule it is an exemption
+    # to. Nothing under it is written here; `design/README.md` beside it is prose and carries no header for the same
+    # reason no `.md` does.
   done < <(git -C "$source_repository_root" ls-files -- \
     '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.kt' '*.css' '*.html' \
+    ':(exclude)design/files/*' \
     ':(exclude)frontend/src-tauri/gen/android/buildSrc/*' \
     ':(exclude)frontend/src-tauri/gen/android/app/src/main/java/io/github/krzysztof318/mailfathom/MainActivity.kt')
 
@@ -8758,7 +8806,7 @@ LISTING
 the_design_mirror_reads_only_what_the_etags_say_moved() {
   local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
 
-  rm -rf "$work" "$repository_root/artifacts/design"
+  rm -rf "$work" "$repository_root/design"
   mkdir -p "$work"
   write_design_listing "$work/listing.json" "300"
 
@@ -8771,9 +8819,9 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
   assert_contains 'support.js' "$output"
   assert_excludes 'avatars/somebody.png' "$output"
 
-  mkdir -p "$repository_root/artifacts/design/files"
-  printf 'screen' >"$repository_root/artifacts/design/files/Screen.dc.html"
-  printf 'run' >"$repository_root/artifacts/design/files/support.js"
+  mkdir -p "$repository_root/design/files"
+  printf 'screen' >"$repository_root/design/files/Screen.dc.html"
+  printf 'run' >"$repository_root/design/files/support.js"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output"
   assert_contains 'stamp' "$output"
@@ -8809,19 +8857,19 @@ the_design_mirror_reads_only_what_the_etags_say_moved() {
     return 1
   fi
 
-  rm -rf "$repository_root/artifacts/design"
+  rm -rf "$repository_root/design"
 }
 
 the_design_mirror_refuses_a_transcription_that_lost_a_window() {
   local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
 
-  rm -rf "$work" "$repository_root/artifacts/design"
-  mkdir -p "$work" "$repository_root/artifacts/design/files"
+  rm -rf "$work" "$repository_root/design"
+  mkdir -p "$work" "$repository_root/design/files"
   write_design_listing "$work/listing.json" "300"
 
   # A windowed read that dropped or doubled a window arrives as a file of the wrong length, and the
   # size the project itself states is the only check available that costs no second read of it.
-  printf 'scree' >"$repository_root/artifacts/design/files/Screen.dc.html"
+  printf 'scree' >"$repository_root/design/files/Screen.dc.html"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output" 2>&1; then
     printf 'The mirror recorded a screen source of the wrong length\n' >&2
@@ -8832,13 +8880,13 @@ the_design_mirror_refuses_a_transcription_that_lost_a_window() {
   # And no manifest, which is the half that matters after the refusal has scrolled past: a manifest
   # recorded over a mirror that does not match it makes the next session's `plan` report that
   # nothing moved, and a screen is then built from a file nobody has reason to doubt.
-  if [[ -e "$repository_root/artifacts/design/manifest.json" ]]; then
+  if [[ -e "$repository_root/design/manifest.json" ]]; then
     printf 'A refused record left a manifest describing a mirror it rejected\n' >&2
     return 1
   fi
 
   # A mirrored file that never arrived is the same failure said differently.
-  rm -f "$repository_root/artifacts/design/files/Screen.dc.html"
+  rm -f "$repository_root/design/files/Screen.dc.html"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$work/listing.json") >"$output" 2>&1; then
     printf 'The mirror recorded a screen source that is not there\n' >&2
@@ -8846,14 +8894,14 @@ the_design_mirror_refuses_a_transcription_that_lost_a_window() {
   fi
   assert_contains 'Missing from the mirror' "$output"
 
-  rm -rf "$repository_root/artifacts/design"
+  rm -rf "$repository_root/design"
 }
 
 the_design_mirror_refuses_a_path_that_leaves_the_mirror() {
   local work="$test_directory/design-mirror" output="$test_directory/design-mirror.out"
   local escapee="$test_directory/design-mirror-escapee"
 
-  rm -rf "$work" "$repository_root/artifacts/design" "$escapee"
+  rm -rf "$work" "$repository_root/design" "$escapee"
   mkdir -p "$work"
   printf 'the file this must not touch' >"$escapee"
 
@@ -8877,7 +8925,7 @@ LISTING
   # And the same value handed to `extract` directly, since a session builds that argument from the
   # listing rather than from anything this script validated.
   if (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    extract "artifacts/design/files/../../../design-mirror-escapee" "$work/listing.json") \
+    extract "design/files/../../../design-mirror-escapee" "$work/listing.json") \
     >"$output" 2>&1; then
     printf 'The mirror extracted onto a path outside itself\n' >&2
     return 1
@@ -8885,15 +8933,15 @@ LISTING
   assert_contains 'stays under' "$output"
   assert_file_content 'the file this must not touch' "$escapee"
 
-  rm -rf "$repository_root/artifacts/design" "$escapee"
+  rm -rf "$repository_root/design" "$escapee"
 }
 
 the_design_mirror_decodes_a_read_result_without_retyping_it() {
   local work="$test_directory/design-mirror" target
 
-  rm -rf "$work" "$repository_root/artifacts/design"
+  rm -rf "$work" "$repository_root/design"
   mkdir -p "$work"
-  target="$repository_root/artifacts/design/files/Screen.dc.html"
+  target="$repository_root/design/files/Screen.dc.html"
 
   # What the harness saves when a read result is too large to return inline: one wrapper line, the
   # entity-escaped body, a blank line the wrapper adds, the closing tag, and a note after it.
@@ -8907,14 +8955,14 @@ the_design_mirror_decodes_a_read_result_without_retyping_it() {
 SAVED
 
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
-    extract "artifacts/design/files/Screen.dc.html" "$work/saved.txt") >/dev/null
+    extract "design/files/Screen.dc.html" "$work/saved.txt") >/dev/null
 
   # `&lt;` and `&gt;` before `&amp;`, exactly once: a body that itself carries `&amp;lt;` comes back
   # as `&amp;lt;` rather than collapsing into a tag that was never in the design.
   assert_file_content '<p>Yes & no</p>
 <span>&amp;lt;</span>' "$target"
 
-  rm -rf "$repository_root/artifacts/design"
+  rm -rf "$repository_root/design"
 }
 
 # The design-parity loop: two capture scripts and a comparison. What is asserted here is everything
@@ -8925,7 +8973,7 @@ SAVED
 write_parity_fixture() {
   local screens="${1:-2}"
 
-  mkdir -p "$repository_root/frontend/design-parity" "$repository_root/artifacts/design/files"
+  mkdir -p "$repository_root/frontend/design-parity" "$repository_root/design/files"
 
   # Two screens at three compositions, which is six pairs and past what one invocation produces, and
   # one screen at three, which is inside it. The bound is therefore exercised from either side of it
@@ -8977,8 +9025,8 @@ MANIFEST
 MANIFEST
   fi
 
-  printf 'screen' >"$repository_root/artifacts/design/files/Screen.dc.html"
-  printf 'run' >"$repository_root/artifacts/design/files/support.js"
+  printf 'screen' >"$repository_root/design/files/Screen.dc.html"
+  printf 'run' >"$repository_root/design/files/support.js"
   write_design_listing "$test_directory/parity-listing.json" "300"
   (cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" \
     record "$test_directory/parity-listing.json") >/dev/null
@@ -8987,7 +9035,7 @@ MANIFEST
 write_parity_pairing() {
   local stamp="$1"
 
-  cat >"$repository_root/artifacts/design/parity.json" <<PAIRING
+  cat >"$repository_root/design/parity.json" <<PAIRING
 {
   "stamp": "$stamp",
   "screens": {
@@ -9001,14 +9049,14 @@ PAIRING
 a_capture_refuses_a_destination_in_the_tree() {
   local output="$test_directory/capture.out" stamp
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 1
   stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
   write_parity_pairing "$stamp"
 
-  # Both sides of a pair are material that does not belong in a public tree: the design side is the
-  # source of truth for screens that have not shipped, and the client side is a capture of a running
-  # client. So the destination is checked rather than trusted, and it is checked before anything else
+  # A capture is generated rather than authored, and the client side of a pair shows whatever mail the
+  # run was answering with — which is why neither is committed however tracked the design it rasterises
+  # now is. So the destination is checked rather than trusted, and it is checked before anything else
   # a capture needs — a refusal here costs no browser and no development server.
   for script in capture-design capture-client; do
     if (cd "$repository_root" && bash "$source_repository_root/scripts/$script.sh" \
@@ -9024,14 +9072,14 @@ a_capture_refuses_a_destination_in_the_tree() {
     --out "$repository_root/artifacts/parity" --screen first --composition desktop) >"$output" 2>&1
   assert_excludes 'Refusing' "$output"
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/artifacts/parity" \
+  rm -rf "$repository_root/design" "$repository_root/artifacts/parity" \
     "$repository_root/frontend/design-parity"
 }
 
 a_capture_refuses_more_pairs_than_one_invocation_produces() {
   local output="$test_directory/capture.out" stamp
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 2
   stamp="$(cd "$repository_root" && bash "$source_repository_root/scripts/design-mirror.sh" stamp)"
   write_parity_pairing "$stamp"
@@ -9054,13 +9102,13 @@ a_capture_refuses_more_pairs_than_one_invocation_produces() {
     --out "$test_directory/parity-captures" --screen first) >"$output" 2>&1
   assert_excludes 'asks for' "$output"
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
 }
 
 the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror() {
   local output="$test_directory/capture.out"
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
   write_parity_fixture 1
   write_parity_pairing 'written-for-an-older-design'
 
@@ -9076,7 +9124,7 @@ the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror() {
 
   # A mirror carrying no runtime is the other way a design capture cannot mean anything: an artboard
   # is a component that runtime boots, so what would be captured is an empty document.
-  rm -f "$repository_root/artifacts/design/files/support.js"
+  rm -f "$repository_root/design/files/support.js"
   if (cd "$repository_root" && bash "$source_repository_root/scripts/capture-design.sh" \
     --out "$test_directory/parity-captures" --screen first --composition desktop) >"$output" 2>&1; then
     printf 'The design capture ran against a mirror with no runtime in it\n' >&2
@@ -9084,7 +9132,7 @@ the_design_capture_refuses_a_pairing_that_no_longer_describes_the_mirror() {
   fi
   assert_contains 'no design runtime' "$output"
 
-  rm -rf "$repository_root/artifacts/design" "$repository_root/frontend/design-parity"
+  rm -rf "$repository_root/design" "$repository_root/frontend/design-parity"
 }
 
 the_comparison_reports_where_a_pair_differs_before_any_image_is_opened() {
@@ -9619,6 +9667,7 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
+run_test fathom_review_never_reads_the_mirrored_design
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone

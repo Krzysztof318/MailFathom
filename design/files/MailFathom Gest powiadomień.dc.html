@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: oklch(0.980 0.004 88); }
+  body:has([data-theme="ciemny"]) { background: oklch(0.183 0.016 262); }
+  a { color: var(--accent); }
+  a:hover { color: var(--accent-2); }
+  [data-theme="jasny"] { color-scheme:light;--bg:oklch(0.980 0.004 88);--panel:#ffffff;--rail:oklch(0.951 0.006 88);--hover:oklch(0.906 0.010 88);--sub:oklch(0.969 0.005 88);--line:oklch(0.906 0.008 88);--line2:oklch(0.949 0.005 88);--border2:oklch(0.856 0.010 88);--text:oklch(0.240 0.014 262);--text2:oklch(0.420 0.012 240);--muted:oklch(0.565 0.010 200);--faint:oklch(0.690 0.009 160);--accent:oklch(0.555 0.185 262);--accent-2:oklch(0.465 0.175 262);--accent-d:oklch(0.385 0.150 262);--accent-soft:oklch(0.945 0.038 258);--accent-line:oklch(0.870 0.062 258);--onaccent:#ffffff;--ok:oklch(0.56 0.14 155);--ok-text:oklch(0.44 0.11 155);--ok-soft:oklch(0.945 0.038 155);--warn:oklch(0.62 0.155 62);--warn-soft:oklch(0.955 0.045 75);--warn-text:oklch(0.46 0.135 55);--err:oklch(0.545 0.195 25);--err-soft:oklch(0.958 0.028 25);--err-text:oklch(0.470 0.180 25);--hl:oklch(0.945 0.070 88);--hl-line:oklch(0.775 0.145 85);--inset:rgba(255,255,255,0.65);--sh-1:oklch(0.30 0.02 262 / 0.07);--sh-2:oklch(0.30 0.025 262 / 0.14);--sh-3:oklch(0.28 0.03 262 / 0.28);--scrim:oklch(0.26 0.03 262 / 0.36); }
+  [data-theme="ciemny"] { color-scheme:dark;--bg:oklch(0.183 0.016 262);--panel:oklch(0.246 0.016 262);--rail:oklch(0.212 0.017 262);--hover:oklch(0.325 0.021 262);--sub:oklch(0.277 0.016 262);--line:oklch(0.336 0.018 262);--line2:oklch(0.283 0.015 262);--border2:oklch(0.416 0.022 262);--text:oklch(0.945 0.007 262);--text2:oklch(0.835 0.011 262);--muted:oklch(0.705 0.013 262);--faint:oklch(0.585 0.015 262);--accent:oklch(0.615 0.175 262);--accent-2:oklch(0.735 0.150 262);--accent-d:oklch(0.865 0.085 262);--accent-soft:oklch(0.320 0.070 262);--accent-line:oklch(0.430 0.095 262);--onaccent:#ffffff;--ok:oklch(0.72 0.14 155);--ok-text:oklch(0.82 0.12 155);--ok-soft:oklch(0.30 0.045 155);--warn:oklch(0.74 0.13 55);--warn-soft:oklch(0.315 0.05 50);--warn-text:oklch(0.87 0.10 62);--err:oklch(0.660 0.190 25);--err-soft:oklch(0.325 0.078 22);--err-text:oklch(0.845 0.105 25);--hl:oklch(0.345 0.055 85);--hl-line:oklch(0.72 0.13 85);--inset:rgba(255,255,255,0.045);--sh-1:oklch(0.10 0.03 262 / 0.38);--sh-2:oklch(0.10 0.03 262 / 0.50);--sh-3:oklch(0.09 0.035 262 / 0.64);--scrim:oklch(0.12 0.045 262 / 0.66); }
+</style>
+</helmet>
+<div data-theme="{{ themeAttr }}" style="min-height:100vh;box-sizing:border-box;padding:26px;background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:22px">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:11px;letter-spacing:0.10em;text-transform:uppercase;color:var(--muted)">MailFathom — system · #1507</div>
+      <div style="font-size:27px;font-weight:600;letter-spacing:-0.02em">Centrum powiadomień: gesty</div>
+      <div style="font-size:13.5px;color:var(--muted);max-width:74ch;text-wrap:pretty">Na telefonie panel powiadomień ma dwa gesty na całej powierzchni: ruch w górę rozpoczęty gdziekolwiek na belce nawigacji wyciąga go, ruch w dół rozpoczęty gdziekolwiek na otwartym panelu — na nagłówku, na filtrach, na wierszu, na pustym stanie — odsuwa go. Dotknięcie dzwonka zostaje bez zmian jako druga droga do tego samego panelu. Osobnego uchwytu „tylko górna belka” już nie ma.</div>
+    </div>
+    <div onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid var(--border2);border-radius:10px;font-size:13px;color:var(--text2)" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">{{ themeIcon }}</span>{{ themeAttr }}</div>
+  </div>
+
+  <div style="display:flex;gap:18px;flex-wrap:wrap">
+
+    <div style="display:flex;flex-direction:column;gap:10px;width:264px">
+      <div style="position:relative;width:264px;height:520px;border-radius:26px;border:1px solid var(--border2);background:var(--sub);overflow:hidden;box-shadow:0 14px 34px var(--sh-1)">
+        <div style="display:flex;flex-direction:column;gap:9px;padding:18px 14px">
+          <div style="height:12px;width:52%;border-radius:3px;background:var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:2px;background:var(--rail);border-top:1px solid var(--line);padding:6px">
+          <sc-for list="{{ barIcons }}" as="b" hint-placeholder-count="6">
+            <div style="{{ b.style }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">{{ b.icon }}</span></div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:50%;bottom:22px;width:34px;height:34px;margin-left:-17px;border-radius:50%;background:var(--accent);opacity:0.28"></div>
+        <div style="position:absolute;left:50%;bottom:56px;width:2px;height:54px;margin-left:-1px;background:var(--accent);opacity:0.5"></div>
+        <div style="position:absolute;left:50%;bottom:104px;margin-left:-9px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--accent)">keyboard_arrow_up</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:14px;font-weight:600">1 · Belka w spoczynku</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">Palec dotknął belki, przebył 0 px. Do 12 px to nadal dotknięcie tego elementu belki — panel jeszcze nie istnieje.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;width:264px">
+      <div style="position:relative;width:264px;height:520px;border-radius:26px;border:1px solid var(--border2);background:var(--sub);overflow:hidden;box-shadow:0 14px 34px var(--sh-1)">
+        <div style="display:flex;flex-direction:column;gap:9px;padding:18px 14px">
+          <div style="height:12px;width:52%;border-radius:3px;background:var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:var(--scrim);opacity:0.54"></div>
+        <div style="position:absolute;left:0;right:0;top:0;bottom:64px;display:flex;flex-direction:column;background:var(--panel);box-shadow:0 -10px 30px var(--sh-2);transform:translateY(46%)">
+          <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:8px 0 2px"><span style="width:38px;height:4px;border-radius:2px;background:var(--border2)"></span></div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;border-bottom:1px solid var(--line2)">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--muted)">notifications</span>
+            <div style="flex:1;min-width:0;font-size:14px;font-weight:600">Powiadomienia</div>
+            <div style="height:20px;padding:0 7px;display:flex;align-items:center;border-radius:6px;background:var(--accent-soft);color:var(--accent-d);font-size:10.5px;font-weight:600">3 nowe</div>
+          </div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line2);background:var(--sub)">
+            <div style="height:24px;padding:0 9px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent-d);font-size:10.5px;font-weight:600">Wszystkie</div>
+            <div style="height:24px;padding:0 9px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--border2);background:var(--panel);color:var(--text2);font-size:10.5px">Nieprzeczytane · 3</div>
+          </div>
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+            <div style="flex:0 0 auto;display:flex;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line2)">
+              <div style="{{ r.iconWrapStyle }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">{{ r.icon }}</span></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="height:9px;width:78%;border-radius:3px;background:var(--line)"></div>
+                <div style="height:8px;width:58%;border-radius:3px;background:var(--line2)"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:2px;background:var(--rail);border-top:1px solid var(--line);padding:6px">
+          <sc-for list="{{ barIcons }}" as="b" hint-placeholder-count="6">
+            <div style="{{ b.style }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">{{ b.icon }}</span></div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:50%;top:246px;width:34px;height:34px;margin-left:-17px;border-radius:50%;background:var(--accent);opacity:0.30"></div>
+        <div style="position:absolute;left:50%;top:280px;width:2px;height:150px;margin-left:-1px;background:var(--accent);opacity:0.45"></div>
+        <div style="position:absolute;left:50%;top:222px;margin-left:-9px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--accent)">keyboard_arrow_up</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:14px;font-weight:600">2 · Gest w połowie drogi</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">Panel stoi dokładnie tam, gdzie palec: przebyte 0,54 wysokości panelu, krycie przesłony 0,54. Bez wygładzania i bez opóźnienia — puszczenie w tym miejscu otwiera panel, bo 0,54 &gt; 0,32.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;width:264px">
+      <div style="position:relative;width:264px;height:520px;border-radius:26px;border:1px solid var(--border2);background:var(--sub);overflow:hidden;box-shadow:0 14px 34px var(--sh-1)">
+        <div style="position:absolute;inset:0;background:var(--scrim)"></div>
+        <div style="position:absolute;left:0;right:0;top:0;bottom:64px;display:flex;flex-direction:column;background:var(--panel);box-shadow:0 -10px 30px var(--sh-2)">
+          <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:8px 0 2px"><span style="width:38px;height:4px;border-radius:2px;background:var(--border2)"></span></div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;border-bottom:1px solid var(--line2)">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--muted)">notifications</span>
+            <div style="flex:1;min-width:0;font-size:14px;font-weight:600">Powiadomienia</div>
+            <div style="height:20px;padding:0 7px;display:flex;align-items:center;border-radius:6px;background:var(--accent-soft);color:var(--accent-d);font-size:10.5px;font-weight:600">3 nowe</div>
+            <div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">close</div>
+          </div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:9px 10px;border-bottom:1px solid var(--line2);background:var(--sub)">
+            <div style="flex:0 0 auto;height:24px;padding:0 6px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent-d);font-size:10px;font-weight:600;white-space:nowrap">Wszystkie</div>
+            <div style="flex:0 0 auto;height:24px;padding:0 6px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--border2);background:var(--panel);color:var(--text2);font-size:10px;white-space:nowrap">Nieprzeczytane</div>
+            <div style="margin-left:auto;font-size:10px;color:var(--accent-d);white-space:nowrap">Oznacz wszystkie</div>
+          </div>
+          <sc-for list="{{ rowsFull }}" as="r" hint-placeholder-count="5">
+            <div style="flex:0 0 auto;display:flex;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line2)">
+              <div style="{{ r.iconWrapStyle }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">{{ r.icon }}</span></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="height:9px;width:78%;border-radius:3px;background:var(--line)"></div>
+                <div style="height:8px;width:58%;border-radius:3px;background:var(--line2)"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:2px;background:var(--rail);border-top:1px solid var(--line);padding:6px">
+          <sc-for list="{{ barIconsOpen }}" as="b" hint-placeholder-count="6">
+            <div style="{{ b.style }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">{{ b.icon }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:14px;font-weight:600">3 · Panel otwarty</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">Gest dokonany: droga 1,0, przesłona pełna, belka zostaje widoczna pod panelem. Ten sam stan, do którego prowadzi dotknięcie dzwonka.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;width:264px">
+      <div style="position:relative;width:264px;height:520px;border-radius:26px;border:1px solid var(--border2);background:var(--sub);overflow:hidden;box-shadow:0 14px 34px var(--sh-1)">
+        <div style="display:flex;flex-direction:column;gap:9px;padding:18px 14px">
+          <div style="height:12px;width:52%;border-radius:3px;background:var(--line)"></div>
+          <div style="height:44px;border-radius:9px;background:var(--panel);border:1px solid var(--line)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:var(--scrim);opacity:0.76"></div>
+        <div style="position:absolute;left:0;right:0;top:0;bottom:64px;display:flex;flex-direction:column;background:var(--panel);box-shadow:0 -10px 30px var(--sh-2);transform:translateY(24%)">
+          <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:8px 0 2px"><span style="width:38px;height:4px;border-radius:2px;background:var(--border2)"></span></div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 12px 10px 14px;border-bottom:1px solid var(--line2)">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--muted)">notifications</span>
+            <div style="flex:1;min-width:0;font-size:14px;font-weight:600">Powiadomienia</div>
+            <div style="height:20px;padding:0 7px;display:flex;align-items:center;border-radius:6px;background:var(--accent-soft);color:var(--accent-d);font-size:10.5px;font-weight:600">3 nowe</div>
+          </div>
+          <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line2);background:var(--sub)">
+            <div style="height:24px;padding:0 9px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent-d);font-size:10.5px;font-weight:600">Wszystkie</div>
+            <div style="height:24px;padding:0 9px;display:flex;align-items:center;border-radius:7px;border:1px solid var(--border2);background:var(--panel);color:var(--text2);font-size:10.5px">Nieprzeczytane · 3</div>
+          </div>
+          <sc-for list="{{ rowsFull }}" as="r" hint-placeholder-count="4">
+            <div style="flex:0 0 auto;display:flex;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line2)">
+              <div style="{{ r.iconWrapStyle }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">{{ r.icon }}</span></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="height:9px;width:78%;border-radius:3px;background:var(--line)"></div>
+                <div style="height:8px;width:58%;border-radius:3px;background:var(--line2)"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:2px;background:var(--rail);border-top:1px solid var(--line);padding:6px">
+          <sc-for list="{{ barIconsOpen }}" as="b" hint-placeholder-count="6">
+            <div style="{{ b.style }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1">{{ b.icon }}</span></div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:20px;top:60px;width:34px;height:34px;border-radius:50%;border:2px dashed var(--accent);opacity:0.7"></div>
+        <div style="position:absolute;left:58px;top:68px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;color:var(--accent)">keyboard_arrow_up</div>
+        <div style="position:absolute;left:16px;right:16px;top:16px;display:flex;align-items:center;justify-content:center;height:26px;border-radius:8px;background:var(--panel);border:1px solid var(--accent-line);font-size:10.5px;color:var(--accent-d)">powrót 260 ms</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:14px;font-weight:600">4 · Powrót sprężyną</div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">Palec puszczony po 0,24 wysokości panelu z prędkością 0,2 px/ms — ani droga, ani prędkość nie sięga progu, więc panel wraca na miejsce w 260 ms krzywą cubic-bezier(.32,.72,0,1). Przesłona wraca tą samą krzywą.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:16px;font-weight:600">Liczby, z których czyta implementacja</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:12px">
+      <sc-for list="{{ numbers }}" as="n" hint-placeholder-count="6">
+        <div style="display:flex;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px">
+          <div style="display:flex;align-items:baseline;gap:9px">
+            <div style="font-size:20px;font-weight:600;letter-spacing:-0.02em;color:var(--accent-d)">{{ n.value }}</div>
+            <div style="flex:1;min-width:0;font-size:13px;font-weight:600">{{ n.name }}</div>
+          </div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ n.text }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:16px;font-weight:600">Kto komu oddaje gest</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+      <sc-for list="{{ handovers }}" as="h" hint-placeholder-count="3">
+        <div style="display:flex;flex-direction:column;gap:8px;background:var(--sub);border:1px solid var(--line);border-radius:12px;padding:14px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="{{ h.iconWrapStyle }}"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1">{{ h.icon }}</span></div>
+            <div style="flex:1;min-width:0;font-size:13.5px;font-weight:600">{{ h.name }}</div>
+          </div>
+          <div style="font-size:12.5px;color:var(--text2);line-height:1.5;text-wrap:pretty">{{ h.text }}</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.45;text-wrap:pretty">{{ h.rule }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:9px;background:var(--warn-soft);border:1px solid var(--hl-line);border-radius:12px;padding:14px 16px">
+    <div style="font-size:13.5px;font-weight:600;color:var(--warn-text)">Gdzie to działa</div>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.5;max-width:88ch;text-wrap:pretty">Tylko kompozycja telefonu i tylko przy wskaźniku zgrubnym (<span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px">pointer: coarse</span>). Fold, tablet i biurko zostają dokładnie przy tym, co rysują dziś: panel wjeżdża z lewej obok szyny, zamyka go przesłona, krzyżyk albo Escape — żadnego gestu ciągnięcia, bo tam nie ma belki nawigacji na dole.</div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:1180},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;jasny&quot;,&quot;ciemny&quot;],&quot;default&quot;:&quot;jasny&quot;,&quot;tsType&quot;:&quot;\&quot;jasny\&quot; | \&quot;ciemny\&quot;&quot;}}">
+class Component extends DCLogic {
+  state = { theme: null };
+
+  icon = (tone) => "flex:0 0 26px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:8px;" +
+    (tone === "accent" ? "background:var(--accent-soft);color:var(--accent-d)" : tone === "ok" ? "background:var(--ok-soft);color:var(--ok-text)" : "background:var(--hover);color:var(--muted)");
+
+  bar = (activeIdx) => ["explore", "mail", "topic", "auto_awesome", "notifications", "more_horiz"].map((ic, i) => ({
+    icon: ic,
+    style: "flex:1;min-width:0;display:flex;align-items:center;justify-content:center;height:100%;border-radius:9px;" +
+      (i === activeIdx ? "background:var(--accent-soft);color:var(--accent-d)" : "color:var(--muted)"),
+  }));
+
+  renderVals() {
+    const theme = this.state.theme ?? (this.props.theme ?? "jasny");
+    return {
+      themeAttr: theme,
+      themeIcon: theme === "ciemny" ? "dark_mode" : "light_mode",
+      toggleTheme: () => this.setState({ theme: theme === "ciemny" ? "jasny" : "ciemny" }),
+      barIcons: this.bar(1),
+      barIconsOpen: this.bar(4),
+      rows: [{ icon: "mail", iconWrapStyle: this.icon("accent") }, { icon: "event", iconWrapStyle: this.icon("ok") }, { icon: "task_alt", iconWrapStyle: this.icon() }],
+      rowsFull: [{ icon: "mail", iconWrapStyle: this.icon("accent") }, { icon: "event", iconWrapStyle: this.icon("ok") }, { icon: "task_alt", iconWrapStyle: this.icon() }, { icon: "topic", iconWrapStyle: this.icon("accent") }, { icon: "group", iconWrapStyle: this.icon() }],
+      numbers: [
+        { value: "1:1", name: "Podążanie za palcem", text: "Panel stoi tam, gdzie palec — bez wygładzania, bez bezwładności, bez opóźnienia. Punkt zerowy ustawia się w chwili przejęcia gestu, nie w chwili dotknięcia, więc panel nigdy nie przeskakuje o wielkość slopu." },
+        { value: "= droga", name: "Krycie przesłony", text: "Krycie przesłony to wprost przebyta droga podzielona przez wysokość panelu: 0 przy zamkniętym, 1 przy otwartym. Ta sama liczba w obie strony gestu." },
+        { value: "0,32", name: "Próg drogi", text: "Gest dokonuje się, gdy palec przebył więcej niż 0,32 wysokości panelu — liczone od miejsca przejęcia gestu, nie od krawędzi ekranu." },
+        { value: "0,5 px/ms", name: "Próg prędkości", text: "Krótki rzut powyżej 0,5 px/ms dokonuje gestu nawet poniżej progu drogi. Prędkość liczona z ostatniego odcinka ruchu; rzut w przeciwną stronę zawsze wygrywa z drogą." },
+        { value: "260 ms", name: "Powrót sprężyną", text: "Gdy nie sięgnięto ani drogi, ani prędkości, panel wraca na miejsce w 260 ms krzywą cubic-bezier(.32,.72,0,1). Ta jedna krzywa obsługuje oba kierunki powrotu." },
+        { value: "12 / 10 px", name: "Slop belki i wiersza", text: "12 px w górę zabiera dotknięcie belce nawigacji, 10 px w dół zabiera długie przytrzymanie wierszowi. Pierwszy próg jest większy, bo belka ma cel dotknięcia i pomyłka kosztuje przejście na inny ekran." },
+      ],
+      handovers: [
+        {
+          icon: "swipe_down", name: "Przewinięta lista oddaje gest panelowi", iconWrapStyle: this.icon("accent"),
+          text: "Gdy lista powiadomień nie jest na swojej górze, ruch w dół przewija najpierw listę. Panel nie rusza się ani o piksel.",
+          rule: "Jedno pociągnięcie, bez podnoszenia palca: w chwili, gdy lista dojdzie do góry, ten sam ruch staje się oddaleniem panelu. Punkt zerowy ustawia się właśnie wtedy — pozostała droga liczy się od tego miejsca, więc panel nie skacze na spotkanie palca.",
+        },
+        {
+          icon: "touch_app", name: "Wiersz: przeciągnięcie albo przytrzymanie", iconWrapStyle: this.icon("ok"),
+          text: "Ruch przekraczający 10 px kasuje 420 ms długiego przytrzymania — menu kontekstowe wiersza już się nie otworzy.",
+          rule: "W drugą stronę też szczelnie: gdy menu zdąży się otworzyć, ten sam palec nie zaczyna już oddalania panelu, a nowy gest oddalenia nie startuje przy otwartym menu. Nigdy oba, nigdy żadne.",
+        },
+        {
+          icon: "swipe_up", name: "Belka nawigacji oddaje gest panelowi", iconWrapStyle: this.icon(),
+          text: "Do 12 px w górę gest należy do elementu belki, na którym się zaczął — puszczenie to zwykłe dotknięcie i przejście na tamten ekran.",
+          rule: "Po 12 px belka oddaje gest: dotknięcie przepada i nie odpali się przy puszczeniu, a panel wyjeżdża spod palca. Ruch w dół rozpoczęty na belce nie jest niczyim gestem — nic się nie dzieje.",
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

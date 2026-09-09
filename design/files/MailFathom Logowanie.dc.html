@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  IKONY — Material Symbols (Rounded), Google.  LICENCJA: Apache License 2.0.
+  Font webowy: https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded
+  Katalog / pobieranie SVG: https://fonts.google.com/icons
+  Repozytorium: https://github.com/google/material-design-icons  (licencja: .../blob/master/LICENSE)
+  Zamienniki MIT: Tabler https://github.com/tabler/tabler-icons · Feather https://github.com/feathericons/feather · Phosphor https://github.com/phosphor-icons/core
+  LOGO DOSTAWCÓW OAuth — Simple Icons (CC0), serwowane z https://cdn.simpleicons.org
+  Znaki towarowe należą do właścicieli; w produkcie podmień na pliki dostarczone przez dział marki.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300,0,0&display=block" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: oklch(0.980 0.004 88); }
+  body:has([data-theme="ciemny"]) { background: oklch(0.183 0.016 262); }
+  input::placeholder { color: var(--faint); }
+  [data-theme="jasny"] { color-scheme:light;--bg:oklch(0.980 0.004 88);--panel:#ffffff;--rail:oklch(0.951 0.006 88);--hover:oklch(0.906 0.010 88);--sub:oklch(0.969 0.005 88);--line:oklch(0.906 0.008 88);--line2:oklch(0.949 0.005 88);--border2:oklch(0.856 0.010 88);--text:oklch(0.240 0.014 262);--text2:oklch(0.420 0.012 240);--muted:oklch(0.565 0.010 200);--faint:oklch(0.690 0.009 160);--accent:oklch(0.555 0.185 262);--accent-2:oklch(0.465 0.175 262);--accent-d:oklch(0.385 0.150 262);--accent-soft:oklch(0.945 0.038 258);--accent-line:oklch(0.870 0.062 258);--onaccent:#ffffff;--ok:oklch(0.56 0.14 155);--ok-text:oklch(0.44 0.11 155);--ok-soft:oklch(0.945 0.038 155);--warn:oklch(0.62 0.155 62);--warn-soft:oklch(0.955 0.045 75);--warn-text:oklch(0.46 0.135 55);--hl:oklch(0.945 0.070 88);--hl-line:oklch(0.775 0.145 85);--inset:rgba(255,255,255,0.65);--sh-1:oklch(0.30 0.02 262 / 0.07);--sh-2:oklch(0.30 0.025 262 / 0.14);--sh-3:oklch(0.28 0.03 262 / 0.28);--scrim:oklch(0.26 0.03 262 / 0.36); }
+  [data-theme="ciemny"] { color-scheme:dark;--bg:oklch(0.183 0.016 262);--panel:oklch(0.246 0.016 262);--rail:oklch(0.212 0.017 262);--hover:oklch(0.325 0.021 262);--sub:oklch(0.277 0.016 262);--line:oklch(0.336 0.018 262);--line2:oklch(0.283 0.015 262);--border2:oklch(0.416 0.022 262);--text:oklch(0.945 0.007 262);--text2:oklch(0.835 0.011 262);--muted:oklch(0.705 0.013 262);--faint:oklch(0.585 0.015 262);--accent:oklch(0.615 0.175 262);--accent-2:oklch(0.735 0.150 262);--accent-d:oklch(0.865 0.085 262);--accent-soft:oklch(0.320 0.070 262);--accent-line:oklch(0.430 0.095 262);--onaccent:#ffffff;--ok:oklch(0.72 0.14 155);--ok-text:oklch(0.82 0.12 155);--ok-soft:oklch(0.30 0.045 155);--warn:oklch(0.74 0.13 55);--warn-soft:oklch(0.315 0.05 50);--warn-text:oklch(0.87 0.10 62);--hl:oklch(0.345 0.055 85);--hl-line:oklch(0.72 0.13 85);--inset:rgba(255,255,255,0.045);--sh-1:oklch(0.10 0.03 262 / 0.38);--sh-2:oklch(0.10 0.03 262 / 0.50);--sh-3:oklch(0.09 0.035 262 / 0.64);--scrim:oklch(0.12 0.045 262 / 0.66); }
+  a { color: var(--accent); }
+  a:hover { color: var(--accent-2); }
+  input { font-family: inherit; }
+  @keyframes mfspin { to { transform: rotate(360deg) } }
+</style>
+</helmet>
+<div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" data-screen-label="Logowanie" style="{{ rootStyle }}">
+
+  <div style="{{ brandStyle }}">
+    <div style="{{ brandRowStyle }}">
+      <img src="./mailfathom-logo.png" alt="MailFathom" style="{{ logoStyle }}" />
+      <div style="{{ wordmarkStyle }}">MailFathom</div>
+    </div>
+    <sc-if value="{{ showPitch }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;justify-content:center;flex:1;gap:18px;max-width:400px;padding-bottom:40px">
+        <div style="font-size:34px;font-weight:600;line-height:1.15;letter-spacing:-0.02em;text-wrap:pretty">Twoja poczta zostaje na Twoim serwerze.</div>
+        <div style="font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">Łączysz się z serwerem MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do chmury bez Twojej zgody.</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="{{ formPaneStyle }}">
+    <div style="{{ formStyle }}">
+
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)">contrast</span>
+          <div style="display:flex;gap:3px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sub)">
+            <sc-for list="{{ themePicks }}" as="tp" hint-placeholder-count="3">
+              <div onClick="{{ tp.pick }}" title="{{ tp.label }}" style="{{ tp.style }}" style-hover="cursor:pointer">{{ tp.short }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)">language</span>
+          <div style="display:flex;gap:3px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--sub)">
+            <sc-for list="{{ langPicks }}" as="lp" hint-placeholder-count="2">
+              <div onClick="{{ lp.pick }}" title="{{ lp.label }}" style="{{ lp.style }}" style-hover="cursor:pointer">{{ lp.short }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="{{ titleStyle }}">Połącz skrzynkę</div>
+            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1;color:{{ lockColor }}">{{ lockIcon }}</span>
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;color:var(--text2)">{{ serverLabel }}</span>
+              <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:10.5px;font-weight:500;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">bez TLS</span>
+              </sc-if>
+            </div>
+          </div>
+
+          <sc-if value="{{ showOauth }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="font-size:11.5px;font-weight:500;letter-spacing:0.02em;color:var(--faint)">Logowanie przez dostawcę</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                  <sc-for list="{{ oauthBtns }}" as="ob" hint-placeholder-count="3">
+                    <div onClick="{{ ob.click }}" title="{{ ob.title }}" style="{{ ob.style }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover)">
+                      <span style="{{ ob.iconStyle }}"></span>
+                      <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ob.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showDivider }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+              <div style="font-size:11px;color:var(--faint)">lub hasłem</div>
+              <div style="flex:1;height:1px;background:var(--line)"></div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showBasic }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;font-weight:500;color:var(--text2)">Login</label>
+                <div style="{{ userBoxStyle }}">
+                  <input value="{{ user }}" onChange="{{ onUser }}" onFocus="{{ focusUser }}" onBlur="{{ blurAny }}" onKeyDown="{{ onKey }}" placeholder="k.kowalska@nordwind.pl" style="{{ fieldStyle }}" />
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;font-weight:500;color:var(--text2)">Hasło</label>
+                <div style="{{ passBoxStyle }}">
+                  <input value="{{ pass }}" onChange="{{ onPass }}" onFocus="{{ focusPass }}" onBlur="{{ blurAny }}" onKeyDown="{{ onKey }}" type="{{ passType }}" placeholder="••••••••••" style="{{ fieldStyle }}" />
+                  <span onClick="{{ toggleReveal }}" style="{{ revealStyle }}" style-hover="cursor:pointer;color:var(--text);background:var(--hover)">{{ revealLabel }}</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:9px 12px">{{ errorText }}</div>
+          </sc-if>
+
+          <sc-if value="{{ showBasic }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ submit }}" style="{{ submitStyle }}" style-hover="{{ submitHover }}">
+              <sc-if value="{{ connecting }}" hint-placeholder-val="{{ false }}">
+                <span style="width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:mfspin 0.7s linear infinite"></span>
+              </sc-if>
+              {{ submitLabel }}
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ noMethods }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:11px 13px">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">block</span>
+              <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">Ten serwer nie udostępnia żadnej metody logowania. Sprawdź adres albo skontaktuj się z administratorem.</div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div onClick="{{ toggleAdvanced }}" style="{{ advancedBtnStyle }}" style-hover="cursor:pointer;color:var(--accent-2);background:var(--hover)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1;{{ chevronRotate }}">chevron_right</span>Zaawansowane<sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}"><span style="margin-left:2px;font-size:11px;color:var(--warn-text);background:var(--warn-soft);border-radius:5px;padding:2px 7px">bez TLS</span></sc-if>
+            </div>
+
+            <sc-if value="{{ advanced }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Protokół</span>
+                    <span style="font-weight:500">{{ protoLabel }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Host</span>
+                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+                    <span style="color:var(--muted)">Port</span>
+                    <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
+                    <span style="color:var(--muted)">Weryfikacja certyfikatu</span>
+                    <span style="font-weight:500;color:{{ certColor }}">{{ certLabel }}</span>
+                  </div>
+                </div>
+
+                <sc-if value="{{ canChangeServer }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ openServer }}" style="{{ ghostBtnStyle }}" style-hover="cursor:pointer;border-color:var(--accent);color:var(--accent-2);background:var(--hover)">
+                    <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">dns</span>Zmień serwer
+                  </div>
+                </sc-if>
+
+              </div>
+            </sc-if>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isServer }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:{{ sectionGap }}px">
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div onClick="{{ closeServer }}" style="{{ backBtnStyle }}" style-hover="cursor:pointer;color:var(--accent-2);background:var(--hover)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px;line-height:1">arrow_back</span>Wróć do logowania
+            </div>
+            <div style="{{ titleStyle }}">Adres serwera</div>
+            <div style="font-size:13px;color:var(--muted);text-wrap:pretty">Zapisujemy go na tym urządzeniu. Serwer decyduje, jakie metody logowania zobaczysz.</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:500;color:var(--text2)">Serwer</label>
+            <div style="{{ hostBoxStyle }}">
+              <input value="{{ host }}" onChange="{{ onHost }}" onFocus="{{ focusHost }}" onBlur="{{ blurAny }}" onKeyDown="{{ onServerKey }}" placeholder="mail.firma.pl:7443" style="{{ fieldStyle }}" />
+              <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap">{{ portHint }}</span>
+            </div>
+            <div style="font-size:11px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ hostNote }}</div>
+          </div>
+
+          <div onClick="{{ toggleInsecure }}" style="{{ insecureRowStyle }}" style-hover="cursor:pointer;border-color:var(--border2)">
+            <div style="{{ checkboxStyle }}">{{ checkMark }}</div>
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <div style="font-size:13px;font-weight:500">Zezwalaj na niezabezpieczone połączenia</div>
+              <div style="font-size:11px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ insecureNote }}</div>
+            </div>
+          </div>
+
+          <sc-if value="{{ customized }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ restoreDefaults }}" style="{{ restoreBtnStyle }}" style-hover="cursor:pointer;border-color:var(--border2);background:var(--hover);color:var(--text)">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1">restart_alt</span>Przywróć domyślne<span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ defaultServerLabel }}</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ insecure }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--warn);border-radius:9px;padding:10px 12px">
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--warn-text)">warning</span>
+              <div style="font-size:12px;line-height:1.5;color:var(--warn-text);text-wrap:pretty">Certyfikat serwera nie będzie weryfikowany. Używaj tylko w sieci wewnętrznej lub przez VPN.</div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:11px;background:var(--sub);border:1px solid var(--line);border-radius:10px;padding:13px 15px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Protokół</span>
+              <span style="font-weight:500">{{ protoLabel }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Host</span>
+              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedHost }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px">
+              <span style="color:var(--muted)">Port</span>
+              <span style="font-weight:500;font-family:'Instrument Sans',system-ui,sans-serif">{{ parsedPort }}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;border-top:1px solid var(--line2);padding-top:11px">
+              <span style="color:var(--muted)">Weryfikacja certyfikatu</span>
+              <span style="font-weight:500;color:{{ certColor }}">{{ certLabel }}</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px;color:var(--warn-text);background:var(--warn-soft);border-radius:8px;padding:9px 12px">{{ errorText }}</div>
+          </sc-if>
+
+          <div onClick="{{ connectServer }}" style="{{ submitStyle }}" style-hover="{{ submitHover }}">
+            <sc-if value="{{ probing }}" hint-placeholder-val="{{ false }}">
+              <span style="width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:mfspin 0.7s linear infinite"></span>
+            </sc-if>
+            {{ serverBtnLabel }}
+          </div>
+
+        </div>
+      </sc-if>
+
+      <div style="{{ footRowStyle }}">
+        <span style="{{ helpRowStyle }}">Nie pamiętasz hasła?&nbsp;<a href="#">Pomoc IT</a></span>
+        <span style="font-size:10.5px;color:var(--faint);white-space:nowrap">MailFathom v<span style="font-family:'Instrument Sans',system-ui,sans-serif">{{ appVersion }}</span></span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;fold&quot;,&quot;telefon&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;jasny&quot;,&quot;ciemny&quot;],&quot;default&quot;:&quot;ciemny&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;serwerDomyslny&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;mail.nordwind.pl:7443&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Serwer&quot;,&quot;label&quot;:&quot;Domyślny serwer (z instalatora)&quot;},&quot;serwerWymuszony&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Serwer&quot;,&quot;label&quot;:&quot;Serwer wymuszony przez env config&quot;},&quot;basicDostepne&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Serwer&quot;,&quot;label&quot;:&quot;Serwer udostępnia basic auth&quot;},&quot;oauthDostepne&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Serwer&quot;,&quot;label&quot;:&quot;Serwer udostępnia OAuth&quot;},&quot;liczbaOauth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:3,&quot;min&quot;:1,&quot;max&quot;:12,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Serwer&quot;,&quot;label&quot;:&quot;Liczba metod OAuth (demo)&quot;}}">
+const FRAMES = { tablet: { w: 1024, h: 768 }, fold: { w: 884, h: 832 }, telefon: { w: 390, h: 844 } };
+const APP_VERSION = "2.4.2";
+const LS_SRV = "mailfathom.serwer";
+const LS_TLS = "mailfathom.brakTls";
+
+/* Logo dostawców: Simple Icons (CC0) z cdn.simpleicons.org — w produkcie podmień na lokalne pliki. */
+const OAUTH = [
+  { id: "github", label: "GitHub", slug: "github", dark: "e8e8e8", light: "181717" },
+  { id: "gmail", label: "Gmail", slug: "gmail", dark: "ea4335", light: "ea4335" },
+  { id: "keycloak", label: "Keycloak", slug: "keycloak", dark: "8fb8ff", light: "3b6fd6" },
+  { id: "gitlab", label: "GitLab", slug: "gitlab", dark: "fc6d26", light: "fc6d26" },
+  { id: "azure", label: "Azure AD", slug: "microsoftazure", dark: "5aa9f0", light: "0078d4" },
+  { id: "okta", label: "Okta", slug: "okta", dark: "e8e8e8", light: "000000" },
+  { id: "auth0", label: "Auth0", slug: "auth0", dark: "eb5424", light: "eb5424" },
+  { id: "nextcloud", label: "Nextcloud", slug: "nextcloud", dark: "4aa8e0", light: "0082c9" },
+  { id: "slack", label: "Slack", slug: "slack", dark: "a98ec2", light: "611f69" },
+  { id: "discord", label: "Discord", slug: "discord", dark: "7c86f5", light: "5865f2" },
+  { id: "apple", label: "Apple", slug: "apple", dark: "e8e8e8", light: "000000" },
+  { id: "linkedin", label: "LinkedIn", slug: "linkedin", dark: "0a8ce8", light: "0a66c2" },
+];
+
+class Component extends DCLogic {
+  _saved = (() => {
+    try { return { srv: localStorage.getItem(LS_SRV), tls: localStorage.getItem(LS_TLS) }; }
+    catch (e) { return { srv: null, tls: null }; }
+  })();
+
+  state = {
+    view: "login",
+    srv: this._saved.srv,           // null = domyślny z konfiguracji
+    notls: this._saved.tls === "1",
+    user: "", pass: "", reveal: false, advanced: false, focus: null,
+    connecting: false, probing: false, oauth: null, error: "", vw: 1440, theme: null, lang: "pl",
+  };
+
+  rootRef = React.createRef();
+
+  componentDidMount() {
+    const el = this.rootRef.current;
+    const measure = () => {
+      const w = el && el.parentElement ? el.parentElement.clientWidth : window.innerWidth;
+      if (w && w !== this.state.vw) this.setState({ vw: w });
+    };
+    measure();
+    this._ro = window.ResizeObserver ? new ResizeObserver(measure) : null;
+    if (this._ro && el && el.parentElement) this._ro.observe(el.parentElement);
+    this._onResize = measure;
+    window.addEventListener("resize", this._onResize);
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this._t);
+    clearTimeout(this._p);
+    if (this._ro) this._ro.disconnect();
+    window.removeEventListener("resize", this._onResize);
+  }
+
+  defaultServer() { return (this.props.serwerDomyslny ?? "mail.nordwind.pl:7443").trim(); }
+  /* Konfiguracja przekazana aplikacji (env / MDM) wygrywa: adres i tryb TLS są wtedy niezmienne. */
+  envLocked() { return !!this.props.serwerWymuszony; }
+  server() { return (this.envLocked() || this.state.srv == null) ? this.defaultServer() : this.state.srv; }
+  notls() { return this.envLocked() ? false : this.state.notls; }
+  /* Niedomyślny serwer albo wyjątek TLS — wtedy oferujemy powrót do konfiguracji z instalatora. */
+  customized() { return this.server().trim() !== this.defaultServer() || this.state.notls; }
+
+  save(srv, notls) {
+    try {
+      if (srv == null) localStorage.removeItem(LS_SRV); else localStorage.setItem(LS_SRV, srv);
+      if (notls) localStorage.setItem(LS_TLS, "1"); else localStorage.removeItem(LS_TLS);
+    } catch (e) {}
+  }
+
+  setServer = e => {
+    const v = e.target.value;
+    this.setState({ srv: v, error: "" });
+    this.save(v, this.state.notls);
+  };
+
+  toggleInsecure = () => {
+    const v = !this.state.notls;
+    this.setState({ notls: v, error: "" });
+    this.save(this.state.srv, v);
+  };
+
+  restoreDefaults = () => {
+    this.setState({ srv: null, notls: false, error: "" });
+    this.save(null, false);
+  };
+
+  parse() {
+    const raw = (this.server() || "").trim().replace(/^\w+:\/\//, "");
+    const m = raw.match(/^([^:/\s]*)(?::(\d{1,5}))?/);
+    return { host: (m && m[1]) || "", port: (m && m[2]) || "" };
+  }
+
+  go = () => {
+    if (!this.state.user.trim()) return this.setState({ error: "Podaj login." });
+    if (!this.state.pass) return this.setState({ error: "Podaj hasło." });
+    this.setState({ connecting: true, error: "" });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ connecting: false }), 1600);
+  };
+
+  goOauth = id => () => {
+    this.setState({ oauth: id, error: "" });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.setState({ oauth: null }), 1800);
+  };
+
+  /* „Połącz” na ekranie serwera = sprawdzenie adresu i powrót do logowania z nowymi metodami. */
+  connectServer = () => {
+    if (!this.parse().host) return this.setState({ error: "Podaj adres serwera, np. mail.firma.pl" });
+    this.setState({ probing: true, error: "" });
+    clearTimeout(this._p);
+    this._p = setTimeout(() => this.setState({ probing: false, view: "login", advanced: false }), 1100);
+  };
+
+  box(name, h) {
+    const on = this.state.focus === name;
+    return "display:flex;align-items:center;gap:10px;min-height:" + (h || 44) + "px;background:var(--panel);border:1px solid " +
+      (on ? "var(--accent)" : "var(--border2)") +
+      ";box-shadow:" + (on ? "0 0 0 3px var(--accent-soft)" : "none") +
+      ";border-radius:10px;padding:0 13px;transition:border-color 0.12s,box-shadow 0.12s";
+  }
+
+  themeChoice() { return this.state.theme ?? this.props.theme ?? "jasny"; }
+
+  resolvedTheme() {
+    const t = this.themeChoice();
+    if (t !== "auto") return t;
+    const dark = typeof window !== "undefined" && window.matchMedia
+      && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return dark ? "ciemny" : "jasny";
+  }
+
+  renderVals() {
+    const s = this.state, p = this.parse();
+    const mode = this.props.layout ?? "auto";
+    const FR = FRAMES[mode] || null;
+    const w = FR ? FR.w : s.vw;
+    const phone = w < 700;
+    const stacked = w < 940;
+    const pad = phone ? "22px 18px 28px 18px" : stacked ? "30px 34px" : "44px 46px";
+    const tapH = phone ? 52 : 44;
+    /* Kompozycje dotykowe (telefon, fold, tablet) — reguła dostępności podnosi każdy cel pod
+       palcem do min. 44×44 px, więc przełączniki motywu i języka muszą to mieć w projekcie. */
+    const touchPick = w < 1180;
+    const pickBase = touchPick
+      ? "min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 7px;"
+      : "min-width:26px;text-align:center;padding:4px 7px;";
+    const dark = this.resolvedTheme() === "ciemny";
+    const locked = this.envLocked();
+    const notls = this.notls();
+    const secure = !notls;
+    const defPort = secure ? "7443" : "7080";
+    const port = p.port || defPort;
+    const busy = s.connecting || !!s.oauth;
+    const onServer = s.view === "serwer" && !locked;
+    const oauthOn = this.props.oauthDostepne ?? true;
+    const basicOn = this.props.basicDostepne ?? true;
+    const provider = OAUTH.find(o => o.id === s.oauth);
+    return {
+      rootRef: this.rootRef,
+      themeAttr: this.resolvedTheme(),
+      themePicks: [["auto", "Auto", "A"], ["jasny", "Jasny", "☀"], ["ciemny", "Ciemny", "☾"]].map(([v, label, short]) => ({
+        label, short,
+        pick: () => this.setState({ theme: v }),
+        style: pickBase + "border-radius:6px;font-size:11.5px;line-height:1.35;" +
+          (this.themeChoice() === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--muted);"),
+      })),
+      langPicks: [["pl", "Polski", "PL"], ["en", "English", "EN"]].map(([v, label, short]) => ({
+        label, short,
+        pick: () => this.setState({ lang: v }),
+        style: pickBase + "border-radius:6px;font-size:11.5px;line-height:1.35;letter-spacing:0.04em;" +
+          ((s.lang ?? "pl") === v
+            ? "background:var(--accent);color:var(--onaccent);font-weight:600;"
+            : "color:var(--muted);"),
+      })),
+      rootStyle: "display:flex;" + (stacked ? "flex-direction:column;" : "") +
+        "background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;overflow:hidden;" + (FR
+          ? "width:" + FR.w + "px;max-width:100%;height:" + FR.h + "px;max-height:100%;margin:0 auto;border:1px solid var(--border2);border-radius:" + (phone ? 20 : 14) + "px;box-shadow:0 20px 50px var(--sh-2)"
+          : "min-height:100vh"),
+      brandStyle: stacked
+        ? "flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:" + (phone ? "18px 18px 12px 18px" : "22px 34px 14px 34px") + ";background:var(--rail);border-bottom:1px solid var(--line)"
+        : "flex:1 1 44%;min-width:0;display:flex;flex-direction:column;gap:40px;padding:44px 46px;background:var(--rail);border-right:1px solid var(--line)",
+      brandRowStyle: stacked ? "display:contents" : "display:flex;align-items:center;gap:12px",
+      logoStyle: "width:" + (stacked ? 34 : 40) + "px;height:" + (stacked ? 34 : 40) + "px;border-radius:10px;display:block;flex:0 0 auto",
+      wordmarkStyle: "font-size:" + (stacked ? 16 : 17) + "px;font-weight:600;letter-spacing:-0.01em",
+      showPitch: !stacked,
+      formPaneStyle: "flex:" + (stacked ? "1 1 auto" : "1 1 56%") + ";min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:" + (stacked ? "flex-start" : "center") +
+        ";gap:" + (phone ? 18 : 22) + "px;overflow:auto;padding:" + pad,
+      formStyle: "width:100%;max-width:" + (phone ? "100%" : "392px") + ";display:flex;flex-direction:column;gap:" + (phone ? 18 : 22) + "px",
+      sectionGap: phone ? 18 : 20,
+      titleStyle: "font-size:" + (phone ? 24 : 22) + "px;font-weight:600;letter-spacing:-0.01em",
+      fieldStyle: "flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:" + (phone ? 16 : 14) + "px;color:var(--text)",
+      revealStyle: "display:flex;align-items:center;justify-content:center;min-height:" + (phone ? 48 : 32) + "px;padding:0 " + (phone ? 12 : 6) + "px;margin-right:-7px;border-radius:10px;font-size:" + (phone ? 13 : 12) + "px;color:var(--muted);white-space:nowrap;user-select:none",
+      advancedBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 28) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 5px;margin-left:-5px") + ";border-radius:10px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
+      backBtnStyle: "display:flex;align-items:center;gap:6px;align-self:flex-start;min-height:" + (phone ? 48 : 30) + "px;padding:" + (phone ? "0 12px 0 8px;margin-left:-8px" : "0 9px 0 6px;margin-left:-6px") + ";border-radius:10px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;color:var(--accent);user-select:none",
+      ghostBtnStyle: "display:flex;align-items:center;justify-content:center;gap:8px;min-height:" + (phone ? 52 : 44) + "px;border:1px solid var(--line);background:var(--panel);color:var(--accent);border-radius:" + (phone ? 26 : 10) + "px;padding:0 16px;font-size:" + (phone ? 15 : 13.5) + "px;font-weight:600;user-select:none",
+      restoreBtnStyle: "display:flex;align-items:center;gap:8px;min-height:" + (phone ? 50 : 42) + "px;border:1px dashed var(--border2);background:transparent;color:var(--text2);border-radius:10px;padding:0 14px;font-size:" + (phone ? 14 : 13) + "px;font-weight:500;user-select:none",
+      helpRowStyle: "display:flex;align-items:center;min-height:" + (phone ? 48 : 24) + "px;font-size:" + (phone ? 13 : 12) + "px;color:var(--muted)",
+
+      isLogin: !onServer,
+      isServer: onServer,
+      envLocked: locked,
+      canChangeServer: !locked,
+      openServer: locked ? () => {} : () => this.setState({ view: "serwer", error: "", focus: null }),
+      closeServer: () => this.setState({ view: "login", error: "", focus: null }),
+
+      serverLabel: this.server() || "—",
+      defaultServerLabel: this.defaultServer(),
+      customized: this.customized(),
+      restoreDefaults: this.restoreDefaults,
+      lockIcon: secure ? "lock" : "lock_open",
+      lockColor: secure ? "var(--ok-text)" : "var(--warn-text)",
+
+      /* Metody logowania deklaruje serwer — w demie: basic auth + trzej dostawcy OAuth. */
+      showOauth: oauthOn,
+      showBasic: basicOn,
+      showDivider: oauthOn && basicOn,
+      noMethods: !oauthOn && !basicOn,
+      oauthBtns: OAUTH.slice(0, Math.max(1, Math.min(12, Math.round(this.props.liczbaOauth ?? 3)))).map(o => ({
+        label: o.label,
+        title: "Przejdź do " + o.label + " (OAuth)",
+        click: this.goOauth(o.id),
+        iconStyle: "width:17px;height:17px;display:block;flex:0 0 auto;background-repeat:no-repeat;background-position:center;background-size:contain;background-image:url(https://cdn.simpleicons.org/" +
+          o.slug + "/" + (dark ? o.dark : o.light) + ")" + (s.oauth === o.id ? ";opacity:0.5" : ""),
+        style: "display:flex;align-items:center;justify-content:center;gap:7px;min-height:" + (phone ? 52 : 44) + "px;padding:0 10px;border:1px solid " +
+          (s.oauth === o.id ? "var(--accent)" : "var(--line)") + ";background:var(--panel);border-radius:10px;color:var(--text2);user-select:none;overflow:hidden",
+      })),
+
+      host: this.server(), user: s.user, pass: s.pass,
+      hostNote: "Port opcjonalny — bez niego " + (secure ? "użyjemy 7443 (MFP przez TLS)" : "użyjemy 7080 (MFP)") + ". Zapisany lokalnie na tym urządzeniu.",
+      onHost: this.setServer,
+      onUser: e => this.setState({ user: e.target.value, error: "" }),
+      onPass: e => this.setState({ pass: e.target.value, error: "" }),
+      onKey: e => { if (e.key === "Enter") this.go(); },
+      onServerKey: e => { if (e.key === "Enter") this.connectServer(); },
+      focusHost: () => this.setState({ focus: "host" }),
+      focusUser: () => this.setState({ focus: "user" }),
+      focusPass: () => this.setState({ focus: "pass" }),
+      blurAny: () => this.setState({ focus: null }),
+      hostBoxStyle: this.box("host", tapH),
+      userBoxStyle: this.box("user", tapH),
+      passBoxStyle: this.box("pass", tapH),
+      portHint: p.port ? "port " + p.port : ":" + defPort,
+      passType: s.reveal ? "text" : "password",
+      revealLabel: s.reveal ? "Ukryj" : "Pokaż",
+      toggleReveal: () => this.setState({ reveal: !s.reveal }),
+      toggleInsecure: this.toggleInsecure,
+      insecure: notls,
+      insecureRowStyle: "display:flex;align-items:flex-start;gap:11px;min-height:" + (phone ? 56 : 0) + "px;border:1px solid " +
+        (notls ? "var(--warn)" : "var(--line)") + ";background:" +
+        (notls ? "var(--warn-soft)" : "var(--panel)") + ";border-radius:10px;padding:" + (phone ? "14px 14px" : "12px 13px"),
+      checkboxStyle: "flex:0 0 auto;width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:14px;line-height:1;border:1px solid " +
+        (notls ? "var(--warn)" : "var(--border2)") + ";background:" +
+        (notls ? "var(--warn)" : "transparent") + ";color:var(--onaccent)",
+      checkMark: notls ? "check" : "",
+      insecureNote: notls
+        ? "TLS wyłączony — logowanie i wiadomości pójdą otwartym tekstem."
+        : "Pozwala połączyć się z serwerem bez ważnego certyfikatu TLS.",
+
+      hasError: !!s.error,
+      errorText: s.error,
+      connecting: busy,
+      probing: s.probing,
+      submitLabel: provider ? "Przekierowanie do " + provider.label + "…" : busy ? "Łączenie z " + (p.host || "serwerem") + "…" : "Połącz",
+      serverBtnLabel: s.probing ? "Sprawdzanie " + (p.host || "serwera") + "…" : "Połącz",
+      submitStyle: "display:flex;align-items:center;justify-content:center;gap:9px;min-height:" + (phone ? 52 : 46) + "px;background:var(--accent);color:var(--onaccent);border-radius:" + (phone ? 26 : 10) + "px;padding:0 18px;font-size:" + (phone ? 15 : 14) + "px;font-weight:600;user-select:none;opacity:" + ((busy || s.probing) ? "0.7" : "1"),
+      submitHover: (busy || s.probing) ? "cursor:default" : "cursor:pointer;background:var(--accent-2)",
+      submit: busy ? () => {} : this.go,
+      connectServer: s.probing ? () => {} : this.connectServer,
+
+      advanced: s.advanced,
+      chevronRotate: s.advanced ? "transform:rotate(90deg);transition:transform 140ms ease" : "transition:transform 140ms ease",
+      footRowStyle: "display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;width:100%;max-width:" + (phone ? "100%" : "392px") + ";font-size:12px;color:var(--muted)",
+      appVersion: APP_VERSION,
+      toggleAdvanced: () => this.setState({ advanced: !s.advanced }),
+      protoLabel: secure ? "MFP przez TLS" : "MFP bez szyfrowania",
+      parsedHost: p.host || "—",
+      parsedPort: port + (p.port ? "" : " (domyślny)"),
+      certLabel: secure ? "Wymagana" : "Pominięta",
+      certColor: secure ? "var(--ok-text)" : "var(--warn-text)",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -89,10 +89,10 @@ bash scripts/design-mirror.sh plan "$WORK_DIR/listing.json"
 
 The client's screens are settled in a design project read through an MCP server,
 and that project is read one windowed call at a time because its prototype file
-is well past the per-call cap. `$read-design` is the step that reads it, and this
+is well past the per-call cap. `$mf-sync-design` is the step that reads it, and this
 script is the half of that step a session should not be doing by eye: it compares
 one full-depth listing — every path, size and opaque `etag`, no content read at
-all — against the manifest under `artifacts/design/`, and names which screen
+all — against the manifest under `design/`, and names which screen
 sources and which generated runtime still have to be read. The runtime is the one
 file that is not a screen source and is still mirrored, because an artboard is a
 component it boots rather than a document a browser draws, and the parity loop
@@ -108,11 +108,9 @@ beside it can say whether it still describes the current design.
 
 It reaches no design server itself. What it writes is the mirror and nothing
 else: `extract` and `decode` write a mirrored screen source, `record` writes the
-manifest, and `plan` and `stamp` write nothing at all. Nothing it touches is
-repository content:
-`artifacts/` is gitignored, `.worktreeinclude` copies `artifacts/design/` into a
-linked worktree so a session does not re-fetch what the main checkout holds, and
-no file describing what a screen looks like is committed.
+manifest, and `plan` and `stamp` write nothing at all. Everything it touches is
+tracked under `design/`, so a refresh is a diff to review rather than a local
+file one checkout holds, and every clone builds a screen from the same bytes.
 
 Ask whether a client screen still looks like the design it was built from:
 
@@ -721,24 +719,32 @@ The canonical skills are:
   what stops the session is the order the tracker records rather than a judgement
   the session makes; an issue it opens carries that order out to the tracker in
   the same pass that places it;
-- `read-design` refreshes the local mirror of the design project and points at
-  the state inventory a client screen is built from. It reads that project and
-  never writes to it: not a file, not a screen, not a one-word fix to a label
-  that is provably wrong, because what makes a source of truth one is that a
-  single person writes it. What it exists to prevent is a screen built from a
-  picture — a rendered preview shows the one state it was clicked into, while the
-  source states every screen, every variant and every reaction at once, so the
-  empty state, the failing state, the state that only exists under a coarse
-  pointer, and the state no click reaches at all are each invisible in a
-  screenshot. Its refresh is one full-depth listing compared against a recorded
-  manifest of the server's own etags, then a read of only the paths whose etag
-  moved, which makes an unchanged project cost a listing rather than a windowed
-  re-read of half a megabyte of prototype. The inventory it points at names the
-  etag set it was extracted from, so it says for itself whether it is still
-  describing the current design, and its last section is the one that has to be
-  there: the states the source gates and no preview reaches. One of those is a
-  gap rather than a screen to invent — it goes to the owner as a correction to
-  make in the project, never into the client as a guess;
+- `read-design` points at the state inventory a client screen is built from. What
+  it exists to prevent is a screen built from a picture — a rendered preview shows
+  the one state it was clicked into, while the source states every screen, every
+  variant and every reaction at once, so the empty state, the failing state, the
+  state that only exists under a coarse pointer, and the state no click reaches at
+  all are each invisible in a screenshot. What it reads is `design/`, which is
+  tracked, so this is the one part of the design loop a clone without the design
+  server can run in full; the inventory names the etag set it was extracted from,
+  so it says for itself whether it still describes the design the mirror stands
+  on, and its last section is the one that has to be there: the states the source
+  gates and no preview reaches. One of those is a gap rather than a screen to
+  invent — it goes to the owner as a correction to make in the project, never into
+  the client as a guess;
+- `mf-sync-design` brings that mirror up to the design project and opens a pull
+  request when anything moved. It reads that project and never writes to it: not a
+  file, not a screen, not a one-word fix to a label that is provably wrong,
+  because what makes a source of truth one is that a single person writes it. The
+  refresh is one full-depth listing compared against the recorded manifest of the
+  server's own etags, then a read of only the paths whose etag moved, which makes
+  an unchanged project cost a listing rather than a windowed re-read of half a
+  megabyte of prototype — and an unchanged project ends the run there, with no
+  branch and no pull request. What a moved screen source still owes is the two
+  files nothing derives: the state inventory, re-extracted and re-stamped, and the
+  parity pairing, whose own stamp is what stops a capture from being taken against
+  an artboard that has since moved. It needs the design server, so it is the one
+  skill here that cannot run in a fork;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -1193,6 +1199,19 @@ per page would leave a stream of them as soon as a pull request passed a hundred
 files or comments; the line list derived from the files would inherit that shape,
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
+
+One class of changed file never reaches any of that. `design/files/` is the design
+project's screen sources and its generated runtime copied byte for byte, and
+`scripts/design-mirror.sh record` checks each of them against the size the project
+states — so nobody here writes a line of them, an edit to one is caught by that
+check rather than by a reader's judgement, and a single artboard is more added
+lines than a large change. They are dropped where the collection is frozen, once,
+ahead of the anchors, the head content, the obligations index and the groups, and
+the count joins the truncation notes so a reader of the review can tell a file
+nobody looked at from a file nobody was meant to. It is that one directory rather
+than the tree above it: `design/manifest.json`, `design/state-inventory.md`,
+`design/parity.json` and `design/README.md` are written in this repository and are
+read like anything else.
 
 The collection then splits the change into groups and the run starts one reader per
 group, concurrently — the fan-out described under **How a review is spread over

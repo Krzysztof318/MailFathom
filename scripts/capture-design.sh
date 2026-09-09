@@ -5,16 +5,15 @@
 
 set -euo pipefail
 
-# The design half of a parity pair. It serves the mirrored design project out of `artifacts/design/files/` and captures
+# The design half of a parity pair. It serves the mirrored design project out of `design/files/` and captures
 # the named screens at the compositions `frontend/design-parity/screens.json` states, which is the same file
 # `scripts/capture-client.sh` reads — so the two sides cannot differ in size, pointer or device pixel ratio, whatever
 # either invocation asked for.
 #
 # The pairing itself is split in two on purpose. The client half is `frontend/design-parity/screens.json`, which
-# describes the client and carries no design content, so it lives in a public tree. The design half — which artboard a
-# screen is drawn on, which properties it takes, what is pressed to reach it — is design content, so it lives beside
-# the mirror in `artifacts/design/parity.json`, which `.gitignore` covers along with everything else under
-# `artifacts/`.
+# describes the client and says nothing about the design. The design half — which artboard a screen is drawn on, which
+# properties it takes, what is pressed to reach it — describes the design, so it lives beside the mirror in
+# `design/parity.json` and moves with it when a refresh moves an artboard.
 
 usage() {
   cat <<'USAGE'
@@ -39,20 +38,20 @@ USAGE
 
 source "$(dirname "${BASH_SOURCE[0]}")/capture-plan.sh"
 
-design_root="$repository_root/artifacts/design/files"
-pairing="$repository_root/artifacts/design/parity.json"
+design_root="$repository_root/design/files"
+pairing="$repository_root/design/parity.json"
 
 if [[ ! -f "$design_root/support.js" ]]; then
   printf 'The mirror carries no design runtime at %s, so an artboard would never boot.\n' "$design_root/support.js" >&2
-  printf 'Refresh it with $read-design, which reads the runtime beside the screen sources.\n' >&2
+  printf 'Refresh it with $mf-sync-design, which reads the runtime beside the screen sources.\n' >&2
   exit 1
 fi
 
 if [[ ! -f "$pairing" ]]; then
   printf 'No design pairing at %s.\n' "$pairing" >&2
   printf 'It names, for each screen in %s, the mirrored artboard it is drawn on, the component properties it\n' "$manifest" >&2
-  printf 'takes and what is pressed to reach it. It is design content, so it stays beside the mirror and out of\n' >&2
-  printf 'the tree; $read-design is what writes it.\n' >&2
+  printf 'takes and what is pressed to reach it. It sits beside the mirror under design/, and $mf-sync-design is\n' >&2
+  printf 'what writes it.\n' >&2
   exit 1
 fi
 
@@ -63,7 +62,7 @@ mirror_stamp="$(bash "$capture_scripts_directory/design-mirror.sh" stamp)"
 
 if [[ "$recorded_stamp" != "$mirror_stamp" ]]; then
   printf 'The pairing was written for stamp %s and the mirror is at %s.\n' "$recorded_stamp" "$mirror_stamp" >&2
-  printf 'Refresh the mirror and the pairing with $read-design before capturing anything.\n' >&2
+  printf 'Refresh the mirror and the pairing with $mf-sync-design before capturing anything.\n' >&2
   exit 1
 fi
 

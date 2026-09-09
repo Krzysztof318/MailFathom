@@ -1,0 +1,202 @@
+{
+  "stamp": "25200f246227ea7e",
+  "screens": {
+    "sign-in": {
+      "file": "MailFathom Logowanie.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "expect": {
+            "text": "Połącz skrzynkę"
+          }
+        }
+      ]
+    },
+    "mail-list": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "Poczta"
+          }
+        }
+      ]
+    },
+    "mail-thread": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "Poczta"
+          }
+        },
+        {
+          "click": {
+            "text": "Aneks do umowy — podpisy"
+          }
+        }
+      ]
+    },
+    "settings-profile": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "KK"
+          }
+        },
+        {
+          "click": {
+            "text": "settingsUstawienia"
+          }
+        },
+        {
+          "expect": {
+            "text": "Profil"
+          }
+        }
+      ]
+    },
+    "settings-application": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "KK"
+          }
+        },
+        {
+          "click": {
+            "text": "settingsUstawienia"
+          }
+        },
+        {
+          "click": {
+            "text": "Aplikacja"
+          }
+        },
+        {
+          "expect": {
+            "text": "JĘZYK"
+          }
+        }
+      ]
+    },
+    "notifications": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "notifications_active"
+          }
+        },
+        {
+          "expect": {
+            "text": "Powiadomienia"
+          }
+        }
+      ]
+    },
+    "account-menu": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "Poczta"
+          }
+        },
+        {
+          "click": {
+            "text": "KK"
+          }
+        },
+        {
+          "expect": {
+            "text": "settingsUstawienia"
+          }
+        }
+      ]
+    },
+    "full-html": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "Poczta"
+          }
+        },
+        {
+          "click": {
+            "text": "Aneks do umowy — podpisy"
+          }
+        },
+        {
+          "click": {
+            "text": "code"
+          }
+        },
+        {
+          "click": {
+            "text": "Pokaż HTML"
+          }
+        },
+        {
+          "expect": {
+            "text": "lockPodgląd izolowany — skrypty i zdalne treści są zablokowane"
+          }
+        }
+      ]
+    },
+    "full-html-ask": {
+      "file": "MailFathom Prototyp.dc.html",
+      "properties": {
+        "theme": null
+      },
+      "steps": [
+        {
+          "click": {
+            "text": "Poczta"
+          }
+        },
+        {
+          "click": {
+            "text": "Aneks do umowy — podpisy"
+          }
+        },
+        {
+          "click": {
+            "text": "code"
+          }
+        },
+        {
+          "expect": {
+            "text": "Pokazać pełny HTML?"
+          }
+        }
+      ]
+    }
+  }
+}

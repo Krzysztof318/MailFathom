@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MailFathom — Wyszukiwanie poczty</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* Barwy MailFathom pochodzą z ikony produktu, a nie z palety przykładowej: te same wartości,
+     które niesie frontend/src/Client.App/src/styles.css. */
+  :root {
+    color-scheme: light;
+    --fathom-950: #010d33; --fathom-800: #0028a0; --fathom-600: #0048e0;
+    --fathom-500: #0068f8; --fathom-200: #a8c8f8; --fathom-star: #f8d848;
+    --page: #f6f7fb; --panel: #ffffff; --rail: #eef0f7; --sunken: #f1f3f9; --hover: #e4e8f3;
+    --line: #d7dced; --line-soft: #e8ebf5;
+    --text: #0b1020; --text-soft: #38405a; --muted: #515a72; --faint: #666f8a;
+    --accent: var(--fathom-600); --accent-strong: var(--fathom-800); --accent-soft: #e6edfd;
+    --on-accent: #ffffff;
+    --healthy: #1a7f4b; --healthy-soft: #e6f4ec; --warning: #b45309; --warning-soft: #fdf0e2;
+    --row: 76px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #070d20; --panel: #0f1730; --rail: #0a1128; --sunken: #0c142c; --hover: #182242;
+      --line: #232e4d; --line-soft: #182140;
+      --text: #e9edf8; --text-soft: #c2c9dc; --muted: #9aa2ba; --faint: #7e87a1;
+      --accent: var(--fathom-500); --accent-strong: var(--fathom-200); --accent-soft: #0c1c3f;
+      --healthy: #4ec98a; --healthy-soft: #10291d; --warning: #f0a14a; --warning-soft: #2e2013;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 34px; }
+  h1 { font-size: 24px; letter-spacing: -0.015em; margin: 0; }
+  h2 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+       font-family: 'Instrument Sans', system-ui, sans-serif; font-weight: 600; margin: 0; }
+  .lede { color: var(--text-soft); max-width: 72ch; text-wrap: pretty; margin: 0; }
+  .state { display: flex; flex-direction: column; gap: 10px; }
+  .note { color: var(--muted); font-size: 13px; max-width: 78ch; text-wrap: pretty; margin: 0; }
+  .column { width: 420px; max-width: 100%; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .head { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .pill { display: flex; align-items: center; gap: 8px; background: var(--rail); border: 1px solid var(--line);
+          border-radius: 999px; padding: 8px 13px; color: var(--faint); font-size: 14px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text-soft);
+         border-radius: 7px; padding: 5px 11px; font-size: 13px; white-space: nowrap; }
+  .row-actions { display: flex; align-items: center; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; }
+  .chip { display: flex; align-items: center; gap: 5px; background: var(--accent-soft); color: var(--accent-strong);
+          border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+  .chip button { all: unset; line-height: 1; padding: 1px 3px; border-radius: 3px; cursor: pointer; }
+  .fold { color: var(--muted); font-size: 13px; }
+  .rows { background: var(--panel); }
+  .row { height: var(--row); border-bottom: 1px solid var(--line-soft); padding: 0 12px;
+         display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
+  .row.open { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+  .line1 { display: flex; align-items: baseline; gap: 8px; }
+  .who { font-size: 14px; font-weight: 600; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .org { font-size: 12px; color: var(--faint); }
+  .when { margin-left: auto; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 11px; color: var(--faint); }
+  .line2 { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+  .subject { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Trzecia linia. Wiersz jest jeden — folder i wyniki rysują ten sam — a wysokość rezerwuje ją zawsze,
+     więc wiersz, który ma coś do powiedzenia, jest tym samym wierszem, a nie wyższym. */
+  .why { height: 16px; overflow: hidden; font-size: 12px; color: var(--faint); }
+  .why mark { background: none; color: var(--accent-strong); font-weight: 600; }
+  .foot { padding: 8px 12px; font-size: 13px; color: var(--faint); }
+  .banner { margin: 10px 12px; padding: 9px 11px; border-radius: 8px; font-size: 13px;
+            background: var(--warning-soft); color: var(--warning); text-wrap: pretty; }
+  .empty { padding: 22px 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .empty p { margin: 0; color: var(--text-soft); text-wrap: pretty; }
+  .waiting { padding: 14px 12px; font-size: 13px; color: var(--muted); }
+  .recent { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line-soft); }
+  .recent .btn { border-radius: 999px; }
+  .gallery { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <h1>Wyszukiwanie poczty</h1>
+    <p class="lede">
+      Znajdowanie wiadomości stoi na górze poczty, którą ktoś właśnie ogląda, a nie na osobnym ekranie: jedna kolumna,
+      jeden kształt wiersza i nic, do czego trzeba przejść i wrócić. Wyszukiwanie obejmuje zakres, na który ktoś patrzy,
+      a ten zakres jest skopiowany na nie jako filtry — widoczne i możliwe do zdjęcia.
+    </p>
+    <p class="note">
+      Pole przyjmuje dziś słowa i nic więcej. Kolumna poczty w prototypie obiecuje w tym miejscu także opis tego,
+      czego ktoś potrzebuje — to jest praca etapu 3, który pisze filtry ze zdania i ląduje na tym ekranie zamiast go
+      zastępować. Dopóki nie wyląduje, pole obiecuje to, co robi: pole proponujące opis nad serwerem, który umie
+      dopasować tylko słowa, zawodzi człowieka dokładnie w chwili, gdy mu zaufał. Prototyp trzeba w tym jednym miejscu
+      poprawić do <em>Słowa z wiadomości, której szukasz</em>.
+    </p>
+  </header>
+
+  <div class="gallery">
+
+    <section class="state">
+      <h2>Wyniki</h2>
+      <div class="column">
+        <div class="head">
+          <div class="row-actions">
+            <div class="pill" style="flex:1;color:var(--text)">faktura sierpień</div>
+            <button class="btn" type="button">Szukaj</button>
+            <button class="btn" type="button">Zakończ</button>
+          </div>
+          <ul class="chips">
+            <li class="chip">Skrzynka: Praca <button aria-label="Usuń filtr Skrzynka: Praca">✕</button></li>
+            <li class="chip">Folder: Odebrane <button aria-label="Usuń filtr Folder: Odebrane">✕</button></li>
+            <li class="chip">Tylko z załącznikami <button aria-label="Usuń filtr Tylko z załącznikami">✕</button></li>
+          </ul>
+          <div class="fold">▸ Zawęź to wyszukiwanie</div>
+        </div>
+        <div class="rows">
+          <div class="row open">
+            <div class="line1"><span class="who">Hanna Wiśniewska</span><span class="org">nordwind.example</span><span class="when">27 sie</span></div>
+            <div class="line2"><span class="subject">Faktura 2026/08/114</span><span class="preview">Przesyłam w załączeniu fakturę za…</span></div>
+            <div class="why">Dlaczego to pasuje: <mark>Faktura</mark> za <mark>sierpień</mark>, numer 114</div>
+          </div>
+          <div class="row">
+            <div class="line1"><span class="who">Biuro rachunkowe</span><span class="org">kontor.example</span><span class="when">21 sie</span></div>
+            <div class="line2"><span class="subject">Rozliczenie miesiąca</span><span class="preview">Komplet dokumentów do zamknięcia…</span></div>
+            <div class="why">Pasują te słowa i to, czego dotyczy ta wiadomość.</div>
+          </div>
+          <div class="row">
+            <div class="line1"><span class="who">Marek Zieliński</span><span class="org">nordwind.example</span><span class="when">14 sie</span></div>
+            <div class="line2"><span class="subject">Płatność przeszła</span><span class="preview">Potwierdzam, przelew wyszedł wczoraj.</span></div>
+            <div class="why">Znalezione po znaczeniu, a nie po tych słowach.</div>
+          </div>
+        </div>
+        <div class="foot">To wszystko, co znalazło to wyszukiwanie.</div>
+      </div>
+      <p class="note">
+        Wiersz jest wierszem listy folderu, a nie drugim kształtem: trzecia linia, którą wysokość wiersza rezerwuje
+        zawsze, niesie tu powód dopasowania. Wyimek pokazuje dopasowane słowa, bo to człowiek może sprawdzić sam;
+        zdanie zastępuje go tylko tam, gdzie serwer nie wyciął żadnego.
+      </p>
+    </section>
+
+    <section class="state">
+      <h2>Pusto</h2>
+      <div class="column">
+        <div class="head">
+          <div class="row-actions">
+            <div class="pill" style="flex:1;color:var(--text)">umowa najmu</div>
+            <button class="btn" type="button">Szukaj</button>
+            <button class="btn" type="button">Zakończ</button>
+          </div>
+          <ul class="chips">
+            <li class="chip">Folder: Odebrane <button aria-label="Usuń filtr Folder: Odebrane">✕</button></li>
+            <li class="chip">Przyszło 1 sierpnia 2026 lub później <button aria-label="Usuń filtr daty">✕</button></li>
+          </ul>
+        </div>
+        <div class="empty">
+          <p>Żadna wiadomość nie pasuje do tego wyszukiwania.</p>
+          <button class="btn" type="button">Przeszukaj zamiast tego całą pocztę</button>
+        </div>
+      </div>
+      <p class="note">
+        Pusto nigdy nie jest pustym panelem: obok stoi zakres, który to pusto wyprodukował, i jedno naciśnięcie, które
+        je poszerza. Wyszukiwanie zawężone czymś, czego nikt nie widzi, czyta się jak skrzynka, która zgubiła pocztę.
+      </p>
+    </section>
+
+    <section class="state">
+      <h2>Czekanie, awaria, tylko słowa</h2>
+      <div class="column">
+        <div class="head">
+          <div class="pill" style="color:var(--text)">faktura sierpień</div>
+        </div>
+        <div class="waiting">Przeszukiwanie twojej poczty…</div>
+        <div class="banner">
+          Ten serwer nie wyszukuje po znaczeniu, więc te wyniki zawierają wpisane przez ciebie słowa i nic, co
+          zostałoby znalezione wyłącznie po znaczeniu.
+        </div>
+        <div class="banner">
+          Nie udało się przeprowadzić tego wyszukiwania: nie można się w tej chwili połączyć z serwerem.
+        </div>
+        <div class="recent">
+          <span class="note" style="width:100%">Wcześniej wyszukiwane</span>
+          <button class="btn" type="button">faktura sierpień</button>
+          <button class="btn" type="button">umowa najmu</button>
+          <button class="btn" type="button">od hanny</button>
+          <button class="btn" type="button">Zapomnij je</button>
+        </div>
+      </div>
+      <p class="note">
+        Serwer, który nie umie szukać po znaczeniu, mówi to osobno od tego, czego nie wolno pytającemu: pierwsze
+        jest brakiem serwera, drugie odmową wobec człowieka. Wcześniejsze wyszukiwania żyją wyłącznie w stanie
+        klienta i znikają razem z poświadczeniem — żadna wpisana fraza nie trafia do logu ani do telemetrii.
+      </p>
+    </section>
+
+  </div>
+
+  <footer class="note">
+    Ten ekran jest zaimplementowany w <code>frontend/src/Client.App/src/search/</code>. Zawężenie po folderze oferuje
+    dziś role folderów, a nie całe drzewo kont — folder spoza ról trafia na wyszukiwanie przez to, na co ktoś patrzył,
+    i stoi na nim jako filtr do zdjęcia.
+  </footer>
+
+</div>
+</body>
+</html>

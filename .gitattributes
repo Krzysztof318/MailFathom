@@ -1,5 +1,11 @@
 * text=auto eol=lf
 
+# The design mirror is the design project's own files copied byte for byte, and
+# `scripts/design-mirror.sh record` checks each one against the byte count the project states. Line-ending
+# normalization would change that count on any file the project ever writes with CRLF, and the failure would
+# read as a transcription that dropped bytes rather than as git having rewritten them.
+design/files/** -text
+
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
