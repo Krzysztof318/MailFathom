@@ -1,5 +1,5 @@
 {
-  "stamp": "6b64bb49fb7e4c1a",
+  "stamp": "1eb5a9bd74d923d2",
   "screens": {
     "sign-in": {
       "file": "MailFathom Sign-in.dc.html",
@@ -63,7 +63,7 @@
         },
         {
           "expect": {
-            "text": "Profil"
+            "text": "Profile"
           }
         }
       ]
@@ -86,7 +86,7 @@
         },
         {
           "click": {
-            "text": "Aplikacja"
+            "text": "Application"
           }
         },
         {

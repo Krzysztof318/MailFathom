@@ -132,7 +132,7 @@
               <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1;width:22px;text-align:center">settings</span>Settings
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:10px 13px;font-size:13px;color:var(--muted);border-top:1px solid var(--line2)" style-hover="cursor:pointer;background:var(--hover)">
-              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1;width:22px;text-align:center">logout</span>Wyloguj
+              <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1;width:22px;text-align:center">logout</span>Sign out
             </div>
           </div>
         </sc-if>
@@ -7214,7 +7214,7 @@ class Component extends DCLogic {
       stateToggleStyle: singlePane
         ? "margin-left:auto;font-size:12px;color:var(--accent-d);background:var(--accent-soft);border-radius:14px;padding:3px 10px"
         : "display:none",
-      stateToggleLabel: st.stateOpen ? "ukryj" : "3 pola",
+      stateToggleLabel: st.stateOpen ? "hide" : "3 fields",
       threadBodyStyle: singlePane
         ? "flex:1;display:flex;flex-direction:column;gap:10px;padding:12px;overflow:auto;min-height:0"
         : "flex:1;display:flex;flex-direction:column;gap:12px;padding:18px 22px;overflow:auto;min-height:0",
@@ -7480,7 +7480,7 @@ class Component extends DCLogic {
       settingsTitleStyle: singlePane ? "font-size:17px;font-weight:600" : "font-size:13.5px;font-weight:600",
       tabProfil: (st.settingsTab || "profil") === "profil",
       tabApp: st.settingsTab === "app",
-      settingsTabs: [["profil", "Profil"], ["app", "Aplikacja"]].map(([v, label]) => ({
+      settingsTabs: [["profil", "Profile"], ["app", "Application"]].map(([v, label]) => ({
         label,
         pick: () => this.setState({ settingsTab: v }),
         style: "white-space:nowrap;border-bottom:2px solid " +
