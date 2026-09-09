@@ -47,13 +47,15 @@ internal sealed class ConfiguredMailFolderMappingReader : IMailFolderMappingRead
     /// <remarks>
     /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> for the reason
     /// <see cref="ConfiguredMailFolders.Of(MailSynchronizationOptions)" /> does, so an account that configures no
-    /// folder answers for the inbox mapping it is actually run with. An entry whose names are unusable is skipped rather than raised over: startup
+    /// folder answers for the inbox mapping it is actually run with, and it reads
+    /// <see cref="MailSynchronizationOptions.DeclaredAccounts" /> so a mailbox declared under a served user is mapped
+    /// exactly as one declared in the deployment's own section is. An entry whose names are unusable is skipped rather than raised over: startup
     /// validation refuses that configuration, and a reload being rejected must not make a lookup throw. Two accounts
     /// configured under one identifier is the same refusal, so the first is kept here rather than the build failing
     /// over what validation already reports.
     /// </remarks>
     private Dictionary<string, IReadOnlyList<MailFolderMapping>> ReadMappings() =>
-        (this.settings.Accounts ?? [])
+        this.settings.DeclaredAccounts
             .Select(static account => (
                 Id: MailSynchronizationOptions.TryReadAccountId(account.AccountId),
                 account.EffectiveFolders))

@@ -5,8 +5,10 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -272,6 +274,22 @@ public sealed class ContactCollectionConfigurationTests
         Assert.DoesNotContain(messages, message => message.Contains("contact collection", StringComparison.Ordinal));
     }
 
+    /// <summary>A mailbox declared under a served user is the whole of what such a deployment configures, so its switch has to be read.</summary>
+    [Fact]
+    public void SettingsFor_AnAccountDeclaredUnderAServedUser_CarriesTheSwitchItStated()
+    {
+        // Arrange
+        var account = AccountAt("work", "user@work.example");
+        account.ContactCollection = new ContactCollectionOptions { Enabled = true, MinimumMessagesFromSender = 4 };
+
+        // Act
+        var settings = UserDeclaring(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
+
+        // Assert
+        Assert.True(settings.IsEnabled);
+        Assert.Equal(4, settings.MinimumMessagesFromSender);
+    }
+
     private static string[] MessagesFrom(MailSynchronizationAccountOptions account) =>
     [
         .. OptionsFor(account)
@@ -291,6 +309,16 @@ public sealed class ContactCollectionConfigurationTests
     {
         Accounts = [.. accounts],
     };
+
+    private static MailSynchronizationOptions UserDeclaring(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().WithServedUsers(
+        [
+            new ServedMailUser(
+                SyntheticMailUser.Deployment,
+                "the user this deployment serves",
+                MailUserAccountSource.UserDocument,
+                accounts),
+        ]);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {
