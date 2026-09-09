@@ -350,7 +350,9 @@ describe('App', () => {
         fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
             target: { value: 'the renewal Nordwind sent' },
         });
-        fireEvent.change(screen.getByRole('combobox', { name: 'Mailbox in scope' }), { target: { value: 'work' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'What the question is asked about' }), {
+            target: { value: 'account:work' },
+        });
 
         await goTo('Mail');
 
@@ -358,7 +360,10 @@ describe('App', () => {
             'value',
             'the renewal Nordwind sent',
         );
-        expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', 'work');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty(
+            'value',
+            'account:work',
+        );
     });
 
     it('offers every mailbox the user holds as a scope, beside all of them at once', async () => {
@@ -366,7 +371,7 @@ describe('App', () => {
 
         renderApp(servedFrom, heldSession, deploymentAnswering(twoMailboxes));
 
-        const scope = await screen.findByRole('combobox', { name: 'Mailbox in scope' });
+        const scope = await screen.findByRole('combobox', { name: 'What the question is asked about' });
         await waitFor(() => {
             expect([...scope.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
                 'All mailboxes',

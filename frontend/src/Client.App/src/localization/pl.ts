@@ -54,9 +54,20 @@ export const pl: Catalogue = {
     'intent.label': 'Zapytaj swoją pocztę',
     'intent.placeholder': 'O co chcesz zapytać swoją pocztę?',
     'intent.ask': 'Zapytaj',
+    'intent.askedBefore': 'Wcześniejsze pytania',
+    'intent.askedUnder': '{question}, pytanie dotyczy: {scope}',
+    'intent.forgetAsked': 'Wyczyść listę',
 
-    'scope.mailbox': 'Skrzynka w zakresie',
+    'scope.inScope': 'Czego dotyczy pytanie',
+    'scope.asking': 'Pytanie dotyczy: {scope}',
     'scope.allMailboxes': 'Wszystkie skrzynki',
+    'scope.everyMailbox': '{folder} we wszystkich skrzynkach',
+    'scope.folderIn': '{folder} w skrzynce {mailbox}',
+    'scope.thread': 'Ta korespondencja',
+    'scope.selection.one': '{count} zaznaczona wiadomość',
+    'scope.selection.few': '{count} zaznaczone wiadomości',
+    'scope.selection.many': '{count} zaznaczonych wiadomości',
+    'scope.selection.other': '{count} zaznaczonych wiadomości',
 
     'signIn.claim': 'Twoja poczta zostaje na Twoim serwerze.',
     'signIn.claimExplanation':

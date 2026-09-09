@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
+import type { AskedQuestion } from './askScope';
 import { everything, type MailScope } from './mailScope';
 import type { CitedAttachment, OpenedAttachment } from './openAttachment';
 import type { OpenConversation } from './openConversation';
@@ -115,6 +116,30 @@ export interface Workspace {
     readonly question: string;
 
     /**
+     * The mailbox the intent field was pointed at, or `null` where the field asks about what the mail space is showing.
+     *
+     * Beside the scope the list is read under rather than instead of it, because the two answer different questions:
+     * one says what is drawn, and the other what the next question is about. Widening a question after an answer that
+     * was too narrow is exactly the second changing while the first does not, so a person who asks again about every
+     * mailbox keeps the folder they were reading and the messages they had picked out.
+     *
+     * Only what the field itself offers ever reaches it — every mailbox at once, or one of them — and
+     * `workspace/askScope.ts` is where it is read against what is on the screen.
+     */
+    readonly askScope: MailScope | null;
+
+    /**
+     * What was asked before, newest first, each with the scope it was asked under.
+     *
+     * Here rather than in the space that answers, for the reason the searches are: the field is drawn in every space
+     * and an answer is drawn in one, so a list the answer held would be empty everywhere a question is composed. It is
+     * a list of questions rather than a conversation — what somebody does with one is ask it again, usually wider —
+     * and it goes with the credential like everything else the workspace holds, because what a person asked their own
+     * mail is theirs.
+     */
+    readonly askedBefore: readonly AskedQuestion[];
+
+    /**
      * What was searched for before, newest first, so a search is one press rather than something to retype.
      *
      * Here rather than inside the search screen because it has to outlive one: the column the search stands in is
@@ -145,6 +170,8 @@ export const emptyWorkspace: Workspace = {
     fragment: null,
     selected: [],
     question: '',
+    askScope: null,
+    askedBefore: [],
     recentSearches: [],
 };
 

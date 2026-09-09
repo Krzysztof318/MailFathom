@@ -286,7 +286,7 @@ describe('App deployment', () => {
         await framed();
 
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
-        expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'What the question is asked about' })).toHaveProperty('value', '');
     });
 
     it('signs in against the next deployment of its own, and never reads the one before it again', async () => {

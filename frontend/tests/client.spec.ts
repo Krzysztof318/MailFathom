@@ -489,18 +489,18 @@ test('moves back and forward through its own spaces without leaving the applicat
     await expect(page.getByRole('main', { name: 'Mail' })).toBeVisible();
 });
 
-test('carries the question and the mailbox in scope from one space to the next', async ({ page }) => {
+test('carries the question and the scope it is asked under from one space to the next', async ({ page }) => {
     await openSignedIn(page);
 
     const question = page.getByRole('searchbox', { name: 'Ask your mail' });
     await question.fill('the renewal Nordwind sent');
-    await page.getByRole('combobox', { name: 'Mailbox in scope' }).selectOption({ label: 'Work' });
+    await page.getByRole('combobox', { name: 'What the question is asked about' }).selectOption({ label: 'Work' });
 
     await page.getByRole('link', { name: 'Cases' }).click();
     await expect(page.getByRole('heading', { name: 'Cases', level: 1 })).toBeVisible();
 
     await expect(question).toHaveValue('the renewal Nordwind sent');
-    await expect(page.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveValue('work');
+    await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toHaveValue('account:work');
 });
 
 test('puts the navigation beside the workspace in a wide window and under it in a narrow one', async ({ page }) => {
@@ -624,7 +624,7 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
     // design project shows. Nothing is dropped by width, and the window it is measured in is the width alone.
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Mailbox in scope' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toBeVisible();
 
     // Three of the seven stand in the bar itself and the other four behind its overflow, which is what makes five
     // places enough for seven destinations. Reached rather than dropped is the whole of the claim, so both halves are

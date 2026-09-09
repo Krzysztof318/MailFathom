@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { longestSearchText } from '@mailfathom/client-backend';
+import { mostAskedQuestions, type AskedQuestion, type AskScope } from './askScope';
 import { everything, isMailFolderRole, type MailScope } from './mailScope';
 import type { OpenConversation } from './openConversation';
 import { emptyWorkspace, type Workspace } from './useWorkspace';
@@ -104,6 +105,9 @@ function workspaceIn(value: unknown): Workspace | null {
 
     const record = value as Record<string, unknown>;
     const scope = scopeIn(record['scope']);
+    const chosen = record['askScope'] ?? null;
+    const askScope = chosen === null ? null : namedScopeIn(chosen);
+    const askedBefore = askedBeforeIn(record['askedBefore'] ?? []);
     const collapsed = collapsedIn(record['collapsed']);
     const mailboxesFolded = record['mailboxesFolded'] ?? false;
     const panelsHidden = record['panelsHidden'] ?? false;
@@ -115,6 +119,8 @@ function workspaceIn(value: unknown): Workspace | null {
 
     if (
         scope === null ||
+        (chosen !== null && askScope === null) ||
+        askedBefore === null ||
         collapsed === null ||
         selected === null ||
         recentSearches === null ||
@@ -151,8 +157,81 @@ function workspaceIn(value: unknown): Workspace | null {
         fragment: null,
         selected,
         question,
+        askScope,
+        askedBefore,
         recentSearches,
     };
+}
+
+// The questions asked before, each held to the same bound the question being typed is held to: what a store carries
+// for them is read back into state and written out again on every revision, and neither the sentence nor the list is
+// something this client would have written past those numbers.
+function askedBeforeIn(value: unknown): readonly AskedQuestion[] | null {
+    if (!Array.isArray(value) || value.length > mostAskedQuestions) {
+        return null;
+    }
+
+    const asked: AskedQuestion[] = [];
+    for (const entry of value) {
+        if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+            return null;
+        }
+
+        const question = (entry as Record<string, unknown>)['question'];
+        const scope = askScopeIn((entry as Record<string, unknown>)['scope']);
+
+        if (
+            typeof question !== 'string' ||
+            question.length === 0 ||
+            question.length > longestQuestion ||
+            scope === null
+        ) {
+            return null;
+        }
+
+        asked.push({ question, scope });
+    }
+
+    return asked;
+}
+
+// The mailbox somebody pointed the field at, held to the two shapes the field can actually offer: every mailbox at
+// once, or one of them. A folder or a role read back here would be a scope no control in the client can produce and
+// nothing anywhere drops when the deployment stops declaring it — the mail space watches its own scope and not this
+// one — so it would ask about a folder nobody has until the tab was closed. Refusing it at the boundary is what makes
+// `askScope.ts` right to re-check the account alone.
+function namedScopeIn(value: unknown): MailScope | null {
+    const scope = scopeIn(value);
+
+    return scope === null || scope.kind === 'everything' || scope.kind === 'account' ? scope : null;
+}
+
+// Read through the same three checks the workspace's own values are read through, because that is exactly what the
+// three shapes hold: a mail scope, a correspondence the deployment named, and a list of messages it named.
+function askScopeIn(value: unknown): AskScope | null {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return null;
+    }
+
+    const record = value as Record<string, unknown>;
+    const threadId = record['threadId'];
+
+    switch (record['kind']) {
+        case 'mail': {
+            const scope = scopeIn(record['scope']);
+
+            return scope === null ? null : { kind: 'mail', scope };
+        }
+        case 'thread':
+            return isIdentifier(threadId) ? { kind: 'thread', threadId } : null;
+        case 'selection': {
+            const messages = selectedIn(record['messages']);
+
+            return messages === null || messages.length === 0 ? null : { kind: 'selection', messages };
+        }
+        default:
+            return null;
+    }
 }
 
 // The searches read back, each held to what this surface ranks against at all: text longer than that is not a search
