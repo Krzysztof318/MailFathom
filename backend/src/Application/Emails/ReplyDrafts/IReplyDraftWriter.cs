@@ -2,6 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Detection;
+
 namespace MailFathom.Application.Emails.ReplyDrafts;
 
 /// <summary>Writes a reply out of the correspondence it answers and the way its author writes.</summary>
@@ -30,5 +33,7 @@ public interface IReplyDraftWriter
     /// falling back there would leave somebody pressing a button the operator has already paid the last of the
     /// allowance for.
     /// </remarks>
+    /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when this deployment has spent what it allows a provider for the period, which is the one refusal a caller publishes rather than answering with nothing.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the correspondence carries, which withholds the drafting rather than sending text nothing scanned.</exception>
     Task<ReplyDraft> WriteAsync(ReplyDraftBrief brief, CancellationToken cancellationToken);
 }
