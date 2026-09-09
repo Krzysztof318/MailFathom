@@ -113,6 +113,23 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailMove { get; } = new("mailfathom.mail.move", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering deleting mail this deployment holds from the mail server itself.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is apart from <see cref="MailMove" /> for the reason that name is apart from <see cref="MailFlagsWrite" />,
+    /// carried one step further: a move puts a message somewhere the user has to look for it, and a delete expunges the
+    /// remote occurrence so that there is nowhere left to look. Filing mail in the trash is the reversible half of what
+    /// a person means by <em>delete</em>, and it stays under the moving grant; this name is the half that cannot be
+    /// taken back, and a deployment that lets a caller file mail has not thereby let it destroy that mail.
+    /// </para>
+    /// <para>
+    /// What becomes of MailFathom's own copy is not this grant's to decide. The account's configured
+    /// <c>AuthoredDeleteEmailDisposition</c> answers that for every authored delete alike, so a caller holding this name
+    /// asks for the same act a rule or a spam action asks for and gets the operator's configured posture with it.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailDelete { get; } = new("mailfathom.mail.delete", ProtectedSurface.Mail);
+
     /// <summary>Gets the permission covering writing, editing, and giving up a draft this deployment holds.</summary>
     /// <remarks>
     /// <para>
@@ -226,6 +243,7 @@ public readonly record struct MailFathomPermission
         MailContactsWrite,
         MailFlagsWrite,
         MailMove,
+        MailDelete,
         MailDraftsWrite,
         MailSend,
         MailAccountsWrite,

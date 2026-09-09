@@ -1142,6 +1142,10 @@ public static class ServiceCollectionExtensions
         // a record and holds nothing that could reach a mail server, so the account's own pass carries the move.
         services.AddScoped<MailRelocationRecorder>();
 
+        // The deleting half beside them, and registered the same way for the same reason. Its grant is its own: filing
+        // mail in the trash is reversible and this is not, so a deployment decides the two separately.
+        services.AddScoped<MailDeletionRecorder>();
+
         // What a caller does with a record after it has one — read where it got to, and withdraw it while nothing has
         // been asked of the server. Both are about records already opened, which is why neither depends on an author.
         services.AddScoped<MailboxChangeProgressReader>();

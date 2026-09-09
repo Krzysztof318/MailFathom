@@ -813,19 +813,20 @@ $ mfctl credential create --method api-key --user 6f1c… --permission mailfatho
 $ mfctl credential list --user 6f1c…
 ```
 
-This surface's half of the published set is nine names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+This surface's half of the published set is ten names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
 `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`,
-`mailfathom.mail.move`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`, and
+`mailfathom.mail.move`, `mailfathom.mail.delete`, `mailfathom.mail.drafts.write`, `mailfathom.mail.send`, and
 `mailfathom.mail.accounts.write` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what naming no permission and naming `--no-permissions` each mean, what
 `PermissionsFromTokenScopes` turns the recorded grant into, and what is refused.
 
-Seven of the nine publish a tool here. `mailfathom.mail.accounts.write` and `mailfathom.mail.move` publish none: the
-first reaches [the client endpoint's record routes](client-endpoint.md#the-record-routes), which is where a person
-maintains which mailboxes this deployment reads for them, and the second reaches [its mutation
-routes](client-endpoint.md#the-mutation-routes), which is where they file mail into another folder. Either is written on
-an entry of this surface only because the two endpoints draw grants from one vocabulary; a caller granted one here is
+Seven of the ten publish a tool here. `mailfathom.mail.accounts.write`, `mailfathom.mail.move`, and
+`mailfathom.mail.delete` publish none: the first reaches [the client endpoint's record
+routes](client-endpoint.md#the-record-routes), which is where a person maintains which mailboxes this deployment reads
+for them, and the other two reach [its mutation routes](client-endpoint.md#the-mutation-routes), which is where they
+file mail into another folder and where they delete a message off the server outright. Any of them is written on an
+entry of this surface only because the two endpoints draw grants from one vocabulary; a caller granted one here is
 offered nothing it did not already have, and an entry that means to reach those routes is one on `ClientEndpoint`.
 
 Two things about it are this surface's own, and both are below. The first is what a grant does to what a caller is

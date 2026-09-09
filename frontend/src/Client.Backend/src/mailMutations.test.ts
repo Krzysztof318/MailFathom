@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     changeMailFlags,
+    deleteMail,
     markMailRead,
     mostMessagesPerMutation,
     mostRecordsPerRead,
@@ -328,6 +329,59 @@ describe('moveMail', () => {
         const answer = await moveMail(session, answering({ status: 403, body: '' }), [
             { storedEmailId, destinationFolder: 'work-archive' },
         ]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
+    });
+});
+
+describe('deleteMail', () => {
+    it('names the messages alone on the client surface’s delete route, and no folder in either direction', async () => {
+        const { transport, requests } = recording(recorded(storedEmailId));
+
+        await deleteMail(session, transport, [storedEmailId]);
+
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/mutations/deletes');
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({ deletes: [{ storedEmailId }] });
+    });
+
+    it('answers what became of each message, a deployment no longer holding one being its own answer', async () => {
+        const answer = await deleteMail(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    results: [
+                        { storedEmailId, outcome: 'recorded' },
+                        { storedEmailId: 'second', outcome: 'message-not-found' },
+                    ],
+                }),
+            }),
+            [storedEmailId, 'second'],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [
+                { storedEmailId, outcome: 'recorded', changes: [] },
+                { storedEmailId: 'second', outcome: 'message-not-found', changes: [] },
+            ],
+        });
+    });
+
+    it('names no more messages than one submission may carry', async () => {
+        const asked = Array.from({ length: mostMessagesPerMutation + 5 }, (_, at) => `message-${String(at)}`);
+        const { transport, requests } = recording(recorded());
+
+        await deleteMail(session, transport, asked);
+
+        const sent = JSON.parse(requests[0]?.body ?? '') as { deletes: readonly unknown[] };
+
+        expect(sent.deletes).toHaveLength(mostMessagesPerMutation);
+    });
+
+    it('says the credential may not delete mail where the deployment refused it, which is its own grant', async () => {
+        const answer = await deleteMail(session, answering({ status: 403, body: '' }), [storedEmailId]);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
     });

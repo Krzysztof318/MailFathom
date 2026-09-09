@@ -57,7 +57,8 @@ public sealed class MailFathomPermissionTests
     /// drafting permission when the tools that write a draft arrived beside it, the configuration permission when
     /// the commands that change a persisted setting did, the mail-account permission when the client surface began
     /// letting a user declare which mailboxes this deployment reads for them, and the moving permission when that
-    /// surface began serving folder moves.
+    /// surface began serving folder moves, and the deleting permission when it began letting somebody empty their
+    /// own trash.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -69,6 +70,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.mail.contacts.write",
                 "mailfathom.mail.flags.write",
                 "mailfathom.mail.move",
+                "mailfathom.mail.delete",
                 "mailfathom.mail.drafts.write",
                 "mailfathom.mail.send",
                 "mailfathom.mail.accounts.write",
@@ -125,6 +127,7 @@ public sealed class MailFathomPermissionTests
                 MailFathomPermission.MailContactsWrite,
                 MailFathomPermission.MailFlagsWrite,
                 MailFathomPermission.MailMove,
+                MailFathomPermission.MailDelete,
                 MailFathomPermission.MailDraftsWrite,
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailAccountsWrite,

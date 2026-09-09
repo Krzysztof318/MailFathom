@@ -30,6 +30,15 @@ export const mailFlagMutationsRoute = '/mutations/flags';
 /** The route a batch of folder moves is written down at, relative to the client prefix. */
 export const mailMoveMutationsRoute = '/mutations/moves';
 
+/**
+ * The route a batch of deletes is written down at, relative to the client prefix.
+ *
+ * A third route and a third grant, because deleting is the act with no way back: filing a message in the trash puts it
+ * somewhere its reader can go and fetch it, and this expunges it from the mail server. A credential may hold the move
+ * and not this one.
+ */
+export const mailDeleteMutationsRoute = '/mutations/deletes';
+
 /** The route the caller's own change records are read back at, relative to the client prefix. */
 export const mailMutationRecordsRoute = '/mutations';
 
@@ -223,6 +232,27 @@ export function moveMail(
     moves: readonly MailMove[],
 ): Promise<ClientResult<readonly MailMutationResult[]>> {
     return submit(session, transport, mailMoveMutationsRoute, { moves: moves.slice(0, mostMessagesPerMutation) });
+}
+
+/**
+ * Writes down that the named messages are to be deleted from the mail server, as one batch their reader's act authored.
+ *
+ * Nothing here names a folder or says what becomes of MailFathom's own copy: the first is not part of the act and the
+ * second is the account's configured answer, which no client decides and none displays.
+ *
+ * @param session Who is asking and where.
+ * @param transport How a request reaches the deployment.
+ * @param storedEmailIds The messages to delete, at most {@link mostMessagesPerMutation} of them.
+ * @returns One result per message the deployment answered for, or an expected failure as a value.
+ */
+export function deleteMail(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    storedEmailIds: readonly string[],
+): Promise<ClientResult<readonly MailMutationResult[]>> {
+    return submit(session, transport, mailDeleteMutationsRoute, {
+        deletes: storedEmailIds.slice(0, mostMessagesPerMutation).map((storedEmailId) => ({ storedEmailId })),
+    });
 }
 
 /** Puts one batch on the wire and reads what came back, which is the same exchange whichever act asked for it. */

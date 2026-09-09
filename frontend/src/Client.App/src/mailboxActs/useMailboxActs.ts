@@ -65,6 +65,15 @@ export interface MailboxActs {
     readonly destinationsOf: (messages: readonly ActedMessage[]) => readonly MoveDestination[];
 
     /**
+     * Whether `delete` would destroy those messages rather than file them in the trash.
+     *
+     * Asked here rather than worked out per surface, because the folders it is read from are the provider's and the two
+     * surfaces that need the answer — the question standing in front of the act, and the report of what it came to —
+     * would otherwise each hold a copy of the rule and could disagree about which act somebody just performed.
+     */
+    readonly deletesPermanently: (messages: readonly ActedMessage[]) => boolean;
+
+    /**
      * Performs an act and reports what it came to through the toast surface.
      *
      * Safe to call for an act `refusalOf` refuses: nothing is submitted, so a control that was drawn before the answer
@@ -84,6 +93,7 @@ export const nothingActed: MailboxActs = {
     asked: new Map(),
     refusalOf: () => 'notOffered',
     destinationsOf: () => [],
+    deletesPermanently: () => false,
     perform: () => undefined,
 };
 

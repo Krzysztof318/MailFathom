@@ -331,6 +331,79 @@ public sealed class ClientMailMutationsEndpointTests
         Assert.Null(move.Change);
     }
 
+    /// <summary>A batch naming no delete asks for nothing, exactly as one naming no move does.</summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_ABatchNamingNoMessage_IsRefused()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest(RequestId: null, []),
+            this.DeletionRecorder(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, RefusalOf(result).StatusCode);
+    }
+
+    /// <summary>
+    /// The delete route's own translation, driven through the use case: the record it publishes names the delete
+    /// mutation, and no part of the answer says what became of the local copy.
+    /// </summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_ADeleteTheUseCaseRecords_PutsTheRecordOnTheWire()
+    {
+        // Arrange
+        this.RecordEveryRequest();
+
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
+            this.DeletionRecorder(TargetInInbox()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deleted = Assert.Single(Assert.IsType<Ok<ClientMailDeletesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(Message, deleted.StoredEmailId);
+        Assert.Equal(ClientMailChangeOutcomes.Recorded, deleted.Outcome);
+        Assert.Equal(MailboxMutation.Delete.Name, deleted.Change?.Mutation);
+    }
+
+    /// <summary>A message the use case cannot find is that message's own result, because a batch carries on past one that has gone.</summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_AMessageTheUseCaseCannotFind_PublishesTheUseCasesOwnAnswer()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
+            this.DeletionRecorder(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deleted = Assert.Single(Assert.IsType<Ok<ClientMailDeletesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, deleted.Outcome);
+        Assert.Null(deleted.Change);
+    }
+
+    /// <summary>An identifier naming no message is answered about that entry rather than refusing the batch it travelled in.</summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_AnEntryNamingTheEmptyIdentifier_ReportsThatEntryAlone()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Guid.Empty)]),
+            this.DeletionRecorder(TargetInInbox()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var deleted = Assert.Single(Assert.IsType<Ok<ClientMailDeletesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, deleted.Outcome);
+        await this.records.DidNotReceiveWithAnyArgs()
+            .OpenAsync(default!, default!, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>A withdrawal naming nothing is a request with nothing to take back.</summary>
     [Fact]
     public async Task WithdrawFlagChangesAsync_NoRecordNamed_IsRefused()
@@ -522,6 +595,30 @@ public sealed class ClientMailMutationsEndpointTests
         Substitute.For<IAuthoredDeleteEmailDispositionReader>(),
         this.records,
         CommitPolicy());
+
+    /// <summary>Builds the deleting use case the route is given, under the grant that route carries.</summary>
+    /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
+    private MailDeletionRecorder DeletionRecorder(AuthoredMailboxTarget? target = null)
+    {
+        var targets = Substitute.For<IAuthoredMailboxTargetReader>();
+        targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
+
+        var dispositions = Substitute.For<IAuthoredDeleteEmailDispositionReader>();
+        dispositions
+            .GetAuthoredDeleteDisposition(Arg.Any<MailAccountId>())
+            .Returns(AuthoredDeleteEmailDisposition.RetainTombstone);
+
+        return new MailDeletionRecorder(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDelete),
+            ScopeResolver(
+                target is null
+                    ? null
+                    : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
+            targets,
+            dispositions,
+            this.records,
+            CommitPolicy());
+    }
 
     /// <summary>Builds a destination resolver that reaches nothing, because no test here gets as far as resolving a folder.</summary>
     private static MailboxDestinationResolver DestinationResolver() => new(

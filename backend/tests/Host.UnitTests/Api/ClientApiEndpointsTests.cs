@@ -153,6 +153,7 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MutationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.DeleteMutationsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.FlagMutationsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveMutationsRoute}",
@@ -262,6 +263,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientMailSearchPhraseEndpoint.MailSearchPhrasingRoute} -> {MailFathomPermission.MailAsk.Name}",
+                $"POST {prefix}{ClientMailMutationsEndpoint.DeleteMutationsRoute} -> {MailFathomPermission.MailDelete.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagMutationsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
@@ -315,7 +317,7 @@ public sealed class ClientApiEndpointsTests
     /// could not tell apart: the caller's own client preferences, the caller's own portrait, and the client handing
     /// over its own telemetry.
     /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
-    /// changing a flag, and moving a message are separately provisioned powers, so a route that changes anything under
+    /// changing a flag, moving a message, and deleting one are separately provisioned powers, so a route that changes anything under
     /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
     /// to read a mailbox would then send from it.
     /// </summary>
@@ -365,7 +367,8 @@ public sealed class ClientApiEndpointsTests
                 || published.Permission == MailFathomPermission.MailDraftsWrite
                 || published.Permission == MailFathomPermission.MailSend
                 || published.Permission == MailFathomPermission.MailFlagsWrite
-                || published.Permission == MailFathomPermission.MailMove);
+                || published.Permission == MailFathomPermission.MailMove
+                || published.Permission == MailFathomPermission.MailDelete);
 
     /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
     /// <remarks>

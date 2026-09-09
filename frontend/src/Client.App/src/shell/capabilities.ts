@@ -19,6 +19,7 @@ export const clientCapabilities = [
     'askMail',
     'writeMailFlags',
     'fileMail',
+    'deleteMail',
     'composeMail',
     'sendMail',
 ] as const;
@@ -35,6 +36,7 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     askMail: 'mailfathom.mail.ask',
     writeMailFlags: 'mailfathom.mail.flags.write',
     fileMail: 'mailfathom.mail.move',
+    deleteMail: 'mailfathom.mail.delete',
     composeMail: 'mailfathom.mail.drafts.write',
     sendMail: 'mailfathom.mail.send',
 };

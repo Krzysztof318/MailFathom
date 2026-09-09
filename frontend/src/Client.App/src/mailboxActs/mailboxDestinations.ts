@@ -57,6 +57,27 @@ export function folderWithRole(
     return foldersOf(directory, account).find((folder) => folder.role === role)?.alias ?? null;
 }
 
+/**
+ * Whether deleting these messages destroys them rather than filing them, which decides both the grant it is reached
+ * under and the question standing in front of it.
+ *
+ * True exactly where every one of them is already in its own account's trash. *Delete* is one control with one symbol,
+ * and what it means is read off where the mail already is — filing a message into the folder it is in would be answered
+ * `already-in-destination` and change nothing, so a trash that could not be emptied would be a control that does
+ * nothing wherever it is most likely to be pressed.
+ *
+ * Every one rather than any: a selection reaching outside the trash — from a search, say — is one press that would
+ * otherwise mean two different acts at once, and the reversible reading of it is the one to take. Those already in the
+ * trash are then answered as already there, which is what the deployment says about them today.
+ */
+export function deletesPermanently(directory: MailFolderDirectory | null, messages: readonly ActedMessage[]): boolean {
+    return (
+        directory !== null &&
+        messages.length > 0 &&
+        messages.every((message) => folderWithRole(directory, message.account, 'Trash') === message.folder)
+    );
+}
+
 /** The accounts the named messages are in, each named once. */
 export function accountsAmong(messages: readonly ActedMessage[]): readonly string[] {
     return [...new Set(messages.map((message) => message.account))];
@@ -89,31 +110,41 @@ export function destinationsFor(
  * @param act What is being asked for.
  * @param messages The messages it would be about.
  * @param directory The user's folders, or `null` where they have not been read.
- * @param offered Whether the credential may write the flags an act needs and move mail.
+ * @param offered Whether the credential may write the flags an act needs, move mail, and delete it.
  */
 export function refusalFor(
     act: MailboxAct,
     messages: readonly ActedMessage[],
     directory: MailFolderDirectory | null,
-    offered: { readonly flags: boolean; readonly moves: boolean },
+    offered: { readonly flags: boolean; readonly moves: boolean; readonly deletes: boolean },
 ): ActRefusal | null {
     if (messages.length === 0) {
         return 'nothingToActOn';
     }
 
-    if (!(changesAFlag(act) ? offered.flags : offered.moves)) {
-        return 'notOffered';
-    }
-
     if (changesAFlag(act)) {
-        return null;
+        return offered.flags ? null : 'notOffered';
     }
 
     // The three acts below are folder moves, and folders this client has not read are not folders an account does not
     // have. Said apart for that reason: a read that failed and a mailbox labelling no archive would otherwise reach a
     // reader as the same sentence, and only one of the two is something they can do anything about.
+    //
+    // A credential holding neither grant is told that instead, because the folders are not read at all without one:
+    // `foldersUnknown` would name a read nobody was ever going to make, and offer a second attempt at it.
     if (directory === null) {
-        return 'foldersUnknown';
+        return offered.moves || offered.deletes ? 'foldersUnknown' : 'notOffered';
+    }
+
+    // Read before the moving grant, because a delete in the trash is not reached under it: a credential that may
+    // destroy mail and not file it can still empty the trash, and one that may file mail and not destroy it is told so
+    // here rather than by the route refusing what a control had already offered.
+    if (act === 'delete' && deletesPermanently(directory, messages)) {
+        return offered.deletes ? null : 'notOffered';
+    }
+
+    if (!offered.moves) {
+        return 'notOffered';
     }
 
     switch (act) {

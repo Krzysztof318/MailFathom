@@ -47,6 +47,15 @@ namespace MailFathom.Host.Api;
 /// resolves, never as a change still quietly converging.
 /// </para>
 /// <para>
+/// <b>Deleting is a third route and a third grant, and it is the one with no way back.</b> Filing a message in the
+/// trash is a move, and a person who does it can go and fetch it; deleting expunges the remote occurrence, so
+/// <see cref="MailFathomPermission.MailDelete" /> is granted apart from
+/// <see cref="MailFathomPermission.MailMove" /> and a deployment lets a credential file mail without letting it destroy
+/// mail. It has no withdrawal route beside it for the reason the route's own remark gives, and it names no folder in
+/// either direction: what becomes of MailFathom's own copy is the account's configured disposition rather than
+/// anything a caller states or reads back.
+/// </para>
+/// <para>
 /// Nothing on this surface sets <c>\Seen</c> as a consequence of anything. Marking a message read is a change a caller
 /// asks for here like any other, which is what
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
@@ -74,6 +83,15 @@ internal static class ClientMailMutationsEndpoint
 
     /// <summary>The route folder moves are withdrawn at.</summary>
     internal const string MoveWithdrawalsRoute = $"{MoveMutationsRoute}/withdrawals";
+
+    /// <summary>The route deletes are submitted at.</summary>
+    /// <remarks>
+    /// It has no withdrawal route beside it, unlike the two above. A withdrawal stops a record nothing has issued yet,
+    /// which is a way back this act deliberately does not offer: the client asks its question before the record is
+    /// opened rather than after, so what would be withdrawn is a delete somebody has already been told cannot be
+    /// undone. Adding the route would publish a second way back nothing draws.
+    /// </remarks>
+    internal const string DeleteMutationsRoute = $"{MutationsRoute}/deletes";
 
     /// <summary>The greatest number of messages, moves, or withdrawals one request may carry in its body.</summary>
     /// <remarks>
@@ -135,6 +153,13 @@ internal static class ClientMailMutationsEndpoint
         api.MapPost(MoveWithdrawalsRoute, WithdrawMovesAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.MailMove);
+
+        // Its own grant rather than the one that moves mail, for the reason the permission itself states: filing a
+        // message in the trash is the reversible half of deleting and this is the half that is not, so an operator
+        // withholds one without withholding the other.
+        api.MapPost(DeleteMutationsRoute, SubmitDeletesAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailDelete);
     }
 
     /// <summary>Reports where each of the named changes stands.</summary>
@@ -249,6 +274,46 @@ internal static class ClientMailMutationsEndpoint
         }
 
         return TypedResults.Ok(new ClientMailMovesResponse(results));
+    }
+
+    /// <summary>Writes down the deletes one batch asks for, one message at a time.</summary>
+    /// <param name="request">The messages to delete from the mail server.</param>
+    /// <param name="recorder">Writes one delete down.</param>
+    /// <param name="cancellationToken">Cancels the resolutions and the writes when the client disconnects.</param>
+    /// <returns><c>200</c> with one result per message, <c>400</c> when the batch itself is not one this boundary accepts, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.delete</c>.</returns>
+    /// <remarks>Nothing names a folder, in either direction: which folder a message is in decides nothing about whether this deployment writes the delete down, and the client's rule that the act is offered only in the trash is a sentence on a screen rather than a second policy here.</remarks>
+    internal static async Task<Results<Ok<ClientMailDeletesResponse>, ProblemHttpResult>> SubmitDeletesAsync(
+        [FromBody] ClientMailDeletesRequest? request,
+        [FromServices] MailDeletionRecorder recorder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(recorder);
+
+        if (request?.Deletes is not { Count: > 0 } deletes)
+        {
+            return Refusal("A batch of deletes names at least one message.");
+        }
+
+        if (deletes.Count > MaximumChangesPerRequest)
+        {
+            return TooMany();
+        }
+
+        var requester = RequesterOf(request.RequestId);
+
+        if (requester is null)
+        {
+            return UnusableRequestId();
+        }
+
+        var results = new List<ClientMailDeleteResultResponse>(deletes.Count);
+
+        foreach (var deletion in deletes)
+        {
+            results.Add(await RecordDeleteAsync(recorder, deletion, requester, cancellationToken));
+        }
+
+        return TypedResults.Ok(new ClientMailDeletesResponse(results));
     }
 
     /// <summary>Withdraws flag and tag changes that have not reached the mail server.</summary>
@@ -380,6 +445,28 @@ internal static class ClientMailMutationsEndpoint
             cancellationToken);
 
         return ClientMailMoveResultResponse.For(move.StoredEmailId, result);
+    }
+
+    /// <summary>Writes one delete down, reporting the use case's own answer as that message's result.</summary>
+    private static async Task<ClientMailDeleteResultResponse> RecordDeleteAsync(
+        MailDeletionRecorder recorder,
+        ClientMailDeleteRequest? deletion,
+        MailboxMutationRequester requester,
+        CancellationToken cancellationToken)
+    {
+        if (deletion is null || deletion.StoredEmailId == Guid.Empty)
+        {
+            return ClientMailDeleteResultResponse.NotRecorded(
+                deletion?.StoredEmailId ?? Guid.Empty,
+                MailDeletionOutcome.MessageNotFound);
+        }
+
+        var result = await recorder.RecordAsync(
+            StoredEmailId.Create(deletion.StoredEmailId),
+            requester,
+            cancellationToken);
+
+        return ClientMailDeleteResultResponse.For(deletion.StoredEmailId, result);
     }
 
     /// <summary>Names the invocation asking, from what the caller supplied or from an identity of MailFathom's own.</summary>
@@ -629,6 +716,69 @@ internal sealed record ClientMailMoveResultResponse(
             nameof(outcome),
             outcome,
             "A move outcome is one this surface publishes."),
+    };
+}
+
+/// <summary>One batch of deletes, each naming the message it is about.</summary>
+/// <param name="RequestId">The caller's own identity for this request, or <see langword="null" /> to have one generated.</param>
+/// <param name="Deletes">The messages to delete, at most the batch bound this surface publishes.</param>
+internal sealed record ClientMailDeletesRequest(string? RequestId, IReadOnlyList<ClientMailDeleteRequest> Deletes);
+
+/// <summary>One message to delete from the mail server.</summary>
+/// <param name="StoredEmailId">The message to delete, as a list row, a conversation, or a search published it.</param>
+/// <remarks>It names nothing else. What becomes of MailFathom's own copy is the account's configured answer, so a caller that could state it here would be deciding an operator's posture from a screen.</remarks>
+internal sealed record ClientMailDeleteRequest(Guid StoredEmailId);
+
+/// <summary>What one batch of deletes produced, one result per message it named.</summary>
+/// <param name="Results">One entry per message, in the order the batch stated them.</param>
+internal sealed record ClientMailDeletesResponse(IReadOnlyList<ClientMailDeleteResultResponse> Results);
+
+/// <summary>What asking to delete one message produced.</summary>
+/// <param name="StoredEmailId">The message the entry answers for, as the request named it.</param>
+/// <param name="Outcome">What happened, as the outcome's own name.</param>
+/// <param name="Change">The durable record the delete is carried by, and <see langword="null" /> where none was opened.</param>
+internal sealed record ClientMailDeleteResultResponse(
+    Guid StoredEmailId,
+    string Outcome,
+    ClientMailRecordedChangeResponse? Change)
+{
+    /// <summary>Describes what the use case answered about one delete.</summary>
+    /// <param name="storedEmailId">The message the entry answers for.</param>
+    /// <param name="result">What the use case answered.</param>
+    /// <returns>The response entry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
+    internal static ClientMailDeleteResultResponse For(Guid storedEmailId, AuthoredMailDeletionResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return new ClientMailDeleteResultResponse(
+            storedEmailId,
+            OutcomeOf(result.Outcome),
+            result is { RecordId: { } recordId, Lifecycle: { } lifecycle }
+                ? new ClientMailRecordedChangeResponse(
+                    MailboxMutation.Delete.Name,
+                    recordId.Value,
+                    lifecycle.Name)
+                : null);
+    }
+
+    /// <summary>Describes a delete the boundary refused before the use case was reached.</summary>
+    /// <param name="storedEmailId">The message the entry answers for.</param>
+    /// <param name="outcome">The reason nothing was written down.</param>
+    /// <returns>The response entry.</returns>
+    internal static ClientMailDeleteResultResponse NotRecorded(Guid storedEmailId, MailDeletionOutcome outcome) =>
+        new(storedEmailId, OutcomeOf(outcome), Change: null);
+
+    /// <summary>Reads the published outcome the use case's own answer names.</summary>
+    private static string OutcomeOf(MailDeletionOutcome outcome) => outcome switch
+    {
+        MailDeletionOutcome.Recorded => ClientMailChangeOutcomes.Recorded,
+        MailDeletionOutcome.MessageNotFound => ClientMailChangeOutcomes.MessageNotFound,
+        MailDeletionOutcome.AccountNoLongerConfigured => ClientMailChangeOutcomes.AccountNoLongerConfigured,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(outcome),
+            outcome,
+            "A delete outcome is one this surface publishes."),
     };
 }
 

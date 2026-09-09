@@ -4,10 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailFolder, MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
-import { destinationsFor, filingFor, folderWithRole, refusalFor } from './mailboxDestinations';
+import { deletesPermanently, destinationsFor, filingFor, folderWithRole, refusalFor } from './mailboxDestinations';
 import type { ActedMessage } from './useMailboxActs';
 
-const everythingOffered = { flags: true, moves: true };
+const everythingOffered = { flags: true, moves: true, deletes: true };
 
 function folder(alias: string, role: MailFolderRole | null, path: readonly string[]): MailFolder {
     return {
@@ -54,6 +54,10 @@ function inWork(storedEmailId: string): ActedMessage {
 
 const atHome: ActedMessage = { storedEmailId: 'message-9', account: 'home', folder: 'home-inbox' };
 
+function inWorkTrash(storedEmailId: string): ActedMessage {
+    return { storedEmailId, account: 'work', folder: 'work-trash' };
+}
+
 describe('folderWithRole', () => {
     it('names the folder an account labels with the role, which is the only thing that says what archiving means', () => {
         expect(folderWithRole(wholeMailbox, 'work', 'Archive')).toBe('work-archive');
@@ -86,16 +90,16 @@ describe('destinationsFor', () => {
 
 describe('refusalFor', () => {
     it('refuses an act about nothing before it asks what the credential may do', () => {
-        expect(refusalFor('flag', [], null, { flags: false, moves: false })).toBe('nothingToActOn');
+        expect(refusalFor('flag', [], null, { flags: false, moves: false, deletes: false })).toBe('nothingToActOn');
     });
 
     it.each([
-        ['flag', { flags: false, moves: true }],
-        ['unflag', { flags: false, moves: true }],
-        ['markUnread', { flags: false, moves: true }],
-        ['archive', { flags: true, moves: false }],
-        ['delete', { flags: true, moves: false }],
-        ['move', { flags: true, moves: false }],
+        ['flag', { flags: false, moves: true, deletes: true }],
+        ['unflag', { flags: false, moves: true, deletes: true }],
+        ['markUnread', { flags: false, moves: true, deletes: true }],
+        ['archive', { flags: true, moves: false, deletes: true }],
+        ['delete', { flags: true, moves: false, deletes: true }],
+        ['move', { flags: true, moves: false, deletes: true }],
     ] as const)(
         'says a credential without the grant may not %s, rather than letting the act be refused',
         (act, offered) => {
@@ -147,6 +151,57 @@ describe('refusalFor', () => {
             expect(refusalFor(act, [inWork('message-1')], null, everythingOffered)).toBe('foldersUnknown');
         },
     );
+
+    it('says a credential holding neither grant may not act, rather than offering a folder read nobody would make', () => {
+        expect(refusalFor('delete', [inWork('message-1')], null, { flags: true, moves: false, deletes: false })).toBe(
+            'notOffered',
+        );
+    });
+
+    it('reaches a delete in the trash under the deleting grant rather than the moving one', () => {
+        expect(
+            refusalFor('delete', [inWorkTrash('message-1')], wholeMailbox, {
+                flags: false,
+                moves: false,
+                deletes: true,
+            }),
+        ).toBeNull();
+    });
+
+    it('refuses a delete in the trash for a credential that may file mail but not destroy it', () => {
+        expect(
+            refusalFor('delete', [inWorkTrash('message-1')], wholeMailbox, {
+                flags: false,
+                moves: true,
+                deletes: false,
+            }),
+        ).toBe('notOffered');
+    });
+});
+
+describe('deletesPermanently', () => {
+    it('reads a message already in its own account trash as one the act would destroy', () => {
+        expect(deletesPermanently(wholeMailbox, [inWorkTrash('message-1')])).toBe(true);
+    });
+
+    it('reads a message anywhere else as one the act would file, which is what makes it reversible', () => {
+        expect(deletesPermanently(wholeMailbox, [inWork('message-1')])).toBe(false);
+    });
+
+    it('takes the reversible reading of a selection reaching outside the trash, rather than two acts in one press', () => {
+        expect(deletesPermanently(wholeMailbox, [inWorkTrash('message-1'), inWork('message-2')])).toBe(false);
+    });
+
+    it('reads a trash folder as its own account, so an alias another account uses decides nothing', () => {
+        const elsewhere: ActedMessage = { storedEmailId: 'message-3', account: 'home', folder: 'work-trash' };
+
+        expect(deletesPermanently(wholeMailbox, [elsewhere])).toBe(false);
+    });
+
+    it('destroys nothing where the folders were never read, and nothing where there is nothing to act on', () => {
+        expect(deletesPermanently(null, [inWorkTrash('message-1')])).toBe(false);
+        expect(deletesPermanently(wholeMailbox, [])).toBe(false);
+    });
 });
 
 describe('filingFor', () => {

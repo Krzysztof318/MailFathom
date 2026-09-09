@@ -19,6 +19,7 @@ const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     askMail: 'grant.askMail',
     writeMailFlags: 'grant.writeMailFlags',
     fileMail: 'grant.fileMail',
+    deleteMail: 'grant.deleteMail',
     composeMail: 'grant.composeMail',
     sendMail: 'grant.sendMail',
 };

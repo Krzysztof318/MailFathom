@@ -68,6 +68,22 @@ describe('MailboxActControls', () => {
         expect(within(asked).getByText('You can take this back for 5 seconds afterwards.')).toBeDefined();
     });
 
+    it('asks about destroying rather than filing where the messages are already in the trash, and offers no way back', () => {
+        drawControls({ deletesPermanently: () => true }, [invoice, receipt]);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        const asked = screen.getByRole('dialog');
+
+        expect(within(asked).getByRole('heading', { name: 'Delete 2 messages permanently?' })).toBeDefined();
+        expect(
+            within(asked).getByText(
+                'Already in the trash — deleting now removes 2 messages together with attachments.',
+            ),
+        ).toBeDefined();
+        expect(within(asked).getByText('This cannot be undone.')).toBeDefined();
+        expect(within(asked).getByRole('button', { name: 'Delete permanently' })).toBeDefined();
+    });
+
     it('deletes nothing where the question was answered with the way back out of it', () => {
         const performed = vi.fn();
         const acted = vi.fn();
