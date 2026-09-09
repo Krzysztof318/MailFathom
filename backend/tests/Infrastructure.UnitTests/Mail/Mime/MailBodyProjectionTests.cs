@@ -474,6 +474,32 @@ public sealed class MailBodyProjectionTests
         Assert.Equal("Readable", TextOf(document));
     }
 
+    /// <summary>A layout table is walked under the same bounds a drawn one is, so unwrapping buys no free walk.</summary>
+    /// <remarks>
+    /// A wrapper is layout by being nested alone, so the rows inside one are a stranger's choice — and removing the
+    /// border is a decision about how content is drawn rather than a reason to walk a shape this reduction would have
+    /// refused to draw.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_LayoutTableWithMoreRowsThanTheBound_StopsAtItAndSaysSo()
+    {
+        // Arrange
+        var rows = string.Concat(
+            Enumerable
+                .Range(0, MailDocumentBounds.Default.MaximumTableRows + 20)
+                .Select(number => $"<tr><td>Row {number.ToString(CultureInfo.InvariantCulture)}</td></tr>"));
+
+        // Act
+        var document = await DocumentOf($"<table role=\"presentation\">{rows}</table>");
+
+        // Assert
+        Assert.True(document.Truncated);
+        Assert.DoesNotContain(
+            $"Row {(MailDocumentBounds.Default.MaximumTableRows + 10).ToString(CultureInfo.InvariantCulture)}",
+            TextOf(document),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A one-column table of sentences is as likely to be a table somebody drew, so it stays one.</summary>
     /// <remarks>
     /// This is the boundary the layout rule is written against rather than an incidental case: unwrapping every

@@ -555,7 +555,9 @@ cells holds content that is itself blocks rather than words. The rule is deliber
 second condition. Unwrapping a two-column table would run its columns together into a paragraph, which is a loss a
 reader cannot recover from, while a border they did not need is one they can ignore; and a lone one-column table of
 sentences is as likely to be a list of dates or terms somebody drew on purpose as it is a wrapper, so it stays a table
-until the markup says otherwise.
+until the markup says otherwise. Unwrapping walks under the same row and cell ceilings drawing the table would have
+been held to, and a layout table past either stops there and marks the document truncated — so a wrapper is not a way
+around a bound a drawn table answers to.
 
 An alignment such a table declared goes with it. It described where the box it positioned sat rather than how the words
 inside that box read, so carrying it into the unwrapped content is what centred a whole message that was only ever

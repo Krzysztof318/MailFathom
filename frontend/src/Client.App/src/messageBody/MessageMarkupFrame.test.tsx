@@ -89,6 +89,16 @@ describe('MessageMarkupFrame', () => {
         expect(opened).toEqual(['https://example.test/offer']);
     });
 
+    it('says so where the head could not open the link that was followed', async () => {
+        drawing('<p>As the sender wrote it.</p>', () => Promise.reject(new Error('no handler for it')));
+
+        reporting({ link: 'https://example.test/offer' });
+
+        // A press that quietly did nothing is the defect this surface exists to remove wearing another face, and the
+        // desktop head's opener is the one that genuinely rejects.
+        expect(await screen.findByText('This link could not be opened.')).toBeDefined();
+    });
+
     it('draws nothing at all where the deployment served no markup for this message', () => {
         drawing('');
 

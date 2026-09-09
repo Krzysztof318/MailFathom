@@ -95,9 +95,10 @@ internal static class MailTableReducer
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The rows and the cells are read exactly as <see cref="Reduce" /> reads them, because they still never pass
-    /// through the element walk: a hidden row or cell is dropped and read for what it would have loaded, and what a
-    /// visible one names is counted. Removing the table is a decision about how the content is drawn and never about
-    /// what the reader is told the message would have fetched.
+    /// through the element walk: a hidden row or cell is dropped and read for what it would have loaded, what a
+    /// visible one names is counted, and the walk stops at the same row and cell bounds. Removing the table is a
+    /// decision about how the content is drawn and never about what the reader is told the message would have
+    /// fetched, nor about how much of a stranger's markup this is willing to walk.
     /// </remarks>
     internal static IReadOnlyList<MailDocumentBlock> Unwrap(
         IElement element,
@@ -108,10 +109,25 @@ internal static class MailTableReducer
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reducer);
 
+        var bounds = reducer.Bounds;
         var unwrapped = new List<MailDocumentBlock>();
+        var rowsWalked = 0;
 
         foreach (var row in RowsOf(element, reducer))
         {
+            // The same two bounds Reduce is held to, and for the same reason: the cost of a table is the sender's to
+            // choose otherwise. Removing the border is a decision about how the content is drawn, and it is not a
+            // reason to walk a shape this reduction would have refused to draw — a wrapper is layout by nesting
+            // alone, so a message can put as many rows inside one as it likes.
+            if (rowsWalked >= bounds.MaximumTableRows)
+            {
+                reducer.NoteTruncated();
+
+                break;
+            }
+
+            rowsWalked++;
+
             if (MailStyleReader.Read(row).Hidden)
             {
                 reducer.NoteHiddenReferences(row);
@@ -121,8 +137,19 @@ internal static class MailTableReducer
 
             reducer.NoteRemoteReferences(row);
 
+            var cellsWalked = 0;
+
             foreach (var cell in row.Children.Where(IsCell))
             {
+                if (cellsWalked >= bounds.MaximumTableCells)
+                {
+                    reducer.NoteTruncated();
+
+                    break;
+                }
+
+                cellsWalked++;
+
                 var style = MailStyleReader.Read(cell);
                 if (style.Hidden)
                 {

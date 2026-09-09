@@ -49,8 +49,7 @@ import { useLinkOpener } from '../shellOperations/linkOpener';
 export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
     const { translate } = useLocalization();
     const frame = useRef<HTMLIFrameElement>(null);
-
-    useFollowedLinks(frame);
+    const refused = useFollowedLinks(frame);
 
     if (markup === '') {
         return null;
@@ -60,13 +59,16 @@ export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
     // measuring script would take that scrolling away with it: hiding the framed document's overflow is what an
     // embedded frame needs and is exactly wrong on the one surface that is meant to scroll.
     return (
-        <iframe
-            ref={frame}
-            title={translate('fullHtml.frame')}
-            sandbox="allow-scripts"
-            srcDoc={documentAround(markup, linkScript)}
-            className="min-h-0 w-full flex-1 border-0 bg-sender-markup"
-        />
+        <>
+            <iframe
+                ref={frame}
+                title={translate('fullHtml.frame')}
+                sandbox="allow-scripts"
+                srcDoc={documentAround(markup, linkScript)}
+                className="min-h-0 w-full flex-1 border-0 bg-sender-markup"
+            />
+            {refused ? <p className="px-3 py-1.5 text-sm text-warning">{translate('link.couldNotOpen')}</p> : null}
+        </>
     );
 }
 
@@ -166,8 +168,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
     const { translate } = useLocalization();
     const frame = useRef<HTMLIFrameElement>(null);
     const [fitted, setFitted] = useState<Fitted>(beforeAnythingReported);
-
-    useFollowedLinks(frame);
+    const refused = useFollowedLinks(frame);
 
     // The one thing outside React this surface synchronizes with, and it is two: a report arriving from inside the
     // frame, and the wait running out before one does. Both are registered once, because a frame belongs to the
@@ -222,6 +223,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
             <p className="flex items-center gap-2 border-t border-line bg-sunken px-3 py-1.5 text-xs text-muted">
                 <Icon name="lock" className="size-3.5" />
                 {translate(fittingNotes[fitted.fitting])}
+                {refused ? <span className="text-warning">{translate('link.couldNotOpen')}</span> : null}
             </p>
         </div>
     );
@@ -253,9 +255,12 @@ const followableSchemes = ['http:', 'https:', 'mailto:', 'tel:'];
  * arrives is read out of an `unknown` and held against the schemes above before anything is asked to open it. Matching
  * on the source rather than on the origin is the same rule the height report follows and for the same reason: an
  * opaque origin serializes as the string `"null"`, which every sandboxed frame on the page reports.
+ *
+ * @returns whether the last link this reader followed could not be opened, which the surface draws.
  */
-function useFollowedLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+function useFollowedLinks(frame: RefObject<HTMLIFrameElement | null>): boolean {
     const openLink = useLinkOpener();
+    const [refused, setRefused] = useState(false);
 
     useEffect(() => {
         function reported(event: MessageEvent): void {
@@ -266,10 +271,15 @@ function useFollowedLinks(frame: RefObject<HTMLIFrameElement | null>): void {
             const target = followableTargetIn(event.data);
 
             if (target !== null) {
-                // A reader following a link they clicked is a gesture no head refuses, and the opener already reports
-                // nothing on the web head. There is therefore no failure to draw here, and the frame has no place to
-                // draw one anyway.
-                void openLink(target).catch(() => undefined);
+                setRefused(false);
+
+                // The desktop head's opener can genuinely reject — an unregistered scheme, no handler, an operating
+                // system that refused — and a press that then does nothing is the defect this whole surface exists to
+                // remove wearing a different face. So the failure is drawn, in the same sentence a link in the reading
+                // pane draws it in.
+                void openLink(target).catch(() => {
+                    setRefused(true);
+                });
             }
         }
 
@@ -279,6 +289,8 @@ function useFollowedLinks(frame: RefObject<HTMLIFrameElement | null>): void {
             window.removeEventListener('message', reported);
         };
     }, [frame, openLink]);
+
+    return refused;
 }
 
 /** What a report names, or nothing where it names no target this application may open. */
