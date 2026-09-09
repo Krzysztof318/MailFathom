@@ -392,7 +392,11 @@ export function MailSpace({
                             asks in are not text read line by line and have no measure to keep. */}
                         <div className="min-h-0 flex-1 overflow-y-auto">{mail}</div>
 
-                        {intent}
+                        {/* The field goes with the panels. What the *fullscreen* control takes away is everything
+                            standing around the message — the head above it and the conversation's own state — and the
+                            field asking about it is the last of those: a column cleared of every panel with one row of
+                            controls still under it is not the screen that control promises. */}
+                        {workspace.panelsHidden ? null : intent}
                     </section>
                 ) : null}
             </div>

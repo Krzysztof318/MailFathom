@@ -41,6 +41,18 @@ type DisclosedRole = Exclude<MailParticipantRole, 'From'>;
 
 const roleOrder: readonly DisclosedRole[] = ['Sender', 'ReplyTo', 'To', 'Cc', 'Bcc'];
 
+// How long the conversation a head stands over is, which the design writes at the end of the author's own line. A form
+// per plural category rather than a number appended to a sentence, for the reason the conversation's reveal control
+// takes one: Polish words one message, two, and five differently.
+const messagesHeld: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'thread.held.other',
+    one: 'thread.held.one',
+    two: 'thread.held.other',
+    few: 'thread.held.few',
+    many: 'thread.held.many',
+    other: 'thread.held.other',
+};
+
 const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
     Sender: 'participant.sender',
     ReplyTo: 'participant.replyTo',
@@ -52,11 +64,30 @@ const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
 export function MessageHeaders({
     headers,
     message,
+    subject: subjectOfTheWhole,
+    messagesInThread,
+    children,
 }: {
     readonly headers: MailMessageHeaders;
 
     /** The message the head's acts are about, which is the one being read. */
     readonly message: HeadMessage;
+
+    /**
+     * What the head is called where that is not this message's own subject — a conversation says its own subject once,
+     * and the message standing in it may be an answer whose subject carries a prefix.
+     */
+    readonly subject?: string;
+
+    /**
+     * How many messages the conversation holds, where the head stands over one, or `null` where it stands over a
+     * message read on its own. The design writes it at the end of the same line the author and the instant are on
+     * rather than as a sentence of its own.
+     */
+    readonly messagesInThread?: number | null;
+
+    /** What the head says under that line, which is whatever the surface owes about what it could not assemble. */
+    readonly children?: ReactNode;
 }) {
     const { locale, translate } = useLocalization();
     const twoPanes = useTwoPanes();
@@ -66,7 +97,8 @@ export function MessageHeaders({
     const others = headers.participants.filter((participant) => participant.role !== 'From');
     const author = authors.length === 0 ? translate('message.noAuthor') : authors.map((one) => named(one)).join(', ');
     const sentAt = wordInstant(headers.sentAt, locale, 'stamp');
-    const subject = headers.subject ?? translate('message.noSubject');
+    const subject = subjectOfTheWhole ?? headers.subject ?? translate('message.noSubject');
+    const held = messagesInThread ?? null;
 
     const authorLine = (
         <>
@@ -76,6 +108,17 @@ export function MessageHeaders({
                 <>
                     <span aria-hidden="true">{translate('message.authorThenWhen')}</span>
                     <time dateTime={headers.sentAt ?? undefined}>{sentAt}</time>
+                </>
+            )}
+
+            {held === null || held < 2 ? null : (
+                <>
+                    <span aria-hidden="true">{translate('message.authorThenWhen')}</span>
+                    <span>
+                        {translate(messagesHeld[new Intl.PluralRules(locale).select(held)], {
+                            count: new Intl.NumberFormat(locale).format(held),
+                        })}
+                    </span>
                 </>
             )}
         </>
@@ -123,6 +166,8 @@ export function MessageHeaders({
                     {translate('message.sentAtUnknown')}
                 </p>
             ) : null}
+
+            {children}
         </header>
     );
 }

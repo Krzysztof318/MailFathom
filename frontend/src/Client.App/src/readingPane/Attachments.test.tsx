@@ -11,6 +11,7 @@ import {
     type AttachmentDeliveryOutcome,
 } from '../deployment/attachmentExchange';
 import { LocalizationProvider } from '../localization/Localization';
+import { ToastContext, type Operation, type Toast, type ToastSurface } from '../toasts/useToasts';
 import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { Attachments } from './Attachments';
 
@@ -41,7 +42,6 @@ const photograph: MailAttachment = {
 interface Asked {
     readonly request: ClientRequest;
     readonly fileName: string;
-    readonly arrived: (octets: number) => void;
     readonly abandoned: AbortSignal;
 }
 
@@ -60,8 +60,8 @@ function deliveryHeldOpen(): {
             settling[at ?? settling.length - 1]?.(outcome);
         },
         exchange: {
-            deliver: (request, fileName, arrived, abandoned) => {
-                asked.push({ request, fileName, arrived, abandoned });
+            deliver: (request, fileName, _arrived, abandoned) => {
+                asked.push({ request, fileName, abandoned });
 
                 return new Promise<AttachmentDeliveryOutcome>((resolve) => {
                     settling.push(resolve);
@@ -74,18 +74,54 @@ function deliveryHeldOpen(): {
     };
 }
 
+/**
+ * A toast surface that records what was said rather than drawing it.
+ *
+ * A download reports from the corner rather than from under the words, so what the strip owes a reader is one task
+ * raised per file and the outcome that task settles with — which is what these assertions are about. The cards
+ * themselves are `toasts/`'s own to draw, and asserting on them here would be testing that surface twice.
+ */
+function recordingToasts(): {
+    readonly surface: ToastSurface;
+    readonly operations: Operation[];
+    readonly settled: Toast[];
+} {
+    const operations: Operation[] = [];
+    const settled: Toast[] = [];
+
+    return {
+        operations,
+        settled,
+        surface: {
+            raise: (toast) => {
+                settled.push(toast);
+            },
+            raiseOperation: (operation) => {
+                operations.push(operation);
+
+                return (outcome) => {
+                    settled.push(outcome);
+                };
+            },
+        },
+    };
+}
+
 function drawing(
     attachments: readonly MailAttachment[],
     exchange: AttachmentExchange,
+    toasts: ToastSurface = recordingToasts().surface,
     open: (opened: OpenedAttachment) => void = () => undefined,
 ) {
     return render(
         <LocalizationProvider>
-            <AttachmentExchangeContext value={exchange}>
-                <OpenAttachmentContext value={open}>
-                    <Attachments session={session} storedEmailId={messageId} attachments={attachments} />
-                </OpenAttachmentContext>
-            </AttachmentExchangeContext>
+            <ToastContext value={toasts}>
+                <AttachmentExchangeContext value={exchange}>
+                    <OpenAttachmentContext value={open}>
+                        <Attachments session={session} storedEmailId={messageId} attachments={attachments} />
+                    </OpenAttachmentContext>
+                </AttachmentExchangeContext>
+            </ToastContext>
         </LocalizationProvider>,
     );
 }
@@ -112,17 +148,15 @@ describe('Attachments', () => {
         });
     });
 
-    it('says how much has arrived while the file is still arriving', async () => {
+    it('reports the download as a task naming the file, rather than a line under the message', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.exchange);
+        const toasts = recordingToasts();
+        drawing([invoice], held.exchange, toasts.surface);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
-        act(() => {
-            held.asked[0]?.arrived(1_024);
-        });
-
-        expect(await screen.findByText(`${sizeReadAs(1_024)} of ${sizeReadAs(2_048)}`)).toBeDefined();
+        expect(toasts.operations[0]?.title).toBe('Downloading file…');
+        expect(toasts.operations[0]?.body).toBe('invoice.pdf');
     });
 
     it('starts one download however often the control is pressed while that one is arriving', () => {
@@ -135,31 +169,39 @@ describe('Attachments', () => {
         expect(held.asked.length).toBe(1);
     });
 
-    it('abandons a download in flight when the way out of it is taken', () => {
+    it('abandons a download in flight when the way out the task carries is taken', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.exchange);
+        const toasts = recordingToasts();
+        drawing([invoice], held.exchange, toasts.surface);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Stop downloading' }));
+        toasts.operations[0]?.stop();
 
         expect(held.asked[0]?.abandoned.aborted).toBe(true);
     });
 
     it('says the file was downloaded once it has been', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.exchange);
+        const toasts = recordingToasts();
+        drawing([invoice], held.exchange, toasts.surface);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-        held.answer('delivered');
 
-        expect(await screen.findByText('invoice.pdf was downloaded.')).toBeDefined();
+        await act(async () => {
+            held.answer('delivered');
+            await Promise.resolve();
+        });
+
+        expect(toasts.settled[0]).toEqual({ kind: 'success', title: 'File downloaded', body: 'invoice.pdf' });
     });
 
     // The viewer is handed the message the file came from as well as the file, because a part's position is its only
     // identity and it means nothing without the message it is a part of.
     it('hands the viewer the file and the message it came from when a chip is pressed', () => {
         const opened: OpenedAttachment[] = [];
-        drawing([invoice, photograph], deliveryHeldOpen().exchange, (opening) => opened.push(opening));
+        drawing([invoice, photograph], deliveryHeldOpen().exchange, recordingToasts().surface, (opening) =>
+            opened.push(opening),
+        );
 
         fireEvent.click(screen.getByRole('button', { name: 'Open photo.jpg' }));
 
@@ -181,8 +223,10 @@ describe('Attachments', () => {
         expect(held.asked.length).toBe(1);
         expect(held.asked[0]?.fileName).toBe('invoice.pdf');
 
-        held.answer('delivered');
-        await screen.findByText('invoice.pdf was downloaded.');
+        await act(async () => {
+            held.answer('delivered');
+            await Promise.resolve();
+        });
 
         expect(held.asked.length).toBe(2);
         expect(held.asked[1]?.fileName).toBe('photo.jpg');
@@ -207,26 +251,27 @@ describe('Attachments', () => {
 
     it('reports a refusal against the file it refused and downloads the rest anyway', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice, photograph], held.exchange);
+        const toasts = recordingToasts();
+        drawing([invoice, photograph], held.exchange, toasts.surface);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
-        held.answer('unavailable');
-        await screen.findByText('The deployment did not answer, so the file was not downloaded. Try again.');
 
-        held.answer('delivered');
+        await act(async () => {
+            held.answer('unavailable');
+            await Promise.resolve();
+        });
 
-        expect(await screen.findByText('photo.jpg was downloaded.')).toBeDefined();
-        expect(screen.getAllByRole('alert').length).toBe(1);
+        expect(toasts.settled[0]).toEqual({
+            kind: 'error',
+            title: 'File not downloaded',
+            body: 'The deployment did not answer, so the file was not downloaded. Try again.',
+        });
+
+        await act(async () => {
+            held.answer('delivered');
+            await Promise.resolve();
+        });
+
+        expect(toasts.settled[1]).toEqual({ kind: 'success', title: 'File downloaded', body: 'photo.jpg' });
     });
 });
-
-// The size is `Intl`'s under the active language, so a test asks it the same question the screen asked rather than
-// spelling out an answer that would be about this machine.
-function sizeReadAs(octets: number): string {
-    return new Intl.NumberFormat('en', {
-        style: 'unit',
-        unit: 'kilobyte',
-        unitDisplay: 'short',
-        maximumFractionDigits: 1,
-    }).format(octets / 1_000);
-}

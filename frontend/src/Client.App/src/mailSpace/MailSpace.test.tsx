@@ -589,6 +589,15 @@ describe('MailSpace, in the four compositions', () => {
         expect(screen.getByText(handedToMail)).toBeDefined();
     });
 
+    // What the control hides is everything the client says *about* the mail, which is what the design draws it taking
+    // away: the block over the correspondence and the field under it are the two halves of that, and a control that
+    // left the field standing would be one that hid half of what its name promises.
+    it('takes the field the client is asked questions in away with the rest of the panels', () => {
+        renderSpace(desktop, { selection: 'stored-1', panelsHidden: true });
+
+        expect(screen.queryByText(handedTheIntent)).toBeNull();
+    });
+
     it('keeps the list at a tablet width while nothing is open, the correspondence having nothing to stand alone with', () => {
         renderSpace(tablet, { panelsHidden: true });
 

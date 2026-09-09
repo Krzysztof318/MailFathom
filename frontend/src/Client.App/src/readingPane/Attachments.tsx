@@ -2,14 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { useLocalization } from '../localization/useLocalization';
-import { useAttachmentExchange } from '../deployment/attachmentExchange';
 import { useOpenAttachment } from '../workspace/openAttachment';
 import { Attachment } from './Attachment';
-import { downloadAttachment, type Download } from './downloadingAttachment';
+import { useAttachmentDownloads } from './downloadingAttachment';
 
 // The files one message carries, and the downloads of them. Both belong here rather than to a row, because downloading
 // every file is an act on the message: the row that would own its own download cannot be asked to start one by the
@@ -25,8 +24,6 @@ import { downloadAttachment, type Download } from './downloadingAttachment';
 // and holding twenty answers in memory at once. What that costs is that each file arrives as its own download, which is
 // where this differs from the design project — that draws one archive, which no route serves.
 
-const described: Download = { stage: 'described' };
-
 export function Attachments({
     session,
     storedEmailId,
@@ -37,64 +34,9 @@ export function Attachments({
     readonly attachments: readonly MailAttachment[];
 }) {
     const { translate } = useLocalization();
-    const exchange = useAttachmentExchange();
     const open = useOpenAttachment();
-    const [downloading, setDownloading] = useState<ReadonlyMap<number, Download>>(new Map());
+    const downloads = useAttachmentDownloads(session, storedEmailId);
     const [downloadingAll, setDownloadingAll] = useState(false);
-
-    // The one thing a render does not own: a download in flight outlives the render that started it, and the way out of
-    // it has to be reachable from the control that stops it and from the cleanup below alike.
-    const running = useRef(new Map<number, AbortController>());
-
-    // Whether the message these files belong to is still on the screen. Abandoning what is in flight is not enough on
-    // its own: the bulk download is a loop that asks for the next file once the one before it has settled, and a loop
-    // that kept going would start a download the cleanup below has already run past.
-    const opened = useRef(true);
-
-    // A download whose message has gone is a download nobody is waiting for, and letting it finish would write a file
-    // to somebody's machine after they left the message it belongs to.
-    useEffect(() => {
-        const abandoning = running.current;
-        opened.current = true;
-
-        return () => {
-            opened.current = false;
-
-            for (const download of abandoning.values()) {
-                download.abort();
-            }
-        };
-    }, []);
-
-    function record(position: number, stage: Download): void {
-        setDownloading((current) => new Map(current).set(position, stage));
-    }
-
-    async function start(attachment: MailAttachment): Promise<void> {
-        // A file already arriving is left to arrive. The chip refuses a second press for the same reason, and the bulk
-        // download reaches files somebody may already have asked for one at a time.
-        if (!opened.current || running.current.has(attachment.position)) {
-            return;
-        }
-
-        const abandoning = new AbortController();
-        running.current.set(attachment.position, abandoning);
-        record(attachment.position, { stage: 'arriving', octets: 0 });
-
-        const outcome = await downloadAttachment(
-            session,
-            storedEmailId,
-            attachment,
-            exchange,
-            (octets) => {
-                record(attachment.position, { stage: 'arriving', octets });
-            },
-            abandoning.signal,
-        );
-
-        running.current.delete(attachment.position);
-        record(attachment.position, { stage: 'finished', outcome });
-    }
 
     // Each file is asked for in turn and each answer is recorded against the file it belongs to, so one refusal is one
     // file's refusal: the files after it are still asked for, and the reader is told which one did not arrive.
@@ -102,7 +44,7 @@ export function Attachments({
         setDownloadingAll(true);
 
         for (const attachment of attachments) {
-            await start(attachment);
+            await downloads.start(attachment);
         }
 
         setDownloadingAll(false);
@@ -116,15 +58,12 @@ export function Attachments({
                 <Attachment
                     key={attachment.position}
                     attachment={attachment}
-                    downloading={downloading.get(attachment.position) ?? described}
+                    arriving={downloads.arriving(attachment.position)}
                     onOpen={() => {
                         open({ storedEmailId, attachment });
                     }}
                     onDownload={() => {
-                        void start(attachment);
-                    }}
-                    onStop={() => {
-                        running.current.get(attachment.position)?.abort();
+                        void downloads.start(attachment);
                     }}
                 />
             ))}

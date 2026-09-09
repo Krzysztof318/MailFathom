@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MailAttachment } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { Attachment } from './Attachment';
-import type { Download } from './downloadingAttachment';
 
 const invoice: MailAttachment = {
     position: 1,
@@ -17,18 +16,13 @@ const invoice: MailAttachment = {
     sizeOctets: 2_048,
 };
 
-const described: Download = { stage: 'described' };
-
-function drawing(
-    attachment: MailAttachment,
-    downloading: Download = described,
-): { onOpen: () => void; onDownload: () => void; onStop: () => void } {
-    const controls = { onOpen: vi.fn(), onDownload: vi.fn(), onStop: vi.fn() };
+function drawing(attachment: MailAttachment, arriving = false): { onOpen: () => void; onDownload: () => void } {
+    const controls = { onOpen: vi.fn(), onDownload: vi.fn() };
 
     render(
         <LocalizationProvider>
             <ul>
-                <Attachment attachment={attachment} downloading={downloading} {...controls} />
+                <Attachment attachment={attachment} arriving={arriving} {...controls} />
             </ul>
         </LocalizationProvider>,
     );
@@ -90,7 +84,7 @@ describe('Attachment', () => {
     });
 
     it('asks for nothing more while the file is still arriving', () => {
-        const controls = drawing(invoice, { stage: 'arriving', octets: 0 });
+        const controls = drawing(invoice, true);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
@@ -98,53 +92,20 @@ describe('Attachment', () => {
     });
 
     it('opens the file while it is arriving, because looking at it stops nothing', () => {
-        const controls = drawing(invoice, { stage: 'arriving', octets: 0 });
+        const controls = drawing(invoice, true);
 
         fireEvent.click(screen.getByRole('button', { name: 'Open invoice.pdf' }));
 
         expect(controls.onOpen).toHaveBeenCalledTimes(1);
     });
 
-    it('says how much has arrived while the file is still arriving', () => {
-        drawing(invoice, { stage: 'arriving', octets: 1_024 });
+    // What became of a download is said from the corner rather than under the row, which is where the design project
+    // puts it — so the row says nothing about it and this asserts that it does not.
+    it('says nothing under the row about a download in flight', () => {
+        drawing(invoice, true);
 
-        expect(screen.getByText(`${sizeReadAs(1_024)} of ${sizeReadAs(2_048)}`)).toBeDefined();
-    });
-
-    it('offers a way out of a download in flight', () => {
-        const controls = drawing(invoice, { stage: 'arriving', octets: 1_024 });
-
-        fireEvent.click(screen.getByRole('button', { name: 'Stop downloading' }));
-
-        expect(controls.onStop).toHaveBeenCalledTimes(1);
-    });
-
-    it('says the file was downloaded once it has been', () => {
-        drawing(invoice, { stage: 'finished', outcome: 'delivered' });
-
-        expect(screen.getByText('invoice.pdf was downloaded.')).toBeDefined();
-    });
-
-    it.each([
-        [
-            'unauthenticated',
-            'This deployment no longer accepts the credential, so the file was not downloaded. Sign in again.',
-        ],
-        ['unauthorized', 'This credential may not read mail on this deployment, so the file was not downloaded.'],
-        ['unavailable', 'The deployment did not answer, so the file was not downloaded. Try again.'],
-        [
-            'screened',
-            'This deployment screens the files it serves and does not serve this one, so it was not downloaded. Try again in case the read ran out of time or the screen was momentarily not answering.',
-        ],
-        [
-            'largerThanDescribed',
-            'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
-        ],
-        ['abandoned', 'The download was stopped, so nothing was saved.'],
-    ] as const)('says what became of a download that answered %s', (outcome, said) => {
-        drawing(invoice, { stage: 'finished', outcome });
-
-        expect(screen.getByRole('alert').textContent).toBe(said);
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByRole('status')).toBeNull();
     });
 });
 

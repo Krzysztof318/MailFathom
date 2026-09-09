@@ -262,14 +262,17 @@ export function Composer({
         onClosed();
     }
 
-    // Sending, said where the design project says it: a toast standing over whatever the person turned to next rather
-    // than a line at the foot of a window they are done with. It stands for as long as the send does, becomes what the
-    // send came to, and carries the way to take a queued message back — which is the one act that has to outlive
-    // reading the outcome.
+    // Sending, said where the design project says it: **the composer closes on the press** and a toast stands over
+    // whatever the person turned to next. That order is the design's own — it finishes the composition first and
+    // raises the task second — and it is what makes the press feel like sending rather than like starting something
+    // to watch. Nothing written is lost by it: a send writes the draft to the user's own drafts folder before it
+    // queues anything, so a message the deployment then refused is in their drafts rather than gone.
     //
-    // Closing that standing toast is asking to stop the send, which is what taking the message back is: the composer
-    // stays open underneath either way, so nothing written is lost by a refusal and nothing is asked for twice.
+    // Which is also why what became of the send is said in full by the toast rather than half of it at the foot of a
+    // window that is no longer there.
     function sendAndReport(sending: Composition): void {
+        close();
+
         const settled = toasts.raiseOperation({
             title: translate('compose.sendingTitle'),
             body: translate('compose.confirmTo', { addresses: addresses.format(sending.to) }),
@@ -296,31 +299,41 @@ export function Composer({
         });
     }
 
-    // What the standing toast becomes once the deployment has answered.
+    // What the standing toast becomes once the deployment has answered, which is the whole answer: the composer closed
+    // on the press, so this is the only place the outcome is said and a title with nothing under it would leave
+    // somebody knowing a message did not go and not why.
     //
-    // A toast stands for a few seconds and then goes, so it carries what somebody who had looked away has to know and
-    // never the sentence they have to act on: a refusal names what would change it and belongs beside the words they
-    // would change, which is the foot of the composer, where it stays until they have. So a send that did not happen
-    // is titled here and said there — one sentence in one place, rather than the same paragraph twice with only one
-    // of the two copies still on the screen a moment later.
+    // **A queued message offers no way back.** The design draws none, and this client has nothing to draw one with: the
+    // one act that would have to outlive the composer is the one the composer is gone for.
     function sendReport(outcome: DraftStanding): Toast {
         switch (outcome.kind) {
             case 'queued':
-                return {
-                    kind: 'success',
-                    title: translate('compose.sentTitle'),
-                    body: translate('compose.queued'),
-                    action: { label: translate('compose.withdraw'), take: withdrawAndReport },
-                };
+                return { kind: 'success', title: translate('compose.sentTitle'), body: translate('compose.queued') };
             case 'withdrawn':
                 return {
                     kind: outcome.withdrawal === 'withdrawn' ? 'success' : 'warning',
                     title: translate(withdrawalTitle[outcome.withdrawal]),
                     body: translate(withdrawalSaid[outcome.withdrawal]),
                 };
+            case 'refused':
+                return {
+                    kind: 'error',
+                    title: translate('compose.notSentTitle'),
+                    body: translate(refusalSaid[outcome.refusal]),
+                };
+            case 'refusedSave':
+                return {
+                    kind: 'error',
+                    title: translate('compose.notSentTitle'),
+                    body: translate(saveRefusalSaid[outcome.refusal]),
+                };
+            case 'failed':
+                return {
+                    kind: 'error',
+                    title: translate('compose.notSentTitle'),
+                    body: translate(failureSaid[outcome.reason]),
+                };
             default:
-                // Every way a send does not happen — refused, failed, or stopped by a refused save met on the way —
-                // is one title here and its own sentence at the foot of the composer, for the reason above.
                 return { kind: 'error', title: translate('compose.notSentTitle') };
         }
     }

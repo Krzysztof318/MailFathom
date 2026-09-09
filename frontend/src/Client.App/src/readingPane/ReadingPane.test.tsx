@@ -15,6 +15,7 @@ import type {
 import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
 import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
+import { ToastsProvider } from '../toasts/Toasts';
 import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import {
     ReadMarkingContext,
@@ -132,22 +133,24 @@ function drawingWithSelection(transport: MailFathomTransport): void {
 
     render(
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentExchangeContext value={deliversNothing}>
-                        <OpenAttachmentContext value={() => undefined}>
-                            <ReadingPane
-                                session={session}
-                                transport={transport}
-                                storedEmailId={messageId}
-                                online
-                                onShowFullHtml={() => undefined}
-                            />
-                        </OpenAttachmentContext>
-                    </AttachmentExchangeContext>
-                </LinkOpenerContext>
-                <SelectionProbe />
-            </WorkspaceProvider>
+            <ToastsProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <ReadingPane
+                                    session={session}
+                                    transport={transport}
+                                    storedEmailId={messageId}
+                                    online
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                    <SelectionProbe />
+                </WorkspaceProvider>
+            </ToastsProvider>
         </LocalizationProvider>,
     );
 }
@@ -163,23 +166,25 @@ function drawing(
     render(
         <SignalledChangesContext value={signalled}>
             <LocalizationProvider>
-                <WorkspaceProvider>
-                    <LinkOpenerContext value={() => Promise.resolve()}>
-                        <AttachmentExchangeContext value={deliver}>
-                            <OpenAttachmentContext value={() => undefined}>
-                                <ReadMarkingContext value={marking}>
-                                    <ReadingPane
-                                        session={session}
-                                        transport={transport}
-                                        storedEmailId={storedEmailId}
-                                        online={online}
-                                        onShowFullHtml={() => undefined}
-                                    />
-                                </ReadMarkingContext>
-                            </OpenAttachmentContext>
-                        </AttachmentExchangeContext>
-                    </LinkOpenerContext>
-                </WorkspaceProvider>
+                <ToastsProvider>
+                    <WorkspaceProvider>
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <AttachmentExchangeContext value={deliver}>
+                                <OpenAttachmentContext value={() => undefined}>
+                                    <ReadMarkingContext value={marking}>
+                                        <ReadingPane
+                                            session={session}
+                                            transport={transport}
+                                            storedEmailId={storedEmailId}
+                                            online={online}
+                                            onShowFullHtml={() => undefined}
+                                        />
+                                    </ReadMarkingContext>
+                                </OpenAttachmentContext>
+                            </AttachmentExchangeContext>
+                        </LinkOpenerContext>
+                    </WorkspaceProvider>
+                </ToastsProvider>
             </LocalizationProvider>
         </SignalledChangesContext>,
     );
@@ -466,21 +471,23 @@ const photograph = {
 function paneReading(transport: MailFathomTransport, online: boolean) {
     return (
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentExchangeContext value={deliversNothing}>
-                        <OpenAttachmentContext value={() => undefined}>
-                            <ReadingPane
-                                session={session}
-                                transport={transport}
-                                storedEmailId={messageId}
-                                online={online}
-                                onShowFullHtml={() => undefined}
-                            />
-                        </OpenAttachmentContext>
-                    </AttachmentExchangeContext>
-                </LinkOpenerContext>
-            </WorkspaceProvider>
+            <ToastsProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <ReadingPane
+                                    session={session}
+                                    transport={transport}
+                                    storedEmailId={messageId}
+                                    online={online}
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                </WorkspaceProvider>
+            </ToastsProvider>
         </LocalizationProvider>
     );
 }
@@ -489,21 +496,23 @@ function paneReading(transport: MailFathomTransport, online: boolean) {
 function paneFor(storedEmailId: string) {
     return (
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentExchangeContext value={deliversNothing}>
-                        <OpenAttachmentContext value={() => undefined}>
-                            <ReadingPane
-                                session={session}
-                                transport={deploymentDescribing()}
-                                storedEmailId={storedEmailId}
-                                online
-                                onShowFullHtml={() => undefined}
-                            />
-                        </OpenAttachmentContext>
-                    </AttachmentExchangeContext>
-                </LinkOpenerContext>
-            </WorkspaceProvider>
+            <ToastsProvider>
+                <WorkspaceProvider>
+                    <LinkOpenerContext value={() => Promise.resolve()}>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <ReadingPane
+                                    session={session}
+                                    transport={deploymentDescribing()}
+                                    storedEmailId={storedEmailId}
+                                    online
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
+                    </LinkOpenerContext>
+                </WorkspaceProvider>
+            </ToastsProvider>
         </LocalizationProvider>
     );
 }
@@ -517,25 +526,27 @@ function drawingOfferingMarkup(
 ): void {
     render(
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <EmbeddedHtmlMessagesContext value={embedded}>
-                    <LinkOpenerContext value={() => Promise.resolve()}>
-                        <AttachmentExchangeContext value={deliversNothing}>
-                            <OpenAttachmentContext value={() => undefined}>
-                                <ReadMarkingContext value={nothingMarkedRead}>
-                                    <ReadingPane
-                                        session={session}
-                                        transport={deploymentDescribing()}
-                                        storedEmailId={messageId}
-                                        online
-                                        onShowFullHtml={shown}
-                                    />
-                                </ReadMarkingContext>
-                            </OpenAttachmentContext>
-                        </AttachmentExchangeContext>
-                    </LinkOpenerContext>
-                </EmbeddedHtmlMessagesContext>
-            </WorkspaceProvider>
+            <ToastsProvider>
+                <WorkspaceProvider>
+                    <EmbeddedHtmlMessagesContext value={embedded}>
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <AttachmentExchangeContext value={deliversNothing}>
+                                <OpenAttachmentContext value={() => undefined}>
+                                    <ReadMarkingContext value={nothingMarkedRead}>
+                                        <ReadingPane
+                                            session={session}
+                                            transport={deploymentDescribing()}
+                                            storedEmailId={messageId}
+                                            online
+                                            onShowFullHtml={shown}
+                                        />
+                                    </ReadMarkingContext>
+                                </OpenAttachmentContext>
+                            </AttachmentExchangeContext>
+                        </LinkOpenerContext>
+                    </EmbeddedHtmlMessagesContext>
+                </WorkspaceProvider>
+            </ToastsProvider>
         </LocalizationProvider>,
     );
 }
@@ -678,28 +689,30 @@ describe('ReadingPane following a cited file', () => {
 
         render(
             <LocalizationProvider>
-                <WorkspaceProvider>
-                    <LinkOpenerContext value={() => Promise.resolve()}>
-                        <AttachmentExchangeContext value={deliversNothing}>
-                            <OpenAttachmentContext
-                                value={(opening) => {
-                                    opened.push(opening);
-                                }}
-                            >
-                                <Citing />
-                                <ReadingPane
-                                    session={session}
-                                    transport={deploymentDescribing(
-                                        description({ attachments: [invoice, photograph] }),
-                                    )}
-                                    storedEmailId={messageId}
-                                    online
-                                    onShowFullHtml={() => undefined}
-                                />
-                            </OpenAttachmentContext>
-                        </AttachmentExchangeContext>
-                    </LinkOpenerContext>
-                </WorkspaceProvider>
+                <ToastsProvider>
+                    <WorkspaceProvider>
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <AttachmentExchangeContext value={deliversNothing}>
+                                <OpenAttachmentContext
+                                    value={(opening) => {
+                                        opened.push(opening);
+                                    }}
+                                >
+                                    <Citing />
+                                    <ReadingPane
+                                        session={session}
+                                        transport={deploymentDescribing(
+                                            description({ attachments: [invoice, photograph] }),
+                                        )}
+                                        storedEmailId={messageId}
+                                        online
+                                        onShowFullHtml={() => undefined}
+                                    />
+                                </OpenAttachmentContext>
+                            </AttachmentExchangeContext>
+                        </LinkOpenerContext>
+                    </WorkspaceProvider>
+                </ToastsProvider>
             </LocalizationProvider>,
         );
 
@@ -805,23 +818,25 @@ describe('ReadingPane selection', () => {
     function readingBeside(): void {
         render(
             <LocalizationProvider>
-                <WorkspaceProvider>
-                    <Opened />
-                    <LinkOpenerContext value={() => Promise.resolve()}>
-                        <AttachmentExchangeContext value={deliversNothing}>
-                            <OpenAttachmentContext value={() => undefined}>
-                                <IntentField accounts={[]} />
-                                <ReadingPane
-                                    session={session}
-                                    transport={deploymentDescribing()}
-                                    storedEmailId={messageId}
-                                    online
-                                    onShowFullHtml={() => undefined}
-                                />
-                            </OpenAttachmentContext>
-                        </AttachmentExchangeContext>
-                    </LinkOpenerContext>
-                </WorkspaceProvider>
+                <ToastsProvider>
+                    <WorkspaceProvider>
+                        <Opened />
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <AttachmentExchangeContext value={deliversNothing}>
+                                <OpenAttachmentContext value={() => undefined}>
+                                    <IntentField accounts={[]} />
+                                    <ReadingPane
+                                        session={session}
+                                        transport={deploymentDescribing()}
+                                        storedEmailId={messageId}
+                                        online
+                                        onShowFullHtml={() => undefined}
+                                    />
+                                </OpenAttachmentContext>
+                            </AttachmentExchangeContext>
+                        </LinkOpenerContext>
+                    </WorkspaceProvider>
+                </ToastsProvider>
             </LocalizationProvider>,
         );
     }

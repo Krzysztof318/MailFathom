@@ -4,7 +4,6 @@
 
 import type { ClientSession, MailFathomTransport, MailThreadMessage } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
-import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useMessageBody } from '../messageBody/useMessageBody';
@@ -49,7 +48,6 @@ export function ThreadMessage({
     message,
     mark,
     online,
-    onOpenOnItsOwn,
     onShowFullHtml,
     onRegion,
 }: {
@@ -63,7 +61,6 @@ export function ThreadMessage({
     /** Whether the deployment is reachable, which decides whether a message the conversation did not carry is read. */
     readonly online: boolean;
 
-    readonly onOpenOnItsOwn: () => void;
     readonly onShowFullHtml: () => void;
     readonly onRegion: (element: HTMLElement | null) => void;
 }) {
@@ -82,43 +79,46 @@ export function ThreadMessage({
                 ref={onRegion}
                 tabIndex={-1}
                 aria-label={translate('thread.messageBy', { sender })}
-                className={`flex flex-col gap-2.75 transition ${mark === null ? '' : arrivalStyles[mark]}`}
+                className="flex flex-col"
             >
-                {/* What the mark says, so that the message the conversation arrived at is named rather than only
-                    tinted: a rule down an edge is invisible to somebody who is being read to, and the accent is
-                    invisible to somebody who cannot tell it from the text beside it. */}
-                {mark === null ? null : (
-                    <p className="mx-auto flex w-full max-w-conversation items-center">
-                        <span className="flex items-center gap-1 rounded-sm bg-accent-soft px-1.75 py-0.5 text-2xs tracking-wide whitespace-nowrap text-accent-deep">
-                            <Icon name="arrow_right" className="size-3" />
-                            {translate(arrivalLabels[mark])}
-                        </span>
-                    </p>
-                )}
+                {/* The mark is drawn inside the column the message itself takes rather than across the pane, because
+                    what it marks out is the message: a rule against the pane's own edge stands beside the whitespace
+                    a wide window leaves rather than beside the words it is about. */}
+                <div
+                    className={`mx-auto flex w-full max-w-conversation flex-col gap-2.75 transition ${
+                        mark === null ? '' : arrivalStyles[mark]
+                    }`}
+                >
+                    {/* What the mark says, so that the message the conversation arrived at is named rather than only
+                        tinted: a rule down an edge is invisible to somebody who is being read to, and the accent is
+                        invisible to somebody who cannot tell it from the text beside it. */}
+                    {mark === null ? null : (
+                        <p className="flex items-center">
+                            <span className="flex items-center gap-1 rounded-sm bg-accent-soft px-1.75 py-0.5 text-2xs tracking-wide whitespace-nowrap text-accent-deep">
+                                <Icon name="arrow_right" className="size-3" />
+                                {translate(arrivalLabels[mark])}
+                            </span>
+                        </p>
+                    )}
 
-                {message.message === null ? (
-                    // A message this deployment could not open is said rather than drawn as an empty card: what the
-                    // reader is owed is the correspondence with a gap they can still open on its own.
-                    <p className="mx-auto w-full max-w-conversation text-sm text-muted" role="status">
-                        {translate('thread.messageNotRead', { sender })}
-                    </p>
-                ) : (
-                    <OpenedMessage
-                        session={session}
-                        message={message.message}
-                        body={body}
-                        onShowFullHtml={onShowFullHtml}
-                    />
-                )}
+                    {message.message === null ? (
+                        // A message this deployment could not open is said rather than drawn as an empty card: what the
+                        // reader is owed is the correspondence with a gap in it rather than a message drawn empty.
+                        <p className="text-sm text-muted" role="status">
+                            {translate('thread.messageNotRead', { sender })}
+                        </p>
+                    ) : (
+                        <OpenedMessage
+                            session={session}
+                            message={message.message}
+                            body={body}
+                            onShowFullHtml={onShowFullHtml}
+                        />
+                    )}
 
-                <div className="mx-auto flex w-full max-w-conversation flex-col gap-2.75">
                     <p className="text-sm text-muted">
                         {translate('thread.storedIn', { account: email.account, folder: email.folder })}
                     </p>
-
-                    <div>
-                        <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />
-                    </div>
                 </div>
             </article>
         </li>

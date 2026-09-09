@@ -176,7 +176,9 @@ function Carried({ carried }: { readonly carried: MailCarried }) {
     }
 
     return (
-        <aside className="flex flex-col gap-1 text-sm text-muted">
+        // At the measure the message itself takes rather than across the pane: what it says is about the copy a reader
+        // is looking at, so it lines up under the words instead of standing out in the margin a wide window leaves.
+        <aside className="mx-auto flex w-full max-w-conversation flex-col gap-1 text-sm text-muted">
             {carried.attachmentCount === 0 ? null : (
                 <p>{translate('carried.total', { size: sizeOf(carried.totalSizeOctets, locale) })}</p>
             )}

@@ -384,17 +384,35 @@ describe('Thread', () => {
         expect(screen.queryByRole('button', { name: /earlier messages/ })).toBeNull();
     });
 
+    // The head over a conversation is the head over the message being read, so the three acts under it are about that
+    // message rather than about nothing: they stood refused for having nothing to act on, which is a control the
+    // design draws working on the one screen a reader opens a message on.
+    it('offers the acts of the message being read rather than three controls with nothing to act on', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two'])));
+
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+        expect(screen.getByRole('button', { name: /^Reply/ })).toBeDefined();
+        expect(screen.getByRole('button', { name: /^Forward/ })).toBeDefined();
+        expect(screen.getByRole('button', { name: /^Flag/ })).toBeDefined();
+        expect(
+            screen.queryByRole('button', { name: 'Flag — nothing is open or selected for this to be about.' }),
+        ).toBeNull();
+    });
+
     it('names the conversation by its first message and says how many messages it holds', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two'])));
 
         expect(await screen.findByRole('heading', { name: 'The quarterly figures', level: 2 })).toBeDefined();
-        expect(screen.getByText('Messages in this conversation: 2')).toBeDefined();
+        expect(screen.getByText(/thread: 2 messages/)).toBeDefined();
     });
 
-    it('names everybody who wrote from the answer rather than from the messages it happens to hold', async () => {
+    // The head over a conversation is the head over one message, which is what the design project draws — so what
+    // stands on the author's line is the author of the message being read rather than a roll call of everybody in it.
+    it('names the author of the message being read rather than everybody the conversation holds', async () => {
         drawing(deploymentAnswering(pageOf(['one'])));
 
-        expect(await screen.findByText('Written by The auditor and user@example.invalid')).toBeDefined();
+        expect(await screen.findByText('The auditor')).toBeDefined();
+        expect(screen.queryByText(/^Written by/)).toBeNull();
     });
 
     it('says a conversation has authors it does not name', async () => {
@@ -482,9 +500,7 @@ describe('Thread', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier message' }));
 
-        expect(
-            screen.getByText('The message from The auditor could not be read here. Open it on its own to read it.'),
-        ).toBeDefined();
+        expect(screen.getByText('The message from The auditor could not be read here.')).toBeDefined();
         expect(bodiesAsked()).toHaveLength(0);
     });
 
@@ -536,10 +552,21 @@ describe('Thread', () => {
 
         expect(await screen.findByText('The whole of what two says.')).toBeDefined();
 
+        fireEvent.click(screen.getByRole('button', { name: 'Show all the messages' }));
+
         const marked = screen.getByText('Opened from the list').closest('li');
 
         expect(screen.getAllByText('Opened from the list')).toHaveLength(1);
         expect(marked?.textContent).toContain('The whole of what two says.');
+    });
+
+    // The mark says which of the messages on the screen somebody was sent to, so it has nothing to say where theirs is
+    // the only one drawn — which is what a conversation opened from the list looks like before its history is shown.
+    it('marks nothing while the message somebody was sent to is the only one drawn', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two' });
+
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 
     it('marks nothing in a conversation opened on its own subject, nobody having been sent to a message', async () => {
@@ -568,6 +595,10 @@ describe('Thread', () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two', fromResult: true });
+
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show all the messages' }));
 
         expect(await screen.findByText('Brought here from a search result')).toBeDefined();
 
@@ -789,10 +820,12 @@ describe('Thread', () => {
         expect(screen.getAllByRole('listitem')).toHaveLength(2);
     });
 
-    it('offers the way back to the message it was opened from in every state', () => {
+    // The conversation is what opening a message means, so there is no message behind it to go back to: a control
+    // saying otherwise appeared even where somebody had arrived from the list, which is nowhere the design draws one.
+    it('offers no way back to a message standing behind the conversation, there being none', () => {
         drawing(answersNothing);
 
-        expect(screen.getByRole('button', { name: 'Back to the message' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Back to the message' })).toBeNull();
     });
 
     it('drops a failure the network gap itself caused, so coming back reads again rather than asking to be pressed', async () => {

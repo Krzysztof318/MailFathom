@@ -713,7 +713,6 @@ export const pl: Catalogue = {
         'Obrazy tej wiadomości są pobierane od nadawcy, więc jego serwery mogą rozpoznać, że ją otwarto. Nic z tego nie jest zapamiętywane: po wyjściu z wiadomości i powrocie pytamy ponownie.',
 
     'thread.label': 'Rozmowa',
-    'thread.close': 'Wróć do wiadomości',
     'thread.reading': 'Trwa wczytywanie tej rozmowy…',
     'thread.readingMore': 'Trwa wczytywanie dalszej części tej rozmowy…',
     'thread.readMore': 'Wczytaj dalszą część tej rozmowy',
@@ -723,13 +722,14 @@ export const pl: Catalogue = {
     'thread.offline':
         'Ta maszyna jest bez sieci, więc nie można otworzyć tej rozmowy. Otworzy się sama, gdy sieć wróci.',
     'thread.empty': 'W tej rozmowie nie ma wiadomości, którą wolno ci zobaczyć.',
-    'thread.messages': 'Wiadomości w tej rozmowie: {count}',
-    'thread.wroteHere': 'Napisali: {names}',
     'thread.moreParticipants': 'W tej rozmowie pisało więcej osób, niż wymieniono tutaj.',
     'thread.moreNotAssembled': 'Ta rozmowa jest dłuższa, niż obejmuje jeden odczyt, więc pokazany jest jej początek.',
     'thread.storedIn': 'W koncie {account}, folder {folder}',
-    'thread.openOnItsOwn': 'Otwórz tę wiadomość osobno',
     'thread.messageBy': 'Wiadomość od: {sender}',
+    'thread.held.one': 'rozmowa: {count} wiadomość',
+    'thread.held.few': 'rozmowa: {count} wiadomości',
+    'thread.held.many': 'rozmowa: {count} wiadomości',
+    'thread.held.other': 'rozmowa: {count} wiadomości',
     'thread.showEarlier.one': 'Pokaż {count} wcześniejszą wiadomość',
     'thread.showEarlier.few': 'Pokaż {count} wcześniejsze wiadomości',
     'thread.showEarlier.many': 'Pokaż {count} wcześniejszych wiadomości',
@@ -737,7 +737,7 @@ export const pl: Catalogue = {
     'thread.hideEarlier': 'Ukryj wcześniejsze wiadomości',
     'thread.showAll': 'Pokaż wszystkie wiadomości',
     'thread.hideOthers': 'Ukryj pozostałe wiadomości',
-    'thread.messageNotRead': 'Nie udało się tutaj odczytać wiadomości od: {sender}. Otwórz ją osobno, aby przeczytać.',
+    'thread.messageNotRead': 'Nie udało się tutaj odczytać wiadomości od: {sender}.',
     'thread.openedFromList': 'Otwarta z listy',
     'thread.landedFromResult': 'Otwarta z wyniku wyszukiwania',
 
@@ -799,10 +799,11 @@ export const pl: Catalogue = {
     'attachment.download': 'Pobierz {name}',
     'attachment.nameWasRewritten':
         'Nadawca zapisał nazwę pliku, której to wdrożenie by nie użyło, więc widoczna jest nazwa nadana w jej miejsce.',
-    'attachment.arriving': 'Jaka część pliku już dotarła',
-    'attachment.arrivingOf': '{arrived} z {whole}',
-    'attachment.stop': 'Przerwij pobieranie',
-    'attachment.saved': 'Pobrano {name}.',
+    'attachment.downloading': 'Pobieranie pliku…',
+    'attachment.downloaded': 'Plik pobrany',
+    'attachment.notDownloaded': 'Nie pobrano pliku',
+    'attachment.stoppingLeavesBehind':
+        'Trwa pobieranie pliku „{name}”. Przerwanie nie zostawi na tym urządzeniu nic z tego pliku.',
     'attachment.abandoned': 'Pobieranie zostało przerwane, więc nic nie zostało zapisane.',
     'attachment.refusedUnauthenticated':
         'To wdrożenie nie przyjmuje już tych danych logowania, więc plik nie został pobrany. Zaloguj się ponownie.',

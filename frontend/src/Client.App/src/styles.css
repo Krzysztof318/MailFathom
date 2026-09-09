@@ -560,6 +560,20 @@
         outline-offset: 2px;
     }
 
+    /* What the pointer says over something that can be pressed, decided once here for the same reason the ring above
+       is. The design project writes `cursor:pointer` into the hover state of every control it draws, and a browser
+       draws the default arrow over a `button` — so a client leaving it to each control is a client where most of them
+       eventually stop saying it, and the one that stopped is invisible in the diff that stopped it.
+
+       A control that cannot be pressed is left out, because the pointer is what says so before the press: this client
+       draws a refused act as `aria-disabled` with the sentence behind it rather than as a disabled element, and both
+       forms read the same way here. */
+    button:not(:disabled, [aria-disabled='true']),
+    summary,
+    [role='button']:not([aria-disabled='true']) {
+        cursor: pointer;
+    }
+
     /* What an editable region says while nothing has been written in it. A `placeholder` attribute is the platform's
        answer for a field and there is none for a region a browser edits, so the word is drawn rather than announced —
        it is decoration beside the region's own accessible name and never part of it, which is why it is written here
@@ -572,6 +586,22 @@
         content: attr(data-placeholder);
         color: var(--color-faint);
         pointer-events: none;
+    }
+
+    /* The quotation a message carries is the one surface in this client where the quiet tones sit on a coloured
+       background rather than on the page, and neither of them was chosen against it: on the highlight, `muted` reads
+       at 4.41 in the dark theme and 3.85 in the light one, and `warning` at 3.22 in the light one — each below the
+       4.5:1 a body-sized sentence is owed. The sentences that land there are not decoration either: where a link goes
+       is drawn in `muted` and what is wrong with it in `warning`, which is the one reading somebody has to be able to
+       make before they follow it.
+
+       So the surface restates the two tones rather than every component inside it learning what it is drawn on — a
+       quotation nests, and the components that write those sentences are the same ones that write them on the page.
+       Each is moved to the step of its own family that carries a whole sentence, which is what those steps are for:
+       `text-soft` reads at 6.97 and 7.16, and `warning-text` at 7.55 and 6.32. */
+    blockquote {
+        --color-muted: var(--color-text-soft);
+        --color-warning: var(--color-warning-text);
     }
 
     /* What a control measures under a finger, decided once here for the same reason the ring above is: a floor met by

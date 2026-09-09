@@ -47,12 +47,11 @@ export function HeadActs({
     readonly compact: boolean;
 
     /**
-     * The message these acts are about, or `null` where the head is about something the client cannot act on yet.
+     * The message these acts are about, or `null` where the head stands over nothing one could be taken on.
      *
-     * A conversation is the second of those. The design's acts in a conversation's head are about the conversation —
-     * flagging one flags every message in it — and this client's acts name messages, so a head that handed them its
-     * newest message would flag one message of a thread while the head said the thread was flagged. That is a screen
-     * of its own rather than a prop to fill in, and until it exists the conversation draws the three as what they are.
+     * A conversation hands the message its head is drawn from, which is the message being read rather than the thread
+     * around it: the head says who wrote *that* message and when, so the three acts under it answer, forward, and flag
+     * the same one. An act over a whole conversation is a screen of its own and is not what this draws.
      */
     readonly message: HeadMessage | null;
 }) {

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentUploadContext, type AttachmentUpload } from '../deployment/attachmentUpload';
@@ -148,18 +149,36 @@ function drawComposer(
     const closed = vi.fn();
     const { transport, asked } = deployment(answers);
 
+    // The composer goes when it closes, which is what the frame does with it: `App.tsx` stops drawing a composer whose
+    // send has been asked for, and a harness that kept one on the screen would be asserting against a window nobody is
+    // looking at — the very thing a send now closes.
+    function Framed({ children }: { readonly children: (onClosed: () => void) => ReactNode }) {
+        const [open, setOpen] = useState(true);
+
+        return open
+            ? children(() => {
+                  closed();
+                  setOpen(false);
+              })
+            : null;
+    }
+
     render(
         <LocalizationProvider>
             <ToastsProvider>
                 <AttachmentUploadContext value={upload}>
-                    <Composer
-                        session={session}
-                        transport={transport}
-                        accounts={accounts}
-                        opening={opening}
-                        online={online}
-                        onClosed={closed}
-                    />
+                    <Framed>
+                        {(onClosed) => (
+                            <Composer
+                                session={session}
+                                transport={transport}
+                                accounts={accounts}
+                                opening={opening}
+                                online={online}
+                                onClosed={onClosed}
+                            />
+                        )}
+                    </Framed>
                 </AttachmentUploadContext>
             </ToastsProvider>
         </LocalizationProvider>,
@@ -349,39 +368,51 @@ describe('Composer, a message of its own', () => {
         expect(asked).toHaveLength(0);
     });
 
-    it('queues the message once the send is confirmed, and offers to take it back', async () => {
+    // The design project closes the composition on the press and raises the task second, which is what makes sending
+    // feel like sending rather than like starting something to watch. Nothing written is lost by it: the send writes
+    // the draft to the person's own drafts folder before it queues anything.
+    it('closes the composer on the press and says from the corner that the message was queued', async () => {
+        const { closed } = drawComposer();
+
+        address('ada@example.invalid');
+        confirmSend();
+
+        expect(closed).toHaveBeenCalled();
+        expect(screen.queryByRole('dialog', { name: 'New message' })).toBeNull();
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+    });
+
+    // A queued message offers no way back, because there is none: the deployment has taken it and the composer the act
+    // would have belonged to is gone. A control promising otherwise is one nothing behind it could keep.
+    it('offers no way to take a queued message back', async () => {
         drawComposer();
 
         address('ada@example.invalid');
         confirmSend();
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Take it back' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Take it back' })).toBeNull();
     });
 
-    it('takes a queued send back, and says what became of it', async () => {
-        drawComposer();
+    // Stopping the task while the send is still in flight is a different act from taking a queued message back, and it
+    // is the one the platform can keep: the deployment has not answered yet, so there is something to withdraw.
+    it('withdraws a send still in flight from the way out its own task carries', async () => {
+        const { asked } = drawComposer();
 
         address('ada@example.invalid');
         confirmSend();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Take it back' }));
+        // Two controls carry that name in turn: the one on the card, which asks whether stopping is meant, and the one
+        // inside the question, which answers it. Each is taken from the surface it belongs to rather than by position.
+        fireEvent.click(screen.getByRole('button', { name: 'Stop the operation' }));
 
-        expect(await screen.findByText('Taken back before it went out.')).toBeDefined();
-    });
+        const question = screen.getByRole('dialog', { name: 'Stop the operation?' });
 
-    it('says a message already going out could not be taken back', async () => {
-        drawComposer(
-            { kind: 'new' },
-            { withdrawal: { status: 200, body: JSON.stringify({ outcome: 'StageDoesNotAllowIt' }) } },
-        );
+        fireEvent.click(within(question).getByRole('button', { name: 'Stop the operation' }));
 
-        address('ada@example.invalid');
-        confirmSend();
-
-        fireEvent.click(await screen.findByRole('button', { name: 'Take it back' }));
-
-        expect(await screen.findByText('It has gone out, so it cannot be taken back.')).toBeDefined();
+        await waitFor(() => {
+            expect(asked.some((request) => request.path.endsWith('/outbox/cancellation'))).toBe(true);
+        });
     });
 
     it.each([
@@ -467,6 +498,8 @@ describe('Composer, a message of its own', () => {
         expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
     });
 
+    // The message has gone as far as this screen can send it, and neither way of asking is on the screen to ask a
+    // second time: the composer closed on the press, which is what makes a second send unreachable rather than refused.
     it('offers no second send once one is queued, from the control or from the shortcut', async () => {
         drawComposer();
 
@@ -476,12 +509,8 @@ describe('Composer, a message of its own', () => {
         confirmSend();
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
-
-        // The message has gone as far as this screen can send it, so neither way of asking may start a second one.
-        expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
-
-        fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter', ctrlKey: true });
-
+        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
 
@@ -515,7 +544,9 @@ describe('Composer, a message of its own', () => {
         ).toBeDefined();
     });
 
-    it('leaves nothing that would write over a queued send and take the way to withdraw with it', async () => {
+    // Nothing of the composer is left to write over the send, because the composer itself is not left: the press that
+    // sends is the press that closes it, so the controls that would have drawn over the queued state are gone with it.
+    it('leaves no control behind that would write over a queued send', async () => {
         drawComposer();
 
         address('ada@example.invalid');
@@ -524,12 +555,8 @@ describe('Composer, a message of its own', () => {
         confirmSend();
 
         expect(await screen.findByText('Queued to go out.')).toBeDefined();
-
-        // Both of these say what is happening the moment they are pressed, so either one would draw over the queued
-        // state and leave the message going out with nothing on the screen able to stop it.
-        expect(screen.getByRole('button', { name: 'Save draft' }).hasAttribute('disabled')).toBe(true);
-        expect(screen.getByRole('button', { name: 'Attach' }).hasAttribute('disabled')).toBe(true);
-        expect(screen.getByRole('button', { name: 'Take it back' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull();
     });
 
     it('stays open and says so where the deployment would not give the draft up', async () => {
