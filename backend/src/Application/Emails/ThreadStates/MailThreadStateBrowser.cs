@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
@@ -59,6 +60,8 @@ public sealed class MailThreadStateBrowser
     /// <param name="threadId">The conversation, as a message row published it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The state, or <see langword="null" /> where this deployment has none for that conversation.</returns>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the state carries, which refuses it rather than serving it unscanned.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     public async Task<EmailThreadState?> ReadStateAsync(EmailThreadId threadId, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailRead);

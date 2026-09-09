@@ -92,10 +92,17 @@ function drawing(
     state: MailThreadState | null,
     reading = false,
     onFollowSource: (storedEmailId: string) => void = () => undefined,
+    online = true,
 ): ReactElement {
     return (
         <LocalizationProvider>
-            <ThreadState state={state} reading={reading} messages={held} onFollowSource={onFollowSource} />
+            <ThreadState
+                state={state}
+                reading={reading}
+                online={online}
+                messages={held}
+                onFollowSource={onFollowSource}
+            />
         </LocalizationProvider>
     );
 }
@@ -167,6 +174,7 @@ describe('ThreadState', () => {
                 <ThreadState
                     state={stateOf([entry({ sources: [{ kind: 'email', email: 'one' }] })])}
                     reading={false}
+                    online={true}
                     messages={[message('one', 0)]}
                     onFollowSource={() => undefined}
                 />
@@ -213,6 +221,26 @@ describe('ThreadState', () => {
         expect(screen.getByRole<HTMLDialogElement>('dialog', { hidden: true }).open).toBe(false);
     });
 
+    // The same rule the desktop card keeps, on the composition that draws the citation in a sheet instead: the sheet is
+    // reached from the conversation it would cite back into.
+    it('draws no source in the sheet either, in a conversation of one message', () => {
+        render(
+            <LocalizationProvider>
+                <ThreadState
+                    state={stateOf([entry({ sources: [{ kind: 'email', email: 'one' }] })])}
+                    reading={false}
+                    online={true}
+                    messages={[message('one', 0)]}
+                    onFollowSource={() => undefined}
+                />
+            </LocalizationProvider>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Where this conversation stands' }));
+
+        expect(screen.queryByRole('button', { name: /message/u })).toBeNull();
+    });
+
     // Absence is the common answer rather than an exception: a deployment that never turned the derivation on and one
     // that has not reached this conversation yet both arrive here.
     it('says a conversation nothing has been derived about, rather than reporting a failure', () => {
@@ -231,6 +259,17 @@ describe('ThreadState', () => {
         render(drawing(stateOf([], 'ThreadTooLarge')));
 
         expect(screen.getByRole('status').textContent).toContain('longer than a state can be derived from');
+    });
+
+    // A conversation already on the screen is what makes this reachable: the frame's own offline sentence is drawn
+    // only where there is nothing to draw instead, so a block left saying "reading" would be the only thing on the
+    // screen that never resolves and nothing would say why.
+    it('says the machine has no network, rather than looking as though a read were in flight', () => {
+        theDesktopComposition();
+
+        render(drawing(null, true, () => undefined, false));
+
+        expect(screen.getByRole('status').textContent).toContain('offline');
     });
 
     it('says it is reading, so the block does not look finished while the answer is in flight', () => {

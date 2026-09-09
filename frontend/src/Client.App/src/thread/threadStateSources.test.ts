@@ -56,6 +56,13 @@ describe('sourceOf', () => {
         expect(sourceOf(anonymous, 'one')?.name).toBe('noreply@example.invalid');
     });
 
+    // The wire type admits a display name of no characters, and a link named by it would announce nothing.
+    it('names a message whose sender was named as nothing by the address it came from', () => {
+        const blank = [message('one', 0, { displayName: '', address: 'noreply@example.invalid' })];
+
+        expect(sourceOf(blank, 'one')?.name).toBe('noreply@example.invalid');
+    });
+
     it('carries the message on, so following the source names what to reveal', () => {
         expect(sourceOf(held, 'two')?.storedEmailId).toBe('two');
     });

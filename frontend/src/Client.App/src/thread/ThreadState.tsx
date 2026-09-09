@@ -35,9 +35,12 @@ const aspectLabels: Readonly<Record<MailThreadStateAspect, MessageKey>> = {
     VersionDifference: 'threadState.versionDifference',
 };
 
-function nothingDrawn(reading: boolean, state: MailThreadState | null): MessageKey {
+function nothingDrawn(reading: boolean, online: boolean, state: MailThreadState | null): MessageKey {
     if (reading) {
-        return 'threadState.reading';
+        // A read that has not answered on a machine with no network is not a read in flight, and the frame above says
+        // nothing about it once the messages are in hand: the conversation stands on the screen and only this block is
+        // waiting. So the block says which of the two it is rather than looking busy for as long as the network is out.
+        return online ? 'threadState.reading' : 'threadState.offline';
     }
 
     return state?.coverage === 'ThreadTooLarge' ? 'threadState.tooLarge' : 'threadState.none';
@@ -46,6 +49,7 @@ function nothingDrawn(reading: boolean, state: MailThreadState | null): MessageK
 export function ThreadState({
     state,
     reading,
+    online,
     messages,
     onFollowSource,
 }: {
@@ -54,6 +58,9 @@ export function ThreadState({
 
     /** Whether the block is still being read, which is what the surface says instead of looking finished. */
     readonly reading: boolean;
+
+    /** Whether the machine has a network, which is what tells a read in flight from one that cannot start. */
+    readonly online: boolean;
 
     /** The conversation's messages, which is what a statement's source is resolved against. */
     readonly messages: readonly MailThreadMessage[];
@@ -76,7 +83,7 @@ export function ThreadState({
                 className="border-b border-line bg-sunken px-5.5 py-2.25"
             >
                 <p role="status" className="text-sm text-muted">
-                    {translate(nothingDrawn(reading, state))}
+                    {translate(nothingDrawn(reading, online, state))}
                 </p>
             </section>
         );
@@ -123,14 +130,12 @@ export function ThreadState({
                             <>
                                 <Owing owedBy={entry.owedBy} dueAt={entry.dueAt} />
 
-                                {/* A conversation of one message has one message to cite, and the design draws no
-                                    citation there: following it would reveal what is already on the screen. */}
-                                {messages.length < 2 ? null : (
+                                {worthCiting(messages) ? (
                                     <SourceLink
                                         source={sourceOf(messages, entry.sources[0]?.email)}
                                         onFollow={onFollowSource}
                                     />
-                                )}
+                                ) : null}
                             </>
                         ) : null}
                     </li>
@@ -267,13 +272,15 @@ function StateSheet({
 
                         <Owing owedBy={entry.owedBy} dueAt={entry.dueAt} />
 
-                        <SourceLink
-                            source={sourceOf(messages, entry.sources[0]?.email)}
-                            onFollow={(storedEmailId) => {
-                                onClose();
-                                onFollowSource(storedEmailId);
-                            }}
-                        />
+                        {worthCiting(messages) ? (
+                            <SourceLink
+                                source={sourceOf(messages, entry.sources[0]?.email)}
+                                onFollow={(storedEmailId) => {
+                                    onClose();
+                                    onFollowSource(storedEmailId);
+                                }}
+                            />
+                        ) : null}
                     </li>
                 ))}
             </ul>
@@ -287,6 +294,13 @@ function StateSheet({
             </button>
         </dialog>
     );
+}
+
+// A conversation of one message has one message to cite, and the design draws no citation there: following it would
+// reveal what is already on the screen. Both compositions that draw a citation ask this, so it is one rule here rather
+// than two of them that could drift apart.
+function worthCiting(messages: readonly MailThreadMessage[]): boolean {
+    return messages.length > 1;
 }
 
 // Who owes a commitment and when it falls due, which is what makes it one rather than another sentence about the

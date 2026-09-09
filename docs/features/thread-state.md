@@ -167,6 +167,10 @@ client draws a conversation nothing has been derived about rather than an error 
 is not something a client is owed: each of them is *there is no block here*, and the deployment's own operator knows
 which.
 
+**A machine with no network says so in the block itself.** The read is not attempted while the client is offline, and
+the conversation it sits above may already be on the screen — so the block draws the offline sentence rather than
+looking like a read still in flight. It reads once the network comes back.
+
 ## What is not here
 
 - **Acting on a commitment.** Nothing reminds, schedules, files, or replies. A commitment is a reading of the

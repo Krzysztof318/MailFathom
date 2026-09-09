@@ -41,10 +41,17 @@ export function sourceOf(
 // The design project draws the source as a place and a first name, because the link sits on one line inside a card
 // that is already narrow. A name is one word here and several there, so what is taken is the leading word rather than
 // a name parsed into parts — and a message whose sender was never named falls back to the address, which is the only
-// other thing a reader could recognize it by.
+// other thing a reader could recognize it by. A header naming the sender with no visible characters is never named
+// either — the wire type admits it — and a link named by that would announce nothing at all.
 function shortName(message: MailThreadMessage): string {
-    const named = message.email.senderDisplayName ?? message.email.senderAddress ?? '';
+    const named = visible(message.email.senderDisplayName) ?? visible(message.email.senderAddress) ?? '';
     const leading = named.split(' ')[0] ?? '';
 
     return leading === '' ? named : leading;
+}
+
+function visible(text: string | null): string | null {
+    const trimmed = text?.trim() ?? '';
+
+    return trimmed === '' ? null : trimmed;
 }

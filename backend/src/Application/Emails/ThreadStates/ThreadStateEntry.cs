@@ -90,8 +90,8 @@ public sealed record ThreadStateEntry
     /// <param name="owedBy">Who owes the commitment, for a commitment that names somebody.</param>
     /// <param name="dueAt">When the commitment falls due, for a commitment that names a date.</param>
     /// <returns>The statement, with the text and the owner shortened to their bounds and the sources to theirs.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sources" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the text is blank, when the sources are empty, or when an aspect other than a commitment names an owner or a date.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sources" /> or <paramref name="text" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the text is present but blank, when the sources are empty, or when an aspect other than a commitment names an owner or a date.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="aspect" /> is not a defined member.</exception>
     public static ThreadStateEntry Create(
         ThreadStateAspect aspect,

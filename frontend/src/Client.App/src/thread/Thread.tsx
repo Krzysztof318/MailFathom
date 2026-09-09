@@ -232,7 +232,8 @@ export function Thread({
 
     // Where the conversation stands is read once per conversation, because that is what it is: a record the deployment
     // wrote behind an account run rather than something composed while this screen waits. A machine with no network
-    // reads nothing and the block says it is still reading, which is what the frame above already explains.
+    // reads nothing, and the block says so itself: the frame's offline sentence is drawn only where there is no
+    // conversation to draw instead, so once the messages are in hand this block is the only thing left waiting.
     useEffect(() => {
         if (!online) {
             return;
@@ -369,7 +370,13 @@ export function Thread({
     const derived = derivation?.outcome === 'read' ? derivation.value : null;
     const stateBlock =
         derivation?.outcome === 'failed' ? undefined : (
-            <ThreadState state={derived} reading={derivation === null} messages={held} onFollowSource={followSource} />
+            <ThreadState
+                state={derived}
+                reading={derivation === null}
+                online={online}
+                messages={held}
+                onFollowSource={followSource}
+            />
         );
 
     return (

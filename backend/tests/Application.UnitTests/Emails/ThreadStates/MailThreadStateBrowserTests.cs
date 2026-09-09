@@ -111,8 +111,10 @@ public sealed class MailThreadStateBrowserTests
         var browser = CreateBrowser(reader, authorization: AccessAuthorizations.ForCallerGranted());
 
         // Act and assert
-        await Assert.ThrowsAnyAsync<Exception>(() =>
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             browser.ReadStateAsync(Conversation, TestContext.Current.CancellationToken));
+
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
         await reader.DidNotReceiveWithAnyArgs().ReadStateAsync(
             Arg.Any<EmailThreadId>(),
             Arg.Any<MailboxScope>(),
