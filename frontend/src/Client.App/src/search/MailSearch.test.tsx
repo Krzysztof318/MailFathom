@@ -137,7 +137,15 @@ function deployment(options: {
 // rather than being one, which is what lets this file prove the composition without mounting a second screen.
 const mailInScope = 'The mail in this folder';
 
-function searchUnder(transport: MailFathomTransport, scope: MailScope = everything): ReactElement {
+// The clock a test that is not about the clock hands over. Declared once rather than defaulted inline, so a screen
+// rendered twice is handed the same function and the effect that reads it does not restart.
+const whenTheSuiteRuns = (): Date => new Date();
+
+function searchUnder(
+    transport: MailFathomTransport,
+    scope: MailScope = everything,
+    now: () => Date = whenTheSuiteRuns,
+): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
@@ -148,6 +156,7 @@ function searchUnder(transport: MailFathomTransport, scope: MailScope = everythi
                     accounts={[work]}
                     online={true}
                     onOpen={() => undefined}
+                    now={now}
                 >
                     <p>{mailInScope}</p>
                 </MailSearch>
@@ -246,6 +255,22 @@ describe('MailSearch', () => {
 
         expect(search?.path).toContain('query=invoice');
         expect(search?.path).toContain('unread=true');
+    });
+
+    // What *yesterday* means is decided where somebody is standing, so the day travels with the sentence rather than
+    // being taken at the other end. A late evening is the hour that would resolve to the wrong day if it were.
+    it('sends the day its caller is standing on rather than the day the deployment is', async () => {
+        const { transport, asked } = deployment({ readsPhrases: true });
+
+        render(searchUnder(transport, everything, () => new Date(2026, 2, 14, 23, 30)));
+        await screen.findByPlaceholderText('Search, or describe what you need');
+        searchFor('mail from Nordwind last week');
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        const read = asked.find((request) => request.method === 'POST');
+
+        expect(JSON.parse(read?.body ?? '{}')).toMatchObject({ askedOn: '2026-03-14' });
     });
 
     it('runs the search again with one criterion no longer ranking it', async () => {

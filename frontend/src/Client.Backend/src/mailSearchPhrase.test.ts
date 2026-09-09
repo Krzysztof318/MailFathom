@@ -79,6 +79,17 @@ describe('readsMailSearchPhrases', () => {
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
+
+    // A present value is not an answer. What this screen promises somebody turns on the field being a boolean, so a
+    // string or a number is refused exactly as an absent one is rather than being read for its truthiness.
+    it.each([['yes'], [1], [null], [{}]])('refuses %o as an answer about whether a sentence is read', async (reads) => {
+        const answer = await readsMailSearchPhrases(
+            session,
+            answering({ status: 200, body: JSON.stringify({ readsPhrases: reads }) }),
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
 });
 
 describe('readMailSearchPhrase', () => {
