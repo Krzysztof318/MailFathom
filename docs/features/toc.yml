@@ -40,6 +40,9 @@
 - name: Message enrichment
   href: message-enrichment.md
   description: How a message's sense, why it may matter, and any commitment in it are derived once on arrival, what backs each mark, and what tells a rule's verdict from a model's.
+- name: A conversation's state
+  href: thread-state.md
+  description: How a correspondence is read once into what it settled, what it left open, what anybody undertook and how a document changed, what puts it back in the queue, and what a client draws where there is none.
 - name: Chat generation
   href: chat-generation.md
   description: What a deployment declares to make a chat call, what one call is allowed to spend, and how an operator sees whether the provider is working.

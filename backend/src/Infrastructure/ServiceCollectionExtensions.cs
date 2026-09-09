@@ -44,6 +44,7 @@ using MailFathom.Application.Emails.Search.Attachments;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
+using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
@@ -136,6 +137,7 @@ using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.Synchronization;
+using MailFathom.Infrastructure.Persistence.ThreadStates;
 using MailFathom.Infrastructure.Persistence.Users;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Database;
@@ -454,6 +456,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailEnrichmentStore, StoredEmailEnrichmentStore>();
         services.AddScoped<IStoredEmailEnrichmentReader, StoredEmailEnrichmentReader>();
         services.AddScoped<MailEnrichmentPass>();
+        // A conversation's derived state, on the same terms and for the same reason: the deriver a deployment that
+        // turned it off resolves answers with a reason, so the pass runs, is told nothing activated it, and stops.
+        services.AddScoped<IStoredThreadStateStore, StoredThreadStateStore>();
+        services.AddScoped<ThreadStateDerivationPass>();
     }
 
     /// <summary>Registers the tables a message's vectors live in, the ceilings a generation is spent against, and the operator acts on a profile.</summary>
@@ -708,6 +714,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
         services.AddScoped<IStoredEmailPreviewReader, StoredEmailPreviewReader>();
         services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
+        services.AddScoped<IStoredThreadStateReader, StoredThreadStateReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<IEmailAttachmentMatchReader, EmailAttachmentMatchReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
@@ -902,6 +909,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<MailTimelineBrowser>();
         services.AddScoped<MailThreadBrowser>();
+        services.AddScoped<MailThreadStateBrowser>();
         services.AddScoped<EmailContentReader>();
         // Beside the content read rather than with the answering run that produces the citations, because what it does
         // is read mail under the caller's own scope: a plan is followed by whoever was shown it, which is not always

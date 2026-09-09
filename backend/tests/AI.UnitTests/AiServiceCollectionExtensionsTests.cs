@@ -9,6 +9,7 @@ using MailFathom.AI.Enrichment;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
+using MailFathom.AI.ThreadStates;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
@@ -18,6 +19,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -281,6 +283,66 @@ public sealed class AiServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => AiServiceCollectionExtensions.AddEmailEnrichmentAgent(null!, isActivated: false));
+    }
+
+    /// <summary>
+    /// The same arrangement one conversation's state is registered under, and for the same reason: the pass resolves a
+    /// deriver whichever decision a deployment took, so an instance that never turned this on is told what activated
+    /// nothing rather than meeting a service nobody registered.
+    /// </summary>
+    [Fact]
+    public void AddThreadStateAgent_NotActivated_ResolvesTheDeriverThatSendsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddThreadStateAgent(isActivated: false);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<InactiveThreadStateDeriver>(provider.GetRequiredService<IThreadStateDeriver>());
+    }
+
+    /// <summary>Scoped where it is active, because each derivation opens its own credential, transport, and client.</summary>
+    [Fact]
+    public void AddThreadStateAgent_Activated_ResolvesTheAgentOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped(_ => ChatDeclarations.Plan());
+        services.AddScoped(_ => MailAnsweringRunBounds.Default);
+        services.AddScoped(_ => Substitute.For<IMailAnsweringSpendLedger>());
+        services.AddScoped(_ => Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddScoped(_ => Substitute.For<IHttpClientFactory>());
+        services.AddScoped(_ => Substitute.For<IOutboundOperationRunner>());
+        services.AddScoped(_ => Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped(_ => SensitiveContentEgressGuards.Inactive());
+
+        // Act
+        services.AddThreadStateAgent(isActivated: true);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var deriver = scope.ServiceProvider.GetRequiredService<IThreadStateDeriver>();
+
+        Assert.IsType<ThreadStateAgent>(deriver);
+        Assert.Same(deriver, scope.ServiceProvider.GetRequiredService<IThreadStateDeriver>());
+
+        using var second = provider.CreateScope();
+
+        Assert.NotSame(deriver, second.ServiceProvider.GetRequiredService<IThreadStateDeriver>());
+    }
+
+    [Fact]
+    public void AddThreadStateAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => AiServiceCollectionExtensions.AddThreadStateAgent(null!, isActivated: false));
     }
 
     /// <summary>A ceiling that admits no image would refuse every one of them while reading as a bound somebody chose.</summary>

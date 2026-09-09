@@ -2163,6 +2163,71 @@
         ],
         "type": "object"
       },
+      "ClientMailThreadStateEntryResponse": {
+        "properties": {
+          "aspect": {
+            "type": "string"
+          },
+          "dueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "owedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCitationRequest"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "aspect",
+          "text",
+          "owedBy",
+          "dueAt",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "ClientMailThreadStateResponse": {
+        "properties": {
+          "coverage": {
+            "type": "string"
+          },
+          "derivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailThreadStateEntryResponse"
+            },
+            "type": "array"
+          },
+          "threadId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "coverage",
+          "derivedAt",
+          "entries"
+        ],
+        "type": "object"
+      },
       "ClientMailTimelineEntryResponse": {
         "properties": {
           "account": {
@@ -12528,6 +12593,44 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailThreadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/threads/{threadId}/state": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailThreadStateResponse"
                 }
               }
             },

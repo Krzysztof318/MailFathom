@@ -12,6 +12,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.Retrieval;
+using MailFathom.AI.ThreadStates;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Discovery.Planning;
@@ -20,6 +21,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Enrichment;
 using MailFathom.Application.Emails.Extraction.Images;
+using MailFathom.Application.Emails.ThreadStates;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using Microsoft.Extensions.DependencyInjection;
@@ -275,6 +277,40 @@ public static class AiServiceCollectionExtensions
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
         services.AddScoped<IEmailEnricher, EmailEnrichmentAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the one way a conversation becomes the state drawn beside it, in whichever of its two states the deployment is in.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <param name="isActivated">Whether the deployment declared a chat endpoint and asked for its conversations to be read into a state.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Registered on the same terms as enrichment beside it, and for the same reason: the port answers with a reason
+    /// rather than with an absence, so the pass records why a conversation carries no state and the screen draws that
+    /// absence as a state of its own instead of as a failure.
+    /// </para>
+    /// <para>
+    /// Which of the two is registered is decided once, at composition, so an instance that did not ask for this never
+    /// resolves a chat client and never composes a turn out of somebody's mail.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddThreadStateAgent(this IServiceCollection services, bool isActivated)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (!isActivated)
+        {
+            services.AddSingleton<IThreadStateDeriver>(InactiveThreadStateDeriver.Instance);
+
+            return services;
+        }
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.TryAddSingleton<IAgentInstructionEnvelope, EmptyAgentInstructionEnvelope>();
+        services.AddScoped<IThreadStateDeriver, ThreadStateAgent>();
 
         return services;
     }

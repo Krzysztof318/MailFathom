@@ -203,7 +203,9 @@ describe('App', () => {
 
         await screen.findByText('A drawn message.');
 
-        const conversations = routesAsked().filter((path) => path.includes('/threads/'));
+        // Where the conversation stands is read beside it and is a route of its own, so it is not one of the reads
+        // this counts: what #1759 settled is that the messages arrive together, not that nothing else is asked for.
+        const conversations = routesAsked().filter((path) => path.includes('/threads/') && !path.endsWith('/state'));
 
         expect(conversations).toHaveLength(1);
         expect(conversations[0]).toContain('content=true');

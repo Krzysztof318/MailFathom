@@ -272,6 +272,25 @@ public sealed class ChatDeclarationRulesTests
         Assert.Single(errors);
     }
 
+    /// <summary>
+    /// Which deriver the pass resolves is decided while the container is built, so a reload that flipped this would
+    /// report the setting as taken while every conversation went on being told the deployment has not turned it on.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_TheConversationStateTurnedOn_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.ThreadState.Enabled = true;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(errors, error => error.StartsWith("Chat:ThreadState:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
     [Fact]
     public void FindChangesNeedingRestart_WithoutADeclarationToCompare_IsRefused()
     {

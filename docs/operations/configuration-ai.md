@@ -640,10 +640,11 @@ question, so correcting a model the provider refused — the ordinary case, beca
 a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
 connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
 next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
-fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the three
+fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the four
 settings that decide which services this deployment registered at all: whether `Chat:Alias` names an endpoint, whether
-`Chat:RelevanceFilter:Enabled` turns the second pass on, and whether `Chat:Enrichment:Enabled` turns the arrival
-derivation on. Renaming a declared alias reloads, because the credential and the resilience circuit are both looked
+`Chat:RelevanceFilter:Enabled` turns the second pass on, whether `Chat:Enrichment:Enabled` turns the arrival
+derivation on, and whether `Chat:ThreadState:Enabled` turns the conversation derivation on. Renaming a declared alias
+reloads, because the credential and the resilience circuit are both looked
 up by whatever the declaration in force calls it; going from no chat section to one, or the reverse, does not, and is
 refused with that message rather than silently ignored.
 
@@ -700,6 +701,32 @@ what withholds a derivation, and what reaches the provider.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:Enrichment:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
+
+### A conversation's state — `Chat:ThreadState`
+
+Reading a correspondence once into what its people settled, what they left open, what anybody undertook, and how a
+document they exchanged changed — and storing that, so a client draws the block beside the conversation without a model
+call per view. A block inside `Chat` for the reason the two above are: it derives with that endpoint and has nowhere to
+send a conversation without one.
+
+Off by default, and off is a supported deployment: the route a client reads the block from then answers that there is
+none, and the client draws a conversation nothing has been derived about rather than an error. Turning it on is a spend
+decision — one provider call per conversation a run changed, and per conversation already stored, until the mailbox is
+drained.
+
+**It competes with questions and with enrichment for one allowance.** Every derivation is admitted against and charged
+to the same `MailAnswering` period ceilings a question is, so a deployment running all three raises those ceilings or
+accepts that they share them. A refused admission withholds the derivation and leaves the conversation outstanding for
+the next period rather than failing it.
+
+What one pass covers is not configurable: four conversations, forty messages each, four thousand characters of every
+message, per account run. Those bound the pass's latency inside a run that other accounts are queued behind rather than
+describing a deployment. [A conversation's state](../features/thread-state.md) describes what a statement carries, what
+puts a conversation back in the queue, what withholds a derivation, and what reaches the provider.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:ThreadState:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias` | restart |
 
 ## `MailAnswering`
 

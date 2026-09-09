@@ -125,4 +125,21 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// </remarks>
     AttachmentDownload = 8,
+
+    /// <summary>The statements the client API answers a conversation's state with: what a derivation wrote down about where an exchange stands.</summary>
+    /// <remarks>
+    /// <para>
+    /// Apart from the client listing rather than folded into it, although both are drawn on the same screen. What
+    /// crosses a listing is text somebody wrote — a subject, a name, the opening of a message — and what crosses here
+    /// is text this deployment composed about that mail, so a finding here says a derivation restated something
+    /// sensitive that the listing beside it may never have shown. Averaging the two would hide exactly that.
+    /// </para>
+    /// <para>
+    /// It is a second scan of material already scanned on its way out: the conversation crossed
+    /// <see cref="ChatPrompt" /> to be derived from, and what came back is scanned again before a reader sees it. That
+    /// is deliberate — a redaction on the way to a provider is about what leaves this deployment, and this one is about
+    /// what a screen presents as settled.
+    /// </para>
+    /// </remarks>
+    ClientThreadState = 9,
 }

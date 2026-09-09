@@ -168,11 +168,18 @@ internal static class PersistenceConcurrencyConflicts
     /// failing on a violation it could not have avoided.
     /// </para>
     /// <para>
-    /// The last is one condition already standing unread in a person's notification centre. Two accounts' runs, or one
+    /// The next is one condition already standing unread in a person's notification centre. Two accounts' runs, or one
     /// account's run and a retry of it, both read that nothing has been said about the condition and both raise it; the
     /// loser violates the partial index. The retry is the whole deduplication rule rather than a repair — it re-reads,
     /// finds the winner's unread row, and raises nothing — and leaving it unrecognized would report a run as having
     /// failed while the person has already been told exactly once.
+    /// </para>
+    /// <para>
+    /// The last is where one conversation stands, derived twice at once. The derivation reads whether the conversation
+    /// already has a state and inserts one when it does not, so two runs reaching a correspondence neither has read
+    /// yet both insert and the loser violates the key. The retry is what converges them: it re-reads, finds the
+    /// winner's state, and replaces it whole, so the conversation carries one reading rather than the second run
+    /// ending on a violation of a key that did not exist when it looked.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -205,6 +212,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.StoredSecretUserNameUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName
-                or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName,
+                or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName
+                or PersistenceConstraintNames.EmailThreadStatePrimaryKeyConstraintName,
         };
 }

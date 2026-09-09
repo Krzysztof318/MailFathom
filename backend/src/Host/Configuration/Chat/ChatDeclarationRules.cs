@@ -147,6 +147,12 @@ internal static class ChatDeclarationRules
                 $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.Enrichment)}:{nameof(EmailEnrichmentOptions.Enabled)} — whether arriving mail is derived from decides which enricher the arrival pipeline resolves, so turning it on or off needs a restart rather than a configuration reload.");
         }
 
+        if (candidate.ThreadState.Enabled != composed.ThreadState.Enabled)
+        {
+            errors.Add(
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.ThreadState)}:{nameof(ThreadStateOptions.Enabled)} — whether a conversation is read into a state decides which deriver the pass resolves, so turning it on or off needs a restart rather than a configuration reload.");
+        }
+
         return errors;
     }
 

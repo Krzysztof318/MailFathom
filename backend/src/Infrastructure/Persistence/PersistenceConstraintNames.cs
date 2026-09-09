@@ -200,6 +200,22 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string EmailEnrichmentMarkForeignKeyName = "fk_email_enrichment_marks_enrichments";
 
+    /// <summary>The key that keeps one state per conversation, and which a second concurrent run is recognized by.</summary>
+    /// <remarks>
+    /// Named because losing this race is the mechanism rather than a fault: an account run derives a conversation's
+    /// state while a later run reaches the same conversation after a reply moved it back into the queue, one of them
+    /// violates this key, and the retry reads back the row the winner wrote — which is how deriving twice produces one
+    /// record.
+    /// </remarks>
+    internal const string EmailThreadStatePrimaryKeyConstraintName = "pk_email_thread_states";
+
+    /// <summary>The foreign key that removes a conversation's statements with the state they belong to.</summary>
+    /// <remarks>
+    /// Named for the reason the enrichment marks' one is: EF's convention composes one from both table names and
+    /// PostgreSQL truncates an identifier at 63 characters.
+    /// </remarks>
+    internal const string EmailThreadStateEntryForeignKeyName = "fk_email_thread_state_entries_states";
+
     /// <summary>The key that keeps one whole-mailbox rule run per account, and which a second request is recognized by.</summary>
     /// <remarks>
     /// Named because losing this race is the mechanism rather than a fault: two requests for one account's first run

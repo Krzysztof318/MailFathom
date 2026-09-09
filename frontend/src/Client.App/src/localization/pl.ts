@@ -685,6 +685,24 @@ export const pl: Catalogue = {
     'thread.openedFromList': 'Otwarta z listy',
     'thread.landedFromResult': 'Otwarta z wyniku wyszukiwania',
 
+    'threadState.label': 'Stan wątku',
+    'threadState.open': 'Stan wątku',
+    'threadState.close': 'Zamknij',
+    'threadState.agreement': 'Ustalenia',
+    'threadState.openQuestion': 'Otwarte pytanie',
+    'threadState.commitment': 'Zobowiązanie',
+    'threadState.versionDifference': 'Różnica wersji',
+    'threadState.reading': 'Trwa wczytywanie stanu tej rozmowy…',
+    'threadState.owedBy': 'Po stronie: {name}',
+    'threadState.dueAt': 'Termin: {when}',
+    'threadState.owedByDue': 'Po stronie: {name}, termin: {when}',
+    'threadState.source': 'wiadomość {position} · {name}',
+    'threadState.tooLarge':
+        'Ta rozmowa jest dłuższa, niż obejmuje jedno wyprowadzenie stanu, więc żaden nie powstał — zamiast takiego, który opisywałby tylko jej część.',
+    'threadState.none': 'Nie wyprowadzono jeszcze niczego o tym, na czym stanęła ta rozmowa.',
+    'threadState.offline':
+        'Ta maszyna jest bez sieci, więc nie można odczytać, na czym stanęła ta rozmowa. Odczyta się, gdy sieć wróci.',
+
     'message.reading': 'Trwa otwieranie tej wiadomości…',
     'message.offline':
         'Ta maszyna jest bez sieci, więc nie można otworzyć tej wiadomości. Otworzy się sama, gdy sieć wróci.',

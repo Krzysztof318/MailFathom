@@ -161,6 +161,15 @@ export {
     type MailThreadParticipant,
 } from './mailThread';
 export {
+    mailThreadStateRoute,
+    readMailThreadState,
+    type MailThreadState,
+    type MailThreadStateAspect,
+    type MailThreadStateCoverage,
+    type MailThreadStateEntry,
+    type MailThreadStateSource,
+} from './mailThreadState';
+export {
     longestTimelinePage,
     mailTimelineRoute,
     readMailTimeline,

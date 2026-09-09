@@ -680,6 +680,24 @@ export const en = {
     'thread.openedFromList': 'Opened from the list',
     'thread.landedFromResult': 'Brought here from a search result',
 
+    'threadState.label': 'Where this conversation stands',
+    'threadState.open': 'Where this conversation stands',
+    'threadState.close': 'Close',
+    'threadState.agreement': 'Agreed',
+    'threadState.openQuestion': 'Open question',
+    'threadState.commitment': 'Commitment',
+    'threadState.versionDifference': 'Version difference',
+    'threadState.reading': 'Reading where this conversation stands…',
+    'threadState.owedBy': 'Owed by {name}',
+    'threadState.dueAt': 'Due {when}',
+    'threadState.owedByDue': 'Owed by {name}, due {when}',
+    'threadState.source': 'message {position} · {name}',
+    'threadState.tooLarge':
+        'This conversation is longer than a state can be derived from in one go, so none was derived rather than one drawn from part of it.',
+    'threadState.none': 'Nothing has been derived about where this conversation stands.',
+    'threadState.offline':
+        'This machine is offline, so where this conversation stands cannot be read. It is read once the network comes back.',
+
     'message.reading': 'Reading this message…',
     'message.offline':
         'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
