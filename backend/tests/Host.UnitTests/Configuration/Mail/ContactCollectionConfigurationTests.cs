@@ -2,11 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -272,6 +275,43 @@ public sealed class ContactCollectionConfigurationTests
         Assert.DoesNotContain(messages, message => message.Contains("contact collection", StringComparison.Ordinal));
     }
 
+    /// <summary>A mailbox declared under a served user is the whole of what such a deployment configures, so its switch has to be read.</summary>
+    [Fact]
+    public void SettingsFor_AnAccountDeclaredUnderAServedUser_CarriesTheSwitchItStated()
+    {
+        // Arrange
+        var account = AccountAt("work", "user@work.example");
+        account.ContactCollection = new ContactCollectionOptions { Enabled = true, MinimumMessagesFromSender = 4 };
+
+        // Act
+        var settings = UserDeclaring(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
+
+        // Assert
+        Assert.True(settings.IsEnabled);
+        Assert.Equal(4, settings.MinimumMessagesFromSender);
+    }
+
+    /// <summary>Two served users are two people, so one of them writing to the other is an ordinary correspondent.</summary>
+    [Fact]
+    public void SettingsFor_AnotherUsersOwnAddress_IsStillCollectableInThisUsersMailbox()
+    {
+        // Arrange
+        var work = AccountAt("work", "user@work.example");
+        work.ContactCollection = new ContactCollectionOptions { Enabled = true };
+        var options = new MailSynchronizationOptions().WithServedUsers(
+        [
+            User(SyntheticMailUser.Deployment, work),
+            User(SyntheticMailUser.Another, AccountAt("theirs", "other@elsewhere.example")),
+        ]);
+
+        // Act
+        var policy = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
+
+        // Assert
+        Assert.True(policy.Admits(AddressOf("other@elsewhere.example")));
+        Assert.False(policy.Admits(AddressOf("user@work.example")));
+    }
+
     private static string[] MessagesFrom(MailSynchronizationAccountOptions account) =>
     [
         .. OptionsFor(account)
@@ -291,6 +331,12 @@ public sealed class ContactCollectionConfigurationTests
     {
         Accounts = [.. accounts],
     };
+
+    private static MailSynchronizationOptions UserDeclaring(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().WithServedUsers([User(SyntheticMailUser.Deployment, accounts)]);
+
+    private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
+        new(user, "a user this deployment serves", MailUserAccountSource.UserDocument, accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {

@@ -1,6 +1,6 @@
 # Sender authentication
 
-<!-- describes: backend/src/Domain/Emails/Authentication/**, backend/src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, backend/src/Application/Mail/ISenderTrustPolicyReader.cs, backend/src/Application/Mail/IDkimPublicKeyRecordResolver.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Infrastructure/Mail/Dkim/**, backend/src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, backend/src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
+<!-- describes: backend/src/Domain/Emails/Authentication/**, backend/src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, backend/src/Application/Mail/ISenderTrustPolicyReader.cs, backend/src/Host/Configuration/Mail/Readers/ConfiguredSenderTrustPolicyReader.cs, backend/src/Application/Mail/IDkimPublicKeyRecordResolver.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Infrastructure/Mail/Dkim/**, backend/src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, backend/src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
 
 Everything about deciding whether a message is from who it says rests on one question: which domain actually sent it?
 The obvious answer is wrong. `From` is a header the sender writes, it is what a mail client displays, and it is what
@@ -253,12 +253,17 @@ against its answer and nothing else. A message whose author was not established,
 failed, both reach *unknown* without the list being consulted at all; which of the two it was stays where it was
 recorded, on the authentication verdict.
 
-### The deployment's own domains
+### A user's own domains
 
-Mail whose author writes from a domain one of this deployment's own accounts uses is trusted, on every account rather
-than on the account that owns the domain. An instance synchronizing a work mailbox and a personal one is synchronizing
-one person's correspondence, and mail that person sends from the first to the second is the least suspicious mail in the
-mailbox; recognizing it only against the receiving account's own domain would leave the user's own mail unknown.
+Mail whose author writes from a domain one of a user's own accounts uses is trusted, on every account of that user
+rather than on the account that owns the domain. An instance synchronizing a work mailbox and a personal one is
+synchronizing one person's correspondence, and mail that person sends from the first to the second is the least
+suspicious mail in the mailbox; recognizing it only against the receiving account's own domain would leave the user's
+own mail unknown.
+
+The set stops at that person. A deployment serving several users holds several such sets, one per user, because two
+users are two correspondents: one of them writing to the other is ordinary mail from outside, and trusting it as the
+recipient's own would hand one person's identity to a message the other wrote.
 
 The set is derived from the configured accounts rather than restated in configuration, so adding an account extends it
 and removing one narrows it without a second edit. It is read from each account's IMAP user name, which is the only

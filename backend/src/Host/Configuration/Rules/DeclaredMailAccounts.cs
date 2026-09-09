@@ -81,8 +81,7 @@ internal static class DeclaredMailAccounts
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        return ReadFrom(settings.Accounts
-            .Concat(settings.ServedUsers?.SelectMany(static user => user.MailAccounts) ?? []));
+        return ReadFrom(settings.DeclaredAccounts);
     }
 
     /// <summary>Reads the declared accounts from one bound set of mailbox declarations.</summary>
