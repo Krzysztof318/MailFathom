@@ -49,6 +49,7 @@ public sealed class ClientMailMutationsEndpointTests
     public void Routes_AreThePathsAClientComposes()
     {
         Assert.Equal("/mutations", ClientMailMutationsEndpoint.MutationsRoute);
+        Assert.Equal("/mutations/deletes", ClientMailMutationsEndpoint.DeleteMutationsRoute);
         Assert.Equal("/mutations/flags", ClientMailMutationsEndpoint.FlagMutationsRoute);
         Assert.Equal("/mutations/flags/withdrawals", ClientMailMutationsEndpoint.FlagWithdrawalsRoute);
         Assert.Equal("/mutations/moves", ClientMailMutationsEndpoint.MoveMutationsRoute);
