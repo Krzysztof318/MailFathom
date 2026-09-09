@@ -564,6 +564,15 @@ on a server without `MOVE` is a copy, a flag, and an expunge, and a process that
 mailbox nothing can interpret afterwards. A second run reads the record and continues from the stage it names, so the
 message ends up filed once whichever command the stop landed between.
 
+**Writing the record also ends the account's wait.** What issues the change is the account's ordinary synchronization
+run, so without that the change would sit until the interval was out — and on an account in push mode until the mail
+*server* reported something, which a change authored here never is. The raise carries nothing, because the run reads
+the records rather than the raise, and it is one per account rather than one per change, so a hundred messages filed at
+once bring a single run forward. It is a hint and not a queue entry: never awaited, never retried, and one lost delays
+a change to the interval rather than dropping it. One arriving while the account is mid-run is the ordinary case rather
+than a corner, since the record is usually written while a run is under way, so it is kept and spent by the wait that
+follows — which is what carries the change into the next run instead of the one after that.
+
 The record answers three questions with one row.
 
 **Whether asking again is the same request.** Its identity is the email occurrence, the mutation, and who asked — a rule

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -51,6 +52,7 @@ public sealed class MailRelocationRecorder
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailboxMutationRecordStore records;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly MailAccountRunSignal runSignal;
 
     /// <summary>Initializes the use case over the grant it asks first, the folder it files into, and the record it writes.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
@@ -60,6 +62,7 @@ public sealed class MailRelocationRecorder
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail that leaves the mirror for good.</param>
     /// <param name="records">Opens the durable record the move is carried by.</param>
     /// <param name="commitPolicy">Commits the record, retrying an optimistic conflict.</param>
+    /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the move to the mail server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public MailRelocationRecorder(
         AccessAuthorization authorization,
@@ -68,7 +71,8 @@ public sealed class MailRelocationRecorder
         MailboxDestinationResolver destinations,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailboxMutationRecordStore records,
-        OptimisticConcurrencyRetryPolicy commitPolicy)
+        OptimisticConcurrencyRetryPolicy commitPolicy,
+        MailAccountRunSignal runSignal)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -77,6 +81,7 @@ public sealed class MailRelocationRecorder
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(runSignal);
 
         this.authorization = authorization;
         this.scopeResolver = scopeResolver;
@@ -85,6 +90,7 @@ public sealed class MailRelocationRecorder
         this.deleteDispositions = deleteDispositions;
         this.records = records;
         this.commitPolicy = commitPolicy;
+        this.runSignal = runSignal;
     }
 
     /// <summary>Writes down one move, against the email and the folder a caller named.</summary>
@@ -173,6 +179,10 @@ public sealed class MailRelocationRecorder
         var record = await this.commitPolicy.CommitAsync(
             (session, attemptCancellationToken) => this.records.OpenAsync(session, request, attemptCancellationToken),
             cancellationToken);
+
+        // Raised once the record is durable, for the reason MailFlagChangeRecorder gives: the run reads the records
+        // rather than the raise.
+        this.runSignal.BringForward(target.Occurrence.AccountId);
 
         return AuthoredMailRelocationResult.Recorded(folder.Alias, record.Id, record.Lifecycle);
     }

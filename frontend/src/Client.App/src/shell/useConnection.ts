@@ -66,37 +66,54 @@ export interface SignedInCaller {
 }
 
 /**
- * What one attempt answered, tagged with the attempt and the identity it answered for.
+ * What one attempt answered, tagged with the address and the identity it answered for.
  *
- * The tag is what makes "still waiting" a thing this hook works out during a render rather than a second piece of state
- * set beside the first: an answer that is not the current attempt's is a stale answer, and clearing it in the effect
- * that starts the next read would be a render spent saying what the tag already says.
+ * **The attempt is deliberately not part of that tag.** A re-read is asked for while somebody is reading — the account
+ * signals one every time a synchronization run finishes — and an answer discarded for belonging to the previous
+ * attempt would empty the whole frame for as long as the new read takes: every screen below unmounts, every read they
+ * have in flight is abandoned and reported as a deployment that is not answering, the list returns to the top of the
+ * folder, and the signal channel is closed and opened again. What is on the screen is still the truest thing anybody
+ * has until the next answer replaces it, which is what this hook already says about a machine that lost its network.
  *
- * The identity is half of that tag rather than the attempt alone, and it is the half that matters most: signing out and
- * back in as somebody else changes who is signed in without changing the attempt, so an answer tagged by attempt alone
- * would put the previous user's accounts and the previous user's grants in front of the next person for as long as
- * their own read takes. What it holds is the identity rather than the credential — the credential is deliberately the
- * thing not compared, a renewal replacing it while nothing about the deployment changed — and it is compared, never
- * read, and never rendered.
+ * The identity is what a stale answer is actually told apart by, and it is what matters: signing out and back in as
+ * somebody else changes who is signed in, so an answer left standing across that would put the previous user's
+ * accounts and the previous user's grants in front of the next person. What it holds is the identity rather than the
+ * credential — the credential is deliberately the thing not compared, a renewal replacing it while nothing about the
+ * deployment changed — and it is compared, never read, and never rendered.
  */
 interface Answered {
     readonly session: ClientResult<DeploymentSession> | null;
     readonly accounts: ClientResult<MailAccountDirectory> | null;
     readonly readAt: Date | null;
-    readonly answering: number;
     readonly presentedAt: string | null;
     readonly presenting: string | null;
 }
 
-// Before the first attempt there is nothing, tagged with an attempt and an identity no read will ever carry.
+// Before the first attempt there is nothing, tagged with an address and an identity no read will ever carry.
 const nothingRead: Answered = {
     session: null,
     accounts: null,
     readAt: null,
-    answering: -1,
     presentedAt: null,
     presenting: null,
 };
+
+/**
+ * The accounts a previous attempt answered with, where they were answered for this same address and identity.
+ *
+ * They stand while the accounts of the attempt now in flight are still being read, for the reason {@link Answered}
+ * gives: a folder tree emptied on every re-read is a folder tree emptied every time an account finishes a run. An
+ * answer for another address or another person is not kept, which is the same comparison that decides what is drawn.
+ */
+function accountsStillStanding(
+    previous: Answered,
+    baseAddress: string,
+    presenting: string,
+): Pick<Answered, 'accounts' | 'readAt'> {
+    return previous.presentedAt === baseAddress && previous.presenting === presenting
+        ? { accounts: previous.accounts, readAt: previous.readAt }
+        : { accounts: null, readAt: null };
+}
 
 /**
  * How many automatic attempts have been made, and against which identity.
@@ -230,7 +247,6 @@ export function useConnection(
                     session,
                     accounts: null,
                     readAt: null,
-                    answering: read,
                     presentedAt: baseAddress,
                     presenting,
                 });
@@ -243,14 +259,16 @@ export function useConnection(
             // On the screen as soon as it is known rather than once the accounts beside it are: what it decides — the
             // spaces, the controls, the deployment's version — is answerable now, and holding it back would leave the
             // frame saying it is still reaching a deployment that has already answered.
-            setAnswered({
+            //
+            // The accounts a previous attempt answered with stand until this attempt's replace them, which is what
+            // makes a re-read invisible to whoever is reading: the folder tree keeps its folders and their counts, and
+            // the freshness line keeps the instant those were read at rather than blanking twice per run.
+            setAnswered((previous) => ({
                 session,
-                accounts: null,
-                readAt: null,
-                answering: read,
+                ...accountsStillStanding(previous, baseAddress, presenting),
                 presentedAt: baseAddress,
                 presenting,
-            });
+            }));
 
             // A credential that may not read mail is never asked for it. The refusal would be the service's to give
             // and it would arrive as a failure on a screen, where what is true is that the client is not offering
@@ -276,7 +294,6 @@ export function useConnection(
                 session,
                 accounts,
                 readAt: now(),
-                answering: read,
                 presentedAt: baseAddress,
                 presenting,
             });
@@ -287,11 +304,12 @@ export function useConnection(
         };
     }, [baseAddress, presenting, online, read, send, onCredentialRefused, now]);
 
-    // An answer belonging to an earlier attempt, or to a credential this client is no longer signed in with, is not
-    // this attempt's, and nothing on the screen may be drawn from it: what a person is looking at then is a read in
-    // flight, which is what the frame says while it waits.
-    const current =
-        answered.answering === read && answered.presentedAt === baseAddress && answered.presenting === presenting;
+    // An answer given for another address, or for a credential this client is no longer signed in with, is nobody's to
+    // draw: what a person is looking at then is a read in flight, which is what the frame says while it waits. An
+    // answer for this same address and this same person stands whichever attempt produced it, for the reason
+    // `Answered` gives — a re-read is not a sign-out, and emptying the frame for one is what made a finished
+    // synchronization run look like the page reloading.
+    const current = answered.presentedAt === baseAddress && answered.presenting === presenting;
     const connection = current ? answered : nothingRead;
 
     // Only a deployment that did not answer is reached for again. A credential it refused, a grant it does not hold,

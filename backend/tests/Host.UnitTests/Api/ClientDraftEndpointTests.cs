@@ -13,9 +13,15 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -56,6 +62,36 @@ public sealed class ClientDraftEndpointTests
         Assert.Equal(
             "/drafts/{draftId:guid}/attachments/{attachmentId:guid}",
             ClientDraftEndpoints.DraftAttachmentRoute);
+    }
+
+    /// <summary>
+    /// A single concrete media type here is enforced rather than documented: the routing pipeline answers <c>415</c> to
+    /// a request declaring anything the metadata does not list, and the client sends the file's own type. So naming one
+    /// refused every file the author's system could name and admitted only the ones it could not, which is what a
+    /// message with an attachment failed on.
+    /// </summary>
+    [Fact]
+    public void MapClientDrafts_TheUploadRoute_AdmitsWhateverTheFileDeclaresItselfToBe()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddRouting();
+        services.AddOptions<MailDeliveryOptions>();
+        var endpoints = new TestEndpointRouteBuilder(services.BuildServiceProvider());
+
+        // Act
+        endpoints.MapGroup(string.Empty).MapClientDrafts();
+
+        // Assert
+        var upload = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                endpoint.RoutePattern.RawText == ClientDraftEndpoints.DraftAttachmentsRoute
+                && endpoint.Metadata.GetMetadata<IAcceptsMetadata>() is not null);
+
+        Assert.Equal(
+            [ClientDraftEndpoints.AnyUploadedMediaType],
+            upload.Metadata.GetMetadata<IAcceptsMetadata>()!.ContentTypes);
     }
 
     /// <summary>The three published answer values, pinned because a client sends one of them as written text.</summary>

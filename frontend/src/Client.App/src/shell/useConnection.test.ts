@@ -142,6 +142,63 @@ describe('useConnection', () => {
         expect(presented.at(-1)).toBe('Bearer mfs_renewed.c2Vzc2lvbg');
     });
 
+    // The account signals one re-read every time a synchronization run finishes, which in push mode is every message
+    // that arrives. A hook that discarded its answer for the duration would empty the frame on each of them: every
+    // screen below unmounts, their reads are abandoned and reported as a deployment that is not answering, the list
+    // returns to the top of the folder, and the signal channel is closed and opened again.
+    it('keeps what it read on the screen while it reads again for the same person', async () => {
+        let answer: ((response: ClientResponse) => void) | null = null;
+        const holdingTheSecondRead: DeploymentTransport = () => (request) => {
+            const response = request.path.endsWith('/session') ? readsMail : oneAccount;
+
+            if (answer === null) {
+                return Promise.resolve(response);
+            }
+
+            return new Promise<ClientResponse>((settle) => {
+                answer = settle;
+            }).then(() => response);
+        };
+
+        const { result } = renderHook(() =>
+            useConnection(baseAddress, firstPerson, holdingTheSecondRead, nothingToDo, clock),
+        );
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        // Held from here on, so the re-read below stays in flight for the whole of the assertion.
+        answer = () => undefined;
+
+        act(() => {
+            result.current.reread();
+        });
+
+        expect(result.current.session?.outcome).toBe('read');
+        expect(result.current.accounts?.outcome).toBe('read');
+        expect(result.current.readAt).toEqual(readAt);
+    });
+
+    // The comparison that decides what is drawn is the address and the person, and only they: the previous user's
+    // accounts and the previous user's grants must not stand while the next person's read is out.
+    it('draws nothing of the last person once somebody else signs in', async () => {
+        const { result, rerender } = renderHook(
+            ({ signedIn }: { signedIn: SignedInCaller }) =>
+                useConnection(baseAddress, signedIn, deploymentAnswering, nothingToDo, clock),
+            { initialProps: { signedIn: firstPerson } },
+        );
+
+        await waitFor(() => {
+            expect(result.current.accounts?.outcome).toBe('read');
+        });
+
+        rerender({ signedIn: secondPerson });
+
+        expect(result.current.session).toBeNull();
+        expect(result.current.accounts).toBeNull();
+    });
+
     // A renewal destroys the token it replaced the moment the deployment answers, so a read already on the wire comes
     // back refused for a value this client itself replaced. Signing somebody out over that would discard the session
     // the renewal just minted, which is the ordinary path for a client opened inside the renewal margin.

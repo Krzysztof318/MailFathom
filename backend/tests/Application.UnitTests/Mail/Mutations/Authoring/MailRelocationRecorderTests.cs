@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -336,6 +337,24 @@ public sealed class MailRelocationRecorderTests
     }
 
     /// <summary>Maps a folder no run schedules, which is resolved against what the server advertises at the moment it is needed.</summary>
+    /// <summary>A move a person watched themselves ask for must not sit under <i>moving to trash</i> until the interval is out.</summary>
+    [Fact]
+    public async Task RecordAsync_AMove_BringsTheAccountsNextSynchronizationRunForward()
+    {
+        // Arrange
+        this.MapMirrored(Archive, "Archive");
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.Recorder(TargetIn(Inbox), runSignal: runSignal);
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Archive, Requester, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(waiting.Token.IsCancellationRequested);
+    }
+
     private void MapUnmirrored(MailFolderAlias alias, string remotePath)
     {
         this.mappings.With(
@@ -349,7 +368,8 @@ public sealed class MailRelocationRecorderTests
 
     private MailRelocationRecorder Recorder(
         AuthoredMailboxTarget? target,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        MailAccountRunSignal? runSignal = null)
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailMove);
@@ -379,7 +399,8 @@ public sealed class MailRelocationRecorderTests
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider(RecordedAt)));
+                new FakeTimeProvider(RecordedAt)),
+            runSignal ?? new MailAccountRunSignal());
     }
 
     private MailboxDestinationResolver DestinationResolver(IPersistenceSessionFactory sessionFactory)

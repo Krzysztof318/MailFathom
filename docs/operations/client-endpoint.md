@@ -1420,6 +1420,13 @@ write session and the same path a rule, a spam verdict, and an MCP tool go down.
 else's mail server to redraw, a change asked for while the account is unreachable is kept rather than lost, and a
 process that dies between a copy and a delete leaves a record saying what was half done.
 
+**The pass is brought forward rather than waited for.** A record written here ends the account's wait between
+synchronization runs, so the change is issued on the run that follows within seconds instead of at the next interval.
+Push does not cover this: what a watched folder reports is the mail *server* changing, and a change authored here is
+not that. Nothing about correctness turns on it — the account's own schedule reaches the record either way, which is
+why a raise that is lost delays a change rather than dropping one — and it is what keeps a deleted message from sitting
+under *moving to trash* for minutes.
+
 **A submission is a batch, and the answer is per message.** At most 200 messages per request — and at most 100 records
 per read, because a read names them in the request line. The route enforces that hundred itself, answering a longer one
 with an ordinary `400`; it is set well under the request line Kestrel will actually accept, so a longer path or a proxy
@@ -1876,7 +1883,9 @@ reply stays a reply. One of that pair without the other names nothing and is ref
 **An upload is the request body and nothing else.** There is no form to parse and no boundary to trust: the octets are
 the body, the file's name is the `fileName` query value, and what it declares itself to be is the request's own
 `Content-Type` without its parameters — a request declaring none is read as `application/octet-stream` rather than
-having its content examined. The bound is the deployment's own configured attachment size, applied by the routing
+having its content examined. **The route admits any media type**, because the declared one is recorded against the file
+rather than checked: naming a single one would be enforced by the routing pipeline as a `415` on everything else, which
+is every file the author's system could name. The bound is the deployment's own configured attachment size, applied by the routing
 pipeline as well as by the use case, so a body past it is refused before it is buffered; how many files a draft may
 carry is the deployment's configured attachment count. Cancelling an upload leaves nothing behind, and a file already
 taken in is removed by naming it.
@@ -2174,6 +2183,16 @@ user are written here from the authenticated credential and **replace** whatever
 page cannot report as somebody else however its bundle was modified. Nothing else in the payload is transformed: the
 batch is forwarded as it arrived, so a signal a client's own instrumentation names arrives at the collector under that
 name.
+
+**A refusal here offers no password challenge**, which is the one way their `401` differs from every other route's on
+this surface. A route a person reaches answers with the `Bearer` challenge and a `Basic` one beside it, because a
+username and a password are typed by somebody whose client only asks for them when a challenge tells it to. Nobody
+navigates to these three: the caller is the client's own OTLP exporter, which builds its own `fetch` with an
+`Authorization` header it was constructed with and no credentials mode, so the browser is left holding a `Basic`
+challenge on a request made from a page that is already signed in — and what a browser does with one is open its own
+sign-in dialog over whatever somebody was reading. So the refusal carries the bearer challenge alone, under the same
+`MailFathom` realm as everywhere else, and the exporter is unaffected: it reads the status rather than the challenge,
+and a credential that has expired is renewed by the page rather than retyped into a dialog the page cannot see.
 
 **Read attribution off the resource, which is the level this holds at.** A client is free to write anything into a
 span, a log record, or a metric data point, a key spelled like the user one included, exactly as it is free to write

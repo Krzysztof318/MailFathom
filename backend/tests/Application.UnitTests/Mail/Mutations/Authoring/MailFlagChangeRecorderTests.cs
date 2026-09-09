@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -305,12 +306,36 @@ public sealed class MailFlagChangeRecorderTests
         Assert.Equal(3, records.OpenedRecordCount);
     }
 
+    /// <summary>The record is what the mail server is eventually told from, and the interval is what deciding to wait for it costs.</summary>
+    /// <remarks>
+    /// The account's own run is what issues the IMAP command, so a change written here is correct whether or not the
+    /// wait between runs is cut short. What this covers is that it is cut short: a person who deleted a message watched
+    /// it stay where it was until the interval was out, which is the defect this call answers.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_AChange_BringsTheAccountsNextSynchronizationRunForward()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = RecorderOver(new InMemoryMailboxMutationRecordStore(), TargetIn(Inbox), runSignal: runSignal);
+        var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
+
+        // Act
+        await recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(waiting.Token.IsCancellationRequested);
+    }
+
     private static MailFlagChangeRecorder RecorderOver(
         InMemoryMailboxMutationRecordStore records,
         AuthoredMailboxTarget? target,
         AccessAuthorization? authorization = null,
         Func<IPersistenceSession>? sessionFactory = null,
-        FakeTimeProvider? clock = null)
+        FakeTimeProvider? clock = null,
+        MailAccountRunSignal? runSignal = null)
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite);
@@ -340,7 +365,8 @@ public sealed class MailFlagChangeRecorderTests
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),
-                clock ?? new FakeTimeProvider()));
+                clock ?? new FakeTimeProvider()),
+            runSignal ?? new MailAccountRunSignal());
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)
