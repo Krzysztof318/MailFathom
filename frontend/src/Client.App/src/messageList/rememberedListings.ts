@@ -42,6 +42,20 @@ const longestCursor = 4_096;
 
 /** Where a folder was left, and how it was being read at the time. */
 export interface RememberedListing extends MailListing {
+    /**
+     * Whether the rows of this folder draw what MailFathom made of each message.
+     *
+     * Here rather than on {@link MailListing}, and that separation is load-bearing: a listing is what a cursor was
+     * issued under, and the deployment refuses one presented under different filters or a different order. This
+     * changes neither, so folding it in would have meant every reader who turned the readings off lost their place in
+     * the folder to a question the deployment was never asked.
+     *
+     * Kept per folder because it is a way of reading one rather than a statement about the person: somebody scanning a
+     * busy folder for what is owed and somebody reading a newsletter folder are not disagreeing with themselves. It is
+     * on by default for the reason the derivation exists at all, and a folder nobody has turned it off in draws it.
+     */
+    readonly readingsShown: boolean;
+
     /** The cursor of the page the reader's leading row was in, or `null` where it was the leading page. */
     readonly cursor: string | null;
 
@@ -60,6 +74,7 @@ export interface RememberedListing extends MailListing {
  */
 export const neverOpenedListing: RememberedListing = {
     ...openingListing,
+    readingsShown: true,
     cursor: null,
     readAs: 'forward',
     rowInPage: 0,
@@ -168,7 +183,12 @@ function listingIn(value: unknown): RememberedListing | null {
     const readAs = record['readAs'];
     const rowInPage = record['rowInPage'];
 
-    if (!isOrder(order) || filters === null || !isDirection(readAs)) {
+    // Read as on where the record predates the field, which is a record this client wrote before the readings were
+    // drawn at all rather than one somebody edited: what it says about the folder is still true, and the default is
+    // what a folder nobody has answered for draws.
+    const readingsShown = record['readingsShown'] ?? true;
+
+    if (!isOrder(order) || filters === null || !isDirection(readAs) || typeof readingsShown !== 'boolean') {
         return null;
     }
 
@@ -182,7 +202,7 @@ function listingIn(value: unknown): RememberedListing | null {
 
     // A row past the page it names is a record this client never wrote: the page it would be read back into cannot
     // hold it, and scrolling to it would leave the reader below every row there is.
-    return rowInPage >= rowsPerPage ? null : { order, filters, cursor, readAs, rowInPage };
+    return rowInPage >= rowsPerPage ? null : { order, filters, readingsShown, cursor, readAs, rowInPage };
 }
 
 function filtersIn(value: unknown): MailListFilters | null {

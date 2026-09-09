@@ -24,6 +24,7 @@ const email: MailTimelineEntry = {
     attachmentCount: 0,
     sizeOctets: 1_024,
     preview: 'The opening of the message.',
+    enrichment: null,
     threadMessageCount: null,
 };
 

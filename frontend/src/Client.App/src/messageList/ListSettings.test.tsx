@@ -17,10 +17,17 @@ function renderSettings(
     listing: MailListing = openingListing,
     onRead: (listing: MailListing) => void = () => undefined,
     junkAskable = false,
+    readings: { shown?: boolean; onDrawReadings?: (shown: boolean) => void } = {},
 ): void {
     render(
         <LocalizationProvider>
-            <ListSettings listing={listing} junkAskable={junkAskable} onRead={onRead} />
+            <ListSettings
+                listing={listing}
+                junkAskable={junkAskable}
+                readingsShown={readings.shown ?? true}
+                onRead={onRead}
+                onDrawReadings={readings.onDrawReadings ?? (() => undefined)}
+            />
         </LocalizationProvider>,
     );
 }
@@ -58,7 +65,13 @@ describe('ListSettings', () => {
             render(
                 <LocalizationProvider>
                     <ListHeadRowContext value={row}>
-                        <ListSettings listing={openingListing} junkAskable={false} onRead={() => undefined} />
+                        <ListSettings
+                            listing={openingListing}
+                            junkAskable={false}
+                            readingsShown
+                            onRead={() => undefined}
+                            onDrawReadings={() => undefined}
+                        />
                     </ListHeadRowContext>
                 </LocalizationProvider>,
             );
@@ -76,6 +89,32 @@ describe('ListSettings', () => {
         } finally {
             row.remove();
         }
+    });
+
+    it('offers turning the readings off for this view, drawn as on where they are shown', () => {
+        renderSettings();
+        openFilters();
+
+        expect(screen.getByRole('switch', { name: 'Show a reading on each row', checked: true })).toBeTruthy();
+    });
+
+    it('says the readings are off for this view where somebody turned them off', () => {
+        renderSettings(openingListing, () => undefined, false, { shown: false });
+        openFilters();
+
+        expect(screen.getByRole('switch', { name: 'Show a reading on each row', checked: false })).toBeTruthy();
+    });
+
+    it('asks for the plain row rather than asking the deployment for the folder again', () => {
+        const drawn = vi.fn<(shown: boolean) => void>();
+        const read = vi.fn<(listing: MailListing) => void>();
+
+        renderSettings(openingListing, read, false, { onDrawReadings: drawn });
+        openFilters();
+        fireEvent.click(screen.getByRole('switch', { name: 'Show a reading on each row' }));
+
+        expect(drawn).toHaveBeenCalledWith(false);
+        expect(read).not.toHaveBeenCalled();
     });
 
     it('says nothing narrows the folder rather than drawing a count nobody has to act on', () => {

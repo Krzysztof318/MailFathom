@@ -494,6 +494,32 @@ export const pl: Catalogue = {
     'list.senderUnknown': 'Brak nadawcy',
     'list.threadMessages': 'Wiadomości w tym wątku: {count}',
 
+    'list.readings': 'Co MailFathom z tego wyczytał',
+    'list.showReadings': 'Pokazuj odczyt przy każdym wierszu',
+    'list.readingsExplained':
+        'Jedno zdanie o wiadomości, pod tematem. Ustawienie dotyczy tego folderu, a wyłączenie go niczego nie zmienia w samej poczcie.',
+
+    'reading.sense': 'O co tu chodzi',
+    'reading.significance': 'Dlaczego to może być ważne',
+    'reading.commitment': 'Jakie jest zobowiązanie',
+    'reading.said': '{aspect}: {text}',
+    'reading.title': 'Co MailFathom wyczytał z tej wiadomości',
+    'reading.about':
+        'Każdy odczyt poniżej powstał z tej wiadomości i można go sprawdzić w fragmentach, na których się opiera.',
+    'reading.check': 'Sprawdź, co MailFathom z tego wyczytał',
+    'reading.close': 'Zamknij',
+    'reading.reason': 'Dlaczego: {reason}',
+    'reading.dueAt': 'Termin: {when}',
+    'reading.byRule': 'Reguła tego wdrożenia — {origin}',
+    'reading.byModel': 'Model — {origin}',
+    'reading.readingEvidence': 'Wczytuję fragmenty, na których się to opiera…',
+    'reading.evidenceFailed': 'Nie udało się wczytać fragmentów, na których się to opiera: {reason}.',
+    'reading.noEvidence': 'Ten odczyt nie wskazuje żadnego fragmentu.',
+    'reading.passageGone': 'Tego fragmentu już tam nie ma — wiadomość została w międzyczasie przeczytana na nowo.',
+    'reading.passagePrivate': 'Tego fragmentu nie da się odczytać przy tym logowaniu.',
+    'reading.passageNotFollowed':
+        'Sprawdzanych jest tylko pierwszych dziesięć fragmentów, na których opiera się wiadomość, a ten jest poza nimi.',
+
     'search.label': 'Znajdź wiadomość',
     'search.placeholder': 'Słowa z wiadomości, której szukasz',
     'search.blank': 'Wpisz, czego szukasz.',

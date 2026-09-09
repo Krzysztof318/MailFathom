@@ -4,6 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
+import { parseEnrichment, type MailEnrichment } from './mailEnrichment';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
@@ -96,6 +97,21 @@ export interface MailTimelineEntry {
 
     /** The opening of the message's own text, or `null` for a message this deployment has stored but not extracted. */
     readonly preview: string | null;
+
+    /**
+     * What a derivation concluded about the message, or `null` where none has reached it.
+     *
+     * The two empty answers are different answers and neither is a failure: `null` is a message no derivation has
+     * reached, which is every message on a deployment that has not switched enrichment on, and an object whose `marks`
+     * is empty is one a derivation settled with nothing to say. A screen may draw them alike, and it was still told
+     * which it was.
+     *
+     * Every surface drawing this row carries it, because the deployment publishes it on every row of every response —
+     * a conversation answering `null` for a message the list beside it shows a reading for would be stating that no
+     * derivation has reached it, which is the one thing this field is for. The search route is the exception the wire
+     * makes rather than one this parser does: it answers no derivation at all, so its rows read `null` here.
+     */
+    readonly enrichment: MailEnrichment | null;
 
     /**
      * How many messages the correspondence this row stands for holds, or `null` where the row's surface states none.
@@ -342,6 +358,11 @@ export function parseTimelineEntry(value: unknown): MailTimelineEntry | null {
         return null;
     }
 
+    const derived = parseEnrichment(record['enrichment']);
+    if (derived === null) {
+        return null;
+    }
+
     const threadMessageCount = record['threadMessageCount'] ?? null;
 
     // A conversation holds at least the message the row is about, so a count of zero is an answer no deployment
@@ -368,6 +389,7 @@ export function parseTimelineEntry(value: unknown): MailTimelineEntry | null {
         attachmentCount,
         sizeOctets,
         preview,
+        enrichment: derived.enrichment,
         threadMessageCount,
     };
 }

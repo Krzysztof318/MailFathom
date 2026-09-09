@@ -133,6 +133,15 @@ async function servedByADeployment(page: Page): Promise<void> {
         return answering(route, mail.timelinePage(from));
     });
 
+    // Following a mark's evidence: the passages are in the request body rather than in the query, so the corpus is
+    // asked for a resolution per passage the client named and in the order it named them.
+    await page.route('**/api/client/citations/resolution', (route) => {
+        const asked: unknown = JSON.parse(route.request().postData() ?? '{}');
+        const citations = (asked as { citations?: { fragment?: string }[] }).citations ?? [];
+
+        return answering(route, mail.citationResolutions(citations.map((citation) => citation.fragment ?? '')));
+    });
+
     // The other route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
     // in the query too, so answering it here is what lets this suite watch a request leave for the sender's host — and
     // watch it not leave before the ask.
@@ -1257,6 +1266,25 @@ test('draws every row of the list at one height, which is what the window is ari
     // measures rows, which this list deliberately does not carry.
     expect(new Set(heights).size).toBe(1);
     expect(heights[0]).toBeGreaterThan(0);
+});
+
+test('opens what MailFathom made of a message from its own row, with the passages it rests on', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    const enriched = list.getByRole('option').nth(1);
+
+    await expect(enriched).toContainText('An answer is owed before the end of the week.');
+
+    // The row's own menu, which is where checking a reading is reached from: a row is an `option` of a listbox and
+    // holds no focusable descendant, so the sentence on it cannot be a control of its own.
+    await enriched.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Check what MailFathom made of it' }).click();
+
+    const checking = page.getByRole('dialog', { name: 'What MailFathom made of this message' });
+
+    await expect(checking.getByText('A model — agents/reader')).toBeVisible();
+    await expect(checking.getByText('Please confirm the bays you want before the end of the week.')).toBeVisible();
 });
 
 test('draws the mail screens at the phone composition, with its own row height and nothing over the question', async ({

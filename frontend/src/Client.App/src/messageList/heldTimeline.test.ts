@@ -44,6 +44,7 @@ function message(at: number): MailTimelineEntry {
         attachmentCount: 0,
         sizeOctets: 1_024,
         preview: null,
+        enrichment: null,
         threadMessageCount: null,
     };
 }

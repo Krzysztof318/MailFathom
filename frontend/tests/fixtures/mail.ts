@@ -27,6 +27,48 @@ export const rowsPerPage = 100;
 /** The conversation every corpus message that belongs to one belongs to. */
 export const conversationId = '00000000-0000-4000-8000-0000000000c0';
 
+/**
+ * What a derivation concluded about the rows that carry one.
+ *
+ * Not every row, and that is deliberate — a corpus whose every message carried a reading could not show the state a
+ * message no derivation reached is drawn in, which is an ordinary row rather than a gap. The first row carries none so
+ * that a check reaching a row by what it is about still matches on the mail alone.
+ *
+ * @param at Which row of the folder, which decides whether it carries one at all and what it says.
+ */
+function derivedReading(at: number) {
+    if (at % 4 !== 1) {
+        return null;
+    }
+
+    const owed = at % 8 === 1;
+
+    return {
+        derivedAt: '2026-08-31T09:42:00+00:00',
+        marks: [
+            owed
+                ? {
+                      aspect: 'Commitment',
+                      text: 'An answer is owed before the end of the week.',
+                      reason: 'The message asks for confirmation and names a day.',
+                      dueAt: '2026-09-04T16:00:00+00:00',
+                      source: 'Model',
+                      origin: 'agents/reader',
+                      evidence: [`fragment-${String(at)}-1`],
+                  }
+                : {
+                      aspect: 'Sense',
+                      text: 'A delivery note for an order already placed.',
+                      reason: 'The sender names an order number the message is about.',
+                      dueAt: null,
+                      source: 'DeterministicRule',
+                      origin: 'rules/delivery-note',
+                      evidence: [`fragment-${String(at)}-1`, `fragment-${String(at)}-2`],
+                  },
+        ],
+    };
+}
+
 function timelineRow(at: number) {
     return {
         id: `message-${String(at)}`,
@@ -46,6 +88,7 @@ function timelineRow(at: number) {
         attachmentCount: at % 5 === 0 ? 1 : 0,
         sizeOctets: 4_096,
         preview: `The opening of message ${String(at)}.`,
+        enrichment: derivedReading(at),
         threadMessageCount: null,
     };
 }
@@ -93,6 +136,31 @@ export function timelinePage(from: number) {
         nextCursor: start + rows >= mailboxSize ? null : String(start + rows),
         previousCursor: start === 0 ? null : String(start),
         pageSize: rowsPerPage,
+    };
+}
+
+/**
+ * What following a mark's evidence answers with, one resolution per citation and in the order they were asked about.
+ *
+ * The last of several is left unresolvable deliberately: a corpus that resolved every passage could not show the state
+ * a reading whose message has been re-cut since is drawn in, which is a sentence saying so rather than a blank.
+ *
+ * @param fragments The passages the request named, which the answer is paired against by position.
+ */
+export function citationResolutions(fragments: readonly string[]) {
+    return {
+        citations: fragments.map((fragment, at) =>
+            at > 0 && at === fragments.length - 1
+                ? { outcome: 'Unresolvable', fragment: null }
+                : {
+                      outcome: 'Resolved',
+                      fragment: {
+                          fragmentId: fragment,
+                          ordinal: at,
+                          text: 'Please confirm the bays you want before the end of the week.',
+                      },
+                  },
+        ),
     };
 }
 

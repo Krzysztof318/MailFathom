@@ -489,6 +489,31 @@ export const en = {
     'list.senderUnknown': 'No sender',
     'list.threadMessages': '{count} messages in this conversation',
 
+    'list.readings': 'What MailFathom made of it',
+    'list.showReadings': 'Show a reading on each row',
+    'list.readingsExplained':
+        'One sentence per message, under the subject. It is kept for this folder, and turning it off changes nothing about the mail itself.',
+
+    'reading.sense': 'What this is about',
+    'reading.significance': 'Why this may matter',
+    'reading.commitment': 'What is committed to',
+    'reading.said': '{aspect}: {text}',
+    'reading.title': 'What MailFathom made of this message',
+    'reading.about':
+        'Each reading below was derived from the message and can be checked against the passages it rests on.',
+    'reading.check': 'Check what MailFathom made of it',
+    'reading.close': 'Close',
+    'reading.reason': 'Why: {reason}',
+    'reading.dueAt': 'Due {when}',
+    'reading.byRule': 'A rule of this deployment — {origin}',
+    'reading.byModel': 'A model — {origin}',
+    'reading.readingEvidence': 'Reading the passages this rests on…',
+    'reading.evidenceFailed': 'The passages this rests on could not be read: {reason}.',
+    'reading.noEvidence': 'This reading names no passage.',
+    'reading.passageGone': 'This passage is no longer where it was — the message has been read again since.',
+    'reading.passagePrivate': 'This passage cannot be read with this sign-in.',
+    'reading.passageNotFollowed': 'Only the first ten passages a message rests on are followed, and this is past them.',
+
     'search.label': 'Find a message',
     'search.placeholder': 'Words from the message you are looking for',
     'search.blank': 'Type something to look for.',

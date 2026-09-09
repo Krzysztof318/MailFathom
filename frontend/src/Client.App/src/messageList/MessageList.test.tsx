@@ -63,6 +63,32 @@ function message(at: number, carried: Record<string, unknown> = {}): Record<stri
     };
 }
 
+// What a derivation concluded about a message, as the deployment publishes it: two readings, so the row proves it
+// draws the most actionable one rather than the first one answered.
+const derived = {
+    derivedAt: '2026-08-31T09:41:00+00:00',
+    marks: [
+        {
+            aspect: 'Sense',
+            text: 'An invoice for August.',
+            reason: 'The message attaches a document the sender calls an invoice.',
+            dueAt: null,
+            source: 'DeterministicRule',
+            origin: 'rules/invoice',
+            evidence: [],
+        },
+        {
+            aspect: 'Commitment',
+            text: 'An answer is owed by Friday.',
+            reason: 'The sender asks for confirmation before the end of the week.',
+            dueAt: '2026-09-04T16:00:00+00:00',
+            source: 'Model',
+            origin: 'agents/reader',
+            evidence: ['fragment-1'],
+        },
+    ],
+};
+
 function pageOf(rows: readonly unknown[], cursors: Record<string, unknown> = {}): string {
     return JSON.stringify({
         emails: rows,
@@ -296,6 +322,7 @@ describe('MessageList', () => {
         rememberListing(session.baseAddress, everything, {
             order: 'newestFirst',
             filters: openingListing.filters,
+            readingsShown: true,
             cursor: 'where-they-were',
             readAs: 'forward',
             rowInPage: 3,
@@ -313,6 +340,7 @@ describe('MessageList', () => {
         rememberListing(session.baseAddress, everything, {
             order: 'newestFirst',
             filters: openingListing.filters,
+            readingsShown: true,
             cursor: 'where-they-were',
             readAs: 'forward',
             rowInPage: rowsPerPage - 1,
@@ -808,6 +836,65 @@ describe('MessageList', () => {
 
         await rows();
         expect(asked.requests.length).toBe(before + 1);
+    });
+
+    it('draws the most actionable reading on a row that carries one, without displacing the mail', async () => {
+        renderList(answering(pageOf([message(0, { enrichment: derived }), message(1)])));
+        await rows();
+
+        const enriched = screen.getByRole('option', { name: /An answer is owed by Friday\.$/ });
+
+        expect(enriched.textContent).toContain('An answer is owed by Friday.');
+        expect(enriched.textContent).toContain('Writer 0');
+        expect(enriched.textContent).toContain('Message 0');
+    });
+
+    it('draws an ordinary row for a message no derivation reached', async () => {
+        renderList(answering(pageOf([message(0, { enrichment: derived }), message(1)])));
+        await rows();
+
+        const plain = row(1);
+
+        expect(plain.textContent).toContain('Message 1');
+        expect(plain.textContent).not.toContain('An answer is owed by Friday.');
+        expect(within(plain).queryByRole('status')).toBeNull();
+    });
+
+    it('restores the plain row when the readings are turned off for the view', async () => {
+        renderList(answering(pageOf([message(0, { enrichment: derived })])));
+        await rows();
+
+        openFilters();
+        fireEvent.click(screen.getByRole('switch', { name: 'Show a reading on each row' }));
+
+        const plain = row(0);
+
+        expect(plain.textContent).not.toContain('An answer is owed by Friday.');
+        expect(plain.textContent).toContain('Writer 0');
+        expect(plain.textContent).toContain('Message 0');
+    });
+
+    it('keeps the switch with the view it was turned off in, so returning to the folder finds it off', async () => {
+        renderList(answering(pageOf([message(0, { enrichment: derived })])));
+        await rows();
+
+        openFilters();
+        fireEvent.click(screen.getByRole('switch', { name: 'Show a reading on each row' }));
+
+        expect(rememberedListing(session.baseAddress, everything).readingsShown).toBe(false);
+    });
+
+    it('offers checking a reading from the row that carries one, and from no other row', async () => {
+        renderList(answering(pageOf([message(0, { enrichment: derived }), message(1)])));
+        await rows();
+
+        fireEvent.contextMenu(screen.getByRole('option', { name: /An answer is owed by Friday\.$/ }));
+        expect(screen.getByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeTruthy();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        fireEvent.contextMenu(row(1));
+
+        expect(screen.queryByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeNull();
     });
 
     it('reads nothing again for a change in another account than the one it is showing', async () => {
