@@ -444,8 +444,15 @@ than the machine's.
 
 `src/folders/` is what writes that scope. It draws the user's mailboxes and their folders as one tree, read from the
 folders route in a single exchange, with the roles that span every mailbox above them — so asking about every inbox at
-once is one act rather than three. A folder is placed and named by the role the deployment gave it rather than by what
-its server calls it, because a name is whatever a provider chose in whatever language. The same tree is what the folded
+once is one act rather than three. That group is what several mailboxes are for, so a user holding one is not offered
+it: it would draw that account's folders a second time under a heading meaning the same thing. Either way the client
+opens on the inbox — every mailbox's at once where that row is drawn, the one mailbox's own where it is not — because
+the widest scope is every folder at once, deleted and sent mail among them. A folder is placed and named by the role
+the deployment gave it rather than by what
+its server calls it, because a name is whatever a provider chose in whatever language, and pressing a mailbox's own row
+means its inbox rather than every folder it has. Nothing in the tree says how a local copy is doing: the column's foot
+carries that for every mailbox at once, which is where the design puts it and where one sentence cannot squeeze a
+mailbox's name off its own row. The same tree is what the folded
 column draws: a row keeps its place and its symbol and loses its label, a mailbox is marked by its colour where its name
 stood, and the two folds stay independent — narrowing the column changes nothing about which mailboxes are open in it.
 

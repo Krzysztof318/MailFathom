@@ -9,7 +9,6 @@ import { MailboxMark } from '../controls/MailboxMark';
 import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { isCurrent, needsAttention, synchronizationStateLabel } from '../synchronization/synchronizationState';
 import { folderRoleLabels } from '../workspace/mailScope';
 import type { FolderTreeRow } from './folderTreeRows';
 
@@ -28,8 +27,13 @@ import type { FolderTreeRow } from './folderTreeRows';
 // Each of those two is drawn twice again, because the column it stands in folds to a rail. Folded, a group is its mark
 // alone — the colour is what tells one mailbox from the next once the name is gone — and a folder is its symbol alone,
 // drawn larger, because a narrower column still has to be hit reliably. What goes is the drawing rather than the
-// saying: the name, the state, and the count stay in the row for a reader who is not looking at it, which is what
-// keeps a rail of unlabelled symbols something a screen reader can still work through.
+// saying: the name and the count stay in the row for a reader who is not looking at it, which is what keeps a rail of
+// unlabelled symbols something a screen reader can still work through.
+//
+// What a row never says is how the local copy is doing. The design draws no such sentence in this column, and one
+// there costs the thing the column is for: a mailbox called *Club* whose copy has stopped becomes a row reading
+// *Stopped synchronizing* with the mailbox's own name squeezed out of it. The column's foot is where that is said,
+// once, for every account at a time — `shell/ConnectionSummary.tsx` — and the account menu says it per account.
 
 // How far in each level under a group sits. Stated as one list rather than as a width worked out from the level,
 // because a computed indentation is a value written outside the token layer however it is arrived at. Anything deeper
@@ -142,7 +146,6 @@ export function FolderRow({
             <span className={folded ? 'sr-only' : 'flex min-w-0 flex-1 items-center gap-2'}>
                 <span className="min-w-0 flex-1 truncate">{nameOf(row, translate)}</span>
 
-                <State row={row} />
                 <Unread count={row.role === 'Inbox' ? row.unreadEmailCount : null} />
             </span>
 
@@ -186,22 +189,6 @@ function Twist({ expanded, onToggle }: { readonly expanded: boolean | null; read
             }}
         >
             <Icon name="chevron_right" className={`size-3.5 transition ${expanded ? 'rotate-90' : ''}`} />
-        </span>
-    );
-}
-
-// Said in words rather than in a colour, and only where there is something to say: a row whose last attempt succeeded
-// and left nothing behind carries nothing, so the two rows that do are the ones a reader's eye lands on.
-function State({ row }: { readonly row: FolderTreeRow }) {
-    const { translate } = useLocalization();
-
-    if (row.state === null || isCurrent(row.state, row.behind)) {
-        return null;
-    }
-
-    return (
-        <span className={`shrink-0 text-xs ${needsAttention(row.state) ? 'text-warning' : 'text-muted'}`}>
-            {translate(synchronizationStateLabel(row.state, row.behind))}
         </span>
     );
 }

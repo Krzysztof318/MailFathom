@@ -249,8 +249,8 @@
     --spacing-rail: 6rem;
     --spacing-rail-narrow: 4.125rem;
     --spacing-mailboxes: 13.125rem;
-    --spacing-mailboxes-folded: 4.8125rem;
-    --spacing-drawer: 18.125rem;
+    --spacing-mailboxes-folded: 3.625rem;
+    --spacing-drawer: 16.375rem;
 
     /* The message list at the tablet and the fold, where the project draws it at one width and offers no boundary to
        move: the list's width is somebody's to set only in the desktop composition, which is the one wide enough for

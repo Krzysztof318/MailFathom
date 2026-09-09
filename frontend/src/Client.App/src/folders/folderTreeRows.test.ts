@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import type { MailAccount, MailFolder, MailFolderDirectory } from '@mailfathom/client-backend';
-import { folderTreeOf, visibleRows, type FolderTreeRow } from './folderTreeRows';
+import type { MailAccount, MailAccountFolders, MailFolder, MailFolderDirectory } from '@mailfathom/client-backend';
+import { folderTreeOf, openingScope, visibleRows, type FolderTreeRow } from './folderTreeRows';
 
 function account(id: string, displayName: string): MailAccount {
     return {
@@ -29,23 +29,22 @@ function folder(folder: Partial<MailFolder> & Pick<MailFolder, 'alias'>): MailFo
     };
 }
 
+const work: MailAccountFolders = {
+    account: account('work', 'Work'),
+    folders: [
+        folder({ alias: 'INBOX', role: 'Inbox', path: ['INBOX'], unreadEmailCount: 12, storedEmailCount: 4213 }),
+        folder({ alias: 'SENT', role: 'Sent', path: ['Wysłane'], storedEmailCount: 300 }),
+        folder({ alias: 'ARCHIVE-2024', path: ['Archiwum', '2024'], storedEmailCount: 980 }),
+    ],
+};
+
+/** The one mailbox above and nothing else, which is the case with no group spanning every mailbox. */
+const alone: MailFolderDirectory = { synchronizationEnabled: true, accounts: [work] };
+
 const directory: MailFolderDirectory = {
     synchronizationEnabled: true,
     accounts: [
-        {
-            account: account('work', 'Work'),
-            folders: [
-                folder({
-                    alias: 'INBOX',
-                    role: 'Inbox',
-                    path: ['INBOX'],
-                    unreadEmailCount: 12,
-                    storedEmailCount: 4213,
-                }),
-                folder({ alias: 'SENT', role: 'Sent', path: ['Wysłane'], storedEmailCount: 300 }),
-                folder({ alias: 'ARCHIVE-2024', path: ['Archiwum', '2024'], storedEmailCount: 980 }),
-            ],
-        },
+        work,
         {
             account: account('personal', 'Personal'),
             folders: [
@@ -115,14 +114,105 @@ describe('folderTreeOf', () => {
     });
 
     it('shows a folder nothing has bound to a remote folder under the name MailFathom knows it by', () => {
-        const news = find(folderTreeOf(directory), 'folder:personal:NEWS');
+        expect(find(folderTreeOf(directory), 'folder:personal:NEWS')?.name).toBe('NEWS');
+    });
 
-        expect(news?.name).toBe('NEWS');
-        expect(news?.state).toBe('NeverSynchronized');
+    it('offers the special folders before the rest, in the order a reader reaches for them', () => {
+        const special = {
+            synchronizationEnabled: true,
+            accounts: [
+                {
+                    account: account('work', 'Work'),
+                    folders: [
+                        folder({ alias: 'ARCHIVE', role: 'Archive', path: ['Archive'] }),
+                        folder({ alias: 'TRASH', role: 'Trash', path: ['Trash'] }),
+                        folder({ alias: 'DRAFTS', role: 'Drafts', path: ['Drafts'] }),
+                        folder({ alias: 'SENT', role: 'Sent', path: ['Sent'] }),
+                        folder({ alias: 'INBOX', role: 'Inbox', path: ['INBOX'] }),
+                    ],
+                },
+                { account: account('personal', 'Personal'), folders: [] },
+            ],
+        };
+
+        expect(keysOf(find(folderTreeOf(special), 'everything')?.children ?? [])).toEqual([
+            'role:Inbox',
+            'role:Sent',
+            'role:Drafts',
+            'role:Archive',
+            'role:Trash',
+        ]);
+
+        expect(keysOf(find(folderTreeOf(special), 'account:work')?.children ?? [])).toEqual([
+            'folder:work:INBOX',
+            'folder:work:SENT',
+            'folder:work:DRAFTS',
+            'folder:work:ARCHIVE',
+            'folder:work:TRASH',
+        ]);
+    });
+
+    it('scopes a mailbox’s own row to its inbox, because that is what pressing a mailbox’s name means', () => {
+        expect(find(folderTreeOf(directory), 'account:work')?.scope).toEqual({
+            kind: 'folder',
+            accountId: 'work',
+            alias: 'INBOX',
+        });
+    });
+
+    it('scopes a mailbox with no inbox to the mailbox itself', () => {
+        const inboxless = {
+            synchronizationEnabled: true,
+            accounts: [
+                { account: account('work', 'Work'), folders: [folder({ alias: 'NEWS', path: ['NEWS'] })] },
+                { account: account('personal', 'Personal'), folders: [] },
+            ],
+        };
+
+        expect(find(folderTreeOf(inboxless), 'account:work')?.scope).toEqual({ kind: 'account', accountId: 'work' });
+    });
+
+    it('offers no group spanning every mailbox to a user who has exactly one', () => {
+        expect(keysOf(folderTreeOf(alone))).toEqual(['account:work']);
     });
 
     it('reads a user with no mailbox as a tree with no rows rather than as a row with nothing under it', () => {
         expect(folderTreeOf({ synchronizationEnabled: true, accounts: [] })).toEqual([]);
+    });
+});
+
+describe('openingScope', () => {
+    it('opens on every mailbox’s inbox at once where the tree draws a row for that', () => {
+        expect(openingScope(directory)).toEqual({ kind: 'role', role: 'Inbox' });
+    });
+
+    it('opens on every mailbox at once where no mailbox plays an inbox to open on', () => {
+        const inboxless = {
+            synchronizationEnabled: true,
+            accounts: [
+                { account: account('work', 'Work'), folders: [folder({ alias: 'NEWS', path: ['NEWS'] })] },
+                { account: account('personal', 'Personal'), folders: [] },
+            ],
+        };
+
+        expect(openingScope(inboxless)).toEqual({ kind: 'everything' });
+    });
+
+    it('opens on the one mailbox’s inbox where there is no row spanning every mailbox', () => {
+        expect(openingScope(alone)).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
+    });
+
+    it('opens on the one mailbox itself where it plays no inbox', () => {
+        const inboxless = {
+            synchronizationEnabled: true,
+            accounts: [{ account: account('work', 'Work'), folders: [folder({ alias: 'NEWS', path: ['NEWS'] })] }],
+        };
+
+        expect(openingScope(inboxless)).toEqual({ kind: 'account', accountId: 'work' });
+    });
+
+    it('opens on every mailbox at once where the user has none, which is the widest scope rather than a place', () => {
+        expect(openingScope({ synchronizationEnabled: true, accounts: [] })).toEqual({ kind: 'everything' });
     });
 });
 

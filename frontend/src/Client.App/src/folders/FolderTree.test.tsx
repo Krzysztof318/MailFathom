@@ -126,7 +126,7 @@ function foldTheColumnAway(): void {
     fireEvent.click(screen.getByRole('button', { name: foldTheColumn }));
 }
 
-/** The part of a row that carries its name, its state, and its count — drawn beside the symbol, or said and not drawn. */
+/** The part of a row that carries its name and its count — drawn beside the symbol, or said and not drawn. */
 function saidOn(named: HTMLElement): HTMLElement {
     const said = named.querySelector<HTMLElement>('span:not([aria-hidden])');
 
@@ -318,7 +318,7 @@ describe('FolderTree', () => {
 
         await drawn();
 
-        expect(row(/^Inbox.*[^0-9]3 unread/).textContent).toContain('3 unread');
+        expect(row(/^Inbox3 unread/).textContent).toContain('3 unread');
     });
 
     it('offers every mailbox at once as the scope everything else is read under', async () => {
@@ -329,6 +329,30 @@ describe('FolderTree', () => {
 
         expect(carried().scope).toEqual({ kind: 'everything' });
         expect(row(/^All mailboxes/).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('lands on a mailbox’s inbox when its own row is pressed, which is what pressing a mailbox’s name means', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+        fireEvent.click(row(/^Work/));
+
+        expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
+        expect(row(/^Inbox12 unread/).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('offers a user with one mailbox no group spanning every mailbox, and opens on that mailbox’s inbox', async () => {
+        renderTree(answering(JSON.stringify({ ...tree, accounts: [tree.accounts[0]] })));
+
+        await drawn();
+
+        expect(screen.queryByRole('treeitem', { name: /^All mailboxes/ })).toBeNull();
+
+        await waitFor(() => {
+            expect(carried().scope).toEqual({ kind: 'folder', accountId: 'work', alias: 'INBOX' });
+        });
+
+        expect(row(/^Inbox12 unread/).getAttribute('aria-selected')).toBe('true');
     });
 
     it('offers a special-use folder across every mailbox playing that role, counting all of them', async () => {
@@ -360,7 +384,7 @@ describe('FolderTree', () => {
         { gone: 'a folder', gap: { kind: 'folder', accountId: 'work', alias: 'ARCHIVE-2019' } },
         { gone: 'a mailbox', gap: { kind: 'account', accountId: 'retired' } },
         { gone: 'the last folder playing a role', gap: { kind: 'role', role: 'Junk' } },
-    ])('opens on every mailbox where what was scoped to is $gone the deployment no longer offers', async ({ gap }) => {
+    ])('opens on the inbox where what was scoped to is $gone the deployment no longer offers', async ({ gap }) => {
         window.sessionStorage.setItem('mailfathom.workspace', JSON.stringify({ ...emptyWorkspace, scope: gap }));
         renderTree(answering(JSON.stringify(tree)));
 
@@ -369,7 +393,7 @@ describe('FolderTree', () => {
         // Awaited rather than asserted outright: the tree is drawn from the answer and the scope is corrected against
         // that same answer, so the correction lands on the render after the one that first drew a row.
         await waitFor(() => {
-            expect(carried().scope).toEqual({ kind: 'everything' });
+            expect(carried().scope).toEqual({ kind: 'role', role: 'Inbox' });
         });
     });
 
@@ -384,13 +408,13 @@ describe('FolderTree', () => {
         expect(carried().scope).toEqual(kept);
     });
 
-    it('says which folder is behind and which one nothing could reach, rather than showing either as waiting', async () => {
+    it('says nothing on a row about how the local copy is doing, which the column’s foot says instead', async () => {
         renderTree(answering(JSON.stringify(tree)));
 
         await drawn();
 
-        expect(row(/^2024/).textContent).toContain('Catching up');
-        expect(row(/^InboxThe mail server did not answer/)).toBeDefined();
+        expect(screen.getByRole('tree').textContent).not.toContain('Catching up');
+        expect(screen.getByRole('tree').textContent).not.toContain('The mail server did not answer');
         expect(screen.queryByRole('progressbar')).toBeNull();
     });
 
@@ -472,7 +496,7 @@ describe('FolderTree', () => {
         first.focus();
         fireEvent.keyDown(first, { key: 'End' });
 
-        expect(document.activeElement).toBe(row(/^InboxThe mail server did not answer/));
+        expect(document.activeElement).toBe(row(/^Inbox3 unread/));
 
         fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Home' });
 
