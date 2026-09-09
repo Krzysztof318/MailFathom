@@ -1,6 +1,6 @@
 # The design's state inventory
 
-**Mirror stamp `1eb5a9bd74d923d2`** — the etag set this was extracted from. Run
+**Mirror stamp `51f0ca5a520463ae`** — the etag set this was extracted from. Run
 `bash scripts/design-mirror.sh stamp`; a different answer means the design moved and this file
 describes something older than the mirror beside it. Refresh with `$mf-sync-design` rather than reading
 around it.
@@ -17,7 +17,7 @@ This file and the sources it was extracted from are tracked, so every clone read
 
 | Mirrored file | What it settles |
 |---|---|
-| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 7 604 lines, and the only file that carries navigation |
+| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 7 658 lines, and the only file that carries navigation |
 | `MailFathom Sign-in.dc.html` | Sign-in, and the server screen behind it |
 | `MailFathom Toasts.dc.html` | Toasts and the blocking overlay — the system's answer to what somebody just did |
 | `MailFathom Notification Gesture.dc.html` | The phone's notification-panel gesture, as four frames plus the numbers behind them |
@@ -38,7 +38,7 @@ source: `grep -n 'showThreadPane' 'design/files/MailFathom Prototype.dc.html'` g
 the gate in the template and the one line that decides it. *Reveal* is what makes it true.
 
 Three things decide composition before any state does, and they are read from the width alone
-(`renderVals`, lines 5266–5287):
+(`renderVals`, lines 5305–5326):
 
 | Name | Condition | What it changes |
 |---|---|---|
@@ -49,7 +49,7 @@ Three things decide composition before any state does, and they are read from th
 | `touch` | `isMobile \|\| tablet` | Every `pointer: coarse` affordance |
 | `drawer` | `tablet \|\| isMobile` | The side list arrives as a drawer rather than a column |
 
-`FRAMES` (line 3050) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
+`FRAMES` (line 3055) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
 `tablet` 1024 × 768, and the artboard's 1440 × 900. A `fold` is a *tablet-class* width with two panes.
 
 ## Discover — `isDiscover`
@@ -72,7 +72,7 @@ The run is a phase machine (`st.phase`), and the blocks arrive one at a time (`r
 | Evidence inspector open | `inspectorOpen` | a citation is pressed |
 | Evidence inspector closed | `inspectorClosed` | nothing selected — the resting state |
 
-Which blocks a run produces is the plan, and there are three (`PLANS`, line 2624): `contract`
+Which blocks a run produces is the plan, and there are three (`PLANS`, line 2629): `contract`
 (answer + timeline + table + action), `files` (answer + gallery + action), `people`
 (answer + people + action). **No single run draws every block**, so a screenshot of one plan is not
 the block set to build against; `MailFathom Result Blocks.dc.html` is where the block types stand
@@ -94,6 +94,13 @@ together.
 | Side list expanded | `sideExpanded` | not collapsed; collapsed is 58 px against 210 px |
 | Side list as a drawer | `showSide` / `sideScrim` | `drawer && drawerOpen` |
 | Folder button | `showFolderBtn` | `drawer` |
+| Account menu on a mailbox | `ctxMenu` through `g.ctxOpen` | right-click a mailbox header, or hold it for 460 ms — *New folder* and *Mark all as read*; **All accounts carries none** |
+| A folder the user made | `st.extraFolders[<mailbox>]` | *New folder* in that menu, or *New folder here* in the move sheet; it is drawn below the standard five |
+
+Every mailbox draws the same five folders in the same order — Inbox, Sent, Drafts, Archive, Trash
+(`STD_FOLDERS`, line 5581) — and a count only where the mock data gives one. *All accounts* is those
+same five over both mailboxes rather than a set of its own, and anything under them is a folder the
+user made.
 
 ### The thread
 
@@ -265,13 +272,14 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | Notification centre | `notifCenterOpen` | the bell, or the phone's upward gesture |
 | Unread notifications | `notifHasUnread` | the unread count; it gates three regions including the rail badge |
 | **No notifications** | `notifEmpty` | the shown list is empty — reachable by filtering to unread after reading them all |
-| Move dialog | `moveOpen` | the move action on a selection |
+| Move dialog | `moveOpen` | the move action on a selection — grouped by mailbox (`moveGroups`, line 7069), each group ending in *New folder here*, and the toast it produces names the mailbox |
+| Permanent delete | `confirmDel` under `inTrash` | a delete action while the open folder is a Trash (line 4446) — *Delete permanently*, no undo offered, and the toast reads *Permanently deleted* rather than *Moved to trash* |
 | Cancel confirmation | `cancelAskOpen` | closing a toast that carries a running operation |
 | Toasts | `toasts` | any operation that reports; `MailFathom Toasts.dc.html` is the whole of it |
 
 Every label in the prototype is English. The four that were not — the Settings tabs *Profil* and
-*Aplikacja* (line 7483), the user menu's sign-out item *Wyloguj* (line 135), and the single-pane
-state toggle beside the thread head, *ukryj* (line 7217) — were translated in the project, and
+*Aplikacja* (line 7535), the user menu's sign-out item *Wyloguj* (line 135), and the single-pane
+state toggle beside the thread head, *ukryj* (line 7271) — were translated in the project, and
 `design/parity.json` presses two of them under their English names.
 
 ## Sign-in — `MailFathom Sign-in.dc.html`
@@ -346,7 +354,7 @@ a failure banner. Worth carrying out of it:
 This is the class the inventory exists for. Each is in the source, and none of them can be reached by
 clicking a preview.
 
-- **The application with no mailbox at all.** `const emptyApp = false;` (line 5537) is a constant, and
+- **The application with no mailbox at all.** `const emptyApp = false;` (line 5576) is a constant, and
   every one of the seven screen gates is `st.screen === "…" && !emptyApp`. Nothing anywhere draws the
   true branch, so **the design does not cover a deployment with no mailbox** — a session that needs
   that screen is designing something the project has not settled, and it goes to the owner rather than
