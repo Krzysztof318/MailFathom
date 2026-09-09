@@ -706,7 +706,6 @@ export const en = {
         'Pictures are being loaded from the sender for this message, so their servers can tell it was opened. Nothing about that is kept: leaving this message and coming back asks again.',
 
     'thread.label': 'Conversation',
-    'thread.close': 'Back to the message',
     'thread.reading': 'Reading this conversation…',
     'thread.readingMore': 'Reading more of this conversation…',
     'thread.readMore': 'Read more of this conversation',
@@ -716,14 +715,15 @@ export const en = {
     'thread.offline':
         'This machine is offline, so this conversation cannot be opened. It opens on its own once the network comes back.',
     'thread.empty': 'There is no message in this conversation that you are allowed to see.',
-    'thread.messages': 'Messages in this conversation: {count}',
-    'thread.wroteHere': 'Written by {names}',
     'thread.moreParticipants': 'More people wrote in this conversation than are named here.',
     'thread.moreNotAssembled':
         'This conversation is longer than one read assembles, so what is shown is the beginning of it.',
     'thread.storedIn': 'In {account}, {folder}',
-    'thread.openOnItsOwn': 'Open this message on its own',
     'thread.messageBy': 'Message from {sender}',
+    'thread.held.one': 'thread: {count} message',
+    'thread.held.few': 'thread: {count} messages',
+    'thread.held.many': 'thread: {count} messages',
+    'thread.held.other': 'thread: {count} messages',
     'thread.showEarlier.one': 'Show {count} earlier message',
     'thread.showEarlier.few': 'Show {count} earlier messages',
     'thread.showEarlier.many': 'Show {count} earlier messages',
@@ -731,7 +731,7 @@ export const en = {
     'thread.hideEarlier': 'Hide earlier messages',
     'thread.showAll': 'Show all the messages',
     'thread.hideOthers': 'Hide the other messages',
-    'thread.messageNotRead': 'The message from {sender} could not be read here. Open it on its own to read it.',
+    'thread.messageNotRead': 'The message from {sender} could not be read here.',
     'thread.openedFromList': 'Opened from the list',
     'thread.landedFromResult': 'Brought here from a search result',
 
@@ -792,10 +792,11 @@ export const en = {
     'attachment.download': 'Download {name}',
     'attachment.nameWasRewritten':
         'The sender wrote a file name this deployment would not use, so what is shown is the name it was given instead.',
-    'attachment.arriving': 'How much of the file has arrived',
-    'attachment.arrivingOf': '{arrived} of {whole}',
-    'attachment.stop': 'Stop downloading',
-    'attachment.saved': '{name} was downloaded.',
+    'attachment.downloading': 'Downloading file…',
+    'attachment.downloaded': 'File downloaded',
+    'attachment.notDownloaded': 'File not downloaded',
+    'attachment.stoppingLeavesBehind':
+        'Downloading “{name}” is in progress. Stopping it leaves nothing of the file on this machine.',
     'attachment.abandoned': 'The download was stopped, so nothing was saved.',
     'attachment.refusedUnauthenticated':
         'This deployment no longer accepts the credential, so the file was not downloaded. Sign in again.',

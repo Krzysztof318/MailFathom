@@ -16,8 +16,7 @@ import {
     type ShowingRefusal,
 } from '../deployment/attachmentExchange';
 import type { OpenedAttachment } from '../workspace/openAttachment';
-import { Downloading } from './Downloading';
-import { useDownloadingAttachment } from './downloadingAttachment';
+import { useAttachmentDownloads } from './downloadingAttachment';
 import { sizeOf } from '../localization/octets';
 import { kindOf } from './fileKind';
 import { shownAttachment, type NotShown } from './shownAttachment';
@@ -105,7 +104,7 @@ export function AttachmentView({
 }) {
     const { locale, translate } = useLocalization();
     const { attachment, storedEmailId } = opened;
-    const { download, start, stop } = useDownloadingAttachment(session, storedEmailId, attachment);
+    const downloads = useAttachmentDownloads(session, storedEmailId);
 
     const region = useRef<HTMLElement>(null);
     const named = attachment.fileName ?? translate('attachment.unnamed');
@@ -131,7 +130,9 @@ export function AttachmentView({
                     <SurfaceControl
                         label={translate('attachment.download', { name: named })}
                         icon="download"
-                        onActivate={start}
+                        onActivate={() => {
+                            void downloads.start(attachment);
+                        }}
                     />
 
                     <SurfaceControl
@@ -140,10 +141,6 @@ export function AttachmentView({
                         onActivate={onClose}
                     />
                 </div>
-            </div>
-
-            <div className="shrink-0 px-4 text-sm empty:hidden">
-                <Downloading download={download} name={named} whole={attachment.sizeOctets} onStop={stop} />
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col items-center overflow-auto px-5 py-6">

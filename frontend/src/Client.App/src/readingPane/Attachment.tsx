@@ -6,8 +6,6 @@ import type { MailAttachment } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { useLocalization } from '../localization/useLocalization';
 import { sizeOf } from '../localization/octets';
-import { Downloading } from './Downloading';
-import type { Download } from './downloadingAttachment';
 import { kindOf } from './fileKind';
 
 // One file a message carries. It is described before anything is fetched — what kind of file it is, what it is called,
@@ -27,24 +25,21 @@ import { kindOf } from './fileKind';
 
 export function Attachment({
     attachment,
-    downloading,
+    arriving,
     onOpen,
     onDownload,
-    onStop,
 }: {
     readonly attachment: MailAttachment;
 
-    /** What is becoming of this file, which is `described` where nobody has asked for it yet. */
-    readonly downloading: Download;
+    /** Whether this file is on its way, which is what refuses a second press on the control that asked for it. */
+    readonly arriving: boolean;
 
     readonly onOpen: () => void;
     readonly onDownload: () => void;
-    readonly onStop: () => void;
 }) {
     const { locale, translate } = useLocalization();
 
     const shown = attachment.fileName ?? translate('attachment.unnamed');
-    const arriving = downloading.stage === 'arriving';
 
     return (
         <li className="flex max-w-full flex-col gap-1 text-sm">
@@ -86,8 +81,6 @@ export function Attachment({
             {attachment.wasFileNameNormalized ? (
                 <p className="text-muted">{translate('attachment.nameWasRewritten')}</p>
             ) : null}
-
-            <Downloading download={downloading} name={shown} whole={attachment.sizeOctets} onStop={onStop} />
         </li>
     );
 }

@@ -190,7 +190,10 @@ describe('App', () => {
         ).toBe(String(startingListWidth));
     });
 
-    it('opens the conversation a message belongs to from the row itself, and returns to that message when it is closed', async () => {
+    // Opening a message from the list *is* opening its conversation, so there is no message standing behind the
+    // conversation and nothing offering a way back to one — a control that did appeared even here, where the reader
+    // had arrived from the list rather than from a message.
+    it('opens the conversation a message belongs to from the row itself, with nothing standing behind it', async () => {
         renderApp(servedFrom, heldSession, deploymentDrawingAConversation());
         await framed();
 
@@ -200,17 +203,9 @@ describe('App', () => {
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         const conversation = await screen.findByRole('region', { name: 'Conversation' });
-        expect(within(conversation).getByText('Messages in this conversation: 1')).toBeDefined();
 
-        fireEvent.click(within(conversation).getByRole('button', { name: 'Back to the message' }));
-
-        expect(await screen.findByText('A drawn message.')).toBeDefined();
-        expect(screen.queryByRole('region', { name: 'Conversation' })).toBeNull();
-
-        // Returning to the message is a navigation rather than a landing, so it places the reader in what it drew.
-        await waitFor(() => {
-            expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
-        });
+        expect(await within(conversation).findByText('A drawn message.')).toBeDefined();
+        expect(within(conversation).queryByRole('button', { name: 'Back to the message' })).toBeNull();
     });
 
     // What #1759 is about: a correspondence costs one read of the deployment however many messages are drawn out of

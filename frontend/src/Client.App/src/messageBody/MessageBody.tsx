@@ -181,11 +181,15 @@ function ReadAsWords({ body }: { readonly body: MailBody }) {
     const { translate } = useLocalization();
 
     const refusal = body.document?.refusal ?? 'None';
-    const reason = refusal === 'None' ? 'body.notReduced' : refusalMessages[refusal];
+
+    // A sender who wrote no formatted version is not a refusal a reader is owed a sentence about: plain text is what
+    // that message is, and the design draws it as the message rather than as a message with a note over it. The other
+    // two are this deployment saying it could not do what it meant to, which is the reader's to know.
+    const reason = refusal === 'NoHtmlPart' ? null : refusal === 'None' ? 'body.notReduced' : refusalMessages[refusal];
 
     return (
         <article className={writtenWords}>
-            <p className="text-sm text-muted">{translate(reason)}</p>
+            {reason === null ? null : <p className="text-sm text-muted">{translate(reason)}</p>}
             <p className="whitespace-pre-wrap">{body.plainText.text}</p>
             {body.plainText.truncation === 'None' ? null : (
                 <p className="text-sm text-muted">{translate('body.textTruncated')}</p>

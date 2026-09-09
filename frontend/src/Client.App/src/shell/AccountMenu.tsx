@@ -116,7 +116,7 @@ export function AccountMenu({
                 aria-label={wide ? translate('shell.account') : undefined}
                 className={
                     wide
-                        ? 'flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay'
+                        ? `flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay ${standing ? 'outline-2 outline-offset-2 outline-accent-line' : ''}`
                         : 'flex min-h-13 w-full items-center gap-3.5 rounded-xl px-2.5 text-start text-text transition hover:bg-hover'
                 }
             >

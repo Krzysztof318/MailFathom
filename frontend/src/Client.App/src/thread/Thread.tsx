@@ -11,14 +11,16 @@ import {
     type ClientResult,
     type ClientSession,
     type MailFathomTransport,
+    type MailMessageHeaders,
+    type MailThreadMessage,
     type MailThreadPage,
     type MailThreadState,
 } from '@mailfathom/client-backend';
-import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { HeadActs } from '../mailSpace/HeadActs';
+import type { HeadMessage } from '../mailSpace/HeadActs';
+import { MessageHeaders } from '../readingPane/MessageHeaders';
 import { useTwoPanes } from '../shell/useWideWorkspace';
 import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -111,7 +113,7 @@ export function Thread({
     readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { locale, translate } = useLocalization();
-    const { workspace, revise } = useWorkspace();
+    const { workspace } = useWorkspace();
     const twoPanes = useTwoPanes();
     const panelsHidden = workspace.panelsHidden;
 
@@ -306,14 +308,6 @@ export function Thread({
         };
     }, [arrival, conversation.fromResult]);
 
-    function close(): void {
-        revise({ conversation: null });
-    }
-
-    function openOnItsOwn(storedEmailId: string): void {
-        revise({ conversation: null, selection: storedEmailId });
-    }
-
     function followSource(storedEmailId: string): void {
         setHistoryShown(true);
         setFollowed((last) => ({ storedEmailId, press: (last?.press ?? 0) + 1 }));
@@ -324,7 +318,7 @@ export function Thread({
     // says the machine has no network.
     if (!online && latest === null) {
         return (
-            <Conversation onClose={close}>
+            <Conversation>
                 <p className="text-sm text-muted" role="status">
                     {translate('thread.offline')}
                 </p>
@@ -334,7 +328,7 @@ export function Thread({
 
     if (latest === null && failure !== null) {
         return (
-            <Conversation onClose={close}>
+            <Conversation>
                 <p className="text-sm text-warning" role="alert">
                     {translate('thread.failed', { reason: translate(failureLabels[failure.reason]) })}
                 </p>
@@ -355,7 +349,7 @@ export function Thread({
 
     if (latest === null) {
         return (
-            <Conversation onClose={close}>
+            <Conversation>
                 <p className="text-sm text-muted" role="status">
                     {translate('thread.reading')}
                 </p>
@@ -369,7 +363,7 @@ export function Thread({
     // a state the block says in a sentence.
     const derived = derivation?.outcome === 'read' ? derivation.value : null;
     const stateBlock =
-        derivation?.outcome === 'failed' ? undefined : (
+        derivation?.outcome === 'failed' || (panelsHidden && twoPanes) ? undefined : (
             <ThreadState
                 state={derived}
                 reading={derivation === null}
@@ -381,53 +375,28 @@ export function Thread({
 
     return (
         <Conversation
-            onClose={close}
             state={stateBlock}
             header={
-                // The head goes with the panels where the composition has two of them, which is the design's own
-                // arithmetic: `showThreadHead` is off under the *fullscreen* control except in a single pane, where
-                // the head is also what carries the way back to the list.
-                panelsHidden && twoPanes ? undefined : (
-                    <header className="flex flex-col gap-1.75 border-b border-line px-5.5 py-4">
-                        {/* The acts the design draws beside a conversation's subject, the same four the head of a
-                            message carries: a conversation is what they are about in the design, whichever message
-                            of it is on the screen — which is why none of them is handed a message here, and why each
-                            stands as what it is. `mailSpace/HeadActs.tsx` holds what a conversation would need first. */}
-                        <div className="flex min-w-0 items-center gap-2.25">
-                            <h2 className="min-w-0 flex-1 text-3xl font-semibold text-balance">
-                                {held[0]?.email.subject ?? translate('message.noSubject')}
-                            </h2>
-
-                            <HeadActs compact={!twoPanes} message={null} />
-                        </div>
-
-                        {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are
-                            the conversation's authors, so a screen deriving them would be paging a conversation to draw
-                            its header. The list is worded by `Intl` under the active locale rather than joined here. */}
-                        {latest.participants.length === 0 ? null : (
-                            <p className="text-base text-muted">
-                                {translate('thread.wroteHere', {
-                                    names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
-                                        latest.participants.map((one) => one.displayName ?? one.address),
-                                    ),
-                                })}
-                            </p>
-                        )}
-
+                // One head rather than a second arrangement of the same three things. The design draws a conversation's
+                // head and a message's head identically — the subject with the acts beside it, and under it the one
+                // line naming who wrote, when, and how long the conversation is, with everybody else it names behind
+                // the same disclosure. `readingPane/MessageHeaders.tsx` is that head, and it carries the *fullscreen*
+                // control's own arithmetic with it.
+                opened === null ? undefined : (
+                    <MessageHeaders
+                        headers={headersOf(opened)}
+                        message={actedOn(opened)}
+                        subject={held[0]?.email.subject ?? translate('message.noSubject')}
+                        messagesInThread={latest.messageCount}
+                    >
                         {latest.moreParticipantsNotNamed ? (
                             <p className="text-base text-muted">{translate('thread.moreParticipants')}</p>
                         ) : null}
 
-                        <p className="text-base text-muted">
-                            {translate('thread.messages', {
-                                count: new Intl.NumberFormat(locale).format(latest.messageCount),
-                            })}
-                        </p>
-
                         {latest.moreMessagesNotAssembled ? (
                             <p className="text-base text-warning">{translate('thread.moreNotAssembled')}</p>
                         ) : null}
-                    </header>
+                    </MessageHeaders>
                 )
             }
         >
@@ -499,11 +468,8 @@ export function Thread({
                                 session={session}
                                 transport={transport}
                                 message={message}
-                                mark={message.email.id === arrival?.storedEmailId ? mark : null}
+                                mark={drawn.length > 1 && message.email.id === arrival?.storedEmailId ? mark : null}
                                 online={online}
-                                onOpenOnItsOwn={() => {
-                                    openOnItsOwn(message.email.id);
-                                }}
                                 onShowFullHtml={() => {
                                     onShowFullHtml(message.email.id, message.email.subject);
                                 }}
@@ -530,7 +496,9 @@ export function Thread({
             ) : null}
 
             {latest.nextCursor === null ? (
-                <p className="text-sm text-faint">{translate('thread.wholeConversationRead')}</p>
+                <p className="mx-auto w-full max-w-conversation text-sm text-faint">
+                    {translate('thread.wholeConversationRead')}
+                </p>
             ) : (
                 <div>
                     {/* Reading further shows the history with it, and that is a correctness rule rather than a
@@ -580,17 +548,59 @@ function pageWanted(
     return latest.nextCursor !== null && continuing ? { cursor: latest.nextCursor } : null;
 }
 
-// The frame every state of this screen is drawn in, which is what makes the way out of it present in all five: a
-// conversation that failed, one with no network, and one still being read each stand under the control that closes it.
-// The header stands across the column, as the design project draws a conversation's head, and everything under it
-// stands inset from the edges.
+/**
+ * The headers the conversation's head is drawn from, which are the opened message's own.
+ *
+ * A message this deployment could not open has none, and what stands in for them is what the conversation's own answer
+ * already said about it: the same author, the same instant, described as a row rather than as an opened message. That
+ * is a narrower reading of the same message rather than an invented one — the addresses it does not carry are the ones
+ * only the message itself holds, and the disclosure simply has nothing to unfold.
+ */
+function headersOf(message: MailThreadMessage): MailMessageHeaders {
+    if (message.message !== null) {
+        return message.message.headers;
+    }
+
+    const email = message.email;
+
+    return {
+        subject: email.subject,
+        sentAt: email.sentAt,
+        receivedAt: email.receivedAt,
+        participants:
+            email.senderAddress === null
+                ? []
+                : [{ role: 'From', address: email.senderAddress, displayName: email.senderDisplayName }],
+        messageId: null,
+        inReplyTo: null,
+        references: [],
+    };
+}
+
+/** The message the head's acts are about, which is the one the conversation is standing on. */
+function actedOn(message: MailThreadMessage): HeadMessage {
+    const email = message.email;
+
+    return {
+        storedEmailId: email.id,
+        account: email.account,
+        folder: email.folder,
+        flagged: email.flagged,
+    };
+}
+
+// The frame every state of this screen is drawn in. The header stands across the column, as the design project draws a
+// conversation's head, and everything under it stands inset from the edges.
+//
+// **Nothing here closes the conversation**, because the design draws nothing that does: the way out of what is being
+// read is the list, which stands beside it where the composition has two panes and is reached through the head's own
+// way back where it has one. A control saying *back to the message* was this client's invention, and it offered to
+// leave a message for the message it was already drawing.
 function Conversation({
-    onClose,
     header,
     state,
     children,
 }: {
-    readonly onClose: () => void;
     readonly header?: ReactNode;
 
     /** Where the conversation stands, which stands across the column between its head and its messages. */
@@ -602,17 +612,6 @@ function Conversation({
 
     return (
         <section aria-label={translate('thread.label')} className="flex flex-col">
-            <div className="px-3.5 pt-3">
-                <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-base text-text-soft transition hover:bg-hover"
-                    onClick={onClose}
-                >
-                    <Icon name="arrow_back" className="size-5" />
-                    {translate('thread.close')}
-                </button>
-            </div>
-
             {header}
 
             {state}

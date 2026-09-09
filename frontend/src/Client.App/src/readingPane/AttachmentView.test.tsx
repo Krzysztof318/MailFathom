@@ -13,6 +13,7 @@ import {
     type ShownAs,
 } from '../deployment/attachmentExchange';
 import { LocalizationProvider } from '../localization/Localization';
+import { ToastsProvider } from '../toasts/Toasts';
 import type { OpenedAttachment } from '../workspace/openAttachment';
 import { AttachmentView } from './AttachmentView';
 
@@ -115,9 +116,11 @@ function drawing(
 
     const surface = (withNetwork: boolean) => (
         <LocalizationProvider>
-            <AttachmentExchangeContext value={exchange}>
-                <AttachmentView session={session} opened={opened} online={withNetwork} onClose={onClose} />
-            </AttachmentExchangeContext>
+            <ToastsProvider>
+                <AttachmentExchangeContext value={exchange}>
+                    <AttachmentView session={session} opened={opened} online={withNetwork} onClose={onClose} />
+                </AttachmentExchangeContext>
+            </ToastsProvider>
         </LocalizationProvider>
     );
 
@@ -235,18 +238,20 @@ describe('AttachmentView', () => {
     // The download the head offers is the same act the row under a message offers, and it is the one thing on this
     // surface that keeps state of its own: what is being proven is that pressing it starts that download and that what
     // becomes of it is said here rather than in the message the file was opened from.
-    it('downloads the file from the control in its head, and says what became of it', async () => {
+    // The viewer's own head offers the download, and what became of it is said from the corner rather than inside the
+    // surface somebody is looking at the file in — which is the one place the design project reports a task.
+    it('downloads the file from the control in its head, and says what became of it from the corner', async () => {
         const held = delivering();
         drawing(photograph, held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
-        held.arrived(1_024);
 
-        expect(screen.getByRole('progressbar', { name: 'How much of the file has arrived' })).toBeDefined();
+        expect(await screen.findByText('Downloading file…')).toBeDefined();
 
         held.finish('delivered');
 
-        expect(await screen.findByText('harbour.png was downloaded.')).toBeDefined();
+        expect(await screen.findByText('File downloaded')).toBeDefined();
+        expect(screen.getAllByText('harbour.png').length).toBeGreaterThan(0);
     });
 
     it('says so and reads nothing while the machine has no network', () => {

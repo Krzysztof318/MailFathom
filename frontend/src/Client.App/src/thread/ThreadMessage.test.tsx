@@ -112,7 +112,6 @@ function unopened(): MailThreadMessage {
 function drawing(
     held: MailThreadMessage = message(),
     handlers: {
-        readonly onOpenOnItsOwn?: () => void;
         readonly onShowFullHtml?: () => void;
         readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
@@ -131,7 +130,6 @@ function drawing(
                                 message={held}
                                 mark={mark}
                                 online
-                                onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
                                 onShowFullHtml={handlers.onShowFullHtml ?? (() => undefined)}
                                 onRegion={handlers.onRegion ?? (() => undefined)}
                             />
@@ -185,14 +183,12 @@ describe('ThreadMessage', () => {
     });
 
     // A message whose local copy the deployment could not open arrives without one. The reader is owed the gap rather
-    // than a message drawn empty, and the way to it is the control that opens the message on its own.
+    // than a message drawn empty — and the gap alone, because the conversation is where every message of it is read
+    // and a second surface for one of them is not something the design project offers.
     it('says a message the conversation could not carry, rather than drawing it empty', () => {
         drawing(unopened());
 
-        expect(
-            screen.getByText('The message from The auditor could not be read here. Open it on its own to read it.'),
-        ).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Open this message on its own' })).toBeDefined();
+        expect(screen.getByText('The message from The auditor could not be read here.')).toBeDefined();
     });
 
     it('names a message nobody wrote a sender for by something rather than by nothing', () => {
@@ -200,9 +196,7 @@ describe('ThreadMessage', () => {
 
         drawing({ ...held, email: { ...held.email, senderDisplayName: null, senderAddress: null } });
 
-        expect(
-            screen.getByText('The message from No sender could not be read here. Open it on its own to read it.'),
-        ).toBeDefined();
+        expect(screen.getByText('The message from No sender could not be read here.')).toBeDefined();
     });
 
     it('names the region it puts a reader in, so arriving at a message announces more than a tag', () => {
@@ -235,13 +229,12 @@ describe('ThreadMessage', () => {
         expect(opened).toEqual([]);
     });
 
-    it('offers the way to the message on its own, where everything a conversation does not draw is', () => {
-        const onOpenOnItsOwn = vi.fn();
-        drawing(message(), { onOpenOnItsOwn });
+    // The conversation carries every message of itself, so there is nowhere else to open one: a control leading out of
+    // the screen a reader is already on is one the design project draws nothing for.
+    it('offers no way out of the conversation to the message on its own', () => {
+        drawing();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Open this message on its own' }));
-
-        expect(onOpenOnItsOwn).toHaveBeenCalled();
+        expect(screen.queryByRole('button', { name: 'Open this message on its own' })).toBeNull();
     });
 
     it('offers the sender own markup, which is the one ask a drawn message still makes of its surface', () => {
