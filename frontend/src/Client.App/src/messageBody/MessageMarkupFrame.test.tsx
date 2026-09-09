@@ -210,7 +210,7 @@ describe('EmbeddedMessageMarkup', () => {
         expect(opened).toEqual([]);
     });
 
-    it('draws no failure where the opener refuses, a click being a gesture no head blocks', async () => {
+    it('says so beside the fitting note where the opener could not open the link', async () => {
         const refusing = vi.fn<OpenLink>(() => Promise.reject(new Error('refused')));
         embedding('<p>As the sender wrote it.</p>', refusing);
 
@@ -219,6 +219,9 @@ describe('EmbeddedMessageMarkup', () => {
             expect(refusing).toHaveBeenCalledWith('https://example.test/offer');
         });
 
+        // The sentence joins the strip the surface already draws rather than arriving as a row of its own, so nothing
+        // under the reader moves when a press fails.
+        expect(await screen.findByText('This link could not be opened.')).toBeDefined();
         expect(screen.getByText('Fitting the height to the content…')).toBeDefined();
     });
 
