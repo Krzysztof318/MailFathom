@@ -78,7 +78,50 @@ public sealed class SyntheticEmailGeneratorAiModeTests
             CancellationToken.None);
 
         // Assert
-        Assert.All(corpus, email => Assert.Equal(new SyntheticEmailAiOrigin("pl", SyntheticMailTopic.Travel), email.AiOrigin));
+        Assert.All(
+            corpus,
+            email =>
+            {
+                Assert.NotNull(email.AiOrigin);
+                Assert.Equal("pl", email.AiOrigin.Language);
+                Assert.Equal(SyntheticMailTopic.Travel, email.AiOrigin.Topic);
+                Assert.Contains(email.AiOrigin.MarkupDialect, SyntheticMarkupDialect.All);
+            });
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EveryMarkupDialect_IsReachedWhenTheBatchIsLargeEnough()
+    {
+        // Arrange, Act
+        var source = await Generate(["en"], [SyntheticMailTopic.Business], count: 120);
+
+        // Assert
+        // No invocation names a dialect, so a corpus large enough has to meet all of them: a run that could only
+        // reach some would leave whichever it missed untested by every corpus anybody generated.
+        var asked = source.Requests.Select(request => request.MarkupDialect).Distinct().ToArray();
+
+        Assert.Equal(SyntheticMarkupDialect.All.Count, asked.Length);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_TheMarkupAskedFor_IsTheOneTheMessageReports()
+    {
+        // Arrange
+        var source = new ScriptedAiEmailContentSource(Answer);
+
+        // Act
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(
+            Plan(["en"], [SyntheticMailTopic.Business], count: 40),
+            source,
+            1,
+            CancellationToken.None);
+
+        // Assert
+        // The listing is what a message that reads badly is reproduced from, so the dialect it prints has to be the
+        // one the source was actually asked for rather than a second draw beside it.
+        Assert.Equal(
+            source.Requests.Select(request => request.MarkupDialect),
+            corpus.Select(message => message.AiOrigin!.MarkupDialect));
     }
 
     [Fact]
@@ -444,5 +487,5 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         $"<p>{HtmlEncoder.Create(new TextEncoderSettings(UnicodeRanges.All)).Encode(sentence)}</p>";
 
     private static string RequestFingerprint(AiEmailContentRequest request) =>
-        $"{request.LanguageCode}|{request.Topic}|{request.AuthorName}|{request.ParentSubject ?? "-"}";
+        $"{request.LanguageCode}|{request.Topic}|{request.MarkupDialect}|{request.AuthorName}|{request.ParentSubject ?? "-"}";
 }

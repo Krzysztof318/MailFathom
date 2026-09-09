@@ -36,7 +36,15 @@ public sealed class OpenAiEmailContentSourceTests
         int expected)
     {
         // Arrange
-        var request = new AiEmailContentRequest("en", SyntheticMailTopic.Business, "Ada Kowalska", null, null, fileName, drawn);
+        var request = new AiEmailContentRequest(
+            "en",
+            SyntheticMailTopic.Business,
+            SyntheticMarkupDialect.GmailComposer,
+            "Ada Kowalska",
+            null,
+            null,
+            fileName,
+            drawn);
 
         // Act
         var bound = OpenAiEmailContentSource.AttachmentBoundOf(request);
@@ -149,6 +157,48 @@ public sealed class OpenAiEmailContentSourceTests
         // Assert
         // The endpoint is one a developer named and what it answers is delivered to a real mailbox, so the run stops
         // rather than reducing the answer into something nobody asked for.
+        Assert.Contains("will not deliver", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    // Word's own HTML: a proprietary namespace, a conditional block, an mso- property, and the paragraph filler.
+    [InlineData("<html xmlns:o=\"urn:schemas-microsoft-com:office:office\"><body><!--[if gte mso 9]><xml></xml><![endif]--><p class=\"MsoNormal\" style=\"mso-pagination:widow-orphan\">Hello.<o:p></o:p></p></body></html>")]
+    // A campaign's nested layout tables, with the deprecated attributes and the font element that come with them.
+    [InlineData("<table border=\"0\" cellpadding=\"0\" bgcolor=\"#eeeeee\"><tr><td align=\"center\"><font face=\"Arial\" size=\"2\">Hello.</font></td></tr></table>")]
+    // Markup that is not well-formed at all: unclosed blocks, a stray end tag, unquoted attributes, and a bare entity.
+    [InlineData("<div><p>Hello.<p>More.<table border=1 width=600><tr><td>One<td>Two</div></span>Rest &amp and &nbsp then.")]
+    public void ParseContent_AnAnswerWrittenAsARealClientsMarkup_IsDeliveredRatherThanRefused(string markup)
+    {
+        // Arrange
+        // Escaped for the same reason the refused constructs above are: the quotation marks these dialects carry in
+        // their attributes would otherwise end the JSON string and make the answer malformed, which is a different
+        // refusal from the one under test.
+        var escaped = markup.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var answer = $$"""{ "subject": "Figures", "body": "Hello.", "html": "{{escaped}}" }""";
+
+        // Act
+        var content = OpenAiEmailContentSource.ParseContent(answer);
+
+        // Assert
+        // The refusal answers what executes, never what is merely deprecated, proprietary, or broken — and the last of
+        // those is the whole point of asking for it, because a corpus of well-formed markup proves nothing about a
+        // reader that has to survive what real senders emit.
+        Assert.Equal(markup, content.Html);
+    }
+
+    [Fact]
+    public void ParseContent_AnExecutableConstructInsideOtherwiseRealisticMarkup_IsStillRefused()
+    {
+        // Arrange
+        const string answer =
+            """{ "subject": "Figures", "body": "Hello.", "html": "<body><p class=\"MsoNormal\">Hello.<o:p></o:p><iframe src=\"x\"></iframe></p></body>" }""";
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => OpenAiEmailContentSource.ParseContent(answer));
+
+        // Assert
+        // Asking for a dialect's own quirks is not a licence for the constructs the refusal exists for: what reaches a
+        // mailbox is decided by the scan rather than by which markup the request asked for.
         Assert.Contains("will not deliver", failure.Message, StringComparison.Ordinal);
     }
 

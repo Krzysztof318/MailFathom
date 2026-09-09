@@ -841,8 +841,8 @@ terms the sending account's are.
 **What the seed still decides, and what it no longer does.** The envelope is still the seed's: author, participants,
 threading, dates, attachments, and the fabricated sensitive material are drawn exactly as in the default mode, and
 the seed is reported and repeated the same way. Each message's language and topic are drawn from the seed too, so a
-batch of one hundred with `--language en,pl` has a reproducible *assignment* of English and Polish. What the seed no
-longer decides is the words: two dry runs of one seed in AI mode agree on everything the listing's columns carry and
+batch of one hundred with `--language en,pl` has a reproducible *assignment* of English and Polish, and the markup
+dialect each message's HTML alternative is written as is drawn there too. What the seed no longer decides is the words: two dry runs of one seed in AI mode agree on everything the listing's columns carry and
 differ in the subjects and bodies, so the `diff` below compares envelopes, not content. A reply keeps the subject of
 the thread it answers rather than one the model invents, because the threading is what a corpus exists to exercise.
 The MIME shape a message takes is still drawn from the seed; the charset is not, because a body written in the
@@ -851,12 +851,32 @@ any of them.
 
 **The message is answered twice, and the second form is the point.** The default mode's HTML alternative is one
 `<p>` per paragraph wrapped around its own text, so MIME extraction and the client's document model are exercised
-against markup this repository wrote. In this mode the model answers the message as text *and* as an HTML document
-carrying the structure real business mail carries — headings, lists, a table where the message reports figures,
-links, emphasis, blockquotes, a horizontal rule, a signature block, and inline styles — and the two say the same
-things in the same order. Which of them a message emits is still the seed's draw between plain text, HTML, and
-`multipart/alternative`, so the axis is unchanged and only what fills it is new. The fabricated sensitive material is
-planted in both, because which alternative a reader extracts from is the extractor's choice rather than the corpus's.
+against markup this repository wrote. In this mode the model answers the message as text *and* as an HTML document,
+and the two say the same things in the same order. Which of them a message emits is still the seed's draw between
+plain text, HTML, and `multipart/alternative`, so the axis is unchanged and only what fills it is new. The fabricated
+sensitive material is planted in both, because which alternative a reader extracts from is the extractor's choice
+rather than the corpus's.
+
+**That document is written as a real client's markup, drawn from the seed like everything else.** Asking for
+well-formed semantic markup produced a corpus that proved the readers cope with markup somebody asked for politely,
+which is not what a mailbox receives. So every generated message is drawn one of five dialects, and the prompt hands
+the model the constructs that dialect actually carries rather than its name:
+
+| Dialect | What the message is written as |
+|---|---|
+| `word-outlook` | The HTML desktop Outlook produces through the Word engine: `xmlns:o` and `xmlns:w` namespaces, `<!--[if gte mso 9]>` conditional blocks, a `<style>` block of `mso-` properties, `class="MsoNormal"` on every paragraph with an `<o:p>` filler, a `<span>` carrying the font on every run of text, nested layout tables, and a quoted history behind a bordered `<div>` of `<b>From:</b>` lines |
+| `campaign-template` | A campaign a sending platform built from a template: three or four levels of nested `<table>` with `cellpadding`, `cellspacing`, `bgcolor` and `align`, a hidden preheader `<div>`, spacer rows, `<font>` elements beside inline styles, a table cell styled as a button, and a small-print unsubscribe footer |
+| `gmail-composer` | What the Gmail web composer emits: `<div dir="ltr">` soup with `<br>` where a blank line belongs, and quoted history as `<div class="gmail_quote">` around a `<blockquote>` carrying Gmail's own border and padding, nested a second level deep |
+| `apple-mail` | What Apple Mail emits: `-webkit-` properties on the body, `<div>` elements holding `<br>`, `<blockquote type="cite">` nested two levels, and a *Begin forwarded message:* block of `<b>From:</b>` lines |
+| `legacy-malformed` | Markup that is not well-formed at all: unclosed `<p>`, `<li>` and `<td>`, stray end tags, unquoted and duplicated attributes, emphasis opened in one block and closed in the next, runs of `<br>` and `&nbsp;`, entities without their semicolon, uppercase tag names beside lowercase ones, and a table whose rows disagree on how many cells they hold |
+
+The last of those is the reason the set exists. A message body is read three times over here — the tokenizer that
+derives its searchable text, the sanitizer, and the document model the reading pane draws — and each of them
+*recovers* from broken markup rather than refusing it, so a corpus that never carried any could not show which
+recovery is wrong. The listing names the dialect beside the language and the topic, as `markup=legacy-malformed`,
+because a message the readers handle badly is reproduced from the seed and which markup it was written in is what
+says where the fault is. No invocation names a dialect: a run that could ask for one would be a run that could avoid
+the other four.
 
 **A text attachment is written by the same call as the message.** The seed still decides whether a message carries an
 attachment, what it is called, and how large it may be; where the drawn file is a text one, the model writes its
@@ -878,7 +898,9 @@ event-handler attribute such as `onerror` stops the run with a line naming what 
 was not the JSON object it was asked for does. The handler is read as a pattern rather than as another spelling in
 that list, because an attribute name is what carries it and a list would refuse the few somebody thought of. Refused
 rather than reduced: stripping one would deliver a message nobody asked for and hide that the endpoint answered with
-something it was told not to. Everything an answer survives with is markup a reader has to handle anyway.
+something it was told not to. Everything an answer survives with is markup a reader has to handle anyway, which is
+the line the dialects above sit on the right side of whatever they ask for: a deprecated attribute, a proprietary
+element, and a `<td>` nobody closed are all things a mailbox receives, and none of them executes.
 
 **What leaves the machine.** In this mode a run sends the generation prompt to the endpoint and reads the message
 content back. The prompt names the language, the topic, who writes the message, and — for a reply — the subject of

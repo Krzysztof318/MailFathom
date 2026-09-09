@@ -516,7 +516,7 @@ internal sealed class SyntheticEmailGenerator
         MessageEnvelope? parent)
     {
         var sentAt = this.BuildSentAt(index, parent?.SentAt);
-        var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic());
+        var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic(), this.DrawMarkupDialect());
         var messageId = this.BuildMessageId(index, author);
         var bodyShape = (SyntheticBodyShape)this.source.Next(3);
         var decoy = this.PlantDecoy();
@@ -585,6 +585,7 @@ internal sealed class SyntheticEmailGenerator
                     new AiEmailContentRequest(
                         envelope.Origin.Language,
                         envelope.Origin.Topic,
+                        envelope.Origin.MarkupDialect,
                         envelope.Author.DisplayName,
                         parent?.Subject,
                         OpeningOf(parent),
@@ -624,6 +625,14 @@ internal sealed class SyntheticEmailGenerator
     private string DrawLanguage() => this.plan.Languages[this.source.Next(this.plan.Languages.Count)];
 
     private SyntheticMailTopic DrawTopic() => this.plan.Topics[this.source.Next(this.plan.Topics.Count)];
+
+    /// <summary>Draws the client whose markup one message's HTML alternative is written as.</summary>
+    /// <remarks>
+    /// Drawn from the whole set rather than from the plan, because no invocation names a dialect: what a corpus is
+    /// for is meeting all of them, and a run that could ask for one would be a run that could avoid the rest.
+    /// </remarks>
+    private SyntheticMarkupDialect DrawMarkupDialect() =>
+        SyntheticMarkupDialect.All[this.source.Next(SyntheticMarkupDialect.All.Count)];
 
     private List<SyntheticParticipant> BuildCarbonCopies(SyntheticParticipant author)
     {
