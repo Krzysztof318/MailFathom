@@ -34,7 +34,7 @@
         {
           "expect": {
             "role": "heading",
-            "name": "Połącz skrzynkę"
+            "name": "Connect your mailbox"
           }
         }
       ],
@@ -48,7 +48,7 @@
         {
           "expect": {
             "role": "listbox",
-            "name": "Wiadomości"
+            "name": "Messages"
           }
         }
       ],
@@ -62,7 +62,7 @@
         {
           "expect": {
             "role": "listbox",
-            "name": "Wiadomości"
+            "name": "Messages"
           }
         },
         {
@@ -87,20 +87,20 @@
         {
           "click": {
             "role": "button",
-            "name": "Konto i ustawienia"
+            "name": "Account and preferences"
           }
         },
         {
           "click": {
             "role": "button",
-            "name": "Ustawienia",
+            "name": "Settings",
             "exact": true
           }
         },
         {
           "expect": {
             "role": "tab",
-            "name": "Profil"
+            "name": "Profile"
           }
         }
       ],
@@ -114,20 +114,20 @@
         {
           "click": {
             "role": "button",
-            "name": "Konto i ustawienia"
+            "name": "Account and preferences"
           }
         },
         {
           "click": {
             "role": "button",
-            "name": "Ustawienia",
+            "name": "Settings",
             "exact": true
           }
         },
         {
           "click": {
             "role": "tab",
-            "name": "Aplikacja"
+            "name": "Application"
           }
         },
         {
@@ -146,14 +146,14 @@
         {
           "click": {
             "role": "button",
-            "name": "2 nieprzeczytane powiadomienia",
+            "name": "2 unread notifications",
             "exact": true
           }
         },
         {
           "expect": {
             "role": "heading",
-            "name": "Powiadomienia"
+            "name": "Notifications"
           }
         }
       ],
@@ -167,13 +167,13 @@
         {
           "click": {
             "role": "button",
-            "name": "Konto i ustawienia"
+            "name": "Account and preferences"
           }
         },
         {
           "expect": {
             "role": "button",
-            "name": "Ustawienia",
+            "name": "Settings",
             "exact": true
           }
         }
@@ -188,7 +188,7 @@
         {
           "expect": {
             "role": "listbox",
-            "name": "Wiadomości"
+            "name": "Messages"
           }
         },
         {
@@ -200,20 +200,20 @@
         {
           "click": {
             "role": "button",
-            "name": "Pokaż pełną wersję HTML"
+            "name": "Show the full HTML version"
           }
         },
         {
           "click": {
             "role": "button",
-            "name": "Pokaż HTML",
+            "name": "Show the HTML",
             "exact": true
           }
         },
         {
           "expect": {
             "role": "region",
-            "name": "Własna wersja tej wiadomości od nadawcy"
+            "name": "The sender's own version of this message"
           }
         }
       ],
@@ -227,7 +227,7 @@
         {
           "expect": {
             "role": "listbox",
-            "name": "Wiadomości"
+            "name": "Messages"
           }
         },
         {
@@ -239,13 +239,13 @@
         {
           "click": {
             "role": "button",
-            "name": "Pokaż pełną wersję HTML"
+            "name": "Show the full HTML version"
           }
         },
         {
           "expect": {
             "role": "button",
-            "name": "Pokaż HTML",
+            "name": "Show the HTML",
             "exact": true
           }
         }
@@ -260,14 +260,14 @@
         {
           "click": {
             "role": "button",
-            "name": "Nowa wiadomość",
+            "name": "New message",
             "exact": true
           }
         },
         {
           "expect": {
             "role": "textbox",
-            "name": "Treść"
+            "name": "Message"
           }
         }
       ],

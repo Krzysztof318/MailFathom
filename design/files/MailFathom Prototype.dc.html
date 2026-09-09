@@ -3515,7 +3515,7 @@ const HTML_NDA = HTML_SHELL("Projekt NDA — Northwind", `
     For signature <strong>by 5 September</strong>. If the other side rejects the lower penalty, I recommend the variant with a €150,000 aggregate cap.
    </div>
   </td></tr>
-  <tr><td style="padding:8px 30px 26px 30px"><a href="#" style="display:inline-block;background:#3b3428;color:#ffffff;text-decoration:none;padding:11px 22px;font-family:Arial,sans-serif;font-size:13px">Podpisz elektronicznie</a></td></tr>
+  <tr><td style="padding:8px 30px 26px 30px"><a href="#" style="display:inline-block;background:#3b3428;color:#ffffff;text-decoration:none;padding:11px 22px;font-family:Arial,sans-serif;font-size:13px">Sign electronically</a></td></tr>
   <tr><td style="background:#faf7f0;border-top:1px solid #e6dfd0;padding:14px 30px;font-family:Arial,sans-serif;font-size:10px;color:#8c8271;line-height:1.7">Working document · not an offer in the legal sense · Wrona Law Office</td></tr>
  </table>
 </div>`);
@@ -4020,8 +4020,8 @@ const msgAddrRows = (thread, m, msgs) => {
   const replyTo = !m.mine && HDR_REPLY_TO[thread.id] ? HDR_REPLY_TO[thread.id] : "";
   const rows = [];
   if (replyTo) rows.push({ label: "Reply-to", value: replyTo });
-  if (to.length) rows.push({ label: "Do", value: to.map(fullAddr).join(", ") });
-  if (cc.length) rows.push({ label: "Kopia", value: cc.map(fullAddr).join(", ") });
+  if (to.length) rows.push({ label: "To", value: to.map(fullAddr).join(", ") });
+  if (cc.length) rows.push({ label: "Cc", value: cc.map(fullAddr).join(", ") });
   return { rows, count: (replyTo ? 1 : 0) + to.length + cc.length };
 };
 
@@ -4521,7 +4521,7 @@ class Component extends DCLogic {
           { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("thread “" + (th.subject || "mail") + "”") },
           { icon: "reply", label: "Reply", run: () => { this.setState({ threadId: id, mailPane: "thread", threadOpen: true }); this.startReply("reply"); } },
           { icon: "forward", label: "Forward", run: () => { this.setState({ threadId: id, mailPane: "thread", threadOpen: true }); this.startReply("fwd"); } },
-          { icon: "archive", label: "Archiwizuj", run: () => this.archiveThreads([id]) },
+          { icon: "archive", label: "Archive", run: () => this.archiveThreads([id]) },
           { icon: "flag", label: flagged ? "Remove flag" : "Flag", run: () => this.toggleFlagThreads([id]) },
           { icon: "mark_email_unread", label: "Mark as unread", run: () => this.markUnread([id]) },
           { icon: "drive_file_move", label: "Move\u2026", run: () => this.setState({ moveFor: [id] }) },
@@ -5358,7 +5358,7 @@ class Component extends DCLogic {
       const w = [];
       if (!curSubj.trim()) w.push("The message has no subject.");
       if (!bodyTxt()) w.push("The message body is empty.");
-      if (!composeTo.length) w.push("Nie wybrano odbiorcy.");
+      if (!composeTo.length) w.push("The message has no recipient.");
       if (st.aiDraft) w.push("The AI draft has not been accepted yet — check the text before sending.");
       this.setState({ sendAsk: { warnings: w } });
     };
@@ -5702,7 +5702,7 @@ class Component extends DCLogic {
           mk("delete", "Delete", () => this.askHide("people", ids, "Delete contacts?", ids.length + " contacts will disappear from the list."), true),
         ].map(st2);
         if (kind === "convs") return [
-          mk("archive", "Zarchiwizuj", () => this.setState(s3 => ({ convs: (s3.convs || []).map(x => ids.indexOf(x.id) >= 0 ? Object.assign({}, x, { archived: true }) : x), selBy: Object.assign({}, s3.selBy || {}, { convs: [] }) }))),
+          mk("archive", "Archive", () => this.setState(s3 => ({ convs: (s3.convs || []).map(x => ids.indexOf(x.id) >= 0 ? Object.assign({}, x, { archived: true }) : x), selBy: Object.assign({}, s3.selBy || {}, { convs: [] }) }))),
           mk("delete", "Delete", () => this.askDel({ title: "Delete conversations?", text: ids.length + " conversations will be permanently deleted.", label: "Delete", run: () => this.setState(s3 => ({ convs: (s3.convs || []).filter(x => ids.indexOf(x.id) < 0), convId: ids.indexOf(s3.convId) >= 0 ? null : s3.convId, selBy: Object.assign({}, s3.selBy || {}, { convs: [] }) })) }), true),
         ].map(st2);
         if (kind === "events") return [
@@ -5760,7 +5760,7 @@ class Component extends DCLogic {
         { icon: "search", label: "Find in mail", run: () => this.setState({ screen: "agent" }) },
         { icon: "event", label: "Lay out the day", run: () => this.autoSchedule() },
         { icon: "check_circle", label: "Show done", run: () => this.setState(s2 => ({ showDone: !s2.showDone })) },
-        { icon: "download", label: "Eksportuj", run: () => {} },
+        { icon: "download", label: "Export", run: () => {} },
       ].map(a => ({ icon: a.icon, label: tbFull ? a.label : "", run: a.run, style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
       tasksBodyStyle: isMobile || compact
         ? "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding:14px"
@@ -6120,7 +6120,7 @@ class Component extends DCLogic {
       })),
       goMail: () => this.goScreen("mail", { mailPane: "list" }),
       digest: [
-        { n: 5, label: "Klienci", note: "Contoso, Fabrikam, Adventure Works", tid: "contoso" },
+        { n: 5, label: "Clients", note: "Contoso, Fabrikam, Adventure Works", tid: "contoso" },
         { n: 4, label: "Internal", note: "controlling, delivery, HR", tid: "marta" },
         { n: 3, label: "Invoices and payments", note: "two to approve", tid: "faktura1" },
         { n: 2, label: "FYI", note: "nothing needs a reply", tid: "hr1" },
@@ -6336,11 +6336,11 @@ class Component extends DCLogic {
         style: w ? SHIM + "height:10px;width:" + w + "%" : "height:6px",
       })),
       aiFilters: [
-        { icon: "pending_actions", label: "Wymaga decyzji" },
+        { icon: "pending_actions", label: "Needs a decision" },
         { icon: "handshake", label: "Commitments" },
-        { icon: "schedule", label: "Terminy w tym tygodniu" },
+        { icon: "schedule", label: "Deadlines this week" },
       ].map(fl => ({
-        icon: fl.icon, label: fl.label, expanded: !sideCollapsed, title: "Filtr AI: " + fl.label,
+        icon: fl.icon, label: fl.label, expanded: !sideCollapsed, title: "AI filter: " + fl.label,
         style: sideCollapsed
           ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;color:var(--muted)"
           : "display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);padding:5px 11px;border-radius:7px",
@@ -6354,15 +6354,15 @@ class Component extends DCLogic {
         { icon: "today", label: "Today" },
         { icon: "event_available", label: "Find a slot" },
         { icon: "mail", label: "Invitation" },
-        { icon: "download", label: "Eksportuj" },
+        { icon: "download", label: "Export" },
         { icon: "print", label: "Print" },
       ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
       peopleActions: [
         { icon: "edit", label: "Write" },
         { icon: "event", label: "Schedule a meeting" },
-        { icon: "merge", label: "Scal duplikaty" },
-        { icon: "upload", label: "Importuj" },
-        { icon: "download", label: "Eksportuj" },
+        { icon: "merge", label: "Merge duplicates" },
+        { icon: "upload", label: "Import" },
+        { icon: "download", label: "Export" },
       ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
       fieldStyle: "flex:1;min-width:0;font-family:inherit;font-size:14px;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;outline:none",
       newEventOpen: !!st.newEvent,
@@ -6734,13 +6734,13 @@ class Component extends DCLogic {
       personNext: personAi.next || "",
       personHasNext: !!personAi.next,
       personPatterns: [
-        { label: "ODPOWIADA", value: personAi.reply || "" },
+        { label: "REPLIES", value: personAi.reply || "" },
         { label: "MOST ACTIVE", value: personAi.peak || "" },
-        { label: "STYL", value: personAi.style || "" },
+        { label: "STYLE", value: personAi.style || "" },
       ].filter(p => !!p.value),
       personStats: [
-        { label: "OSTATNI KONTAKT", value: person.last },
-        { label: "OTWARTE", value: person.owed },
+        { label: "LAST CONTACT", value: person.last },
+        { label: "OPEN", value: person.owed },
         { label: "CASES", value: person.cases },
       ],
       personColsStyle: isMobile || narrow ? "display:flex;flex-direction:column;gap:12px" : "display:flex;gap:12px",
@@ -6758,9 +6758,9 @@ class Component extends DCLogic {
 
       tbCaseLabel: tbFull ? "New case" : "",
       caseActions: [
-        { icon: "summarize", label: "Podsumuj" },
+        { icon: "summarize", label: "Summarise" },
         { icon: "mail", label: "Add thread" },
-        { icon: "download", label: "Eksportuj" },
+        { icon: "download", label: "Export" },
         { icon: "check_circle", label: "Close case" },
       ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", style: tbFull ? tbBtn : tbIcon + ";flex:0 0 auto" })),
       newCaseOpen: !!st.newCase,
@@ -6788,8 +6788,8 @@ class Component extends DCLogic {
         if (this.csDueRef.current) this.csDueRef.current.value = "28.08";
         this.setState({ csFound: [
           { kind: "thread", label: thread.subject },
-          { kind: "osoba", label: thread.from },
-          { kind: "deadline", label: "Decyzja do 28.08" },
+          { kind: "person", label: thread.from },
+          { kind: "deadline", label: "Decision by 28.08" },
         ] });
       },
       saveCase: () => {
@@ -6868,9 +6868,9 @@ class Component extends DCLogic {
         ? "display:flex;flex-direction:column;gap:12px"
         : "display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start",
       caseColumns: [
-        { label: "USTALONE", items: kase.agreed },
-        { label: "OTWARTE", items: kase.openQ },
-        { label: "TERMINY", items: kase.dates },
+        { label: "AGREED", items: kase.agreed },
+        { label: "OPEN QUESTIONS", items: kase.openQ },
+        { label: "DEADLINES", items: kase.dates },
       ].map(col => ({
         label: col.label,
         count: col.items.length,
@@ -7001,7 +7001,7 @@ class Component extends DCLogic {
         { icon: "reply", label: "Reply", key: 1 },
         { icon: "reply_all", label: "Reply all" },
         { icon: "forward", label: "Forward" },
-        { icon: "archive", label: "Archiwizuj", key: 1 },
+        { icon: "archive", label: "Archive", key: 1 },
         { icon: "delete", label: "Delete", key: 1 },
         { icon: "flag", label: flagOn ? "Remove flag" : "Flag", key: 1 },
         { icon: "mark_email_unread", label: "Unread" },
@@ -7020,9 +7020,9 @@ class Component extends DCLogic {
        })),
       selBarStyle: "flex:0 0 auto;display:flex;align-items:center;gap:2px;overflow-x:auto;padding:8px 12px;background:var(--accent-soft);border-bottom:1px solid var(--accent-line)",
       selectionActions: [
-        { icon: "archive", label: "Archiwizuj" },
+        { icon: "archive", label: "Archive" },
         { icon: "delete", label: "Delete" },
-        { icon: "flag", label: "Flaga" },
+        { icon: "flag", label: "Flag" },
         { icon: "mark_email_unread", label: "Unread" },
         { icon: "drive_file_move", label: "Move" },
       ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", run: mailAct[a.icon], style: tbFull ? selBtn : tbIcon + ";flex:0 0 auto;color:var(--accent-d)" })),
@@ -7565,14 +7565,14 @@ class Component extends DCLogic {
       })),
       bodyRef: this.bodyRef,
       fmtButtons: [
-        { key: "b", label: "B", title: "Pogrubienie", style: "font-weight:700", run: () => this.exec("bold") },
-        { key: "i", label: "I", title: "Kursywa", style: "font-style:italic;font-family:Georgia,serif", run: () => this.exec("italic") },
+        { key: "b", label: "B", title: "Bold", style: "font-weight:700", run: () => this.exec("bold") },
+        { key: "i", label: "I", title: "Italic", style: "font-style:italic;font-family:Georgia,serif", run: () => this.exec("italic") },
         { key: "u", label: "U", title: "Underline", style: "text-decoration:underline", run: () => this.exec("underline") },
         { key: "s", label: "S", title: "Strikethrough", style: "text-decoration:line-through", run: () => this.exec("strikeThrough") },
-        { key: "ul", label: "•—", title: "Lista punktowana", style: "", run: () => this.exec("insertUnorderedList") },
-        { key: "ol", label: "1.", title: "Lista numerowana", style: "", run: () => this.exec("insertOrderedList") },
-        { key: "q", label: "format_quote", title: "Cytat", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("formatBlock", "blockquote") },
-        { key: "lnk", label: "link", title: "Wstaw link", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("createLink", "https://") },
+        { key: "ul", label: "•—", title: "Bulleted list", style: "", run: () => this.exec("insertUnorderedList") },
+        { key: "ol", label: "1.", title: "Numbered list", style: "", run: () => this.exec("insertOrderedList") },
+        { key: "q", label: "format_quote", title: "Quote", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("formatBlock", "blockquote") },
+        { key: "lnk", label: "link", title: "Insert link", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("createLink", "https://") },
         { key: "clr", label: "format_clear", title: "Clear formatting", style: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:17px;line-height:1;", run: () => this.exec("removeFormat") },
       ].map(b => ({ key: b.key, label: b.label, title: b.title, style: "display:flex;align-items:center;justify-content:center;border-radius:" + (touch ? "9px;min-width:40px;height:40px;padding:0 9px;font-size:15px;border:1px solid var(--line);" : "7px;min-width:30px;height:30px;padding:0 7px;font-size:13px;") + "color:var(--text2);" + b.style, run: b.run })),
       aiActions: [

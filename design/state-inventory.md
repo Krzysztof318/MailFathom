@@ -1,6 +1,6 @@
 # The design's state inventory
 
-**Mirror stamp `099857782525a732`** — the etag set this was extracted from. Run
+**Mirror stamp `6b64bb49fb7e4c1a`** — the etag set this was extracted from. Run
 `bash scripts/design-mirror.sh stamp`; a different answer means the design moved and this file
 describes something older than the mirror beside it. Refresh with `$mf-sync-design` rather than reading
 around it.
