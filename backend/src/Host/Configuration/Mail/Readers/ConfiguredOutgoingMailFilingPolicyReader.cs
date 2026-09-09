@@ -19,4 +19,12 @@ internal sealed class ConfiguredOutgoingMailFilingPolicyReader(MailSynchronizati
     /// </remarks>
     public bool FilesSentCopy(MailAccountId accountId) =>
         settings.FindConfiguredAccount(accountId)?.Delivery.FileSentCopy ?? true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// An unconfigured account is answered the same way and for the same reason: the port's own default withdraws the
+    /// duplicate, and only a message sent as an account somebody configured can have one.
+    /// </remarks>
+    public bool WithdrawsDuplicateSentCopy(MailAccountId accountId) =>
+        settings.FindConfiguredAccount(accountId)?.Delivery.WithdrawDuplicateSentCopy ?? true;
 }

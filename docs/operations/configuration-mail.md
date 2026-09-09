@@ -334,6 +334,7 @@ what it does not.
 | `…:Delivery:FromAddress` | string | unset (the account's `UserName` when it is a mailbox address) | A mailbox address; startup refuses an endpoint that resolves to none | reload |
 | `…:Delivery:FromDisplayName` | string | unset (the address alone) | The name recipients see this mailbox sign itself with; deliberately not the account's `DisplayName` | reload |
 | `…:Delivery:FileSentCopy` | bool | `true` | Whether a delivered message is appended to the folder this account maps to the `Sent` role | reload |
+| `…:Delivery:WithdrawDuplicateSentCopy` | bool | `true` | Whether that appended copy is taken back out once the provider files one of its own beside it | reload |
 
 **`Enabled` is off on every account of every deployment, and turning it on is the act that makes sending possible.** An
 installation upgrading into a release that can send therefore does not thereby become able to: the release meets a
@@ -346,10 +347,15 @@ account. What an enabled account may then write, and how much of it, is
 [`Deployment:ReadOnly`](configuration-runtime.md#deployment).
 
 `FileSentCopy` is on because a submission server files nothing: without it the user's own mail client shows a Sent
-folder that is empty however much this account sends. Turn it off for a provider that files the copy itself, which is
-the one case leaving it on produces two copies of every message.
-[The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states why
-this is configured rather than detected, and what an account that maps no `Sent` folder does instead.
+folder that is empty however much this account sends. `WithdrawDuplicateSentCopy` is what answers the provider that
+files the copy itself: the append still happens, and the copy this deployment made is taken back out once
+synchronization has actually met the provider's own beside it, so neither setting has to be decided in advance from
+what a provider is believed to do. Turning `WithdrawDuplicateSentCopy` off keeps both copies, and turning
+`FileSentCopy` off is the stronger form of the same decision — no copy is appended at all, at the cost of a mailbox
+with no record of the send should the provider turn out to file nothing.
+[The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states what
+is detected and what is not, the window a duplicate is recognized within, and what an account that maps no `Sent`
+folder does instead.
 
 The permitted mechanisms, both weakenings, and the certificate authority are **not** repeated here: they are one
 decision the account makes about itself in `TransportSecurity` above, and both endpoints are reached under it. What

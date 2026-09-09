@@ -96,23 +96,25 @@ public sealed class OutgoingMailFilingRecordTests
     }
 
     /// <summary>
-    /// A row that has already answered for a discovery answers for no second one. Without it, a folder recreated under
-    /// reused UIDs would attribute a stranger's message to a copy this deployment filed long ago.
+    /// Having answered for one discovery does not close the row, because a provider that files the sent copy itself
+    /// puts a second occurrence of the same message in the same folder — and both are the user's own outgoing mail.
     /// </summary>
     [Fact]
-    public void AccountsForPlacementAt_AFilingSynchronizationAlreadyMet_IsNoLongerACandidate()
+    public void AccountsForMessageAt_AFilingSynchronizationAlreadyMet_StillAnswersForASecondOccurrence()
     {
         // Arrange
-        var filing = Confirmed(RemoteEmailPlacement.Reported(UidValidity, ImapUid.Create(7))) with
+        var filing = Confirmed(
+            RemoteEmailPlacement.Reported(UidValidity, ImapUid.Create(7)),
+            messageId: "mint-1@mailfathom.invalid") with
         {
             ObservedAt = DateTimeOffset.UnixEpoch,
         };
 
         // Act
-        var accountsFor = filing.AccountsForPlacementAt(SentFolder, UidValidity, ImapUid.Create(7));
+        var accountsFor = filing.AccountsForMessageAt(SentFolder, "mint-1@mailfathom.invalid");
 
         // Assert
-        Assert.False(accountsFor);
+        Assert.True(accountsFor);
     }
 
     /// <summary>An issued append names no copy anybody can point at, which is what its unknown outcome means.</summary>

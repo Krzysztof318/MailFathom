@@ -33,10 +33,24 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// </remarks>
 public sealed class OutgoingMailFilingPass
 {
+    /// <summary>
+    /// How long after an append a second occurrence of the message is still read as the provider having filed its own.
+    /// </summary>
+    /// <remarks>
+    /// It bounds a race between one append and the synchronization run that meets what the provider filed, which is
+    /// minutes on any account being synchronized at all. Past it the copy has been in the user's folder long enough to
+    /// have been read, replied from, moved, or flagged, and a duplicate discovered then is more likely to be the user's
+    /// own act than the provider's — so both copies stand and the one the user does not want is the one they delete. It
+    /// is a constant rather than a setting because it measures how long this system waits to recognize its own copy,
+    /// which is not a quantity an operator has grounds to tune.
+    /// </remarks>
+    private static readonly TimeSpan DuplicateSentCopyWindow = TimeSpan.FromMinutes(15);
+
     private readonly IOutgoingEmailStore outgoingEmails;
     private readonly OutgoingMailFiler filer;
     private readonly IMailFolderMappingReader folderMappings;
     private readonly IOutgoingMailFilingPolicyReader filingPolicies;
+    private readonly IOutgoingMailFilingStore filings;
     private readonly TimeProvider timeProvider;
     private readonly int maxMirroredSendsPerPass;
 
@@ -45,6 +59,7 @@ public sealed class OutgoingMailFilingPass
     /// <param name="filer">Appends and withdraws one copy.</param>
     /// <param name="folderMappings">Answers whether this account maps a folder to the outbox role at all.</param>
     /// <param name="filingPolicies">Answers whether this account files a copy of what it sends.</param>
+    /// <param name="filings">Answers which filed sent copies the folder holds a second occurrence of.</param>
     /// <param name="timeProvider">Decides which sends are waiting rather than merely queued.</param>
     /// <param name="settings">Bounds how many waiting sends one pass mirrors.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
@@ -58,6 +73,7 @@ public sealed class OutgoingMailFilingPass
         OutgoingMailFiler filer,
         IMailFolderMappingReader folderMappings,
         IOutgoingMailFilingPolicyReader filingPolicies,
+        IOutgoingMailFilingStore filings,
         TimeProvider timeProvider,
         MailOutboxSettings settings)
     {
@@ -65,6 +81,7 @@ public sealed class OutgoingMailFilingPass
         ArgumentNullException.ThrowIfNull(filer);
         ArgumentNullException.ThrowIfNull(folderMappings);
         ArgumentNullException.ThrowIfNull(filingPolicies);
+        ArgumentNullException.ThrowIfNull(filings);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -72,6 +89,7 @@ public sealed class OutgoingMailFilingPass
         this.filer = filer;
         this.folderMappings = folderMappings;
         this.filingPolicies = filingPolicies;
+        this.filings = filings;
         this.timeProvider = timeProvider;
         this.maxMirroredSendsPerPass = settings.MaxDeliveriesPerPass;
     }
@@ -108,6 +126,58 @@ public sealed class OutgoingMailFilingPass
         foreach (var record in waiting)
         {
             results.Add(await this.filer.FileAsync(record, OutgoingMailFiling.Held, cancellationToken));
+        }
+
+        return results;
+    }
+
+    /// <summary>Takes back the sent copies whose provider has since filed one of its own beside them.</summary>
+    /// <param name="account">The account whose sent folder is brought back to one copy of each message.</param>
+    /// <param name="cancellationToken">Cancels the read and the withdrawals.</param>
+    /// <returns>What each withdrawal did, which is empty on an account that has asked for none.</returns>
+    /// <remarks>
+    /// <para>
+    /// A provider that files the sent copy itself does it asynchronously, so nothing before the send can tell whether it
+    /// will. What can be told, once synchronization has met a second occurrence of the message in the same folder, is
+    /// that the folder now holds two — and the one this system appended is the one it may take back out.
+    /// </para>
+    /// <para>
+    /// It runs on the outbox pass rather than on the synchronization run that discovers the duplicate, because taking a
+    /// message out of a folder is a write and no read path may obtain the session that makes one. The cost is one query
+    /// per pass on an account whose sent folder holds no duplicate, which is every account whose provider files
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// One pass withdraws no more copies than it delivers sends, for the reason the mirror is bounded by that same
+    /// number: each is one conversation with a server, and what one pass leaves the next one takes. A record an erasure
+    /// removed between the read and the withdrawal is passed over rather than reported, because the copy it named
+    /// belongs to a message this deployment no longer holds.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<OutgoingMailFilingResult>> WithdrawDuplicatedSentCopiesAsync(
+        MailAccountIdentity account,
+        CancellationToken cancellationToken)
+    {
+        if (!this.filingPolicies.WithdrawsDuplicateSentCopy(account.Id))
+        {
+            return [];
+        }
+
+        var duplicated = await this.filings.ReadDuplicatedSentCopiesAsync(
+            account,
+            this.timeProvider.GetUtcNow() - DuplicateSentCopyWindow,
+            this.maxMirroredSendsPerPass,
+            cancellationToken);
+
+        var results = new List<OutgoingMailFilingResult>(duplicated.Count);
+        foreach (var outgoingEmailId in duplicated)
+        {
+            if (await this.outgoingEmails.FindAsync(outgoingEmailId, cancellationToken) is not { } record)
+            {
+                continue;
+            }
+
+            results.Add(await this.filer.WithdrawAsync(record, OutgoingMailFiling.Sent, cancellationToken));
         }
 
         return results;

@@ -103,6 +103,22 @@ public sealed class MailAccountDeliveryOptions
     /// </remarks>
     public bool FileSentCopy { get; set; } = true;
 
+    /// <summary>Gets or sets whether this account's own filed copy is taken back out once the provider files one too.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to on, and it is what leaves one copy of each sent message in the folder without an operator having
+    /// to know in advance what their provider does. Where the provider files nothing it never acts, because there is
+    /// never a second occurrence to meet.
+    /// </para>
+    /// <para>
+    /// Turning it off keeps both copies, which is the answer for a provider whose own copy differs from what was
+    /// submitted in a way the user wants to keep. Turning <see cref="FileSentCopy" /> off instead is the stronger form
+    /// of the same decision: it stops the copy being appended at all, at the cost of a mailbox with no record of the
+    /// send should the provider turn out to file nothing.
+    /// </para>
+    /// </remarks>
+    public bool WithdrawDuplicateSentCopy { get; set; } = true;
+
     /// <summary>Gets or sets the submission credential, or nothing to present the account's reading credential.</summary>
     /// <remarks>
     /// The block is nullable and defaults to absent rather than to an empty block, for the reason

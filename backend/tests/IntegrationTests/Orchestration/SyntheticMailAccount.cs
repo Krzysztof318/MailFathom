@@ -391,6 +391,14 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
+    /// Answered from the same switch the append is, because a duplicate can only exist where a copy was filed: an
+    /// account this suite files nothing for has nothing of its own to take back out, and one that files states both
+    /// halves at once.
+    /// </remarks>
+    public bool WithdrawsDuplicateSentCopy(MailAccountId accountId) => accountId == AccountId && filesSentCopies;
+
+    /// <inheritdoc />
+    /// <remarks>
     /// On for this account and off for every other, which is the opposite of the deployed default and is what this
     /// suite is: an installation whose operator configured a submission endpoint and turned sending on for the one
     /// mailbox it serves. A test about a deployment that may not send states that posture itself rather than reading

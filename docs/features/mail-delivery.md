@@ -983,10 +983,36 @@ with no path is refused at startup, naming the alias and the key it wants, becau
 Nothing is mirrored until somebody writes that mapping.
 
 **The sent copy is appended after a delivery the server acknowledged, and only then.** Whether it is appended at all is
-`Delivery:FileSentCopy`, a per-account setting that defaults to on and is configured rather than detected: a provider
-that files the copy itself does so asynchronously, so looking in the folder immediately after a delivery cannot tell
-*will appear shortly* from *will never appear*. Turn it off for an account whose provider files the copy, and leave it
-alone otherwise — a duplicate a user deletes beats a record of what they sent that never existed.
+`Delivery:FileSentCopy`, a per-account setting that defaults to on. Whether it is appended is never decided by looking
+at the folder: a provider that files the copy itself does so asynchronously, so a look immediately after a delivery
+cannot tell *will appear shortly* from *will never appear*, and a record of what somebody sent that never existed is
+the worse of the two errors.
+
+**What the provider filed is answered afterwards, once it is a fact rather than a guess.** Where the same message turns
+up a second time in the same folder, the copy this system appended is taken back out and the provider's is what the
+user keeps. That is `Delivery:WithdrawDuplicateSentCopy`, per account and on by default, so an ordinary account ends
+with one copy of each message it sent whichever kind of provider it is on. Four things bound it, and each is the
+reason it can be done at all:
+
+- **The occurrence has to have been named.** The withdrawal reaches the UID the `APPENDUID` response reported, so a
+  server advertising no `UIDPLUS` withdraws nothing: the two copies carry one `Message-ID` between them and nothing
+  says which of them is this deployment's, and guessing would be as likely to delete the provider's.
+- **The folder has to still hold the other copy.** The second occurrence is read from what synchronization stored, and
+  a row the server has since expunged is a tombstone rather than a copy — so a duplicate the user has already deleted
+  decides nothing, and this deployment's own copy stays as the one record of the send.
+- **It is recognized within fifteen minutes of the append.** That bounds the race between the append and the
+  synchronization run that meets what the provider filed — three runs at the default
+  [`MailSynchronization:Interval`](../operations/configuration-mail.md#mailsynchronization), each of which drains the
+  outbox and looks for a duplicate as it goes, so a deployment that lengthened that interval past the window is the one
+  place a duplicate goes unnoticed. A second occurrence met later is left alone, because by then the copy has been in
+  the folder long enough to have been read, replied from, moved, or flagged, and what the user did with it is theirs to
+  undo.
+- **It runs on the outbox pass rather than on the run that discovers the duplicate.** Taking a message out of a folder
+  is a write, and [no read path may obtain the session](imap-synchronization.md) that makes one.
+
+Turning `WithdrawDuplicateSentCopy` off keeps both copies. Turning `FileSentCopy` off is the stronger form of the same
+decision and is still the right one where a provider is known to file, since it spends no append and no withdrawal at
+all; what it costs is a mailbox with no record of the send should that belief turn out to be wrong.
 
 **The bytes are the ones the recipients received.** The append reuses the stored MIME rather than recomposing it, for
 the reason a retry does: a recomposed message carries a different `Message-ID` and threads as a second message in every
@@ -1001,7 +1027,10 @@ again.
 
 **The copy comes back through synchronization and is recognized rather than guessed at.** Where the server advertises
 RFC 4315 `UIDPLUS`, its `APPENDUID` response names the occurrence exactly and that is the join; where it does not, the
-`Message-ID` this system minted, read back off the appended bytes, is what recognizes it. Either way the stored message
+`Message-ID` this system minted, read back off the appended bytes, is what recognizes it. A second occurrence carrying
+that identity is recognized as well rather than only the first, because a provider that filed its own copy filed the
+user's own outgoing message and the copy that stays behind is as much this deployment's as the one withdrawn. Every
+such stored message
 is marked as this deployment's own, which is what keeps [a rule](mail-rules.md#when-rules-run) conditioned on arriving
 mail from firing on what the user just sent, and what keeps
 [spam classification](spam-classification.md#mail-is-classified-as-it-arrives) from scoring a message this system
@@ -1029,7 +1058,8 @@ UID the append reported. A server without `UIDPLUS` leaves the copy standing rat
 does a copy the server never named — one copy of the user's own message in a folder they mapped, deletable with the
 gesture they would have used anyway. A mirror whose append the server never answered is left alone entirely: nobody
 knows whether that copy reached the folder, so the record goes on reporting the outcome as unknown rather than claiming
-the copy was taken back out. A sent copy is withdrawn by nothing: it is what the user keeps.
+the copy was taken back out. A sent copy is withdrawn by one thing only, which is the provider having filed its own
+beside it; nothing else takes it back out, because it is what the user keeps.
 
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.

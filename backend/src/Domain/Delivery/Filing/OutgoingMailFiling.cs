@@ -79,7 +79,9 @@ public readonly record struct OutgoingMailFiling
     /// <summary>Gets whether the copy is withdrawn once the message leaves the stage this filing describes.</summary>
     /// <remarks>
     /// Only the outbox mirror is. A draft and a sent copy are what the user keeps; the mirror exists to show a message
-    /// that has not gone yet, so leaving it behind after the message went would show an outbox that never drains.
+    /// that has not gone yet, so leaving it behind after the message went would show an outbox that never drains. A
+    /// sent copy is still withdrawable on its own terms — the provider filing one of its own beside it is the one
+    /// thing that takes it back out — and that is a second occurrence of the message rather than the message leaving.
     /// </remarks>
     public bool IsWithdrawnWhenTheMessageLeaves => this == Held;
 
