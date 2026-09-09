@@ -1,6 +1,6 @@
 # The design's state inventory
 
-**Mirror stamp `099857782525a732`** — the etag set this was extracted from. Run
+**Mirror stamp `1eb5a9bd74d923d2`** — the etag set this was extracted from. Run
 `bash scripts/design-mirror.sh stamp`; a different answer means the design moved and this file
 describes something older than the mirror beside it. Refresh with `$mf-sync-design` rather than reading
 around it.
@@ -269,11 +269,10 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | Cancel confirmation | `cancelAskOpen` | closing a toast that carries a running operation |
 | Toasts | `toasts` | any operation that reports; `MailFathom Toasts.dc.html` is the whole of it |
 
-Three labels in the prototype are still Polish where every other string is English: the two Settings
-tabs, *Profil* and *Aplikacja* (line 7483), the user menu's sign-out item, *Wyloguj* (line 135), and
-the single-pane state toggle beside the thread head, *ukryj* (line 7217). They are named here because
-`design/parity.json` presses two of them and because the client is English everywhere: copy the
-English the rest of the design uses rather than these three, and expect them to move in the project.
+Every label in the prototype is English. The four that were not — the Settings tabs *Profil* and
+*Aplikacja* (line 7483), the user menu's sign-out item *Wyloguj* (line 135), and the single-pane
+state toggle beside the thread head, *ukryj* (line 7217) — were translated in the project, and
+`design/parity.json` presses two of them under their English names.
 
 ## Sign-in — `MailFathom Sign-in.dc.html`
 

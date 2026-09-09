@@ -342,9 +342,9 @@ function contextFor(browser: Browser, plan: PlannedRun, composition: Composition
         isMobile: composition.touch,
         colorScheme: plan.theme,
 
-        // The design project is written in Polish and reads no locale, so the client is asked for the same language:
+        // The design project is written in English and reads no locale, so the client is asked for the same language:
         // a pair captured in two languages differs in every word and says nothing about the screen.
-        locale: 'pl-PL',
+        locale: 'en-US',
     });
 }
 
@@ -397,11 +397,12 @@ async function captureClient(
         if (pair.signIn) {
             // The credential is the corpus's own rather than a second copy of it written here, which is the same rule
             // the browser suite follows: the example mail and the credential that reaches it are one file. The names
-            // are the client's Polish ones, because that is the language the context above asked it for.
+            // are the client's English ones, because that is the language the context above asked it for, and each is
+            // the catalogue's own value rather than a translation of it.
             await page.getByRole('textbox', { name: 'Login' }).fill(userName);
-            await page.getByLabel('Hasło', { exact: true }).fill(password);
-            await page.getByRole('button', { name: 'Połącz' }).click();
-            await page.getByRole('navigation', { name: 'Przestrzenie' }).waitFor({ state: 'visible' });
+            await page.getByLabel('Password', { exact: true }).fill(password);
+            await page.getByRole('button', { name: 'Connect' }).click();
+            await page.getByRole('navigation', { name: 'Spaces' }).waitFor({ state: 'visible' });
 
             // Signing in lands on the client's default space, so an address naming another one is asked for again —
             // the fragment was read before the credential was accepted.
