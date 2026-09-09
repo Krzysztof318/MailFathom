@@ -686,30 +686,35 @@ The canonical skills are:
 
 - `get-started-contributors` takes somebody from arriving to a first green run: a
   welcome, then an orientation in what MailFathom is, how this repository is
-  worked, what the AGPL grant and the contributor licence agreement each ask, the
-  one part of the client graph that arrives under somebody else's proprietary
-  terms, the file header that carries no name, and what a public repository is
-  careful about
+  worked, where both stacks and the design mirror live, what the AGPL grant and
+  the contributor licence agreement each ask, what each closure carries that is
+  not permissive, the file header that carries no name, and what a public
+  repository is careful about
   — and then the setup, which is the platform check that refuses anything but
-  Linux, the toolchain and how each piece of it is installed, the remote the gates
+  Linux, the toolchain both stacks need and how each piece of it is installed,
+  what this machine's credentials may and may not do here, the remote the gates
   resolve their base from, the local instruction file above, the commands an agent
-  harness has to permit for the loop to be a loop, and what the fork role is
-  refused before a session is spent on it. It is the one skill written for
+  harness has to permit for the loop to be a loop, and the refusals no probe can
+  ask about. The capability step is the one that runs before anything is written:
+  which repository `origin` is answers only which clone this is, so the skill asks
+  the repository and the board what this credential holds and says the two answers
+  back as one account of what may and may not be done. It is the one skill written for
   somebody who has not read this page, and it changes no tracked file. Like `prepare-release` it sets `disable-model-invocation`, for the
   opposite reason: setting a machine up is asked for by a person, and an
   agent that hits a missing SDK mid-task has a blocker to report rather than an
   installation to perform while nobody is looking. It is asked for more than
   once all the same, because what it puts on a machine does not hold still — the
-  SDK pin, the repository-local tools, the permission list, the role file's
-  wording, and a board grant each move without the machine hearing about it. A
+  SDK pin, the client's Node and pnpm pins, the repository-local tools, the
+  permission list, the role file's wording, and a board grant each move without
+  the machine hearing about it. A
   completed run writes `mailfathom-setup.json` inside the clone's git directory,
   resolved through `--git-common-dir` so it is one file per clone however many
   worktrees read it and so no commit can reach it, and a later invocation reads
   it and refreshes instead of repeating:
   it diffs the recorded base commit against the current one over the paths a
   local configuration is written from, leaves an installed tool alone while its
-  check answers, probes the role and the board again because neither is written
-  in a commit, and rewrites the role file and the permissions only where they
+  check answers, runs all three capability probes again because none of them is
+  written in a commit, and rewrites the role file and the permissions only where they
   differ. Deleting that file is how a first run is asked for again;
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
