@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useLinkOpener } from '../shellOperations/linkOpener';
 
 // The one file in this client that writes an `iframe`'s `srcDoc`, and the only place a message's own markup is drawn
 // as markup. Everywhere else under `src/` the lint rule refuses it outright, and the exception is written into
@@ -14,22 +15,29 @@ import { useLocalization } from '../localization/useLocalization';
 // both markup surfaces rather than one per surface, which is why the two below stand here together.
 //
 // **Two mechanisms hold two different promises here, and neither substitutes for the other.** A frame is what stops the
-// markup running: `sandbox` with neither `allow-scripts` nor `allow-same-origin` denies script, forms, popups,
-// navigation, downloads, and an origin of its own. It is *not* what stops the markup reporting — no sandboxing flag
-// the HTML Standard defines governs what a framed document may fetch, so a sandboxed frame would load a tracking pixel
-// exactly as an unsandboxed one does. What keeps that out is the representation: the service prepares the markup with
-// every remote address already removed, unless the reader asked for this one message's pictures. Weakening either half
-// is a change to both.
+// markup reaching anything: no `allow-same-origin`, so the document holds an opaque origin and reaches neither the
+// page's DOM nor its storage nor a cookie, and no `allow-forms`, `allow-popups`, or `allow-top-navigation`, so it
+// submits, opens, and navigates nowhere. It is *not* what stops the markup reporting — no sandboxing flag the HTML
+// Standard defines governs what a framed document may fetch, so a sandboxed frame would load a tracking pixel exactly
+// as an unsandboxed one does. What keeps that out is the representation: the service prepares the markup with every
+// remote address already removed, unless the reader asked for this one message's pictures. And since the flag below is
+// granted, the representation is what stops the markup *running* as well. Weakening either half is a change to both.
 //
-// **The two surfaces carry two different `sandbox` values, and that is ADR 0024's third question rather than drift.**
-// The dialog is opened one message at a time, is given its size by the page, and keeps `sandbox=""`. The embedded view
-// draws every open message inline at its full height inside one scrolling conversation, and no attribute, property, or
-// shipped platform feature fits a sandboxed frame to its content — so it carries `sandbox="allow-scripts"` and nothing
-// else, which leaves the framed document an opaque origin that reaches neither the page's DOM, nor its storage, nor a
-// cookie, and lets the client's own measuring script report the height. What then holds *nothing in the message runs*
-// on that surface is the representation alone: #1484 serves markup with nothing executable in it, so the only script
-// in that frame is the one this file put there. That is a promise moved off the platform and onto a build, and ADR 0024
-// records it as a cost rather than as free.
+// **Both surfaces carry `sandbox="allow-scripts"` and nothing else, which is ADR 0024's third and fourth questions.**
+// That leaves each framed document an opaque origin reaching neither the page's DOM, nor its storage, nor a cookie, and
+// it grants no `allow-same-origin`, no `allow-forms`, no `allow-popups`, and no `allow-top-navigation`. What it buys is
+// two things a sandboxed frame cannot otherwise do: the embedded view fits itself to its content, and — on both
+// surfaces — a link the reader clicks is reported out rather than dying silently, which is what a frame granting no
+// popup and no top navigation does to every `href` in it. What then holds *nothing in the message runs* is the
+// representation alone: #1484 serves markup with nothing executable in it, so the only script in either frame is the
+// one this file put there. That is a promise moved off the platform and onto a build, and ADR 0024 records it as a cost
+// rather than as free.
+//
+// **A followed link leaves through the application's own opener rather than out of the frame.** The framed document
+// reports the `href` as the sender wrote it and navigates nothing; the parent decides whether that target is one a
+// reader may be handed and then asks for it to be opened — a new browsing context on the web head, the system browser
+// on the desktop head. So the two heads answer a link in the sender's markup exactly as they answer one in the reading
+// pane, through the one operation `shellOperations/linkOpener.ts` resolves, and no screen here learns which head it is.
 //
 // What both are drawn on is `--color-sender-markup`, which is the one token in this client that stays the same in both
 // themes, and `styles.css` carries the reason beside the declaration rather than here.
@@ -40,16 +48,23 @@ import { useLocalization } from '../localization/useLocalization';
 
 export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
     const { translate } = useLocalization();
+    const frame = useRef<HTMLIFrameElement>(null);
+
+    useFollowedLinks(frame);
 
     if (markup === '') {
         return null;
     }
 
+    // The dialog is given its size by the page and scrolls inside itself, so it is handed the link script alone. The
+    // measuring script would take that scrolling away with it: hiding the framed document's overflow is what an
+    // embedded frame needs and is exactly wrong on the one surface that is meant to scroll.
     return (
         <iframe
+            ref={frame}
             title={translate('fullHtml.frame')}
-            sandbox=""
-            srcDoc={markup}
+            sandbox="allow-scripts"
+            srcDoc={documentAround(markup, linkScript)}
             className="min-h-0 w-full flex-1 border-0 bg-sender-markup"
         />
     );
@@ -85,6 +100,20 @@ const settledWithin = 3;
 // the way the platform still has: that attribute is deprecated and the lint set refuses it, and what replaces it is
 // `overflow: hidden` on the framed document. The one case the frame is meant to scroll is the one where no report ever
 // arrives, and nothing there ran this script to hide it.
+// The client's own script for reporting a followed link, prepended to both surfaces' `srcDoc`. It cancels the frame's
+// own handling of the click and reports the `href` **as the sender wrote it** — the attribute rather than the resolved
+// property, because a relative reference resolves against `about:srcdoc` and would arrive as an address that means
+// nothing. Whether the target is one a reader may be handed is the parent's decision and is taken there.
+//
+// The listener is on the document in the capture phase, so a link wrapped in whatever a template put around it is still
+// answered by the first handler to see the event. It reads the tree upwards rather than trusting the event target,
+// since a click lands on the text node's element — a `span` inside the anchor, the image inside a banner link.
+const linkScript = `<script>(function(){
+function anchor(n){while(n&&n.nodeType===1){if(n.nodeName==="A")return n;n=n.parentNode}return null}
+document.addEventListener("click",function(e){var a=anchor(e.target);if(!a)return;
+var href=a.getAttribute("href");if(!href)return;e.preventDefault();
+try{parent.postMessage({link:href},"*")}catch(err){}},true)})()</script>`;
+
 const measuringScript = `<script>(function(){var last=0,sends=0;
 function measure(){var de=document.documentElement,b=document.body;if(!de||!b)return 0;
 var held=de.style.height;de.style.height="0px";
@@ -138,6 +167,8 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
     const frame = useRef<HTMLIFrameElement>(null);
     const [fitted, setFitted] = useState<Fitted>(beforeAnythingReported);
 
+    useFollowedLinks(frame);
+
     // The one thing outside React this surface synchronizes with, and it is two: a report arriving from inside the
     // frame, and the wait running out before one does. Both are registered once, because a frame belongs to the
     // message this component was mounted for and a changed message mounts another.
@@ -182,7 +213,7 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
                     ref={frame}
                     title={translate('fullHtml.frame')}
                     sandbox="allow-scripts"
-                    srcDoc={documentAround(markup)}
+                    srcDoc={documentAround(markup, linkScript + measuringScript)}
                     style={{ height: `${String(fitted.height)}px` }}
                     className="block w-full border-0 bg-sender-markup"
                 />
@@ -197,14 +228,78 @@ export function EmbeddedMessageMarkup({ markup }: { readonly markup: string }) {
 }
 
 // The script goes ahead of the message markup, inside the document's own head where it has one, so that it is parsed
-// before anything it will measure. The representation is a whole document rather than a fragment, so the head is
-// normally there; a representation without one still gets the script first.
-function documentAround(markup: string): string {
+// before anything it will measure or listen on. The representation is a whole document rather than a fragment, so the
+// head is normally there; a representation without one still gets the script first.
+function documentAround(markup: string, script: string): string {
     const head = markup.indexOf('<head>');
 
     return head < 0
-        ? measuringScript + markup
-        : markup.slice(0, head + '<head>'.length) + measuringScript + markup.slice(head + '<head>'.length);
+        ? script + markup
+        : markup.slice(0, head + '<head>'.length) + script + markup.slice(head + '<head>'.length);
+}
+
+/** The longest target this hands to the opener, past which a report is a payload rather than a place. */
+const longestTarget = 4096;
+
+// The schemes a reader may be handed, which is the set the service already admits on a reduced document's link. It is
+// an allow-list for the reason `MailLinkReader` gives about one: what a platform opener will act on is decided by the
+// operating system rather than here, so what leaves this application has to be a set somebody chose.
+const followableSchemes = ['http:', 'https:', 'mailto:', 'tel:'];
+
+/**
+ * Opens the links a framed document reports, for the frame this component created and for no other.
+ *
+ * The report crossed a trust boundary — it was raised by a script running against a stranger's markup — so what
+ * arrives is read out of an `unknown` and held against the schemes above before anything is asked to open it. Matching
+ * on the source rather than on the origin is the same rule the height report follows and for the same reason: an
+ * opaque origin serializes as the string `"null"`, which every sandboxed frame on the page reports.
+ */
+function useFollowedLinks(frame: RefObject<HTMLIFrameElement | null>): void {
+    const openLink = useLinkOpener();
+
+    useEffect(() => {
+        function reported(event: MessageEvent): void {
+            if (event.source !== frame.current?.contentWindow) {
+                return;
+            }
+
+            const target = followableTargetIn(event.data);
+
+            if (target !== null) {
+                // A reader following a link they clicked is a gesture no head refuses, and the opener already reports
+                // nothing on the web head. There is therefore no failure to draw here, and the frame has no place to
+                // draw one anyway.
+                void openLink(target).catch(() => undefined);
+            }
+        }
+
+        window.addEventListener('message', reported);
+
+        return () => {
+            window.removeEventListener('message', reported);
+        };
+    }, [frame, openLink]);
+}
+
+/** What a report names, or nothing where it names no target this application may open. */
+function followableTargetIn(reported: unknown): string | null {
+    if (typeof reported !== 'object' || reported === null || !('link' in reported)) {
+        return null;
+    }
+
+    const { link } = reported;
+
+    if (typeof link !== 'string' || link.length === 0 || link.length > longestTarget) {
+        return null;
+    }
+
+    try {
+        return followableSchemes.includes(new URL(link).protocol) ? link : null;
+    } catch {
+        // A relative reference resolves against nothing here, exactly as it does in the framed document, so it names
+        // no place a reader could be taken to.
+        return null;
+    }
 }
 
 // What a report carries, or nothing where it carries no height this surface can act on. The value crossed a trust

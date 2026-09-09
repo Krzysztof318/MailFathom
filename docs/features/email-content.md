@@ -538,6 +538,30 @@ Each block names its own revision beside its identity, and `MailDocument.SchemaV
 document itself. A client keys its renderers by the pair and draws a placeholder for a pair it does not implement, so a
 deployment ahead of the client on the other end of the connection costs that client one block rather than the message.
 
+**A message that displays no markup reduces to a document too, and it is its plain text.** Mail is mostly
+machine-written — a notification, a receipt, a dispatch note — and such a message carries a `text/plain` part and
+nothing else. It becomes a paragraph per blank-line-separated block, with the message's own line breaks kept inside the
+runs, so what a pane draws is the text as it was written plus the one thing the text alone could not carry: the
+addresses in it, as links. Nothing is inferred beyond that — no heading, no list, and no quotation is guessed at from
+punctuation, because a reduction that guessed would be wrong in a way the sender could not have anticipated.
+
+**A table used for layout is not a table.** Mail lays a message out in tables and has for twenty years, so a reduction
+that made every `table` element a `table` block drew an ordinary newsletter as a bordered card inside a bordered card
+inside another, with its call to action as a ruled bar. Such a table is unwrapped into the blocks its cells hold. What
+makes one layout is stated over the markup and nothing else: a table declaring `role="presentation"` or `role="none"`
+is taken at its word, and any other table is layout only where it carries no header — no `thead` section and no `th`
+cell — no row holds more than one cell, and the box is doing a box's work: it sits inside another table, or one of its
+cells holds content that is itself blocks rather than words. The rule is deliberately narrow in both halves of that
+second condition. Unwrapping a two-column table would run its columns together into a paragraph, which is a loss a
+reader cannot recover from, while a border they did not need is one they can ignore; and a lone one-column table of
+sentences is as likely to be a list of dates or terms somebody drew on purpose as it is a wrapper, so it stays a table
+until the markup says otherwise.
+
+An alignment such a table declared goes with it. It described where the box it positioned sat rather than how the words
+inside that box read, so carrying it into the unwrapped content is what centred a whole message that was only ever
+centred as a column. Colour and emphasis are kept, being what the sender said about the words themselves, and a block
+that declared its own alignment keeps that.
+
 ### Nothing in a body reaches another server unless the reader asked
 
 Every reference to a remote address is removed while the tree is built, rather than left in it for a renderer to
@@ -593,11 +617,26 @@ and the link goes to another, `NotApplicable` where the text is not a place at a
 The determination belongs here rather than to each client, so two clients reading one message cannot disagree about how
 loudly to warn, and a client that never learned what a homograph is still shows what this deployment found.
 
+**An address a message wrote as words carries one too.** A URL with its own scheme, a bare `www.` host, and a mail
+address are each found in the text of a run that is not already inside a link, and each becomes an ordinary
+`MailDocumentLink` judged by the reader above — so `Deception`, `Host`, and `AsciiHost` mean on a written address
+exactly what they mean on an anchor. It is done here for the same reason the judgement is: a client finding addresses
+for itself would be a second implementation of what a link is, and the quieter of the two would be the one a reader
+happened to have.
+
+Three rules bound it, and each is a rule over the characters rather than a guess at intent. The punctuation a sentence
+closes on is dropped from the end of a match, while a bracket the address opened itself is kept. A run already inside
+an anchor is left alone, because the sender already said where those words go. And a bare host names no scheme, so the
+one supplied for it is `https` — the reader is the one who will follow it, and that is the only choice here that cannot
+expose what they were reading. What the sender wrote is never rewritten: a written `http://` stays one.
+
 ### A refusal is a value rather than an exception
 
-`MailDocumentRefusal` says why a document holds nothing: `NoHtmlPart` where the message carried no markup at all,
+`MailDocumentRefusal` says why a document holds nothing: `NoHtmlPart` where the message carried no body at all,
 `ReductionFailed` where the markup could not be read, `NothingRenderable` where it reduced to no content, and `None`
-where the document is the message. The plain text travels beside it in every case, so a pane falls back to the words
+where the document is the message. `NoHtmlPart` is narrower than its name suggests and deliberately so: a message that
+displays no markup but says something reduces to the plain-text document above, so what is left for that value to
+answer is a message with nothing in it either way. The plain text travels beside it in every case, so a pane falls back to the words
 with a reason it can show rather than to an empty frame. `Truncated` says a bound stopped the reduction before the end
 of the body, the way `EmailBodyTruncation` says the same about a representation, and it says the same about a scan that
 withheld what it could not reach — every way a document is cut short reads as one flag.

@@ -525,12 +525,20 @@ takes, and where somebody works in tabs it opens as a tab of its own. Where they
 the message — `mailSpace/SurfaceWindow.tsx`, the platform's own modal dialog, so the message they were reading is still
 where they left it when the window goes. What the reading pane draws is a closed
 document tree; what this draws is the markup the sender actually wrote, and two different mechanisms are what make that
-safe rather than one. The frame it is drawn in carries a `sandbox` attribute naming neither `allow-scripts` nor
-`allow-same-origin`, so nothing in the markup runs whatever the markup holds; and what is drawn in it is the
-self-contained representation the service composes, whose every remote address is already gone, so nothing in it
-reaches the sender until a reader asks for that one message's pictures. The footer states those two separately and
+safe rather than one. What is drawn in the frame is the self-contained representation the service composes, whose every
+remote address is already gone and which carries nothing executable — so nothing in it reaches the sender until a
+reader asks for that one message's pictures, and nothing in it runs. The frame carries `sandbox="allow-scripts"` and
+no other flag: no `allow-same-origin`, so the framed document holds an opaque origin and reaches nothing of the page,
+and no `allow-popups` and no `allow-top-navigation`, so it reaches nothing outside itself either. The flag is granted
+for what the client's own scripts do with it — reporting a followed link out to the parent on both markup surfaces,
+and reporting a height on the embedded one — which is ADR 0024's fourth question, and it is what puts _nothing in the
+message runs_ on the representation rather than on the frame. The footer states the two promises separately and
 credits each to what actually holds it, because a reader who is told the frame stops both learns nothing about what
 asking for the pictures gives up.
+
+A link the reader presses in that frame leaves through `shellOperations/linkOpener.ts` like every other link in this
+client: the framed document reports the address it was written with and navigates nothing, and the parent admits
+`http`, `https`, `mailto`, and `tel`, bounds the length, and accepts a report only from a frame it created itself.
 
 Reaching it is a question rather than a control: pressing the one on the message's head opens a confirmation, and
 neither answer is written down — per message, per reader, or at all. `workspace/rememberedWorkspace.ts` is what keeps

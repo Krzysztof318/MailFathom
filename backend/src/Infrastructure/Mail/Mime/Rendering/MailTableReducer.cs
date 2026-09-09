@@ -25,6 +25,125 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// </remarks>
 internal static class MailTableReducer
 {
+    /// <summary>The elements whose presence in a cell makes the cell a box around content rather than a cell of words.</summary>
+    private static readonly string[] BlockElementNames =
+    [
+        "table", "div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "blockquote", "pre", "hr",
+    ];
+
+    /// <summary>Answers whether this table lays a message out rather than holding a table of anything.</summary>
+    /// <param name="element">The table as the message wrote it.</param>
+    /// <returns><see langword="true" /> where the table is the sender's layout and its content is what a reader wants.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="element" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Two rules, both over the markup rather than over what anybody meant by it. A table that declares itself
+    /// presentational is taken at its word, which is the declaration the accessibility guidance has asked mail to write
+    /// for twenty years and which every serious template generator writes. Everything else is layout only where it
+    /// carries no header — no <c>thead</c> section and no <c>th</c> cell — no row holds more than one cell, and the box
+    /// is doing a box's work: it either sits inside another table or holds content that is itself blocks. That is the
+    /// single-column wrapper a newsletter nests three and four deep to centre itself in a viewport.
+    /// </para>
+    /// <para>
+    /// Both halves of the second rule are deliberately narrow. A table of two columns is where a schedule, a price list,
+    /// and an invoice live, and unwrapping one would run the two columns of every row together into a paragraph — a
+    /// loss a reader cannot recover from, against a border they can ignore. And a lone one-column table of sentences is
+    /// as likely to be a list somebody drew as a wrapper, so it stays a table until the markup says otherwise. The
+    /// failure this admits is a layout table still drawn as a table, which is the direction that costs the less of the
+    /// two.
+    /// </para>
+    /// </remarks>
+    internal static bool IsLayout(IElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+
+        if (element.GetAttribute("role") is { } role
+            && (role.Equals("presentation", StringComparison.OrdinalIgnoreCase)
+                || role.Equals("none", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (element.Children.Any(child => IsNamed(child, "thead")))
+        {
+            return false;
+        }
+
+        var rows = RowsOf(element, reducer: null).ToArray();
+
+        return rows.Length > 0
+            && rows.All(row => row.Children.Count(IsCell) <= 1)
+            && rows.All(row => !row.Children.Any(child => IsNamed(child, "th")))
+            && (element.ParentElement?.Closest("table") is not null
+                || rows.SelectMany(row => row.Children.Where(IsCell)).Any(HoldsBlocks));
+    }
+
+    /// <summary>Answers whether a cell holds content that is drawn as blocks rather than as words in a line.</summary>
+    /// <remarks>
+    /// This is what separates a box from a cell: a wrapper's one cell holds the next table, a heading, a paragraph, or
+    /// a list, while the cell of a table somebody drew on purpose holds the words themselves. Only the cell's own
+    /// children are read, because a paragraph three elements down belongs to whatever box is nearer to it.
+    /// </remarks>
+    private static bool HoldsBlocks(IElement cell) =>
+        cell.Children.Any(child => BlockElementNames.Any(name => IsNamed(child, name)));
+
+    /// <summary>Reduces a layout table to the blocks its cells hold, in the order the message wrote them.</summary>
+    /// <param name="element">The table as the message wrote it.</param>
+    /// <param name="context">What the content is drawn under, which is what the table sits inside rather than what it asked for.</param>
+    /// <param name="reducer">The reduction the cells' own content is produced by.</param>
+    /// <returns>The blocks the table held.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The rows and the cells are read exactly as <see cref="Reduce" /> reads them, because they still never pass
+    /// through the element walk: a hidden row or cell is dropped and read for what it would have loaded, and what a
+    /// visible one names is counted. Removing the table is a decision about how the content is drawn and never about
+    /// what the reader is told the message would have fetched.
+    /// </remarks>
+    internal static IReadOnlyList<MailDocumentBlock> Unwrap(
+        IElement element,
+        MailReductionContext context,
+        MailBodyReducer reducer)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reducer);
+
+        var unwrapped = new List<MailDocumentBlock>();
+
+        foreach (var row in RowsOf(element, reducer))
+        {
+            if (MailStyleReader.Read(row).Hidden)
+            {
+                reducer.NoteHiddenReferences(row);
+
+                continue;
+            }
+
+            reducer.NoteRemoteReferences(row);
+
+            foreach (var cell in row.Children.Where(IsCell))
+            {
+                var style = MailStyleReader.Read(cell);
+                if (style.Hidden)
+                {
+                    reducer.NoteHiddenReferences(cell);
+
+                    continue;
+                }
+
+                reducer.NoteRemoteReferences(cell);
+
+                // The cell's own alignment goes with the box it described, for the reason the caller states; its
+                // colour and its emphasis are what the sender said about the words themselves and are kept.
+                unwrapped.AddRange(reducer.ReduceBlocks(
+                    cell,
+                    context.Inside(style with { Alignment = MailBlockAlignment.Inherited })));
+            }
+        }
+
+        return unwrapped;
+    }
+
     /// <summary>Reduces one table element.</summary>
     /// <param name="element">The table as the message wrote it.</param>
     /// <param name="context">What the table inherits.</param>
