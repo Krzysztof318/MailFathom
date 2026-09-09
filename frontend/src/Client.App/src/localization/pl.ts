@@ -55,6 +55,7 @@ export const pl: Catalogue = {
     'intent.placeholder': 'O co chcesz zapytać swoją pocztę?',
     'intent.ask': 'Zapytaj',
     'intent.askedBefore': 'Wcześniejsze pytania',
+    'intent.askedUnder': '{question}, pytanie dotyczy: {scope}',
     'intent.forgetAsked': 'Wyczyść listę',
 
     'scope.inScope': 'Czego dotyczy pytanie',

@@ -46,6 +46,15 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
     const inForce = askScopeInForce(workspace, accounts);
     const offered = scopesOffered(onScreen, accounts, translate, locale);
 
+    // Read out of the list the control renders rather than out of the workspace, because the list is the shorter of
+    // the two: a mailbox somebody named in the field stops being offered separately the moment the mail space moves to
+    // it, and a value naming an option that is no longer there leaves the control drawing nothing selected while the
+    // question is still scoped to it. The first option is what answers then, and it is the same scope under another
+    // name — following the screen, where the screen now shows what was named.
+    const named = workspace.askScope;
+    const chosen =
+        named === null ? undefined : offered.find((one) => one.scope !== null && sameScope(one.scope, named));
+
     // The front door is reachable without hunting for it, which is what "from anywhere in the application" costs: a
     // reader inside a list of messages would otherwise tab back out of it to reach the field. An imperative browser
     // API being subscribed to is what an effect is for, and the shortcut is announced on the field itself rather than
@@ -102,7 +111,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                     ref={question}
                     type="search"
                     aria-label={translate('intent.label')}
-                    aria-keyshortcuts="Control+K Meta+K"
+                    aria-keyshortcuts={askShortcut}
                     placeholder={translate('intent.placeholder')}
                     value={workspace.question}
                     onChange={(event) => {
@@ -129,7 +138,7 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
             <div className="flex flex-wrap items-center gap-2">
                 <select
                     aria-label={translate('scope.inScope')}
-                    value={workspace.askScope === null ? '' : scopeKey(workspace.askScope)}
+                    value={chosen?.value ?? ''}
                     onChange={(event) => {
                         revise({ askScope: offered.find((one) => one.value === event.target.value)?.scope ?? null });
                     }}
@@ -180,8 +189,12 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                     asked={workspace.askedBefore}
                     accounts={accounts}
                     onAskAgain={ask}
+                    // Forgetting the list takes the list off the screen, and the control that was pressed with it, so
+                    // focus is placed rather than left to fall to the document — the same reason the fragment chip's
+                    // own close button places it, and the same place: the question, which is what the field is for.
                     onForget={() => {
                         revise({ askedBefore: [] });
+                        question.current?.focus();
                     }}
                 />
             )}
@@ -191,8 +204,10 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 
 // The key the shortcut is pressed with, beside the modifier the platform reads it under. Stated once because the
 // handler tests it and `aria-keyshortcuts` announces it, and a screen reader promising a shortcut nothing listens for
-// is worse than promising none.
+// is worse than promising none — which is why the announcement below is built from the key rather than spelled beside
+// it, where the two could drift apart without either half looking wrong.
 const askShortcutKey = 'k';
+const askShortcut = `Control+${askShortcutKey.toUpperCase()} Meta+${askShortcutKey.toUpperCase()}`;
 
 // How many messages are picked out, in the forms a language has for the noun — selected rather than spelled, for the
 // reason `mailSpace/SelectionBar.tsx` gives: Polish needs three forms and English hides that it needs two.
@@ -302,8 +317,15 @@ function AskedBefore({
             <ul aria-label={translate('intent.askedBefore')} className="flex flex-wrap items-center gap-2">
                 {asked.map((before) => (
                     <li key={before.question} className="min-w-0 max-w-full">
+                        {/* The name is a sentence rather than the two pieces the chip draws: the question and its
+                            scope sit in adjacent elements with no whitespace between them, so what a screen reader
+                            would otherwise read out is the two run together into one word at the join. */}
                         <button
                             type="button"
+                            aria-label={translate('intent.askedUnder', {
+                                question: before.question,
+                                scope: scopeName(before.scope, accounts, translate, locale),
+                            })}
                             title={before.question}
                             className={`flex min-w-0 max-w-full items-center gap-1.5 px-2.75 py-1.25 text-sm ${chip}`}
                             onClick={() => {

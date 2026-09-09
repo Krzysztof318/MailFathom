@@ -56,6 +56,7 @@ export const en = {
     'intent.placeholder': 'What do you want to ask your mail?',
     'intent.ask': 'Ask',
     'intent.askedBefore': 'Asked before',
+    'intent.askedUnder': '{question}, asking about {scope}',
     'intent.forgetAsked': 'Forget these',
 
     'scope.inScope': 'What the question is asked about',

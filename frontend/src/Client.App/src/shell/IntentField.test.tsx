@@ -206,6 +206,18 @@ describe('IntentField scope', () => {
         expect(reported().askScope).toEqual({ kind: 'everything' });
     });
 
+    // The list the control renders drops the mailbox the mail space is already showing, so that it is not offered
+    // twice. A reader who names a mailbox here and then walks the folder tree to it is the case where those two meet,
+    // and the control has to keep saying what the question is about rather than falling blank between them.
+    it('keeps saying what is in scope when the mail space arrives at the mailbox the field was pointed at', () => {
+        fieldStanding(
+            { askScope: { kind: 'account', accountId: 'home' }, scope: { kind: 'account', accountId: 'home' } },
+            [workAccount, homeAccount],
+        );
+
+        expect(screen.getByRole('option', { name: 'Home', selected: true })).toBeDefined();
+    });
+
     it('follows the mail space again when what it is showing is chosen back', () => {
         const reported = fieldStanding({}, [workAccount, homeAccount]);
 
@@ -228,30 +240,30 @@ describe('IntentField history', () => {
     });
 
     it('keeps what was asked beside the scope it was asked under', () => {
-        const reported = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
 
         fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
             target: { value: 'what did they promise' },
         });
         fireEvent.submit(screen.getByRole('search'));
 
-        expect(reported().askedBefore).toEqual([
-            { question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } },
-        ]);
+        expect(
+            screen.getByRole('button', { name: 'what did they promise, asking about This correspondence' }),
+        ).toBeDefined();
     });
 
     it('records nothing for a submission with no question in it', () => {
-        const reported = fieldStanding({});
+        fieldStanding({});
 
         fireEvent.submit(screen.getByRole('search'));
 
-        expect(reported().askedBefore).toEqual([]);
+        expect(screen.queryByRole('list', { name: 'Asked before' })).toBeNull();
     });
 
     // Widening is what somebody does after an answer that was too narrow, so asking a past question again asks it
     // under the scope in force now rather than the one it carries — otherwise widening would mean retyping.
     it('asks a past question again under the scope in force now', () => {
-        const reported = fieldStanding(
+        fieldStanding(
             {
                 askedBefore: [{ question: 'what did they promise', scope: { kind: 'thread', threadId: 'thread-1' } }],
             },
@@ -263,17 +275,12 @@ describe('IntentField history', () => {
         });
         fireEvent.click(screen.getByRole('button', { name: /what did they promise/ }));
 
-        expect(reported().askedBefore).toEqual([
-            {
-                question: 'what did they promise',
-                scope: { kind: 'mail', scope: { kind: 'account', accountId: 'home' } },
-            },
-        ]);
+        expect(screen.getByRole('button', { name: 'what did they promise, asking about Home' })).toBeDefined();
         expect(window.location.hash).toBe('#/discover');
     });
 
     it('lets go of what was asked when that is asked for', () => {
-        const reported = fieldStanding({
+        fieldStanding({
             askedBefore: [
                 { question: 'what did they promise', scope: { kind: 'mail', scope: { kind: 'everything' } } },
             ],
@@ -281,7 +288,21 @@ describe('IntentField history', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Forget these' }));
 
-        expect(reported().askedBefore).toEqual([]);
         expect(screen.queryByRole('list', { name: 'Asked before' })).toBeNull();
+    });
+
+    // Forgetting the list takes away the control that was pressed, so focus is placed rather than left on an element
+    // that is no longer in the document — which is where keyboard and screen-reader use stops without anything saying
+    // so, and is the same reason the fragment chip's own close button places it.
+    it('puts the keyboard back on the question when the list it was pressed in goes', () => {
+        fieldStanding({
+            askedBefore: [
+                { question: 'what did they promise', scope: { kind: 'mail', scope: { kind: 'everything' } } },
+            ],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Forget these' }));
+
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toBe(document.activeElement);
     });
 });

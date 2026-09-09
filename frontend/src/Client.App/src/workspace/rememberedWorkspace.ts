@@ -106,7 +106,7 @@ function workspaceIn(value: unknown): Workspace | null {
     const record = value as Record<string, unknown>;
     const scope = scopeIn(record['scope']);
     const chosen = record['askScope'] ?? null;
-    const askScope = chosen === null ? null : scopeIn(chosen);
+    const askScope = chosen === null ? null : namedScopeIn(chosen);
     const askedBefore = askedBeforeIn(record['askedBefore'] ?? []);
     const collapsed = collapsedIn(record['collapsed']);
     const mailboxesFolded = record['mailboxesFolded'] ?? false;
@@ -193,6 +193,17 @@ function askedBeforeIn(value: unknown): readonly AskedQuestion[] | null {
     }
 
     return asked;
+}
+
+// The mailbox somebody pointed the field at, held to the two shapes the field can actually offer: every mailbox at
+// once, or one of them. A folder or a role read back here would be a scope no control in the client can produce and
+// nothing anywhere drops when the deployment stops declaring it — the mail space watches its own scope and not this
+// one — so it would ask about a folder nobody has until the tab was closed. Refusing it at the boundary is what makes
+// `askScope.ts` right to re-check the account alone.
+function namedScopeIn(value: unknown): MailScope | null {
+    const scope = scopeIn(value);
+
+    return scope === null || scope.kind === 'everything' || scope.kind === 'account' ? scope : null;
 }
 
 // Read through the same three checks the workspace's own values are read through, because that is exactly what the

@@ -280,6 +280,17 @@ describe('rememberedWorkspace', () => {
             value: JSON.stringify({ ...emptyWorkspace, askScope: { kind: 'somewhere' } }),
         },
         {
+            shape: 'a scope the field was pointed at naming a folder, which the field cannot offer',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                askScope: { kind: 'folder', accountId: 'work', alias: 'Invoices' },
+            }),
+        },
+        {
+            shape: 'a scope the field was pointed at naming a folder role, which the field cannot offer',
+            value: JSON.stringify({ ...emptyWorkspace, askScope: { kind: 'role', role: 'Inbox' } }),
+        },
+        {
             shape: 'questions asked before kept as something other than a list of them',
             value: JSON.stringify({ ...emptyWorkspace, askedBefore: 'what did they promise' }),
         },

@@ -64,8 +64,9 @@ export function askScopeOnScreen(workspace: Workspace): AskScope {
  * The scope the next question would actually be asked under.
  *
  * What the person named in the field wins over what is on the screen. A mailbox they named that the deployment no
- * longer declares is not one — a chosen scope outlives the answer it was chosen from, exactly as the mail space's own
- * does — so it falls back to the screen rather than asking about a mailbox nobody has.
+ * longer declares is not one — a chosen scope outlives the answer it was chosen from — so it falls back to the screen
+ * rather than asking about a mailbox nobody has. What that check has to cover is decided by what may reach this value
+ * at all, which `stillOffered` below states.
  */
 export function askScopeInForce(workspace: Workspace, accounts: readonly MailAccount[]): AskScope {
     return workspace.askScope !== null && stillOffered(workspace.askScope, accounts)
@@ -109,9 +110,11 @@ export function withAsked(
     );
 }
 
-// A mailbox somebody pointed the field at is offered while the deployment still declares the account it names. Every
-// other mail scope either spans accounts or names none, and the folder scopes the field itself never sets are left to
-// the mail space, which already drops one the deployment stopped offering.
+// A mailbox somebody pointed the field at is offered while the deployment still declares the account it names. The
+// account is the only kind that has to be asked about: the field offers every mailbox at once or one of them and
+// nothing else, and `rememberedWorkspace.ts` refuses anything else on the way back in, so a folder or a role never
+// reaches this value to go stale in it. Checking the account against the accounts is therefore the whole of it rather
+// than a narrower reading of `mailScope.ts`'s own check, which needs the folder directory this field is never handed.
 function stillOffered(scope: MailScope, accounts: readonly MailAccount[]): boolean {
     return scope.kind !== 'account' || accounts.some((account) => account.id === scope.accountId);
 }
