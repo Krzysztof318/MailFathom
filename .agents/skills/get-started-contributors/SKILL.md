@@ -166,10 +166,28 @@ offer to go deeper on any one of them instead of expanding all six.
    expect the register to be careful about, and why a new client dependency is a licensing review rather than a pin.
 
 5. **The file header, and no name beside it.** Every file carries the same three lines naming the project, the licence,
-   and the repository. In a C# file it is never typed — `scripts/verify-fast.sh` inserts it and `IDE0073` fails the
-   build without it — and everywhere else it is written by hand in that file's own comment syntax. Nothing personal
-   joins it: no second copyright line, no `@author`, no handle, no "modified by". That is a consistency rule rather than
-   a claim about authorship, which is recorded where it is durable — in the commit history and the pull request.
+   and the repository, and `.editorconfig`'s `file_header_template` is where that text is decided once.
+
+   **Only a C# file gets it for free.** `IDE0073` fails the build without it and `scripts/verify-fast.sh` inserts it, so
+   nobody types one there. **Nothing inserts it anywhere else** — not the fast loop, not the formatter of either stack —
+   and the check that catches the omission is `scripts/test-agent-workflow.sh`, which runs inside the *full* gate. So a
+   new file written without one builds, lints, type-checks and passes the fast loop, and fails at the last gate before
+   the commit. Say this out loud to somebody about to write their first client file, because it is the most likely way a
+   first change stops. The forms the client's own file types take, each parsed by that file's own readers:
+
+   ```
+   // Copyright © …                    a .ts, .tsx, .js, .mjs, .cjs, .rs module: three `// ` lines
+   /* … */                             a .css file: one block comment, no line comment existing to use
+   <!-- … -->                          an .html document: one comment
+   ```
+
+   Root `AGENTS.md` § *Documentation and test obligations* holds the whole list, including the shell, YAML, TOML, Helm
+   and `SKILL.md` forms and the handful of files that carry none — a `package.json`, because strict JSON has no comment
+   syntax, and every generated lock file.
+
+   Nothing personal joins the three lines: no second copyright line, no `@author`, no handle, no "modified by". That is
+   a consistency rule rather than a claim about authorship, which is recorded where it is durable — in the commit
+   history and the pull request.
 
 6. **What the repository is careful about.** It is public, so nothing credential-shaped, no real mailbox data, and no
    personal information belongs in a commit; every fixture uses a synthetic value, and GitHub's push protection refuses
@@ -248,6 +266,36 @@ offer to go deeper on any one of them instead of expanding all six.
    `--frozen-lockfile` is to pnpm what `--locked-mode` is to `dotnet restore`: it fails rather than rewriting
    `frontend/pnpm-lock.yaml`, which is what both gates run and therefore what a first restore should prove.
 
+   **Check the Node version by hand, because nothing else will.** `frontend/.npmrc` sets no `engine-strict` and the
+   repository carries no `.nvmrc`, so pnpm installs against a Node below the `engines` floor without a word and the
+   failure arrives later, somewhere that does not mention Node. Compare `node --version` against that floor once, here,
+   rather than diagnosing it from a build.
+
+   **A browser is the one client prerequisite `pnpm install` does not bring**, and it is worth installing during setup
+   rather than discovering later, because three separate things want it and no gate installs any of them:
+
+   ```bash
+   pnpm --dir frontend exec playwright install chromium
+   ```
+
+   Roughly 300 MB. Add `--with-deps` when the browser is installed but refuses to start — that is a missing system
+   library rather than a Playwright fault, and the flag installs the distribution packages for it, which needs `sudo`.
+   What wants it: `pnpm test:browser`, which no verification gate runs and which the pipeline runs on every client pull
+   request; driving the running client to see what it actually sent, which is how a screen is checked rather than
+   reasoned about; and the design-parity capture scripts.
+
+   **Two Playwright packages are pinned here and they are not interchangeable.** Both arrive with the restore above, so
+   neither is installed by hand and neither is taken from whatever a machine has globally — `@playwright/test` runs the
+   committed browser suite, and `@playwright/cli` is the one a person or an agent drives a page with, reached as
+   `pnpm exec playwright-cli` from `frontend/`. `frontend/AGENTS.md` § *Driving the running client in a real browser*
+   is the rule and lists the five things a first session gets wrong; read it before the first attempt rather than after.
+
+   **Holding a screen against its design needs ImageMagick as well**, and specifically the version 7 binary:
+   `scripts/compare-captures.sh` probes for `magick` and stops with *ImageMagick is required to compare captures*, so an
+   ImageMagick 6 that provides `convert` and no `magick` does not satisfy it. The capture scripts want the same Chromium
+   as above and a network the browser can reach, because the design's artboards fetch their own runtime and web fonts.
+   `docs/operations/local-development.md` § *Building and testing the client* carries all three.
+
    **The desktop head's prerequisites are not part of a first run.** Tauri wants a Rust toolchain and the platform's
    WebView development packages, and the Android head wants more again; `pnpm build` produces the web bundle without
    any of it, and only `pnpm desktop:*` and `pnpm android:*` reach the crate graph.
@@ -255,6 +303,11 @@ offer to go deeper on any one of them instead of expanding all six.
    lists out, including the `-sys` crate failure a missing WebView package produces, which is the one that reads as a
    Rust defect and is not. Point at those rather than installing anything from them, and install them later only if the
    task in hand actually reaches a head.
+
+   **Helm is the same shape of answer** and belongs to `deploy/helm/` alone: `scripts/render-helm-manifests.sh` probes
+   for it and stops with an install link, neither verification gate runs that script, and `CI` renders the chart on
+   every pull request that touches it. So a contributor who never opens the chart never installs Helm, and one who does
+   installs it then.
 
    **`gh`** comes from GitHub's own package repository — the distribution's copy is frequently far behind, and several
    commands the workflow uses are recent. Install it as <https://github.com/cli/cli/blob/trunk/docs/install_linux.md>
@@ -299,7 +352,9 @@ offer to go deeper on any one of them instead of expanding all six.
    what is installed, a restore when `frontend/.npmrc` moved, and the two global tools when
    `docs/operations/local-development.md` moved the version it pins for them. `gh` is re-read whatever moved, because
    what the next step needs from it is a scope rather than a version, and a scope is dropped by a re-authentication
-   nobody recorded.
+   nobody recorded. The browser is re-read whatever moved as well, for a different reason: a moved `@playwright/test`
+   pin wants a browser build to match, and the restore that brings the new pin says nothing about the browser already
+   on the machine.
 
 3. **Resolve what this workspace is and what its credentials may do here**, before anything else is installed,
    written, or attempted. Three facts, three probes, and none of them is worth guessing at, because a wrong guess is
@@ -491,15 +546,17 @@ offer to go deeper on any one of them instead of expanding all six.
    - **Writes outside the checkout**, which both builds make whether or not anybody asked. The .NET side is `~/.nuget`,
      `~/.local/share/NuGet`, `~/.dotnet`, `~/.templateengine`, `~/.aspnet`, `~/.microsoft`, `~/.aspire`, and the
      temporary directory; the client side is `~/.local/share/pnpm`, `~/.local/state/pnpm`, `~/.cache/pnpm`, and
-     `~/.npm`, plus `~/.cache/ms-playwright` for the one browser install `pnpm test:browser` wants. A sandbox that
+     `~/.npm`, plus `~/.cache/ms-playwright`, where the browser from step 2 lands. A sandbox that
      denies any of these fails the restore, which reads as a broken repository rather than as a permission.
    - **Network hosts**: `nuget.org` and `pkgs.dev.azure.com` for packages, `registry.npmjs.org` for the client's, which
      `frontend/.npmrc` pins rather than leaving to the machine, `dot.net`, `aka.ms`, `*.microsoft.com`, and
      `dotnetcli.blob.core.windows.net` for the SDK, `github.com` and `*.githubusercontent.com` for `gh` and the base
-     fetch, and `mcr.microsoft.com` with the Docker registries for the PostgreSQL image the app model pulls. Playwright's
-     own download host joins them only where the browser suite is being run, which no gate does. Local
+     fetch, `mcr.microsoft.com` with the Docker registries for the PostgreSQL image the app model pulls, and
+     Playwright's own download host for the browser step 2 installs. Local
      binding as well, because the app model listens on the loopback and so do the client's development and preview
-     servers.
+     servers. A design capture needs more than the loopback: the artboards fetch their runtime and their web fonts, so
+     a sandbox that allows nothing outward turns a capture into a comparison of two fallback renderings rather than
+     failing.
 
    Leave the other direction unpermitted, whichever harness this is: pushing, force-pushing, merging, deleting a branch
    or a worktree, writing to a remote, and running the integration suite are decisions rather than steps, and each one
@@ -629,7 +686,8 @@ Return:
 Mode: <first run, or refresh naming what moved since the recorded commit — or that the commit was unreachable>
 Orientation: <which of the six were covered, and what was asked about — or offered and declined on a refresh>
 Platform: <uname -s and the OpenSSL version, or refused with the reason>
-Toolchain: <SDK, Node, pnpm, Git, gh with its scopes, Docker — the version each answered with, or what was installed or left alone>
+Toolchain: <SDK, Node against the engines floor, pnpm, Git, gh with its scopes, Docker, jq — the version each answered with, or what was installed or left alone>
+Client extras: <the Playwright browser and ImageMagick — installed, already present, or deliberately deferred with what that defers>
 Role: <which repository origin is, and what resolved it>
 May and may not: <what the repository probe and the board probe answered, and the rows of the table each one decided>
 Base remote: <name and URL, or the command that added it>

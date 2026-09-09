@@ -34,7 +34,8 @@ Two things are unchanged by whoever or whatever typed the code:
 MailFathom is developed and run on Linux.
 
 - The .NET SDK version pinned in [`global.json`](global.json). `latestFeature` roll-forward applies, so a later feature band of that same major and minor version works and a different major or minor version does not.
-- Node and pnpm, at the versions [`frontend/package.json`](frontend/package.json) names in `engines` and `packageManager`. The SDK does not bring them, and corepack no longer ships with Node, which is why the pnpm version is stated in that manifest rather than left to a shim.
+- Node and pnpm, at the versions [`frontend/package.json`](frontend/package.json) names in `engines` and `packageManager`. The SDK does not bring them, and corepack no longer ships with Node, which is why the pnpm version is stated in that manifest rather than left to a shim. **Check `node --version` against that floor yourself** — nothing sets `engine-strict`, there is no `.nvmrc`, and pnpm installs against an older Node without a word.
+- A browser, if you touch a screen: `pnpm --dir frontend exec playwright install chromium`, roughly 300 MB, and `--with-deps` when it installs but refuses to start, which is a missing system library rather than a Playwright fault. `pnpm install` does not bring it, no gate installs it, and three things want it — the browser suite, driving the running client, and the design-parity capture. **ImageMagick** joins it for the capture comparison, which probes for the version 7 `magick` binary and will not accept a version 6 that only provides `convert`.
 - Docker, for the PostgreSQL container the local orchestration starts.
 - Optionally the Aspire CLI and `dotnet-ef`, which only some workflows need, and — only if you build the desktop or Android head — a Rust toolchain and the platform packages [`docs/operations/local-development.md`](docs/operations/local-development.md) lists for it.
 
@@ -252,6 +253,8 @@ Every file in this repository carries the same three lines, and a new file is no
 A `.json` file carries no header. A `package.json` is strict JSON and has no comment syntax at all; a `tsconfig.json` does take a comment, since `tsc` parses it as JSONC, but that is one tool's parser rather than a form the header is written in.
 
 `scripts/test-agent-workflow.sh` fails when one of those is missing, so a forgotten header is a red check rather than a review comment. It reads the expected text out of `.editorconfig`, which means the header is one decision written in one place no matter how many forms it takes.
+
+**The fast loop will not tell you.** That script runs in the full gate and nowhere else, and neither eslint nor either formatter has a rule for the header — so a new client file without one builds, lints, type-checks, and passes `verify-fast.sh` cleanly, then stops the last gate before your commit. Adding a file is the moment to type the header, not the moment to rely on a check.
 
 **Do not modify it, and do not add anything of your own beside it.** No second copyright line, no `@author` tag, no "modified by", no name, initials, handle, or contact detail in a comment, a file, or a header anywhere in the tree. A pull request that adds one is asked to remove it before review continues. The one `author` a skill's `metadata` block names is the copyright holder the header already states, spelled the way that format expects it; it is the same single record, not a second one, and it stays that name whoever edits the skill.
 
