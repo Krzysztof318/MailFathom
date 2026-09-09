@@ -38,26 +38,45 @@ public sealed class OutgoingEmailFilingModelTests
     }
 
     /// <summary>
-    /// Both indexes serve one join, and the join matches a confirmed row whether or not a run has met it already.
+    /// All three read the copies a folder may still hold, so all three carry the same filter and it is the stage alone.
     /// Dropping the stage would leave every mirror withdrawn before a run saw it, and every append the server never
-    /// answered, sitting in both structures for the life of the deployment; adding the meeting back would drop a copy
-    /// out of them the moment it was recognized, which is what would leave the second occurrence of the same message —
-    /// the one a provider filed itself — read as mail somebody sent the user.
+    /// answered, sitting in all of them for the life of the deployment; adding the meeting back would drop a copy out
+    /// of them the moment it was recognized, which is what would leave the second occurrence of the same message — the
+    /// one a provider filed itself — read as mail somebody sent the user.
     /// </summary>
     [Theory]
     [InlineData(PersistenceConstraintNames.OutgoingEmailFilingPlacementIndexName, "PlacementUid")]
     [InlineData(PersistenceConstraintNames.OutgoingEmailFilingMessageIdIndexName, "InternetMessageId")]
-    public void OutgoingEmailFilingModel_TheJoinIndexes_AreFilteredToExactlyTheRowsTheJoinCanMatch(
+    [InlineData(PersistenceConstraintNames.OutgoingEmailFilingRecentByFilingIndexName, "OutgoingEmailId")]
+    public void OutgoingEmailFilingModel_TheFilingIndexes_AreFilteredToTheCopiesAFolderMayStillHold(
         string indexName,
         string expectedLastColumn)
     {
         // Act
         var index = FindFilingIndex(indexName);
 
-        // Assert — the account a filing names is the pair, so the join narrows on the user before the identifier.
+        // Assert — the account a filing names is the pair, so every one of them narrows on the user before the
+        // identifier.
         Assert.Equal(["UserId", "MailboxAccountId"], index.Properties.Take(2).Select(property => property.Name));
         Assert.Equal(expectedLastColumn, index.Properties[^1].Name);
         Assert.Equal("\"Stage\" = 'Confirmed'", index.GetFilter());
+    }
+
+    /// <summary>
+    /// The sweep for a copy the provider duplicated reads one account's standing copies of one kind, oldest append
+    /// first, and takes a few. The order of the key is what lets that be read rather than scanned and sorted: the
+    /// filing before the instant, because the filing is an equality and the instant is a range.
+    /// </summary>
+    [Fact]
+    public void OutgoingEmailFilingModel_TheRecentByFilingIndex_LeadsWithTheFilingAndThenTheAppend()
+    {
+        // Act
+        var index = FindFilingIndex(PersistenceConstraintNames.OutgoingEmailFilingRecentByFilingIndexName);
+
+        // Assert
+        Assert.Equal(
+            ["UserId", "MailboxAccountId", "Filing", "AppendedAt", "OutgoingEmailId"],
+            index.Properties.Select(property => property.Name));
     }
 
     private static IIndex FindFilingIndex(string indexName)

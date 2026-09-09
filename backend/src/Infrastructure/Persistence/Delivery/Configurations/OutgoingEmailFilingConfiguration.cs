@@ -35,7 +35,7 @@ namespace MailFathom.Infrastructure.Persistence.Delivery.Configurations;
 /// </remarks>
 internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguration<OutgoingEmailFilingEntity>
 {
-    /// <summary>What both filing indexes are filtered to, which is exactly the rows the join they serve can match.</summary>
+    /// <summary>What every filing index is filtered to, which is exactly the copies a folder may still hold.</summary>
     /// <remarks>
     /// The stage is the whole of it. A row is a candidate while it is confirmed and stops being one when it is
     /// withdrawn, which is what keeps a mirror taken back out and an append the server never answered from sitting in
@@ -74,9 +74,9 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // token would not notice two passes settling one copy differently.
         entity.Property(filing => filing.ConcurrencyVersion).IsRowVersion();
 
-        // The join a synchronized batch runs, filtered to exactly the rows that join can still match. What bounds both
-        // structures is the stage: a mirror withdrawn before any run saw it, and an append the server never answered,
-        // would each otherwise leave a row nothing can match sitting in them for the life of the deployment.
+        // The join a synchronized batch runs, filtered to exactly the rows that join can still match. What bounds every
+        // structure here is the stage: a mirror withdrawn before any run saw it, and an append the server never
+        // answered, would each otherwise leave a row nothing can match sitting in them for the life of the deployment.
         entity.HasIndex(filing => new
         {
             filing.UserId,
@@ -95,6 +95,22 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
             filing.InternetMessageId,
         })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingMessageIdIndexName)
+            .HasFilter(JoinableFilingIndexFilter);
+
+        // The same rows read the other way round: not "is this discovery one of ours" but "which of this account's
+        // standing sent copies were appended recently enough to still be worth a look". The filing is in the key rather
+        // than the filter so one structure answers that for any kind, and the record's identity is behind the instant
+        // for the reason the claim's is — two copies appended in one instant need a total order for the sweep to be
+        // deterministic, and it is what lets the ordering be read rather than sorted.
+        entity.HasIndex(filing => new
+        {
+            filing.UserId,
+            filing.MailboxAccountId,
+            filing.Filing,
+            filing.AppendedAt,
+            filing.OutgoingEmailId,
+        })
+            .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingRecentByFilingIndexName)
             .HasFilter(JoinableFilingIndexFilter);
 
         entity.HasOne(filing => filing.OutgoingEmail)

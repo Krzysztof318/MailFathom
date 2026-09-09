@@ -347,14 +347,23 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The index a batch of discovered mail is joined to the copies this deployment filed through.</summary>
     /// <remarks>
-    /// Filtered to the filings synchronization has not met yet, which is what keeps it proportional to what is in
-    /// flight rather than to everything the deployment has ever sent: a copy is looked for once, and every mailbox this
-    /// system has been filing into for a year is otherwise in the structure that lookup reads.
+    /// Filtered to the copies still standing, which is what keeps it proportional to what a mailbox holds rather than
+    /// to everything the deployment has ever attempted: a mirror taken back out and an append the server never
+    /// answered are rows the join can never match again, and they are otherwise in the structure that lookup reads.
     /// </remarks>
     internal const string OutgoingEmailFilingPlacementIndexName = "ix_outgoing_email_filings_placement";
 
     /// <summary>The index the same join falls back to where the server named no placement to look the copy up by.</summary>
     internal const string OutgoingEmailFilingMessageIdIndexName = "ix_outgoing_email_filings_message_id";
+
+    /// <summary>The index the sweep for a copy the provider duplicated reads, which is bounded by when it was filed.</summary>
+    /// <remarks>
+    /// The two above lead with what a discovery is recognized by, so neither answers a question asked the other way
+    /// round: which of this account's standing copies of one kind were appended recently enough to still be acted on.
+    /// Without it that sweep reads every confirmed filing the account has ever kept, on every outbox pass, to find the
+    /// few inside a fifteen-minute window.
+    /// </remarks>
+    internal const string OutgoingEmailFilingRecentByFilingIndexName = "ix_outgoing_email_filings_recent_by_filing";
 
     /// <summary>The uniqueness a declaration that a message repeats rests on, which is the same identity a send's is.</summary>
     /// <remarks>
