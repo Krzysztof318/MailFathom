@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.ThreadStates;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -23,6 +24,8 @@ namespace MailFathom.Application.UnitTests.Emails.ThreadStates;
 /// </remarks>
 public sealed class MailThreadStateBrowserTests
 {
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     private static readonly EmailThreadId Conversation = EmailThreadId.Create(Guid.CreateVersion7());
@@ -121,6 +124,34 @@ public sealed class MailThreadStateBrowserTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A statement is a sentence a model wrote about somebody's mail, and the name a commitment is owed by is a person
+    /// — so both are scanned, and the aspects, the dates and the sources are this deployment's own values that a
+    /// redaction would only corrupt.
+    /// </summary>
+    [Fact]
+    public async Task ReadStateAsync_ADeploymentThatScans_ScansTheStatementAndTheOwnerAndLeavesEverythingElse()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var recorded = Commitment($"They send the signed annex, quoting {Marker}.", $"Karolina {Marker}");
+        var browser = CreateBrowser(ReaderReturning(State([recorded])), egressGuard: egress.Guard);
+
+        // Act
+        var state = await browser.ReadStateAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(state);
+
+        var guarded = Assert.Single(state.Entries);
+
+        Assert.DoesNotContain(Marker, guarded.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Marker, guarded.OwedBy!, StringComparison.Ordinal);
+        Assert.Equal(recorded.Aspect, guarded.Aspect);
+        Assert.Equal(recorded.Sources, guarded.Sources);
+        Assert.Equal(recorded.DueAt, guarded.DueAt);
+    }
+
     private static EmailThreadState State(IReadOnlyList<ThreadStateEntry> entries) =>
         new(
             Conversation,
@@ -135,6 +166,14 @@ public sealed class MailThreadStateBrowserTests
             text,
             [StoredEmailId.Create(Guid.CreateVersion7())]);
 
+    private static ThreadStateEntry Commitment(string text, string owedBy) =>
+        ThreadStateEntry.Create(
+            ThreadStateAspect.Commitment,
+            text,
+            [StoredEmailId.Create(Guid.CreateVersion7())],
+            owedBy,
+            new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero));
+
     private static IStoredThreadStateReader ReaderReturning(EmailThreadState? state)
     {
         var reader = Substitute.For<IStoredThreadStateReader>();
@@ -148,7 +187,8 @@ public sealed class MailThreadStateBrowserTests
     private static MailThreadStateBrowser CreateBrowser(
         IStoredThreadStateReader reader,
         IReadOnlyList<MailAccountId>? servedAccounts = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         var accounts = servedAccounts ?? [Account];
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
@@ -165,7 +205,7 @@ public sealed class MailThreadStateBrowserTests
         return new MailThreadStateBrowser(
             reader,
             scopeResolver,
-            SensitiveContentEgressGuards.Inactive(),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
     }
 }
