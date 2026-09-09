@@ -991,12 +991,15 @@ the worse of the two errors.
 **What the provider filed is answered afterwards, once it is a fact rather than a guess.** Where the same message turns
 up a second time in the same folder, the copy this system appended is taken back out and the provider's is what the
 user keeps. That is `Delivery:WithdrawDuplicateSentCopy`, per account and on by default, so an ordinary account ends
-with one copy of each message it sent whichever kind of provider it is on. Three things bound it, and each is the
+with one copy of each message it sent whichever kind of provider it is on. Four things bound it, and each is the
 reason it can be done at all:
 
 - **The occurrence has to have been named.** The withdrawal reaches the UID the `APPENDUID` response reported, so a
   server advertising no `UIDPLUS` withdraws nothing: the two copies carry one `Message-ID` between them and nothing
   says which of them is this deployment's, and guessing would be as likely to delete the provider's.
+- **The folder has to still hold the other copy.** The second occurrence is read from what synchronization stored, and
+  a row the server has since expunged is a tombstone rather than a copy — so a duplicate the user has already deleted
+  decides nothing, and this deployment's own copy stays as the one record of the send.
 - **It is recognized within fifteen minutes of the append.** That bounds the race between the append and the
   synchronization run that meets what the provider filed — three runs at the default
   [`MailSynchronization:Interval`](../operations/configuration-mail.md#mailsynchronization), each of which drains the

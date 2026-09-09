@@ -150,7 +150,8 @@ public interface IOutgoingMailFilingStore
     /// occurrences carry one identity between them and nothing says which of them this system put there, so a
     /// withdrawal would be as likely to take the provider's copy as its own. The second occurrence is recognized by the
     /// identity the appended bytes carry, in the same folder and the same UID space, at a UID the placement does not
-    /// name.
+    /// name — and only while the folder still holds it, because a copy the user has already deleted is no reason to
+    /// take the remaining one away from them.
     /// </para>
     /// <para>
     /// Nothing here reads mail. A folder, a UID, and a <c>Message-ID</c> MailFathom minted itself are what the

@@ -11,6 +11,7 @@ using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -185,11 +186,19 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The second occurrence is found by a correlated existence test rather than by reading both sides into the
     /// process: the folder a sent copy went into is the one folder of the account holding thousands of the user's own
     /// messages, and only the rows carrying this filing's own minted identity are ever of interest. The join is on the
     /// folder's remote path, which is what the filing recorded, so a copy filed into a folder an alias has since been
     /// repointed away from matches nothing rather than matching another folder's mail.
+    /// </para>
+    /// <para>
+    /// The existence test admits only rows the folder still holds. A tombstone says the occurrence has gone from the
+    /// server, and a duplicate decided from one would withdraw this deployment's copy on the strength of a message
+    /// nobody can open any more — which leaves the user with no copy at all of something they sent, the one outcome
+    /// this whole feature is bounded to avoid.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingEmailId>> ReadDuplicatedSentCopiesAsync(
         MailAccountIdentity account,
@@ -213,12 +222,14 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
                 && filing.PlacementUidValidity != null
                 && filing.PlacementUid != null
                 && filing.InternetMessageId != null
-                && readContext.StoredEmails.Any(stored => stored.UserId == userValue
-                    && stored.MailboxAccountId == accountValue
-                    && stored.MailFolder.RemotePath == filing.FolderPath
-                    && stored.UidValidity == filing.PlacementUidValidity
-                    && stored.Uid != filing.PlacementUid
-                    && stored.InternetMessageId == filing.InternetMessageId))
+                && readContext.StoredEmails
+                    .Where(StoredEmailTombstone.IsNotTombstoned)
+                    .Any(stored => stored.UserId == userValue
+                        && stored.MailboxAccountId == accountValue
+                        && stored.MailFolder.RemotePath == filing.FolderPath
+                        && stored.UidValidity == filing.PlacementUidValidity
+                        && stored.Uid != filing.PlacementUid
+                        && stored.InternetMessageId == filing.InternetMessageId))
             .OrderBy(filing => filing.AppendedAt)
             .ThenBy(filing => filing.OutgoingEmailId)
             .Take(limit)

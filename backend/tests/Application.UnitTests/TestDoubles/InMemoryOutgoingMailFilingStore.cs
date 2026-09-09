@@ -41,17 +41,20 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
     /// <param name="uidValidity">The UID space that folder is in.</param>
     /// <param name="uid">The UID the occurrence carries.</param>
     /// <param name="internetMessageId">The <c>Message-ID</c> it reports.</param>
+    /// <param name="expunged">Whether the row is a tombstone, which is a message the folder no longer holds.</param>
     /// <remarks>
     /// The real store finds the second occurrence by joining the filings to the messages synchronization has stored, so
     /// the double is given those messages rather than the answer: a test says what the folder holds and the join is
-    /// still the thing under test.
+    /// still the thing under test. A tombstoned row is stored here too rather than left out, because the real query
+    /// reads the same table and excluding it is the behaviour under test.
     /// </remarks>
     internal void RecordDiscoveredOccurrence(
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         ImapUid uid,
-        string internetMessageId) =>
-        this.discoveries.Add(new DiscoveredOccurrence(folderPath, uidValidity, uid, internetMessageId));
+        string internetMessageId,
+        bool expunged = false) =>
+        this.discoveries.Add(new DiscoveredOccurrence(folderPath, uidValidity, uid, internetMessageId, expunged));
 
     /// <summary>Reads back what this store holds about one record's copies.</summary>
     /// <param name="outgoingEmailId">The record to read.</param>
@@ -258,11 +261,13 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
         RemoteFolderPath FolderPath,
         ImapUidValidity UidValidity,
         ImapUid Uid,
-        string InternetMessageId)
+        string InternetMessageId,
+        bool Expunged)
     {
         /// <summary>Reports whether this occurrence is the same message at a UID the filing's placement does not name.</summary>
         internal bool IsSecondOccurrenceOf(OutgoingMailFilingRecord filing) =>
-            this.FolderPath.NamesSameFolderAs(filing.FolderPath)
+            !this.Expunged
+            && this.FolderPath.NamesSameFolderAs(filing.FolderPath)
             && filing.Placement is { UidValidity: { } placedUidValidity, Uid: { } placedUid }
             && this.UidValidity == placedUidValidity
             && this.Uid != placedUid

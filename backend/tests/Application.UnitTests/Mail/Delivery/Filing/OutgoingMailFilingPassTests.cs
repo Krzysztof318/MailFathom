@@ -536,6 +536,40 @@ public sealed class OutgoingMailFilingPassTests
         Assert.Equal(OutgoingMailFilingStage.Confirmed, filed.Stage);
     }
 
+    /// <summary>
+    /// The provider's copy is gone from the folder again, so the only copy left is this deployment's own. Withdrawing
+    /// it on the strength of a row the server no longer holds would leave the user with no record of the send at all.
+    /// </summary>
+    [Fact]
+    public async Task WithdrawDuplicatedSentCopiesAsync_ADuplicateTheServerNoLongerHolds_LeavesTheRemainingCopyStanding()
+    {
+        // Arrange
+        var context = new FilingContext();
+        var sentFolder = context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        var delivered = await context.FileSentCopyAsync();
+        context.Filing.Filings.RecordDiscoveredOccurrence(
+            sentFolder.RemotePath,
+            ImapUidValidity.Create(42),
+            ImapUid.Create(8),
+            "mint-1@mailfathom.invalid",
+            expunged: true);
+
+        // Act
+        var results = await context.Filing.Pass.WithdrawDuplicatedSentCopiesAsync(
+            Account,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(results);
+        await context.Filing.WriteSession.DidNotReceiveWithAnyArgs().WithdrawAppendedAsync(
+            Arg.Any<ImapUidValidity>(),
+            Arg.Any<ImapUid>(),
+            Arg.Any<CancellationToken>());
+
+        var filed = Assert.Single(context.Filing.Filings.Read(delivered));
+        Assert.Equal(OutgoingMailFilingStage.Confirmed, filed.Stage);
+    }
+
     /// <summary>Arranges an outbox whose sends a test settles by hand, beside the filing the pass performs.</summary>
     private sealed class FilingContext
     {
