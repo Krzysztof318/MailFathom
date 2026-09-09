@@ -382,7 +382,7 @@ export const pl: Catalogue = {
     'compose.cautionNoWords': 'Wiadomość pójdzie bez treści.',
     'compose.discardQuestion': 'Odrzucić tę wiadomość?',
     'compose.discardExplanation':
-        'To, co zostało napisane, przepadnie razem ze szkicem, który trzyma dla niej Twoje wdrożenie.',
+        'To, co zostało napisane, przepadnie razem ze szkicem, który Twoje wdrożenie zdążyło już dla niej zapisać.',
     'compose.discardIsFinal': 'Nic jej wcześniej nie zapisze, więc do tego tekstu nie ma powrotu.',
     'compose.discard': 'Odrzuć',
     'compose.saving': 'Zapisujemy szkic…',

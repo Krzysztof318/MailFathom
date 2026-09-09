@@ -10,7 +10,6 @@ import {
     type MailAccount,
     type MailDraftAnswer,
     type MailFathomTransport,
-    type MailStagedAttachment,
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
@@ -24,7 +23,7 @@ import { DiscardConfirmation } from './DiscardConfirmation';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
 import { RecipientField } from './RecipientField';
 import { SendConfirmation } from './SendConfirmation';
-import { useDraftAtDeployment, type DraftStanding } from './useDraftAtDeployment';
+import { useDraftAtDeployment, type AttachedFile, type DraftStanding } from './useDraftAtDeployment';
 import { WrittenMessage } from './WrittenMessage';
 
 // Writing a message, as the design project composes it: one model in two shapes, decided by the width the client has
@@ -244,19 +243,6 @@ export function Composer({
         }
     }
 
-    // One file at a time. The draft this stages against is written by whichever save answers first, so two uploads
-    // started together would each file a draft of their own and every file but the last would be staged against one
-    // nothing sends.
-    async function attachInTurn(chosen: readonly File[]): Promise<void> {
-        if (composition === null) {
-            return;
-        }
-
-        for (const file of chosen) {
-            await draft.attach(composition, file);
-        }
-    }
-
     function close(): void {
         forgetComposition();
         onClosed();
@@ -338,11 +324,15 @@ export function Composer({
         }
     }
 
-    // Whether this message may still be acted on, read by every control that writes to the draft: the send itself,
-    // the shortcut that asks the same question, and saving and attaching. Two presses would queue the same message
-    // twice — while the first is still in flight, and equally once it is queued — and a save or an attach after that
-    // would say what is happening over the queued state and take the way to withdraw off the screen with it.
-    const sendable = online && draft.standing.kind !== 'sending' && draft.standing.kind !== 'queued';
+    // Whether the message is still being written rather than on its way, read by every control that changes it. Two
+    // presses would queue the same message twice — while the first is still in flight, and equally once it is
+    // queued — and a save or an attach after that would say what is happening over the queued state and take the way
+    // to withdraw off the screen with it.
+    const stillBeingWritten = draft.standing.kind !== 'sending' && draft.standing.kind !== 'queued';
+
+    // Whether it may be filed, which is the same question and a deployment that answers. Attaching does not ask it:
+    // a chosen file is held here until the message is saved or sent, so it costs nothing and is offered offline.
+    const sendable = online && stillBeingWritten;
 
     const title = translate(titles[opening.kind === 'new' ? 'new' : opening.answers]);
 
@@ -366,7 +356,7 @@ export function Composer({
                 <div className="ms-auto flex items-center">
                     <DiscardConfirmation
                         edged={!wide}
-                        written={authored || draft.staged.length > 0}
+                        written={authored || draft.attached.length > 0}
                         onDiscard={() => {
                             // The same rule the keep path holds to: a deployment that refused is one the composer
                             // stays open on, because closing on it is how what somebody wrote is lost quietly.
@@ -510,11 +500,11 @@ export function Composer({
                         }}
                     />
 
-                    <StagedFiles
-                        staged={draft.staged}
+                    <AttachedFiles
+                        attached={draft.attached}
                         locale={locale}
-                        onUnstage={(attachmentId) => {
-                            void draft.unstage(attachmentId);
+                        onDetach={(attachmentId) => {
+                            void draft.detach(attachmentId);
                         }}
                     />
 
@@ -532,7 +522,7 @@ export function Composer({
 
                         <button
                             type="button"
-                            disabled={!sendable}
+                            disabled={!stillBeingWritten}
                             className="flex items-center gap-1.75 rounded-lg border border-line-strong px-3 py-2 text-sm text-text-soft transition hover:bg-hover disabled:opacity-60"
                             onClick={() => {
                                 files.current?.click();
@@ -555,7 +545,10 @@ export function Composer({
                                 const chosen = [...(event.target.files ?? [])];
 
                                 event.target.value = '';
-                                void attachInTurn(chosen);
+
+                                for (const file of chosen) {
+                                    draft.attach(file);
+                                }
                             }}
                         />
 
@@ -611,20 +604,22 @@ function BeforeAnythingIsWritten({ reading }: { readonly reading: Reading }) {
     );
 }
 
-// The files staged against the draft, drawn as the reading pane draws the files a message carries: what each one is
-// called and how large it is, before anything is fetched or sent.
-function StagedFiles({
-    staged,
+// The files the message carries, drawn as the reading pane draws the files a message already has: what each one is
+// called and how large it is, before anything is fetched or sent. Whether the deployment holds one yet is not drawn
+// and is deliberately not drawable — a file is part of the message from the moment it was chosen, and where it
+// currently sits is the hook's business rather than something its author has to follow.
+function AttachedFiles({
+    attached,
     locale,
-    onUnstage,
+    onDetach,
 }: {
-    readonly staged: readonly MailStagedAttachment[];
+    readonly attached: readonly AttachedFile[];
     readonly locale: Locale;
-    readonly onUnstage: (attachmentId: string) => void;
+    readonly onDetach: (attachmentId: string) => void;
 }) {
     const { translate } = useLocalization();
 
-    if (staged.length === 0) {
+    if (attached.length === 0) {
         return null;
     }
 
@@ -633,7 +628,7 @@ function StagedFiles({
             aria-label={translate('compose.attachedFiles')}
             className="flex shrink-0 flex-wrap gap-2 border-t border-line-soft px-4.25 py-2.5"
         >
-            {staged.map((file) => (
+            {attached.map((file) => (
                 <li
                     key={file.attachmentId}
                     className="flex items-center gap-2 rounded-xl border border-line bg-rail px-2.5 py-1.25 text-base"
@@ -647,7 +642,7 @@ function StagedFiles({
                         aria-label={translate('compose.removeFile', { name: file.fileName })}
                         className="flex items-center rounded-xs text-faint transition hover:text-text"
                         onClick={() => {
-                            onUnstage(file.attachmentId);
+                            onDetach(file.attachmentId);
                         }}
                     >
                         <Icon name="close" className="size-3.5" />

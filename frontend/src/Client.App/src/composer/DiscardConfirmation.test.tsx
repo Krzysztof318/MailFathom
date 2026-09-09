@@ -67,7 +67,7 @@ describe('DiscardConfirmation', () => {
         const asked = screen.getByRole('dialog').textContent;
 
         expect(asked).toContain('Discard this message?');
-        expect(asked).toContain('along with the draft your deployment is holding for it');
+        expect(asked).toContain('along with any draft your deployment is already holding for it');
     });
 
     it('says that nothing files the words first, so the cost of discarding is read before it is paid', () => {
