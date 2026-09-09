@@ -31,7 +31,11 @@ to an operator as a configured provider while nothing would ever call it.
 One declared endpoint serves more than one capability. Beside answering a question, it is what judges retrieved
 candidates for relevance where a deployment turns that pass on — a block inside this section, off by default, described
 in [Mail answering § An optional second
-pass](mail-answering.md#an-optional-second-pass-the-model-decides-what-answers). Each capability is a separate decision
+pass](mail-answering.md#an-optional-second-pass-the-model-decides-what-answers). It is also what reads a sentence
+somebody typed into a search field into filters they can see and correct, which
+[Email search § A typed sentence becomes filters](email-search.md#a-typed-sentence-becomes-filters-rather-than-a-search-of-its-own)
+describes and [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
+turns off. Each capability is a separate decision
 over one endpoint, and every call any of them makes carries the parameters, the deadline, and the budget declared here.
 
 ## One endpoint, not a chain
@@ -240,10 +244,13 @@ What that means in practice:
   and whether the credential reference still resolves. A refused candidate is logged with the key an operator has to
   fix, the previous declaration goes on answering, and the process stays up — which is what makes correcting a mistake
   in a correction possible at all.
-- **Three things still take a restart**, because each decided which services this deployment registered: whether `Alias`
-  names an endpoint at all, whether the relevance filter runs, and whether arriving mail is derived from — the switch
-  [message enrichment](message-enrichment.md) is turned on with. Going from no chat section to one is therefore a
-  restart, and so is turning the second pass or the arrival derivation on or off. Each is refused with that message
+- **Five things still take a restart**, because each decided which services this deployment registered: whether `Alias`
+  names an endpoint at all, whether the relevance filter runs, whether arriving mail is derived from — the switch
+  [message enrichment](message-enrichment.md) is turned on with — whether a correspondence is derived from, the switch
+  [a conversation's state](thread-state.md) is turned on with, and whether a typed sentence is read into filters, the
+  switch [AI configuration § `Chat:SearchPhrasing`](../operations/configuration-ai.md#reading-a-typed-sentence-into-filters--chatsearchphrasing)
+  describes. Going from no chat section to one is therefore a restart, and so is turning the second pass, either
+  derivation, or the sentence reading on or off. Each is refused with that message
   rather than adopted and quietly ignored. *Renaming* a declared alias is not one of them — the credential and the circuit are looked up by
   whatever the declaration in force calls the endpoint.
 

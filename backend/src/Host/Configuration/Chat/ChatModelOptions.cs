@@ -186,6 +186,10 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     /// <remarks>Present rather than nullable for the reason the two blocks above are: its own <c>Enabled</c> is what says whether the derivation runs, and off is the default and a supported deployment.</remarks>
     public ThreadStateOptions ThreadState { get; set; } = new();
 
+    /// <summary>Gets or sets whether a sentence typed into the search field is read into the filters it describes.</summary>
+    /// <remarks>Present rather than nullable for the reason the three blocks above are, and on by default unlike any of them — the block itself says why, and what turning it off leaves is the word search every deployment serves.</remarks>
+    public MailSearchPhrasingOptions SearchPhrasing { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the alias because it is the one member with no usable default: a section an operator began writing but left without a name is not a declaration, and a section they never wrote has none either.</remarks>
     public bool IsConfigured => this.Alias.Trim().Length > 0;

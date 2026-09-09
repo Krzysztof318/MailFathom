@@ -68,11 +68,84 @@ function recording(body: string): { transport: MailFathomTransport; asked: Clien
     };
 }
 
+// This screen asks the deployment whether it reads a typed sentence before anybody types one, so the requests a test
+// about searching means are the searches among what was asked.
+function searches(asked: readonly ClientRequest[]): readonly ClientRequest[] {
+    return asked.filter((request) => request.path.includes('/emails/search?'));
+}
+
+const phraseReading = JSON.stringify({
+    read: true,
+    filters: {
+        sender: 'accounts@nordwind.example',
+        recipient: null,
+        receivedFrom: null,
+        receivedTo: null,
+        unread: true,
+        flagged: false,
+        hasAttachments: false,
+    },
+    criteria: ['invoice'],
+    unaccounted: 'soon',
+});
+
+// A deployment answering each of the three questions this screen asks: whether it reads a sentence, what one sentence
+// was read as, and the results. One transport rather than three, because what is being proved is the order the screen
+// asks them in.
+function deployment(options: {
+    readonly readsPhrases: boolean;
+    readonly reading?: string;
+    readonly holdTheReading?: boolean;
+}): { transport: MailFathomTransport; asked: ClientRequest[]; answerTheReading: () => void } {
+    const asked: ClientRequest[] = [];
+    let releaseTheReading = (): void => undefined;
+
+    return {
+        asked,
+        answerTheReading: () => {
+            releaseTheReading();
+        },
+        transport: (request) => {
+            asked.push(request);
+
+            if (request.path.includes('/emails/search/phrasing')) {
+                if (request.method === 'GET') {
+                    return Promise.resolve({
+                        status: 200,
+                        body: JSON.stringify({ readsPhrases: options.readsPhrases }),
+                        headers: {},
+                    });
+                }
+
+                const answer = { status: 200, body: options.reading ?? phraseReading, headers: {} };
+
+                return options.holdTheReading === true
+                    ? new Promise((resolve) => {
+                          releaseTheReading = () => {
+                              resolve(answer);
+                          };
+                      })
+                    : Promise.resolve(answer);
+            }
+
+            return Promise.resolve({ status: 200, body: onePage, headers: {} });
+        },
+    };
+}
+
 // What the caller renders in this column while nothing is being searched for. It stands for the folder's own list
 // rather than being one, which is what lets this file prove the composition without mounting a second screen.
 const mailInScope = 'The mail in this folder';
 
-function searchUnder(transport: MailFathomTransport, scope: MailScope = everything): ReactElement {
+// The clock a test that is not about the clock hands over. Declared once rather than defaulted inline, so a screen
+// rendered twice is handed the same function and the effect that reads it does not restart.
+const whenTheSuiteRuns = (): Date => new Date();
+
+function searchUnder(
+    transport: MailFathomTransport,
+    scope: MailScope = everything,
+    now: () => Date = whenTheSuiteRuns,
+): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
@@ -83,6 +156,7 @@ function searchUnder(transport: MailFathomTransport, scope: MailScope = everythi
                     accounts={[work]}
                     online={true}
                     onOpen={() => undefined}
+                    now={now}
                 >
                     <p>{mailInScope}</p>
                 </MailSearch>
@@ -117,7 +191,7 @@ describe('MailSearch', () => {
 
         expect(await screen.findByRole('listbox', { name: 'What this search found' })).toBeTruthy();
         expect(screen.queryByText(mailInScope)).toBeNull();
-        expect(asked[0]?.path).toContain('query=invoice');
+        expect(searches(asked)[0]?.path).toContain('query=invoice');
     });
 
     it('searches the mailbox the client is looking at, and says which one that is', async () => {
@@ -128,7 +202,7 @@ describe('MailSearch', () => {
 
         await screen.findByRole('listbox', { name: 'What this search found' });
 
-        expect(asked[0]?.path).toContain('account=work');
+        expect(searches(asked)[0]?.path).toContain('account=work');
         expect(screen.getByRole('list', { name: 'Filters this search is under' }).textContent).toContain('Work');
     });
 
@@ -143,7 +217,111 @@ describe('MailSearch', () => {
 
         await screen.findByRole('listbox', { name: 'What this search found' });
 
-        expect(asked[1]?.path).not.toContain('account=work');
+        expect(searches(asked)[1]?.path).not.toContain('account=work');
+    });
+
+    // A field offering to take a description over a deployment that can only match words fails a person at the one
+    // moment they trusted it, so the promise follows what the deployment answered rather than what the client can do.
+    it('offers to take a description only where the deployment reads one', async () => {
+        render(searchUnder(deployment({ readsPhrases: true }).transport));
+
+        expect(await screen.findByPlaceholderText('Search, or describe what you need')).toBeTruthy();
+    });
+
+    it('offers the word search where the deployment reads no sentence', async () => {
+        render(searchUnder(deployment({ readsPhrases: false }).transport));
+
+        expect(await screen.findByPlaceholderText('Words from the message you are looking for')).toBeTruthy();
+    });
+
+    it('turns a typed sentence into filters and criteria somebody can see, and searches with them', async () => {
+        const { transport, asked } = deployment({ readsPhrases: true });
+
+        render(searchUnder(transport));
+        await screen.findByPlaceholderText('Search, or describe what you need');
+        searchFor('unread mail from Nordwind about the invoice, soon');
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        expect(screen.getByRole('list', { name: 'Filters this search is under' }).textContent).toContain(
+            'accounts@nordwind.example',
+        );
+        expect(
+            within(screen.getByRole('list', { name: 'What this search is ranked by' })).getAllByRole('listitem'),
+        ).toHaveLength(1);
+        expect(screen.getByText(/Nothing was made of “soon”/u)).toBeTruthy();
+
+        const search = searches(asked)[0];
+
+        expect(search?.path).toContain('query=invoice');
+        expect(search?.path).toContain('unread=true');
+    });
+
+    // What *yesterday* means is decided where somebody is standing, so the day travels with the sentence rather than
+    // being taken at the other end. A late evening is the hour that would resolve to the wrong day if it were.
+    it('sends the day its caller is standing on rather than the day the deployment is', async () => {
+        const { transport, asked } = deployment({ readsPhrases: true });
+
+        render(searchUnder(transport, everything, () => new Date(2026, 2, 14, 23, 30)));
+        await screen.findByPlaceholderText('Search, or describe what you need');
+        searchFor('mail from Nordwind last week');
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        const read = asked.find((request) => request.method === 'POST');
+
+        expect(JSON.parse(read?.body ?? '{}')).toMatchObject({ askedOn: '2026-03-14' });
+    });
+
+    it('runs the search again with one criterion no longer ranking it', async () => {
+        const { transport, asked } = deployment({ readsPhrases: true });
+
+        render(searchUnder(transport));
+        await screen.findByPlaceholderText('Search, or describe what you need');
+        searchFor('unread mail from Nordwind about the invoice, soon');
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+        fireEvent.click(screen.getByRole('button', { name: 'Stop ranking by invoice' }));
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        const ran = searches(asked);
+
+        expect(ran).toHaveLength(2);
+        expect(ran[1]?.path).toContain('unread=true');
+        expect(ran[1]?.path).not.toContain('query=invoice');
+    });
+
+    // Nothing waits in silence, and reading a sentence is a provider call rather than an instant.
+    it('says it is reading what was typed while it reads it', async () => {
+        const held = deployment({ readsPhrases: true, holdTheReading: true });
+
+        render(searchUnder(held.transport));
+        await screen.findByPlaceholderText('Search, or describe what you need');
+        searchFor('unread mail from Nordwind about the invoice, soon');
+
+        expect(screen.getByRole('status').textContent).toContain('Reading what you wrote');
+
+        held.answerTheReading();
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        expect(screen.queryByText('Reading what you wrote…')).toBeNull();
+    });
+
+    // A sentence is not unsearchable because nothing read it: the words are searched exactly as a deployment with no
+    // provider searches them, and nothing on the screen reports a failure.
+    it('searches the typed words where the deployment reads no sentence', async () => {
+        const { transport, asked } = deployment({ readsPhrases: false });
+
+        render(searchUnder(transport));
+        await screen.findByPlaceholderText('Words from the message you are looking for');
+        searchFor('invoice');
+
+        await screen.findByRole('listbox', { name: 'What this search found' });
+
+        expect(asked.some((request) => request.method === 'POST')).toBe(false);
+        expect(searches(asked)[0]?.path).toContain('query=invoice');
     });
 
     it('says what to do rather than running a search of nothing', () => {
@@ -153,7 +331,7 @@ describe('MailSearch', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
         expect(screen.getByRole('alert').textContent).toContain('Type something to look for.');
-        expect(asked).toStrictEqual([]);
+        expect(searches(asked)).toStrictEqual([]);
         expect(screen.getByText(mailInScope)).toBeTruthy();
     });
 
@@ -164,7 +342,7 @@ describe('MailSearch', () => {
         searchFor('x'.repeat(513));
 
         expect(screen.getByRole('alert').textContent).toContain('longer than a search this deployment runs');
-        expect(asked).toStrictEqual([]);
+        expect(searches(asked)).toStrictEqual([]);
     });
 
     it('gives the mail in scope back when the search is stopped', async () => {
@@ -201,7 +379,7 @@ describe('MailSearch', () => {
 
         await screen.findByRole('listbox', { name: 'What this search found' });
 
-        expect(asked).toHaveLength(2);
+        expect(searches(asked)).toHaveLength(2);
     });
 
     it('forgets what was searched for when asked to', async () => {

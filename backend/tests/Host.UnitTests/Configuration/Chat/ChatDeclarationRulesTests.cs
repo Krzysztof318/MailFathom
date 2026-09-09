@@ -291,6 +291,26 @@ public sealed class ChatDeclarationRulesTests
         Assert.Single(errors);
     }
 
+    /// <summary>
+    /// Whether a sentence is read into filters is decided while the container is built, and the search screen asks the
+    /// deployment once. A reload that flipped it would report the setting as taken while every field went on promising
+    /// a description this deployment had stopped reading, or refusing one it had started reading.
+    /// </summary>
+    [Fact]
+    public void FindChangesNeedingRestart_PhraseReadingTurnedOff_RefusesRatherThanBeingIgnored()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.SearchPhrasing.Enabled = false;
+
+        // Act
+        var errors = ChatDeclarationRules.FindChangesNeedingRestart(candidate, Declared());
+
+        // Assert
+        Assert.Contains(errors, error => error.StartsWith("Chat:SearchPhrasing:Enabled — ", StringComparison.Ordinal));
+        Assert.Single(errors);
+    }
+
     [Fact]
     public void FindChangesNeedingRestart_WithoutADeclarationToCompare_IsRefused()
     {

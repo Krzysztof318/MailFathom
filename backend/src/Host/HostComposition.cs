@@ -862,6 +862,15 @@ internal static class HostComposition
             builder.Services.AddMailAnsweringAgent();
             builder.Services.AddDiscoveryRunAgents();
 
+            // Beside them and behind one more decision, because this is the only one of the three an operator can
+            // decline while keeping the endpoint. Registered or not registered is the whole of the switch: the search
+            // endpoint resolves the reader optionally, so an instance that declined it serves the word search and says
+            // it reads no sentence, rather than offering a field that would fail.
+            if (declaredChat.SearchPhrasing.Enabled)
+            {
+                builder.Services.AddMailSearchPhraseAgent();
+            }
+
             // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
             // AddInfrastructure below, because it decorates the retrieval that call registers. Scoped for the reason the
             // generation plan is: the two numbers it carries are a lookup's, and whether the pass runs at all is the part
