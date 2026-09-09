@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
-import { askScopeInForce, askScopeKey, askScopeOnScreen, mostAskedQuestions, withAsked } from './askScope';
+import { askScopeInForce, askScopeOnScreen, mostAskedQuestions, withAsked } from './askScope';
 import { emptyWorkspace, type Workspace } from './useWorkspace';
 
 const workAccount: MailAccount = {
@@ -67,18 +67,6 @@ describe('askScopeInForce', () => {
             kind: 'mail',
             scope: { kind: 'everything' },
         });
-    });
-});
-
-describe('askScopeKey', () => {
-    it('tells the three shapes apart', () => {
-        const keys = [
-            askScopeKey({ kind: 'mail', scope: { kind: 'account', accountId: 'work' } }),
-            askScopeKey({ kind: 'thread', threadId: 'work' }),
-            askScopeKey({ kind: 'selection', messages: ['work'] }),
-        ];
-
-        expect(new Set(keys).size).toBe(keys.length);
     });
 });
 

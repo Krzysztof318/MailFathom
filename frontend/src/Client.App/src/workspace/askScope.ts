@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailAccount } from '@mailfathom/client-backend';
-import { scopeKey, type MailScope } from './mailScope';
+import type { MailScope } from './mailScope';
 import type { Workspace } from './useWorkspace';
 
 // What a question is asked about, which is not the same thing as what the mail space is showing. Somebody reading one
@@ -72,23 +72,6 @@ export function askScopeInForce(workspace: Workspace, accounts: readonly MailAcc
     return workspace.askScope !== null && stillOffered(workspace.askScope, accounts)
         ? { kind: 'mail', scope: workspace.askScope }
         : askScopeOnScreen(workspace);
-}
-
-/**
- * The scope's identity as one string.
- *
- * It is what a past question is compared by, so nothing has to write a comparison per shape and a fourth shape cannot
- * be forgotten by one of them.
- */
-export function askScopeKey(scope: AskScope): string {
-    switch (scope.kind) {
-        case 'mail':
-            return `mail:${scopeKey(scope.scope)}`;
-        case 'thread':
-            return `thread:${scope.threadId}`;
-        case 'selection':
-            return `selection:${scope.messages.join(',')}`;
-    }
 }
 
 /**
