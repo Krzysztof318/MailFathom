@@ -34,7 +34,8 @@ export const conversationId = '00000000-0000-4000-8000-0000000000c0';
  * message no derivation reached is drawn in, which is an ordinary row rather than a gap. The first row carries none so
  * that a check reaching a row by what it is about still matches on the mail alone.
  *
- * @param at Which row of the folder, which decides whether it carries one at all and what it says.
+ * @param at Which position in the answer, which decides whether it carries one at all and what it says. A folder page
+ * counts rows and a conversation counts messages, and the derivation is the same shape on both.
  */
 function derivedReading(at: number) {
     if (at % 4 !== 1) {
@@ -334,6 +335,11 @@ const conversationRows = [
  * The screen shows the latest message and folds every earlier one behind a control naming how many there are, so a
  * conversation of two would draw the collapsed history and prove nothing about it. Five is the shortest one where the
  * fold is worth reading: four messages behind the control, in both folders the exchange ran through.
+ *
+ * Each message carries what a derivation concluded about it, because the thread route publishes a message in the same
+ * shape a list row is published in — the field and all — and a corpus that left it off would be stating this route
+ * answering like the search route, which is the one route that genuinely publishes no derivation. Only one of the five
+ * carries a reading, for the reason {@link derivedReading} gives about a folder page.
  */
 export const conversation = {
     threadId: conversationId,
@@ -358,6 +364,7 @@ export const conversation = {
             attachmentCount: 0,
             sizeOctets: 3_120,
             preview: row.preview,
+            enrichment: derivedReading(position),
             threadMessageCount: conversationRows.length,
         },
     })),
