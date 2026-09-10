@@ -25,6 +25,7 @@ import {
 import { everything, type MailScope } from '../workspace/mailScope';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { estimatedRowHeight } from '../messageRows/rowWindow';
 import { openingListing, rowsPerPage } from './listing';
 import { MessageList } from './MessageList';
 import { rememberedListing, rememberListing } from './rememberedListings';
@@ -886,6 +887,91 @@ describe('MessageList', () => {
 
         await rows();
         expect(asked.requests.length).toBe(before + 1);
+    });
+
+    // The standing rule for every list in this client: it is drawn as a skeleton once, and a change after that reaches
+    // the rows it touched rather than the list. So what is asserted here is which rows carry the design's animation,
+    // not that the list read something again — that is the pair of cases above.
+    it('moves only the rows the deployment named as changed', async () => {
+        const deployment = deploymentSaying();
+
+        renderList(answering(wholeFolder), { changes: deployment.changes });
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['message-1'] });
+        });
+
+        await waitFor(() => {
+            expect([...row(1).classList]).toContain('animate-row-changed');
+        });
+
+        expect([...row(0).classList]).not.toContain('animate-row-changed');
+    });
+
+    it('lands the rows a later page brought, and none of the ones it had already drawn', async () => {
+        const deployment = deploymentSaying();
+        // Named past the end of the folder the first read answered, so it is a row this list has genuinely not drawn
+        // before rather than one already on the page under another number.
+        const arriving = [message(1000), ...Array.from({ length: rowsPerPage - 1 }, (_, at) => message(at))];
+        let reads = 0;
+
+        renderList(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({
+                    status: 200,
+                    body: reads === 1 ? wholeFolder : pageOf(arriving),
+                    headers: {},
+                });
+            },
+            { changes: deployment.changes },
+        );
+
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'mail.arrived', account: 'work', folder: 'INBOX', count: 1 });
+        });
+
+        await waitFor(() => {
+            expect([...row(1000).classList]).toContain('animate-row-landing');
+        });
+
+        expect([...row(0).classList]).not.toContain('animate-row-landing');
+    });
+
+    // A row carried out of the window is unmounted, and an unmounted row never reports its animation ending — so the
+    // scroll is what has to let go of it. Without that, coming back to it draws the animation again for something that
+    // changed a folder's length of scrolling ago.
+    it('stops holding a row that changed once a scroll has carried it out of the list', async () => {
+        const deployment = deploymentSaying();
+
+        renderList(answering(wholeFolder), { changes: deployment.changes });
+        await rows();
+
+        act(() => {
+            deployment.say({ kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['message-0'] });
+        });
+
+        await waitFor(() => {
+            expect([...row(0).classList]).toContain('animate-row-changed');
+        });
+
+        const scroller = screen.getByRole('listbox', { name: 'Messages' }).parentElement;
+
+        if (scroller === null) {
+            throw new Error('The list draws no scroller around its rows.');
+        }
+
+        fireEvent.scroll(scroller, { target: { scrollTop: 40 * estimatedRowHeight } });
+
+        expect(screen.queryByRole('option', { name: /Message 0$/ })).toBeNull();
+
+        fireEvent.scroll(scroller, { target: { scrollTop: 0 } });
+
+        expect([...row(0).classList]).not.toContain('animate-row-changed');
     });
 
     it('draws the most actionable reading on a row that carries one, without displacing the mail', async () => {

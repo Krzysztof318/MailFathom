@@ -187,7 +187,11 @@ export function useNotificationCentre(
 
         const attempted = new AbortController();
 
-        async function count(): Promise<void> {
+        // `asksForThePage` is false for a count somebody asked for beside a page they are already asking for: the rise
+        // below is what turns an unattended count into a page read, and a hand-made refresh has bumped the token
+        // itself, so leaving it armed would ask the route twice — the second answer arriving against a `known` the
+        // first had already filled, which is a row that arrived and is marked as though it had always been there.
+        async function count(asksForThePage: boolean): Promise<void> {
             if (session === null) {
                 return;
             }
@@ -206,26 +210,26 @@ export function useNotificationCentre(
 
             // Only a rise asks for the page. A count that fell is this client's own marking landing, and a count that
             // did not move is the ordinary poll — neither is anything a reader has to be told about.
-            if (rose) {
+            if (rose && asksForThePage) {
                 setAsked((token) => token + 1);
             }
         }
 
         countNow.current = () => {
-            void count();
+            void count(false);
         };
 
-        void count();
+        void count(true);
 
         const polling = window.setInterval(() => {
-            void count();
+            void count(true);
         }, unreadCountInterval);
 
         // Coming back to the window is when somebody looks at the bell, and it is the moment a poll is least likely to
         // have just landed — a machine that was asleep ran no interval at all.
         function returned(): void {
             if (document.visibilityState === 'visible') {
-                void count();
+                void count(true);
             }
         }
 
@@ -237,7 +241,7 @@ export function useNotificationCentre(
         // number this client keeps in step on its own.
         const listening = signalledChanges.listen((signal) => {
             if (signal.kind === 'notification.raised') {
-                void count();
+                void count(true);
             }
         });
 
@@ -264,7 +268,8 @@ export function useNotificationCentre(
     // mechanism rather than two reads racing on the same route. The count is read beside it rather than left to the
     // interval, because the badge is what a reader who does not open the panel is looking at — and it is the read the
     // effect above is holding rather than a second one composed here, so a press cannot outlive the session it was
-    // made under. A count that came back higher bumps the token again, which costs one page read rather than two.
+    // made under. It is asked for as a count alone, so a press that finds notifications waiting costs the one page
+    // read bumped here rather than a second one the rise would otherwise ask for.
     const readAgain = useCallback((): void => {
         setAsked((token) => token + 1);
         countNow.current?.();

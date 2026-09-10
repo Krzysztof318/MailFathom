@@ -411,6 +411,33 @@ describe('useNotificationCentre', () => {
         expect(result.current.notifications.map((row) => row.id)).toEqual(['n-second', 'n-mail']);
     });
 
+    it('costs one page read when the refresh finds something waiting, and marks it as having arrived', async () => {
+        const { transport, requests, hold } = deployment({ unreadCount: 1, notifications: [mail] });
+        const { result } = centreOf(transport);
+
+        // Opened first, so the centre has been read once and what a later read brings is an arrival rather than the
+        // list appearing — which is the case the count rising and the press are both about.
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        requests.length = 0;
+        hold(2, [{ ...mail, id: 'n-second' }, mail]);
+
+        act(() => {
+            result.current.readAgain();
+        });
+        await settled();
+
+        // Once, although the count came back higher — which is the case somebody presses refresh for. A rise is what
+        // turns an unattended count into a page read, and a press has asked for the page itself, so leaving the rise
+        // armed would read the route twice and compute the second answer against a centre the first had already
+        // filled: an arrival drawn as though it had always been there.
+        expect(pathsAsked(requests).filter((path) => path === '/api/client/notifications')).toHaveLength(1);
+        expect([...result.current.arrived]).toEqual(['n-second']);
+    });
+
     it('reads the page when the count rises, which is what an arrival looks like to a client that polls', async () => {
         const { transport, requests, hold } = deployment({ unreadCount: 0, notifications: [] });
 

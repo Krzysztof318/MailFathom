@@ -291,6 +291,11 @@ describe('a credential kept in the shell’s protected store', () => {
         // password will last until sign-out — so a refused write is answered rather than left to be discovered at the
         // next start.
         expect(await store.keep(deployment, credential, true)).toBe(false);
+
+        // Answered as not kept and still kept for this tab, which are two different promises: the person is told the
+        // sign-in will not outlive the browser, and is not signed out of the tab they are looking at to prove it.
+        expect(window.sessionStorage.length).toBe(1);
+        expect(await store.read(deployment)).toBe(credential);
     });
 
     it('asks the shell to delete the entry when the credential is forgotten', async () => {
