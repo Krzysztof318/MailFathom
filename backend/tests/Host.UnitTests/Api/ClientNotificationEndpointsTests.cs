@@ -17,7 +17,7 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Api;
 
 /// <summary>
-/// Covers the four routes a person reads and marks their own notification centre over. What separates them from the
+/// Covers the five routes a person reads, marks, and clears their own notification centre over. What separates them from the
 /// mail routes is that nothing here reaches a mailbox: the page is drawn from what a producer already derived, a
 /// notification another person holds answers as one that does not exist, and both writes are admitted under the grant a
 /// signed-in person already holds.
@@ -29,6 +29,8 @@ public sealed class ClientNotificationEndpointsTests
     private static readonly DateTimeOffset OccurredAt = new(2026, 9, 3, 8, 30, 0, TimeSpan.Zero);
 
     private static readonly Guid NotificationIdentifier = new("2f0b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d");
+
+    private static readonly Guid SecondNotificationIdentifier = new("3a1c2d5e-6f70-4b8c-9dae-1f2a3b4c5d6e");
 
     [Fact]
     public async Task ReadPageAsync_APageOfNotifications_DescribesEachRowAndTheBoundaryTheNextPageContinuesFrom()
@@ -253,6 +255,102 @@ public sealed class ClientNotificationEndpointsTests
         Assert.Equal(0, result.Value.UnreadCount);
     }
 
+    [Fact]
+    public async Task EraseAsync_NotificationsThePersonHolds_AnswersHowManyWentAndTheCountThatLeaves()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.EraseAsync(
+                User,
+                Arg.Any<IReadOnlyCollection<NotificationId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(2);
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(4);
+
+        // Act
+        var result = await ClientNotificationEndpoints.EraseAsync(
+            new ClientNotificationDeletionRequest([NotificationIdentifier, SecondNotificationIdentifier]),
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var erased = Assert.IsType<Ok<ClientDeletedNotificationsResponse>>(result.Result);
+
+        Assert.Equal(2, erased.Value!.Deleted);
+        Assert.Equal(4, erased.Value.UnreadCount);
+    }
+
+    /// <summary>The one act here that cannot be taken back is refused above the ceiling rather than served in part, unlike the page size two routes above.</summary>
+    [Fact]
+    public async Task EraseAsync_MoreIdentifiersThanOnePageCouldHold_IsRefusedRatherThanTruncated()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+
+        // Act
+        var result = await ClientNotificationEndpoints.EraseAsync(
+            new ClientNotificationDeletionRequest(
+                [.. Enumerable.Range(0, OwnNotifications.MaximumErasedAtOnce + 1).Select(_ => Guid.NewGuid())]),
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        await notifications.DidNotReceive().EraseAsync(
+            Arg.Any<MailUserId>(),
+            Arg.Any<IReadOnlyCollection<NotificationId>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An identifier addressing nothing is dropped rather than failing the request, because a caller that sent it named nothing.</summary>
+    [Fact]
+    public async Task EraseAsync_TheEmptyIdentifier_NamesNothingRatherThanFailingTheRequest()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        IReadOnlyCollection<NotificationId>? named = null;
+        notifications.EraseAsync(User, Arg.Any<IReadOnlyCollection<NotificationId>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                named = call.Arg<IReadOnlyCollection<NotificationId>>();
+
+                return 1;
+            });
+
+        // Act
+        var result = await ClientNotificationEndpoints.EraseAsync(
+            new ClientNotificationDeletionRequest([Guid.Empty, NotificationIdentifier]),
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<Ok<ClientDeletedNotificationsResponse>>(result.Result);
+        Assert.Equal([NotificationId.Create(NotificationIdentifier)], named);
+    }
+
+    /// <summary>A body naming no notification is an erasure of nothing rather than a refusal, which is what an absent list means.</summary>
+    [Fact]
+    public async Task EraseAsync_ABodyNamingNoNotification_ErasesNothingAndStillAnswersTheCount()
+    {
+        // Arrange
+        var notifications = Substitute.For<INotificationStore>();
+        notifications.CountUnreadAsync(User, Arg.Any<CancellationToken>()).Returns(7);
+
+        // Act
+        var result = await ClientNotificationEndpoints.EraseAsync(
+            new ClientNotificationDeletionRequest(NotificationIds: null),
+            SignedIn(notifications),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var erased = Assert.IsType<Ok<ClientDeletedNotificationsResponse>>(result.Result);
+
+        Assert.Equal(0, erased.Value!.Deleted);
+        Assert.Equal(7, erased.Value.UnreadCount);
+    }
+
     /// <summary>The strict binding, which is what keeps a mistyped request from being read as the opposite of what it stated.</summary>
     [Fact]
     public void Deserialize_ABodyCarryingAKeyNothingBinds_IsRefused()
@@ -260,6 +358,16 @@ public sealed class ClientNotificationEndpointsTests
         // Assert
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientNotificationReadStateRequest>(
             """{"read":true,"dismissed":true}""",
+            WebFormat));
+    }
+
+    /// <summary>The same strict binding on the act that cannot be taken back, where a key nothing binds is the difference between a refusal and erasing a set nobody named.</summary>
+    [Fact]
+    public void Deserialize_ADeletionCarryingAKeyNothingBinds_IsRefused()
+    {
+        // Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientNotificationDeletionRequest>(
+            """{"notificationIds":[],"all":true}""",
             WebFormat));
     }
 

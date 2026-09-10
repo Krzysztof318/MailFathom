@@ -475,6 +475,31 @@
         ],
         "type": "object"
       },
+      "ClientDeletedNotificationsResponse": {
+        "properties": {
+          "deleted": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unreadCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "deleted",
+          "unreadCount"
+        ],
+        "type": "object"
+      },
       "ClientDiscoveryRunRequest": {
         "properties": {
           "accounts": {
@@ -2603,6 +2628,25 @@
         "required": [
           "markedRead",
           "unreadCount"
+        ],
+        "type": "object"
+      },
+      "ClientNotificationDeletionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "notificationIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "notificationIds"
         ],
         "type": "object"
       },
@@ -12071,6 +12115,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientNotificationPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/notifications/deletions": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientNotificationDeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDeletedNotificationsResponse"
                 }
               }
             },

@@ -28,6 +28,9 @@ export const unreadNotificationCountRoute = `${notificationsRoute}/unread-count`
 /** The route every one of the acting person's notifications is marked read on. */
 export const markAllNotificationsReadRoute = `${notificationsRoute}/read`;
 
+/** The route the acting person's notifications are erased on, one or several at a time. */
+export const notificationDeletionsRoute = `${notificationsRoute}/deletions`;
+
 /**
  * The most notifications one page may hold, which is the service's own ceiling.
  *
@@ -35,6 +38,15 @@ export const markAllNotificationsReadRoute = `${notificationsRoute}/read`;
  * carrying more than was asked for is not an answer this deployment produced.
  */
 export const longestNotificationPage = 100;
+
+/**
+ * The most notifications one erasure may name, which is the service's own ceiling and a refusal rather than a clamp.
+ *
+ * It is the page ceiling because that is where a selection is made: a panel picks its rows out of the page it drew, so
+ * a longer request names notifications nobody was looking at — and this is the one act here that cannot be taken back,
+ * which is why the deployment refuses it instead of serving the first hundred of it.
+ */
+export const mostNotificationsErasedAtOnce = 100;
 
 // The most of one page this client reads. A row carries a title, a bounded body, and a source, so a full page is on
 // the order of tens of kilobytes; this is well above that and well below the transport's backstop, which is written
@@ -140,6 +152,17 @@ export interface NotificationReadState {
 /** What marking the whole centre read changed. */
 export interface MarkedNotifications {
     readonly markedRead: number;
+    readonly unreadCount: number;
+}
+
+/**
+ * What erasing notifications removed, and what that leaves on the bell.
+ *
+ * `deleted` is fewer than were named where any of them was already gone, which is the deployment reporting what
+ * happened rather than what was asked for.
+ */
+export interface ErasedNotifications {
+    readonly deleted: number;
     readonly unreadCount: number;
 }
 
@@ -265,6 +288,50 @@ export function markAllNotificationsRead(
         return markedRead === null || unreadCount === null
             ? failed('unreadable', response.status)
             : read({ markedRead, unreadCount });
+    });
+}
+
+/**
+ * Erases the named notifications from the signed-in person's own centre, and answers with what the bell now stands at.
+ *
+ * A request naming more than the deployment serves is refused here rather than sent: the answer is a refusal either
+ * way, and a caller that composed one is holding more rows than a page could have drawn.
+ *
+ * @param notificationIds The notifications to erase, at most {@link mostNotificationsErasedAtOnce} of them.
+ */
+export function deleteNotifications(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    notificationIds: readonly string[],
+): Promise<ClientResult<ErasedNotifications>> {
+    return spanned(`POST ${notificationDeletionsRoute}`, async () => {
+        if (notificationIds.length > mostNotificationsErasedAtOnce) {
+            return failed('unreadable', null);
+        }
+
+        const response = await send(transport, {
+            method: 'POST',
+            path: routeFor(session, notificationDeletionsRoute),
+            headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notificationIds }),
+            longestAnswer: longestNotificationAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const record = bodyRecord(response.body);
+        const deleted = record === null ? null : countField(record['deleted']);
+        const unreadCount = record === null ? null : countField(record['unreadCount']);
+
+        return deleted === null || unreadCount === null
+            ? failed('unreadable', response.status)
+            : read({ deleted, unreadCount });
     });
 }
 

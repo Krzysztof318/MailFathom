@@ -21,6 +21,7 @@ import {
 } from '../workspace/askScope';
 import { folderRoleLabels, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { useTwoPanes } from './useWideWorkspace';
 
 // What the product puts in front of the person in every space: the question they are composing, drawn as the design
 // project draws the bar under a correspondence — a field with the product's mark on it, and the scope the question
@@ -36,15 +37,32 @@ import { useWorkspace } from '../workspace/useWorkspace';
 // It no longer writes the scope the mail space is read under, which it used to: choosing a mailbox to ask about is not
 // choosing a folder to read, and somebody widening a question after too narrow an answer would otherwise lose the
 // folder they were in and the messages they had picked out.
+//
+// **The words on it follow the scope, because the design project draws two bars rather than one.** Standing over a
+// correspondence, the act somebody wants is a reply rather than a question about their mail, so the bar names that and
+// the placeholder offers both; standing anywhere else it is the Discover screen's own question. It is the same field
+// and the same submission either way — one field takes every kind of ask, as above — so what changes is the wording and
+// nothing behind it.
 
 export function IntentField({ accounts }: { readonly accounts: readonly MailAccount[] }) {
     const { locale, translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const twoPanes = useTwoPanes();
     const question = useRef<HTMLInputElement>(null);
 
     const onScreen = askScopeOnScreen(workspace);
     const inForce = askScopeInForce(workspace, accounts);
     const offered = askScopesOffered(workspace, accounts);
+    const overACorrespondence = correspondenceScopes.includes(inForce.kind);
+
+    // The whole sentence rather than the shortened label, because what a press with nothing typed asks for must not
+    // depend on how wide the window was: the scope travels with the question, so *draft a reply* against this
+    // correspondence is already a complete request, and shortening it for room would change what was asked.
+    const drafting = translate('intent.draftReply');
+
+    const submitting = !overACorrespondence
+        ? translate('intent.ask')
+        : translate(twoPanes ? 'intent.draftReply' : 'intent.draftReplyShort');
 
     // The front door is reachable without hunting for it, which is what "from anywhere in the application" costs: a
     // reader inside a list of messages would otherwise tab back out of it to reach the field. An imperative browser
@@ -87,10 +105,16 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
             className="flex shrink-0 flex-col gap-2.25 border-t border-line bg-panel px-4 py-3.5 workspace:px-5.5"
             onSubmit={(event) => {
                 event.preventDefault();
-                ask(workspace.question);
+                ask(workspace.question.trim() === '' && overACorrespondence ? drafting : workspace.question);
             }}
         >
-            <div className="flex items-center gap-3 rounded-xl border-2 border-accent px-3.25 py-2">
+            {/* The focus treatment stands on the box rather than on the field inside it, which is the sign-in screen's
+                own shape and for a reason that is visible here rather than argued: the stylesheet's ring is drawn
+                around whatever took focus, so a transparent field inside a bordered box draws a second rectangle
+                *inside* the first and the bar reads as two nested borders instead of one field that lit up. The field
+                therefore gives its own outline up and the box widens instead — which is also what somebody putting a
+                cursor in it is looking for. */}
+            <div className="flex items-center gap-3 rounded-xl border-2 border-accent px-3.25 py-2 transition focus-within:ring-3 focus-within:ring-accent-soft">
                 <span
                     aria-hidden="true"
                     className="shrink-0 rounded-sm bg-accent px-1.75 py-0.75 text-2xs font-semibold tracking-widest text-on-accent"
@@ -103,19 +127,19 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
                     type="search"
                     aria-label={translate('intent.label')}
                     aria-keyshortcuts={askShortcut}
-                    placeholder={translate('intent.placeholder')}
+                    placeholder={translate(overACorrespondence ? 'intent.threadPlaceholder' : 'intent.placeholder')}
                     value={workspace.question}
                     onChange={(event) => {
                         revise({ question: event.target.value });
                     }}
-                    className="min-w-0 flex-1 bg-transparent text-lg text-text placeholder:text-faint"
+                    className="min-w-0 flex-1 bg-transparent text-lg text-text outline-none placeholder:text-faint"
                 />
 
                 <button
                     type="submit"
                     className="shrink-0 rounded-lg bg-accent px-3 py-1.75 text-base font-semibold text-on-accent shadow-raised transition hover:bg-accent-strong"
                 >
-                    {translate('intent.ask')}
+                    {submitting}
                 </button>
             </div>
 
@@ -190,6 +214,11 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 // it, where the two could drift apart without either half looking wrong.
 const askShortcutKey = 'k';
 const askShortcut = `Control+${askShortcutKey.toUpperCase()} Meta+${askShortcutKey.toUpperCase()}`;
+
+// The scopes that mean somebody is standing over a correspondence, which is what the design project's thread bar is
+// drawn under. A passage is one of them because it was selected inside a message somebody is reading; a selection of
+// rows is not, because what is in front of them then is the list rather than the exchange.
+const correspondenceScopes: readonly AskScope['kind'][] = ['thread', 'message', 'fragment'];
 
 // How many messages are picked out, in the forms a language has for the noun — selected rather than spelled, for the
 // reason `mailSpace/SelectionBar.tsx` gives: Polish needs three forms and English hides that it needs two.

@@ -260,6 +260,81 @@ public sealed class OwnNotificationsTests
         Assert.False(store.Recorded.Single(candidate => candidate.Id == theirs.Id).IsRead);
     }
 
+    /// <summary>An identifier is not a capability: the erasure carries the caller inside it, so somebody else's row is neither removed nor reported.</summary>
+    [Fact]
+    public async Task EraseAsync_ANotificationSomebodyElseHolds_LeavesItAndCountsOnlyTheCallersOwn()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var mine = await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "mine");
+        var theirs = await RecordAsync(store, SomebodyElse, occurredAtOffsetMinutes: 0, "theirs");
+
+        var notifications = SignedIn(store);
+
+        // Act
+        var erasedCount = await notifications.EraseAsync(
+            [mine.Id, theirs.Id],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, erasedCount);
+        Assert.Equal([theirs.Id], store.Recorded.Select(candidate => candidate.Id));
+    }
+
+    /// <summary>Removing an unread notification is what lowers the bell, which is the count the answer is redrawn from.</summary>
+    [Fact]
+    public async Task EraseAsync_AnUnreadNotification_LowersWhatStandsUnread()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var unread = await RecordAsync(store, User, occurredAtOffsetMinutes: 0, "unread");
+        await RecordAsync(store, User, occurredAtOffsetMinutes: 5, "still-here");
+
+        var notifications = SignedIn(store);
+
+        // Act
+        await notifications.EraseAsync([unread.Id], TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, await notifications.CountUnreadAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The act is what the caller wanted either way, so a row that has already gone is a count of nothing rather than a failure.</summary>
+    [Fact]
+    public async Task EraseAsync_ANotificationThatIsAlreadyGone_ErasesNothingAndDoesNotFail()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var notifications = SignedIn(store);
+
+        // Act
+        var erasedCount = await notifications.EraseAsync(
+            [NotificationId.Create(Guid.CreateVersion7(FirstInstant))],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, erasedCount);
+    }
+
+    /// <summary>The one act here that cannot be taken back refuses a set larger than a page rather than serving part of it.</summary>
+    [Fact]
+    public async Task EraseAsync_MoreThanOnePageOfIdentifiers_IsRefusedRatherThanServedInPart()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var notifications = SignedIn(store);
+
+        NotificationId[] named =
+        [
+            .. Enumerable.Range(0, OwnNotifications.MaximumErasedAtOnce + 1)
+                .Select(_ => NotificationId.Create(Guid.CreateVersion7(FirstInstant))),
+        ];
+
+        // Act and assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => notifications.EraseAsync(named, TestContext.Current.CancellationToken));
+    }
+
     /// <summary>The centre is a person's own working state, so a caller holding no reading grant reaches none of it.</summary>
     [Fact]
     public async Task ReadPageAsync_ACallerWithoutTheReadingGrant_IsRefused()
@@ -332,6 +407,12 @@ public sealed class OwnNotificationsTests
             Task.FromResult(NotificationReadOutcome.Applied);
 
         public Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<int> EraseAsync(
+            MailUserId user,
+            IReadOnlyCollection<NotificationId> notifications,
+            CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<int> EraseOccurredBeforeAsync(
