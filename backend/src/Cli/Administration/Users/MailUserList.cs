@@ -21,7 +21,7 @@ internal sealed record MailUserList(
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
 /// <param name="Served">Whether the running deployment is serving them.</param>
-/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies their mailboxes, so a start writes their row again after an erasure.</param>
+/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies their mailboxes, so an erasure of them is refused rather than performed.</param>
 /// <remarks>
 /// The label is here because an identifier is what a command needs and a person is what an operator is thinking about;
 /// the three flags are here because each is a different thing to act on — the first says whether a change to their

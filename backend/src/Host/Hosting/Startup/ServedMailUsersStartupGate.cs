@@ -478,7 +478,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Message = "The user labelled {UserDisplayName} is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.")]
     private partial void LogUserReadFromTheirDocument(string userDisplayName);
 
-
     /// <remarks>Reached only where the deployment holds no user row at all, which the release's own migration ordinarily provisions.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
