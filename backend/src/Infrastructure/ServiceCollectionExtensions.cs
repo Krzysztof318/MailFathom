@@ -121,6 +121,7 @@ using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Answering;
+using MailFathom.Infrastructure.Persistence.ClientAssertions;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Coordination;
@@ -385,6 +386,11 @@ public static class ServiceCollectionExtensions
             () => provider.GetRequiredService<FieldEncryptor>(),
             () => provider.GetRequiredService<DatabaseCommandTimeout>()));
         services.AddScoped<IStoredSecretStore, StoredSecretStore>();
+        // A singleton over the pool, like the two configuration statements above it, because it is two bare commands
+        // with no query shape and its caller is an authentication handler rather than a unit of work: the record of a
+        // served assertion belongs to the deployment whether or not the request that produced it goes on to commit
+        // anything.
+        services.AddSingleton<IClientAssertionSpendStore, ClientAssertionSpendStore>();
         // Reads the persisted configuration layer once the process is running, which is what a reload asks. The
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.

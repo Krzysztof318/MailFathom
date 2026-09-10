@@ -77,7 +77,7 @@ internal sealed partial class UserClientAssertionAuthenticator
     /// <summary>Judges the assertion an <c>Authorization</c> header carried.</summary>
     /// <param name="audience">The audience the surface publishes, which the assertion must name.</param>
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
-    /// <param name="cancellationToken">Cancels the credential read.</param>
+    /// <param name="cancellationToken">Cancels the credential read and the spend that records the assertion.</param>
     /// <returns>What the request was admitted as, or the reason the assertion was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="audience" /> is <see langword="null" />.</exception>
     public async Task<UserClientAssertionAuthenticationResult> AuthenticateAsync(
@@ -129,7 +129,13 @@ internal sealed partial class UserClientAssertionAuthenticator
             return UserClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.SignatureUnrecognized);
         }
 
-        return await this.VerifyAsync(audience, presentedAssertion, fingerprint, key, credential);
+        return await this.VerifyAsync(
+            audience,
+            presentedAssertion,
+            fingerprint,
+            key,
+            credential,
+            cancellationToken);
     }
 
     /// <summary>Verifies the assertion against the resolved key and then judges what it claims.</summary>
@@ -139,7 +145,8 @@ internal sealed partial class UserClientAssertionAuthenticator
         string presentedAssertion,
         UserCredentialLookup fingerprint,
         AsymmetricAlgorithm key,
-        ResolvedUserCredential credential)
+        ResolvedUserCredential credential,
+        CancellationToken cancellationToken)
     {
         var validation = await new JsonWebTokenHandler().ValidateTokenAsync(
             presentedAssertion,
@@ -177,7 +184,7 @@ internal sealed partial class UserClientAssertionAuthenticator
             return UserClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.ClaimsUnacceptable);
         }
 
-        if (this.replayStore.TrySpend(fingerprint.Value, identifier, expiresAt))
+        if (await this.replayStore.TrySpendAsync(fingerprint.Value, identifier, expiresAt, cancellationToken))
         {
             return UserClientAssertionAuthenticationResult.Authenticated(AdmittedUserCredential.For(credential));
         }

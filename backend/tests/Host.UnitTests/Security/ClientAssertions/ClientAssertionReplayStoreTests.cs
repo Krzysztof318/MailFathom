@@ -4,6 +4,7 @@
 
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Host.Security.ClientAssertions;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -12,52 +13,89 @@ namespace MailFathom.Host.UnitTests.Security.ClientAssertions;
 
 /// <summary>Covers what the store refuses a second time, and what it stops holding.</summary>
 /// <remarks>
+/// <para>
 /// Two properties matter and they pull against each other. Nothing may be served twice inside its lifetime, which is the
 /// replay the method exists to refuse; and nothing may be remembered indefinitely, because an authenticated client would
-/// otherwise grow the store one identifier per request for as long as the process runs.
+/// otherwise grow the record one identifier per request for as long as the deployment runs.
+/// </para>
+/// <para>
+/// What the record itself is, and whether PostgreSQL settles two replicas presenting one identifier at the same instant,
+/// is <c>OrchestratedClientAssertionReplayTests</c>'s to prove against a real server. What is decidable here is
+/// everything above the port: the scoping to the verifying credential, and the sweep interval that decides when expired
+/// records are asked for.
+/// </para>
 /// </remarks>
 public sealed class ClientAssertionReplayStoreTests
 {
     private static readonly DateTimeOffset SpentAt = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void TrySpend_AnIdentifierNotSeenBefore_IsServed()
+    public async Task TrySpendAsync_AnIdentifierNotSeenBefore_IsServed()
     {
         // Arrange
-        var store = new ClientAssertionReplayStore(new FakeTimeProvider(SpentAt));
+        var store = new ClientAssertionReplayStore(
+            new InMemoryClientAssertionSpendStore(),
+            new FakeTimeProvider(SpentAt));
 
         // Act
-        var served = store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt.AddMinutes(1));
+        var served = await store.TrySpendAsync(
+            KeyNamed("nightly"),
+            "an-identifier",
+            SpentAt.AddMinutes(1),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(served);
     }
 
     [Fact]
-    public void TrySpend_TheSameIdentifierTwice_RefusesTheSecond()
+    public async Task TrySpendAsync_TheSameIdentifierTwice_RefusesTheSecond()
     {
         // Arrange
-        var store = new ClientAssertionReplayStore(new FakeTimeProvider(SpentAt));
+        var store = new ClientAssertionReplayStore(
+            new InMemoryClientAssertionSpendStore(),
+            new FakeTimeProvider(SpentAt));
 
         // Act
-        var first = store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt.AddMinutes(1));
-        var second = store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt.AddMinutes(1));
+        var first = await SpendAsync(store, "nightly", "an-identifier", SpentAt.AddMinutes(1));
+        var second = await SpendAsync(store, "nightly", "an-identifier", SpentAt.AddMinutes(1));
 
         // Assert
         Assert.True(first);
         Assert.False(second);
     }
 
-    /// <summary>Identifiers are the client's own, so one client spending a value must never be able to refuse another that happens to choose it.</summary>
+    /// <summary>An identifier already served by another replica is refused here, which is the whole reason the record left this process.</summary>
+    /// <remarks>The two stores share one spend store and hold their own sweep intervals, which is what a second replica against one database is.</remarks>
     [Fact]
-    public void TrySpend_OneIdentifierUnderTwoKeys_ServesBoth()
+    public async Task TrySpendAsync_AnIdentifierAnotherReplicaAlreadyServed_IsRefused()
     {
         // Arrange
-        var store = new ClientAssertionReplayStore(new FakeTimeProvider(SpentAt));
+        var deployment = new InMemoryClientAssertionSpendStore();
+        var oneReplica = new ClientAssertionReplayStore(deployment, new FakeTimeProvider(SpentAt));
+        var anotherReplica = new ClientAssertionReplayStore(deployment, new FakeTimeProvider(SpentAt));
 
         // Act
-        var first = store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt.AddMinutes(1));
-        var second = store.TrySpend(KeyNamed("reporting"), "an-identifier", SpentAt.AddMinutes(1));
+        var served = await SpendAsync(oneReplica, "nightly", "an-identifier", SpentAt.AddMinutes(1));
+        var replayed = await SpendAsync(anotherReplica, "nightly", "an-identifier", SpentAt.AddMinutes(1));
+
+        // Assert
+        Assert.True(served);
+        Assert.False(replayed);
+    }
+
+    /// <summary>Identifiers are the client's own, so one client spending a value must never be able to refuse another that happens to choose it.</summary>
+    [Fact]
+    public async Task TrySpendAsync_OneIdentifierUnderTwoKeys_ServesBoth()
+    {
+        // Arrange
+        var store = new ClientAssertionReplayStore(
+            new InMemoryClientAssertionSpendStore(),
+            new FakeTimeProvider(SpentAt));
+
+        // Act
+        var first = await SpendAsync(store, "nightly", "an-identifier", SpentAt.AddMinutes(1));
+        var second = await SpendAsync(store, "reporting", "an-identifier", SpentAt.AddMinutes(1));
 
         // Assert
         Assert.True(first);
@@ -65,43 +103,79 @@ public sealed class ClientAssertionReplayStoreTests
     }
 
     /// <summary>
-    /// Nothing is remembered indefinitely, which is what bounds the store: an entry is dropped once the assertion
-    /// carrying it could no longer be accepted anyway. Without the sweep an authenticated client grows the store one
-    /// identifier per request for the life of the process, which is the only way this can be made to cost memory.
+    /// Nothing is remembered indefinitely, which is what bounds the table: a record is dropped once the assertion
+    /// carrying it could no longer be accepted anyway. Without the sweep an authenticated client grows it one identifier
+    /// per request for the life of the deployment, which is the only way this can be made to cost storage.
     /// </summary>
     [Fact]
-    public void TrySpend_PastThePermittedLifetime_StopsHoldingTheExpiredEntry()
+    public async Task TrySpendAsync_PastThePermittedLifetime_StopsHoldingTheExpiredRecord()
     {
         // Arrange
         var clock = new FakeTimeProvider(SpentAt);
-        var store = new ClientAssertionReplayStore(clock);
+        var store = new ClientAssertionReplayStore(new InMemoryClientAssertionSpendStore(), clock);
 
-        store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt.AddMinutes(1));
+        await SpendAsync(store, "nightly", "an-identifier", SpentAt.AddMinutes(1));
 
         // Act
         clock.Advance(ClientAssertion.MaximumLifetime + TimeSpan.FromMinutes(1));
-        store.TrySpend(KeyNamed("nightly"), "a-later-identifier", clock.GetUtcNow().AddMinutes(1));
+        await SpendAsync(store, "nightly", "a-later-identifier", clock.GetUtcNow().AddMinutes(1));
 
         // Assert
-        Assert.True(store.TrySpend(KeyNamed("nightly"), "an-identifier", clock.GetUtcNow().AddMinutes(1)));
+        Assert.True(await SpendAsync(store, "nightly", "an-identifier", clock.GetUtcNow().AddMinutes(1)));
     }
 
-    /// <summary>The sweep must not drop an entry whose assertion is still usable, which would reopen the replay window it was recording.</summary>
+    /// <summary>The sweep must not drop a record whose assertion is still usable, which would reopen the replay window it was recording.</summary>
     [Fact]
-    public void TrySpend_AfterASweep_StillRefusesAnUnexpiredIdentifier()
+    public async Task TrySpendAsync_AfterASweep_StillRefusesAnUnexpiredIdentifier()
     {
         // Arrange
         var clock = new FakeTimeProvider(SpentAt);
-        var store = new ClientAssertionReplayStore(clock);
+        var store = new ClientAssertionReplayStore(new InMemoryClientAssertionSpendStore(), clock);
 
-        store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt + ClientAssertion.MaximumLifetime * 3);
+        await SpendAsync(store, "nightly", "an-identifier", SpentAt + (ClientAssertion.MaximumLifetime * 3));
 
         // Act
         clock.Advance(ClientAssertion.MaximumLifetime + TimeSpan.FromMinutes(1));
 
         // Assert
-        Assert.False(store.TrySpend(KeyNamed("nightly"), "an-identifier", SpentAt + ClientAssertion.MaximumLifetime * 3));
+        Assert.False(await SpendAsync(
+            store,
+            "nightly",
+            "an-identifier",
+            SpentAt + (ClientAssertion.MaximumLifetime * 3)));
     }
+
+    /// <summary>
+    /// The removal is asked for at most once per permitted lifetime rather than per request, which is what keeps the
+    /// second statement off the authentication path: a deployment answering a request a second would otherwise issue a
+    /// delete a second to drop records no client could have presented anyway.
+    /// </summary>
+    [Fact]
+    public async Task TrySpendAsync_ManySpendsInsideOneLifetime_AsksForOneRemoval()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(SpentAt);
+        var deployment = new InMemoryClientAssertionSpendStore();
+        var store = new ClientAssertionReplayStore(deployment, clock);
+
+        // Act
+        clock.Advance(ClientAssertion.MaximumLifetime);
+
+        foreach (var ordinal in Enumerable.Range(0, 5))
+        {
+            await SpendAsync(store, "nightly", $"an-identifier-{ordinal}", clock.GetUtcNow().AddMinutes(1));
+        }
+
+        // Assert
+        Assert.Equal(1, deployment.RemovalCount);
+    }
+
+    private static Task<bool> SpendAsync(
+        ClientAssertionReplayStore store,
+        string keyName,
+        string identifier,
+        DateTimeOffset expiresAt) =>
+        store.TrySpendAsync(KeyNamed(keyName), identifier, expiresAt, TestContext.Current.CancellationToken);
 
     private static SecretName KeyNamed(string name) =>
         SecretName.TryCreate(name, out var keyName) ? keyName : throw new InvalidOperationException(name);

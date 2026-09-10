@@ -72,7 +72,7 @@ internal sealed partial class ClientAssertionAuthenticator
     /// <param name="configuredKeys">The client public keys the surface configured, in configuration order.</param>
     /// <param name="audience">The audience the surface publishes, which the assertion must name.</param>
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
-    /// <param name="cancellationToken">Cancels the retrieval of the configured key material.</param>
+    /// <param name="cancellationToken">Cancels the retrieval of the configured key material and the spend that records the assertion.</param>
     /// <returns>The name of the key that verified the assertion, or the reason it was refused.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuredKeys" /> or <paramref name="audience" /> is <see langword="null" />.</exception>
     public async Task<ClientAssertionAuthenticationResult> AuthenticateAsync(
@@ -104,7 +104,12 @@ internal sealed partial class ClientAssertionAuthenticator
 
         try
         {
-            return await this.VerifyAsync(configuredKeys, audience, presentedAssertion, verificationKeys);
+            return await this.VerifyAsync(
+                configuredKeys,
+                audience,
+                presentedAssertion,
+                verificationKeys,
+                cancellationToken);
         }
         finally
         {
@@ -121,7 +126,8 @@ internal sealed partial class ClientAssertionAuthenticator
         IReadOnlyList<ConfiguredSecret> configuredKeys,
         string audience,
         string presentedAssertion,
-        IReadOnlyList<VerificationKey> verificationKeys)
+        IReadOnlyList<VerificationKey> verificationKeys,
+        CancellationToken cancellationToken)
     {
         var validation = await new JsonWebTokenHandler().ValidateTokenAsync(
             presentedAssertion,
@@ -164,7 +170,7 @@ internal sealed partial class ClientAssertionAuthenticator
             return ClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.ClaimsUnacceptable);
         }
 
-        if (!this.replayStore.TrySpend(verifyingKey.Name, identifier, expiresAt))
+        if (!await this.replayStore.TrySpendAsync(verifyingKey.Name, identifier, expiresAt, cancellationToken))
         {
             this.LogReplayedAssertionPresented(verifyingKey.Name.Value!);
 

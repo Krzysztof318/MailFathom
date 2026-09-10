@@ -292,7 +292,7 @@ public sealed class ClientAssertionAuthenticatorTests
         return new Harness(
             new ClientAssertionAuthenticator(
                 new PlaintextOnlySecretReferenceResolver(),
-                new ClientAssertionReplayStore(clock),
+                new ClientAssertionReplayStore(new InMemoryClientAssertionSpendStore(), clock),
                 clock,
                 new RecordingLogger<ClientAssertionAuthenticator>()),
             [configuredKey]);

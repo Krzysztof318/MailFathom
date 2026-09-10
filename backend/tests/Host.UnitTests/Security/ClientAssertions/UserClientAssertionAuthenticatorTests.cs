@@ -9,6 +9,7 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.ClientAssertions;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -270,7 +271,7 @@ public sealed class UserClientAssertionAuthenticatorTests
         return new Harness(
             new UserClientAssertionAuthenticator(
                 credentials,
-                new ClientAssertionReplayStore(clock),
+                new ClientAssertionReplayStore(new InMemoryClientAssertionSpendStore(), clock),
                 clock,
                 NullLogger<UserClientAssertionAuthenticator>.Instance),
             credentials);

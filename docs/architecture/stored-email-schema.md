@@ -412,6 +412,38 @@ a decoy record so that an unknown username and a wrong password cost the same an
 **Removing a user removes these with the rest.** The cascade from `settings_accounts` takes them, which is what the
 foreign key is for: a person erased from the deployment leaves nothing behind that could still be signed in as.
 
+## The assertions this deployment has already served
+
+`spent_client_assertions` is what makes a captured [client assertion](../operations/mcp-endpoint.md#key-pairs)
+unusable a second time. A valid signature is not by itself a reason to serve a request — an assertion travels over the
+wire like any other bearer credential — so an identifier already served is refused, which is the one thing a short
+lifetime alone cannot do.
+
+It is a table rather than a field in a process because the property is the deployment's. An identifier spendable once
+per replica is not spendable once at all: the replica that refuses a replay is not the replica the next presentation
+reaches, so raising `replicaCount` would otherwise reopen the window without anything saying so.
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records that, and records
+why session affinity is not an answer to it — affinity is honoured by the client, and the client here is whoever
+captured the assertion.
+
+| Column | What it records |
+|---|---|
+| `CredentialKey` | What identifies the credential that verified the assertion, at most 64 characters, and the leading half of the primary key. A user's registered key is named by its 43-character fingerprint and a configured one by the name an operator gave it; the two vocabularies cannot collide, and the scoping is what stops one client from spending an identifier another was going to choose |
+| `Identifier` | The assertion's own `jti`, as the client minted it, at most 128 characters — the bound both authenticators already refuse past. It is the second half of the primary key, and that pair being unique is the anti-replay rule itself: the spend is an insert that either happens or conflicts, and which of the two it was is the whole answer |
+| `ExpiresAt` | When the assertion stops being accepted, which is when the row stops being needed. It is the one indexed column beside the key, and the index is what makes the removal proportional to what has expired rather than to everything ever spent |
+
+**Nothing here is mail, and nothing an unauthenticated caller sends reaches it.** Only an assertion whose signature
+already verified is recorded, so a row is a credential's own name, a value a client minted for one request, and an
+instant — no message, no header, no request, and no key material. There is no foreign key onto the user record either,
+because the credential column holds a configured key's name as readily as a registered key's fingerprint and belongs
+to neither.
+
+**It cannot grow without bound.** A row outlives no assertion, an assertion lives at most five minutes, and how fast a
+verified client can add rows is exactly what the surface's rate limit already bounds — so the removal, issued at most
+once per that lifetime by whichever replica reaches the interval first, is what keeps the table proportional to the
+traffic of the last few minutes. A cap with an eviction policy would be worse than none: evicting a row that has not
+expired is precisely the replay this exists to refuse.
+
 ## The derived search document
 
 `email_search_documents` is one-to-one with `stored_emails` and holds what lexical search reads: `subject_text`, `participant_addresses`, `body_text`, `body_text_before_trimming`, `text_source`, `extracted_at`, and the generated `search_vector`. [Body text and the lexical index](../features/imap-synchronization.md#body-text-and-the-lexical-index) describes how each of them is derived. Every stored email has one, including a message whose body was never read: that row carries the envelope's subject alone and records its text source as not extracted, so an oversized or unparseable message is still findable rather than absent from search entirely.
@@ -1547,6 +1579,8 @@ account reach these four tables through the same cascade every other table is re
 | `ix_jobs_user_turn` | `(UserId, TurnAt)` where the state is `Pending` or `Claimed` | How far one user's waiting work has reached, which is what every enqueue asks before it stamps a turn. It carries no account column at all: the user is on the row now, so the latest turn is one descending step into this index rather than a maximum over the accounts that user holds joined together. Beside `ix_jobs_user_account` rather than folded into it because the two are proportional to different things: that one spans everything the queue has ever done, and this one only what is still claimable, which is what keeps the read a backward walk of a few index entries on a queue holding a backlog of any size |
 | `ix_jobs_dead_lettered` | `(StateChangedAt, Id)` where the state is `DeadLettered` | The operator's reading of what has stopped, newest first, keyed on the pair it pages by. The filter keeps the index the size of what is waiting for a person rather than of the table, and a row leaves it the moment the decision about it is taken |
 | `ix_notifications_user_unread_condition` | `(UserId, DeduplicationKey)`, unique, where `NOT "IsRead"` | The deduplication rule itself: one unread statement per condition, and no bound at all on conditions the person has already read. Being partial is also what makes it the index an unread count is answered from, since that count is one user's rows in it — and what keeps a repeated raise a lost race a retry resolves rather than a check the application could win between the read and the write |
+| `PK_spent_client_assertions` | `(CredentialKey, Identifier)`, unique | The anti-replay rule itself. The spend is one `INSERT ... ON CONFLICT DO NOTHING` and whether a row was written is the whole answer, so two replicas presenting one identifier at the same instant are settled here rather than by a check either of them makes between two statements |
+| `ix_spent_client_assertions_expires_at` | `(ExpiresAt)` | The order the served assertions are aged out through. Nothing reads a spent assertion, so the column is indexed for the removal alone — which is what keeps that removal proportional to what has expired since the last one rather than to everything ever spent |
 | `ix_notifications_user_occurred` | `(UserId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
 | `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
 
