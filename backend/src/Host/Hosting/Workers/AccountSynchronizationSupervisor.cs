@@ -54,6 +54,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly AccountPushNotificationWatch pushNotifications;
     private readonly MailSynchronizationTelemetry telemetry;
     private readonly MailSynchronizationRunLedger runLedger;
+    private readonly MailAccountRunSignal runSignal;
     private readonly ClientSignals signals;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
@@ -65,6 +66,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
     /// <param name="runLedger">Holds what this supervisor is doing for the administrative surface, which is what an operator without a metrics stack reads it from.</param>
+    /// <param name="runSignal">Ends the wait between runs early when a change is authored here, which is the one event push cannot report.</param>
     /// <param name="signals">Tells whatever the user has open that mail arrived and that the run finished, so a screen catches up without waiting for its own interval.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     public AccountSynchronizationSupervisor(
@@ -75,6 +77,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         AccountPushNotificationWatch pushNotifications,
         MailSynchronizationTelemetry telemetry,
         MailSynchronizationRunLedger runLedger,
+        MailAccountRunSignal runSignal,
         ClientSignals signals,
         ILogger<AccountSynchronizationSupervisor> logger)
     {
@@ -85,6 +88,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.pushNotifications = pushNotifications;
         this.telemetry = telemetry;
         this.runLedger = runLedger;
+        this.runSignal = runSignal;
         this.signals = signals;
         this.logger = logger;
     }
@@ -183,7 +187,24 @@ internal sealed partial class AccountSynchronizationSupervisor
                 run.ResolvedFolders,
                 schedulingToken);
 
-            await this.pushNotifications.WaitForNextPassAsync(runSettings, delayBeforeNextRun, schedulingToken);
+            // The other event that ends the wait, and the one push cannot report: a change somebody authored here. It
+            // is registered before the wait rather than raced against it, so a record written between the run above and
+            // the wait below still brings this account's next run forward instead of being waited out — which is the
+            // ordinary timing, the record being written while the account is busy.
+            using var authoredChange = this.runSignal.Register(this.account.Id, schedulingToken);
+
+            try
+            {
+                await this.pushNotifications.WaitForNextPassAsync(
+                    runSettings,
+                    delayBeforeNextRun,
+                    authoredChange.Token);
+            }
+            catch (OperationCanceledException) when (!schedulingToken.IsCancellationRequested)
+            {
+                // Something local asked for this account's run. The backoff it was waiting out is not reset by that —
+                // the next run recomputes it from the failure count, which nothing here touched.
+            }
         }
     }
 

@@ -90,6 +90,15 @@ internal static class ClientDraftEndpoints
     /// </remarks>
     internal const int MaxWriteRequestBytes = 2 * 1024 * 1024;
 
+    /// <summary>What the upload route declares it takes, which is octets of whatever the file says it is.</summary>
+    /// <remarks>
+    /// The declared type is recorded against the file rather than checked, because what an author attaches is theirs to
+    /// name and this deployment stages it either way. Naming one type here instead would be enforced rather than
+    /// documented: the routing pipeline answers <c>415</c> to a request declaring anything the metadata does not list,
+    /// so a single concrete type refuses every file whose system could name it and admits only the ones it could not.
+    /// </remarks>
+    internal const string AnyUploadedMediaType = "*/*";
+
     /// <summary>Maps the draft routes into the client group, so they inherit its requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
@@ -134,7 +143,7 @@ internal static class ClientDraftEndpoints
 
         api.MapPost(DraftAttachmentsRoute, StageAttachmentAsync)
             .WithMetadata(new RequestSizeLimitAttribute(uploadLimit))
-            .Accepts<Stream>(AttachmentContentResponse.FallbackMediaType)
+            .Accepts<Stream>(AnyUploadedMediaType)
             .RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         api.MapDelete(DraftAttachmentRoute, UnstageAttachmentAsync)

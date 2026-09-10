@@ -747,6 +747,11 @@ public static class ServiceCollectionExtensions
         // not this deployment synchronizes, because a deployment that switched it off is exactly the one whose operator
         // is asking why no mail arrives, and the status surface answers that from the switch rather than from silence.
         services.AddSingleton<MailSynchronizationRunLedger>();
+        // A singleton for the reason the outbox's own signal is one: it carries a raise from the scope that wrote a
+        // mailbox change to the supervisor waiting between that account's runs, so one per scope would be a registry
+        // nobody is waiting in. Registered whether or not this deployment synchronizes, because the use case that
+        // raises it does not ask first and a raise nothing is waiting on is already nothing.
+        services.AddSingleton<MailAccountRunSignal>();
         services.AddScoped<IMailFolderSynchronizationProgressReader, MailFolderSynchronizationProgressReader>();
         services.AddScoped<MailSynchronizationStatusReader>();
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Mutations;
 
@@ -47,6 +48,7 @@ public sealed class MailFlagChangeRecorder
     private readonly IAuthoredMailboxTargetReader targets;
     private readonly IMailboxMutationRecordStore records;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly MailAccountRunSignal runSignal;
 
     /// <summary>Initializes the use case over the grant it asks first and the record it writes.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
@@ -54,25 +56,29 @@ public sealed class MailFlagChangeRecorder
     /// <param name="targets">Answers where the named email currently is.</param>
     /// <param name="records">Opens the durable record one change is carried by.</param>
     /// <param name="commitPolicy">Commits a call's records together, retrying an optimistic conflict.</param>
+    /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the change to the mail server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public MailFlagChangeRecorder(
         AccessAuthorization authorization,
         MailboxScopeResolver scopeResolver,
         IAuthoredMailboxTargetReader targets,
         IMailboxMutationRecordStore records,
-        OptimisticConcurrencyRetryPolicy commitPolicy)
+        OptimisticConcurrencyRetryPolicy commitPolicy,
+        MailAccountRunSignal runSignal)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(targets);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(runSignal);
 
         this.authorization = authorization;
         this.scopeResolver = scopeResolver;
         this.targets = targets;
         this.records = records;
         this.commitPolicy = commitPolicy;
+        this.runSignal = runSignal;
     }
 
     /// <summary>Writes down every value one change asks for, against the email it names.</summary>
@@ -136,6 +142,12 @@ public sealed class MailFlagChangeRecorder
                 }
             },
             cancellationToken);
+
+        // Raised once the records are durable, and never before: the run this brings forward reads the records rather
+        // than the raise, so a raise ahead of the commit would be a run that found nothing and a change that then waited
+        // out the interval anyway. It is a hint and nothing is done about it failing — the account's own schedule is
+        // what makes the change correct, and this only decides whether it is prompt.
+        this.runSignal.BringForward(target.Occurrence.AccountId);
 
         return new AuthoredMailFlagChangeResult(
             change.StoredEmailId,

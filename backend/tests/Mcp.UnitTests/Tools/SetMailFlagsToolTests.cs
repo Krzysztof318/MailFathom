@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -354,7 +355,8 @@ public sealed class SetMailFlagsToolTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider())));
+                new FakeTimeProvider()),
+            new MailAccountRunSignal()));
     }
 
     /// <summary>A record store that keeps what a call asked to have written down.</summary>

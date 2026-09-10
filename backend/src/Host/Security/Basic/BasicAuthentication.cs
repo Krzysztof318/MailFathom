@@ -57,19 +57,30 @@ internal static class BasicAuthentication
         $"{BasicCredentialHeader.HttpAuthenticationScheme} realm=\"{ApiKeyAuthentication.Realm}\", charset=\"UTF-8\"";
 
     /// <summary>Answers a request with the <c>401</c> a surface accepting passwords produces.</summary>
-    /// <param name="response">The response to write the refusal onto.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="response" /> is <see langword="null" />.</exception>
+    /// <param name="context">The request being refused, whose route decides whether the password half is offered.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The bare bearer challenge every method on the surface produces, and the password challenge beside it, as two
     /// values of one header. The bearer half is written by the method that owns it rather than restated here, so a
     /// surface accepting both offers exactly what it would have offered without this one.
+    /// <para>
+    /// A route carrying <see cref="NoPasswordChallenge" /> takes the bearer half alone, for the reason that marker
+    /// gives: the password half is an instruction to a browser, and a route no person navigates to is a route where
+    /// obeying it opens a dialog over what somebody was reading.
+    /// </para>
     /// </remarks>
-    internal static void WriteChallenge(HttpResponse response)
+    internal static void WriteChallenge(HttpContext context)
     {
-        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(context);
 
-        ApiKeyAuthentication.WriteBareChallenge(response);
+        ApiKeyAuthentication.WriteBareChallenge(context.Response);
 
-        response.Headers.WWWAuthenticate = response.Headers.WWWAuthenticate.Append(PasswordChallenge).ToArray();
+        if (context.GetEndpoint()?.Metadata.GetMetadata<NoPasswordChallenge>() is not null)
+        {
+            return;
+        }
+
+        context.Response.Headers.WWWAuthenticate =
+            context.Response.Headers.WWWAuthenticate.Append(PasswordChallenge).ToArray();
     }
 }

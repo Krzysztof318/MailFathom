@@ -11412,7 +11412,7 @@
         ],
         "requestBody": {
           "content": {
-            "application/octet-stream": {
+            "*/*": {
               "schema": {
                 "$ref": "#/components/schemas/Stream"
               }

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -366,6 +367,7 @@ public sealed class MailSynchronizationCoordinatorTests
                 settings,
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 new MailSynchronizationRunLedger(clock),
+                new MailAccountRunSignal(),
                 ClientSignalPublishers.ReachingNobody,
                 this.loggerFactory,
                 clock);

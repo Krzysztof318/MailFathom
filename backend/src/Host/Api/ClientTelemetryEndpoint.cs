@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Host.Observability.ClientTelemetry;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
@@ -124,6 +125,12 @@ internal static class ClientTelemetryEndpoint
                 // reach it: it implements IRequestSizeLimitMetadata, so a body over the bound is stopped by the request
                 // body feature instead of being buffered here first.
                 .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
+
+                // The one route family on this surface a browser reaches without the client having composed the call.
+                // The exporter builds its own request and takes no option for the credentials mode, so it defaults to
+                // sending them — and a refusal naming the password method then opens the browser's own dialog over
+                // somebody's mail. NoPasswordChallenge is what leaves the bearer challenge alone there.
+                .WithMetadata(NoPasswordChallenge.Instance)
                 .Accepts<Stream>(ClientTelemetryForwarder.ProtobufMediaType)
                 .Produces<Stream>(StatusCodes.Status200OK, ClientTelemetryForwarder.ProtobufMediaType)
                 .RequireNoPermission();

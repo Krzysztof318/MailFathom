@@ -173,7 +173,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// </remarks>
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        BasicAuthentication.WriteChallenge(this.Response);
+        BasicAuthentication.WriteChallenge(this.Context);
 
         return Task.CompletedTask;
     }

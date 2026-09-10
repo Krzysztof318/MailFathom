@@ -200,6 +200,30 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
     }
 
+    /// <summary>The marker is metadata on the route, so it only reaches the challenge if the handler refuses on the whole context rather than on the response alone.</summary>
+    [Fact]
+    public async Task ChallengeAsync_OnARouteThatAnswersNoPasswordChallenge_OffersTheBearerSchemeAlone()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        var context = new DefaultHttpContext();
+        context.SetEndpoint(
+            new Endpoint(
+                requestDelegate: null,
+                new EndpointMetadataCollection(NoPasswordChallenge.Instance),
+                displayName: "telemetry"));
+
+        var handler = await harness.InitializeAsync(authorizationHeaderValue: string.Empty, https: true, context);
+
+        // Act
+        await handler.ChallengeAsync(new AuthenticationProperties());
+
+        // Assert
+        var challenges = context.Response.Headers[HeaderNames.WWWAuthenticate].ToString();
+        Assert.DoesNotContain("Basic", challenges, StringComparison.Ordinal);
+        Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
+    }
+
     /// <summary>Nothing was declared in front, so the peer is the caller and one host guessing at many users spends the allowance it is bounded by.</summary>
     [Fact]
     public async Task AuthenticateAsync_TwoUsernamesFromOnePeerWithNoProxyDeclared_SpendsThatPeersAllowance()

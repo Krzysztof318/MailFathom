@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -585,7 +586,8 @@ public sealed class ClientMailMutationsEndpointTests
                     : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
             targets,
             this.records,
-            CommitPolicy());
+            CommitPolicy(),
+            new MailAccountRunSignal());
     }
 
     private MailRelocationRecorder RelocationRecorder() => new(
@@ -595,7 +597,8 @@ public sealed class ClientMailMutationsEndpointTests
         DestinationResolver(),
         Substitute.For<IAuthoredDeleteEmailDispositionReader>(),
         this.records,
-        CommitPolicy());
+        CommitPolicy(),
+        new MailAccountRunSignal());
 
     /// <summary>Builds the deleting use case the route is given, under the grant that route carries.</summary>
     /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
@@ -618,7 +621,8 @@ public sealed class ClientMailMutationsEndpointTests
             targets,
             dispositions,
             this.records,
-            CommitPolicy());
+            CommitPolicy(),
+            new MailAccountRunSignal());
     }
 
     /// <summary>Builds a destination resolver that reaches nothing, because no test here gets as far as resolving a folder.</summary>

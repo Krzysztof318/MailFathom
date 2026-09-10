@@ -27,7 +27,7 @@ public sealed class BasicAuthenticationTests
         context.Response.Body = body;
 
         // Act
-        BasicAuthentication.WriteChallenge(context.Response);
+        BasicAuthentication.WriteChallenge(context);
 
         // Assert
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
@@ -42,7 +42,7 @@ public sealed class BasicAuthenticationTests
         var context = new DefaultHttpContext();
 
         // Act
-        BasicAuthentication.WriteChallenge(context.Response);
+        BasicAuthentication.WriteChallenge(context);
 
         // Assert
         Assert.Equal(
@@ -58,7 +58,7 @@ public sealed class BasicAuthenticationTests
         var context = new DefaultHttpContext();
 
         // Act
-        BasicAuthentication.WriteChallenge(context.Response);
+        BasicAuthentication.WriteChallenge(context);
 
         // Assert
         Assert.Contains(
@@ -75,12 +75,29 @@ public sealed class BasicAuthenticationTests
         var context = new DefaultHttpContext();
 
         // Act
-        BasicAuthentication.WriteChallenge(context.Response);
+        BasicAuthentication.WriteChallenge(context);
 
         // Assert
         var challenge = context.Response.Headers[HeaderNames.WWWAuthenticate].ToString();
 
         Assert.DoesNotContain("error", challenge, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("user", challenge, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The password half is an instruction to a browser, and a route nothing navigates to is one where obeying it opens a dialog over what somebody was reading.</summary>
+    [Fact]
+    public void WriteChallenge_ARouteThatAnswersNoPasswordChallenge_OffersTheBearerSchemeAlone()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.SetEndpoint(new Endpoint(null, new EndpointMetadataCollection(NoPasswordChallenge.Instance), "telemetry"));
+
+        // Act
+        BasicAuthentication.WriteChallenge(context);
+
+        // Assert
+        Assert.Equal(
+            ["Bearer realm=\"MailFathom\""],
+            context.Response.Headers[HeaderNames.WWWAuthenticate].Select(value => value ?? string.Empty));
     }
 }

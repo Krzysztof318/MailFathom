@@ -10,6 +10,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Observability.ClientTelemetry;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
@@ -72,6 +73,28 @@ public sealed class ClientTelemetryEndpointTests
                 .OfType<RouteEndpoint>()
                 .Select(endpoint => endpoint.RoutePattern.RawText)
                 .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The exporter builds its own request and takes no option for the credentials mode, so it sends them — and a
+    /// refusal naming the password method then opens the browser's own username-and-password dialog over whatever the
+    /// person was reading. Every request the client composes itself omits credentials instead, which is why these three
+    /// routes are the only ones marked.
+    /// </summary>
+    [Fact]
+    public void MapClientTelemetry_WithADestinationConfigured_AnswersNoPasswordChallengeOnAnySignalRoute()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapGroup(ClientEndpointOptions.RoutePrefix).MapClientTelemetry();
+
+        // Assert
+        var mapped = endpoints.Materialize();
+
+        Assert.NotEmpty(mapped);
+        Assert.All(mapped, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<NoPasswordChallenge>()));
     }
 
     /// <summary>The claim the whole feature rests on, asserted at the wire rather than at the argument.</summary>

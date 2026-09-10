@@ -423,6 +423,48 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>
+    /// A change somebody authored reaches the mail server through this run and through nothing else, so the wait in
+    /// front of it is what a person watching a message stay where they deleted it is waiting out. The clock never moves
+    /// in this test, which is what makes the second run attributable to the signal rather than to the interval.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AChangeBroughtTheRunForward_RunsAgainWithoutWaitingOutTheInterval()
+    {
+        // Arrange
+        var attemptCount = 0;
+        var secondRunStarted = new TaskCompletionSource();
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attemptCount) == 2)
+                {
+                    secondRunStarted.TrySetResult();
+                }
+
+                return Task.FromResult(emptyMailbox);
+            });
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+        var supervision = harness.StartSupervision();
+
+        // Act: kept where it lands, so whether it arrives before or during the first run decides nothing.
+        harness.RunSignal.BringForward(MailAccountId.Create("primary"));
+
+        // Assert
+        await secondRunStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopSchedulingAsync();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// The ledger is what an operator without a metrics stack reads, so a folder the mail server refused has to reach
     /// it classified rather than only reach the log. The wait beside it is the other half: a folder that is failing and
     /// an account that is approaching its server less often for it are one event read two ways.
@@ -1377,6 +1419,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
             this.RunLedger = new MailSynchronizationRunLedger(clock);
+            this.RunSignal = new MailAccountRunSignal();
             this.Signals = new ClientSignals([this.SignalChannel], this.SignalClock);
             this.supervisor = new AccountSynchronizationSupervisor(
                 account,
@@ -1390,11 +1433,15 @@ public sealed class AccountSynchronizationSupervisorTests
                     clock),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 this.RunLedger,
+                this.RunSignal,
                 this.Signals,
                 this.Logger);
         }
 
         internal MailSynchronizationRunLedger RunLedger { get; }
+
+        /// <summary>Gets the registry a change authored here brings this account's next run forward through.</summary>
+        internal MailAccountRunSignal RunSignal { get; }
 
         /// <summary>Gets what this run told a client, which most tests here have no claim about.</summary>
         internal RecordingClientSignalChannel SignalChannel { get; } = new();
