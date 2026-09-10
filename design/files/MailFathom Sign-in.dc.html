@@ -123,6 +123,14 @@
                   <span onClick="{{ toggleReveal }}" style="{{ revealStyle }}" style-hover="cursor:pointer;color:var(--text);background:var(--hover)">{{ revealLabel }}</span>
                 </div>
               </div>
+
+              <div onClick="{{ toggleRemember }}" style="{{ rememberRowStyle }}" style-hover="cursor:pointer">
+                <span style="{{ rememberBoxStyle }}"><span style="{{ rememberTickStyle }}">check</span></span>
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:12.5px;color:var(--text2)">Keep me signed in</span>
+                  <span style="font-size:11px;line-height:1.45;color:var(--faint);text-wrap:pretty">{{ rememberHint }}</span>
+                </span>
+              </div>
             </div>
           </sc-if>
 
@@ -300,7 +308,7 @@ class Component extends DCLogic {
     view: "login",
     srv: this._saved.srv,           // null = default from configuration
     notls: this._saved.tls === "1",
-    user: "", pass: "", reveal: false, advanced: false, focus: null,
+    user: "", pass: "", reveal: false, remember: false, advanced: false, focus: null,
     connecting: false, probing: false, oauth: null, error: "", vw: 1440, theme: null, lang: "en",
   };
 
@@ -517,6 +525,14 @@ class Component extends DCLogic {
       userBoxStyle: this.box("user", tapH),
       passBoxStyle: this.box("pass", tapH),
       portHint: p.port ? "port " + p.port : ":" + defPort,
+      /* Remember me is a basic-auth affordance only — OAuth sessions are governed by the provider. */
+      toggleRemember: () => this.setState({ remember: !s.remember }),
+      rememberRowStyle: "display:flex;align-items:flex-start;gap:9px;padding:" + (phone ? "4px 0 2px" : "2px 0 0") + ";user-select:none",
+      rememberBoxStyle: "width:" + (phone ? 22 : 18) + "px;height:" + (phone ? 22 : 18) + "px;flex:0 0 " + (phone ? 22 : 18) + "px;margin-top:1px;border-radius:5px;display:flex;align-items:center;justify-content:center;border:1px solid " +
+        (s.remember ? "var(--accent)" : "var(--line)") + ";background:" + (s.remember ? "var(--accent)" : "var(--panel)"),
+      rememberTickStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 500;font-size:13px;line-height:1;color:var(--onaccent);opacity:" + (s.remember ? "1" : "0"),
+      rememberHint: s.remember ? "This device stays signed in for 30 days. Applies to password sign-in only." : "Applies to password sign-in only — provider sessions follow their own rules.",
+
       passType: s.reveal ? "text" : "password",
       revealLabel: s.reveal ? "Hide" : "Show",
       toggleReveal: () => this.setState({ reveal: !s.reveal }),

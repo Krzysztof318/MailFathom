@@ -1,6 +1,6 @@
 # The design's state inventory
 
-**Mirror stamp `51f0ca5a520463ae`** — the etag set this was extracted from. Run
+**Mirror stamp `417366b3bb130ff0`** — the etag set this was extracted from. Run
 `bash scripts/design-mirror.sh stamp`; a different answer means the design moved and this file
 describes something older than the mirror beside it. Refresh with `$mf-sync-design` rather than reading
 around it.
@@ -17,7 +17,7 @@ This file and the sources it was extracted from are tracked, so every clone read
 
 | Mirrored file | What it settles |
 |---|---|
-| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 7 658 lines, and the only file that carries navigation |
+| `MailFathom Prototype.dc.html` | The whole signed-in application: seven screens, every overlay, every composition. 8 136 lines, and the only file that carries navigation |
 | `MailFathom Sign-in.dc.html` | Sign-in, and the server screen behind it |
 | `MailFathom Toasts.dc.html` | Toasts and the blocking overlay — the system's answer to what somebody just did |
 | `MailFathom Notification Gesture.dc.html` | The phone's notification-panel gesture, as four frames plus the numbers behind them |
@@ -38,7 +38,7 @@ source: `grep -n 'showThreadPane' 'design/files/MailFathom Prototype.dc.html'` g
 the gate in the template and the one line that decides it. *Reveal* is what makes it true.
 
 Three things decide composition before any state does, and they are read from the width alone
-(`renderVals`, lines 5305–5326):
+(`renderVals`, lines 5697–5718):
 
 | Name | Condition | What it changes |
 |---|---|---|
@@ -49,7 +49,7 @@ Three things decide composition before any state does, and they are read from th
 | `touch` | `isMobile \|\| tablet` | Every `pointer: coarse` affordance |
 | `drawer` | `tablet \|\| isMobile` | The side list arrives as a drawer rather than a column |
 
-`FRAMES` (line 3055) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
+`FRAMES` (line 3147) is the design's own four sizes: `phone` 390 × 844, `fold` 884 × 832,
 `tablet` 1024 × 768, and the artboard's 1440 × 900. A `fold` is a *tablet-class* width with two panes.
 
 ## Discover — `isDiscover`
@@ -72,7 +72,7 @@ The run is a phase machine (`st.phase`), and the blocks arrive one at a time (`r
 | Evidence inspector open | `inspectorOpen` | a citation is pressed |
 | Evidence inspector closed | `inspectorClosed` | nothing selected — the resting state |
 
-Which blocks a run produces is the plan, and there are three (`PLANS`, line 2629): `contract`
+Which blocks a run produces is the plan, and there are three (`PLANS`, line 2721): `contract`
 (answer + timeline + table + action), `files` (answer + gallery + action), `people`
 (answer + people + action). **No single run draws every block**, so a screenshot of one plan is not
 the block set to build against; `MailFathom Result Blocks.dc.html` is where the block types stand
@@ -91,16 +91,51 @@ together.
 | Toolbar | `showMailToolbar` | `!selectionOn && !singlePane` |
 | Primary actions in the bar | `tbPrimaryShown` | the toolbar has room for them |
 | Resizer between panes | `showResizer` | `!singlePane && !tablet` |
-| Side list expanded | `sideExpanded` | not collapsed; collapsed is 58 px against 210 px |
+| Side list expanded | `sideExpanded` | not collapsed; collapsed is 58 px, expanded is 210 px and draggable to 420 |
+| Side list resizer | `showSideResizer` | `!drawer && !sideCollapsed && !isMobile` (line 6713) — drag widens the folder pane between 210 and 420 px, double-click returns it to 210 |
 | Side list as a drawer | `showSide` / `sideScrim` | `drawer && drawerOpen` |
 | Folder button | `showFolderBtn` | `drawer` |
 | Account menu on a mailbox | `ctxMenu` through `g.ctxOpen` | right-click a mailbox header, or hold it for 460 ms — *New folder* and *Mark all as read*; **All accounts carries none** |
-| A folder the user made | `st.extraFolders[<mailbox>]` | *New folder* in that menu, or *New folder here* in the move sheet; it is drawn below the standard five |
+| Menu on a folder row | `folderMenu` (line 4643) | right-click a folder, or hold it — *Mark all as read* always, *New folder inside* while the path is under three segments, and *Edit folder* and *Delete folder* only on a folder the user made; **All accounts carries none** |
+| A folder the user made | `st.extraFolders[<mailbox>]` | the two menus above, or *New folder here* in the move sheet; it is drawn below the standard five |
 
 Every mailbox draws the same five folders in the same order — Inbox, Sent, Drafts, Archive, Trash
-(`STD_FOLDERS`, line 5581) — and a count only where the mock data gives one. *All accounts* is those
+(`STD_FOLDERS`, line 5975) — and a count only where the mock data gives one. *All accounts* is those
 same five over both mailboxes rather than a set of its own, and anything under them is a folder the
 user made.
+
+### Folders the user made
+
+Added on 2026-09-10, and the largest thing in this refresh. A folder is no longer a name in a flat
+list: it carries a remote path, it nests, and it can be edited and deleted.
+
+| State | Flag | Reveal |
+|---|---|---|
+| The folder tree | `st.folderOpen[<mailbox·path>]` | a folder with children draws a twisty; each level is indented 15 px, and **three path segments is the ceiling** (`MAX_DEPTH`, line 4655) |
+| Children shown | `mb.hasKids` / `mb.twisty` | `expand_more` against `chevron_right`, titled *Collapse subfolders* and *Show subfolders*; a collapsed side list draws depth 0 only |
+| New folder dialog | `newFolderOpen` (line 7528) | *New folder* on a mailbox, *New folder inside* on a folder, or *New folder here* in the move sheet |
+| Editing one | the same dialog in `mode: "edit"` | *Edit folder* — the title reads *Edit folder* and the button *Save changes* |
+| Its two fields | `nfName` / `nfPath` | *FOLDER NAME* and *REMOTE PATH*. The path follows the name until the path is typed in by hand, and then stops following it |
+| Nothing typed yet | `nfCreateStyle` / `nfCreateHover` | the create button is drawn flat and refuses the pointer while the name is empty |
+| Delete confirmation | `delFolderOpen` (line 7532) | *Delete folder* — it names the folder, says whether everything nested inside it goes too, and states that the messages it holds go back to Inbox |
+
+The remote path is the design's own statement about what a folder *is*: the hint under it reads
+*Path on the mail server. The parent folder is created if it does not exist yet.*, the placeholder is
+built from the parent (`INBOX/…`), and creating, renaming and deleting one each post a success toast
+naming the path and the mailbox.
+
+### The per-message AI reading
+
+| State | Flag | Reveal |
+|---|---|---|
+| AI summary | `aiSumOpen` (line 7489) | the `auto_awesome` control on a message row, or *AI summary* at the top of that row's context menu |
+| Its cards | `aiSumCards` (line 4831) | **three at most**, each a heading, the claim, a *Why:* line, a model chip reading *Model — mailfathom-email-enrichment*, and the fragment of the message it rests on |
+| Which headings exist | — | *WHAT IS SETTLED*, *WHAT IS STILL OPEN*, *WHAT IS THE COMMITMENT*, *WHAT THE DEADLINE IS*, and *WHAT THIS IS ABOUT* where the list's own reading fills a card out |
+| Jump to the source | `ac.showSrc` | only where the thread holds more than one message — *Open message N in the thread* |
+
+The dialog opens at 620 px on the desktop and full-screen on the phone. Its own sentence is the
+contract it states: *Every reading below comes from this message alone, and each one shows the
+fragment it rests on.*
 
 ### The thread
 
@@ -272,15 +307,40 @@ menu's *Tab mode* switch is turned on at a width of at least 1180 px**.
 | Notification centre | `notifCenterOpen` | the bell, or the phone's upward gesture |
 | Unread notifications | `notifHasUnread` | the unread count; it gates three regions including the rail badge |
 | **No notifications** | `notifEmpty` | the shown list is empty — reachable by filtering to unread after reading them all |
-| Move dialog | `moveOpen` | the move action on a selection — grouped by mailbox (`moveGroups`, line 7069), each group ending in *New folder here*, and the toast it produces names the mailbox |
-| Permanent delete | `confirmDel` under `inTrash` | a delete action while the open folder is a Trash (line 4446) — *Delete permanently*, no undo offered, and the toast reads *Permanently deleted* rather than *Moved to trash* |
+| Move dialog | `moveOpen` | the move action on a selection — grouped by mailbox (`moveGroups`, line 7504), each group ending in *New folder here*, and the toast it produces names the mailbox |
+| Permanent delete | `confirmDel` under `inTrash` | a delete action while the open folder is a Trash (line 4598) — *Delete permanently*, no undo offered, and the toast reads *Permanently deleted* rather than *Moved to trash* |
+| The rail's nav scrolls | `railNavStyle` (line 6192) | a viewport too short for the seven destinations — the nav scrolls and the bottom cluster stays pinned |
 | Cancel confirmation | `cancelAskOpen` | closing a toast that carries a running operation |
 | Toasts | `toasts` | any operation that reports; `MailFathom Toasts.dc.html` is the whole of it |
 
 Every label in the prototype is English. The four that were not — the Settings tabs *Profil* and
-*Aplikacja* (line 7535), the user menu's sign-out item *Wyloguj* (line 135), and the single-pane
-state toggle beside the thread head, *ukryj* (line 7271) — were translated in the project, and
-`design/parity.json` presses two of them under their English names.
+*Aplikacja* (line 8015, now *Profile* and *Application*), the user menu's sign-out item *Wyloguj*
+(line 140, now *Sign out*), and the single-pane state toggle beside the thread head, *ukryj* (line
+7472, now *Hide panels — correspondence only* against *Show thread panels*) — were translated in the
+project, and `design/parity.json` presses two of them under their English names.
+
+### The demo refresh, and what it is not
+
+The prototype carries a control the product does not: a dashed `refresh` button in the rail, titled
+*Demo: new mail, an update and a removal* (line 7562 for the phone's own floating copy of it).
+Pressing it plays one scripted batch out of three (`DEMO_BATCHES`, line 4176) — a message lands at
+the top of the list, a second after 1 000 ms an existing thread is replaced in place, and a third
+after 2 050 ms is withdrawn with the toast *The sender withdrew a message — the thread has left the
+list*. `demoBusy` spins the glyph and refuses a second press while a batch runs.
+
+**It is a way to show the states, not a state to build.** What the client owes here is the three
+things the batch reveals, each of which the client reaches from its own live data:
+
+| State | Flag | What it draws |
+|---|---|---|
+| A row arriving | `rowAnim[<id>] === "in"` | `mfrowin` — 480 ms, opening from zero height with a 7 px drop |
+| A row leaving | `rowAnim[<id>] === "out"` | `mfrowout` — 440 ms, collapsing and sliding 22 px left, pointer events off while it goes |
+| A row changing in place | `rowAnim[<id>] === "edit"` | `mfrowedit` — 1 700 ms, an accent bar and a soft accent wash that fade out |
+| A notification arriving | `notifAnim[<id>] === "in"` | the same `mfrowin` on the notification-centre row |
+
+The comment above them is the requirement rather than the animation: *Only the touched tile
+animates — the list is never re-rendered as a whole, so scroll position and every other row stay
+exactly where they were.*
 
 ## Sign-in — `MailFathom Sign-in.dc.html`
 
@@ -295,6 +355,7 @@ is forced by configuration.
 | Password offered | `showBasic` | the server declares it (prop `basicAvailable`) |
 | Both, so a divider | `showDivider` | both of the above |
 | **No method at all** | `noMethods` | neither — a **prop pair**, so only a property change reaches it |
+| Kept signed in | `remember` | the *Keep me signed in* checkbox, drawn under the password field and **only where the password form is** — checked it reads *This device stays signed in for 30 days. Applies to password sign-in only.*, unchecked *Applies to password sign-in only — provider sessions follow their own rules.* |
 | Connecting | `connecting` | pressing *Connect*, or an OAuth provider |
 | Advanced open | `advanced` | the *Advanced* control |
 | Insecure allowed | `insecure` | the checkbox on the server view; it changes the lock glyph, the port hint and the certificate row |
@@ -354,7 +415,7 @@ a failure banner. Worth carrying out of it:
 This is the class the inventory exists for. Each is in the source, and none of them can be reached by
 clicking a preview.
 
-- **The application with no mailbox at all.** `const emptyApp = false;` (line 5576) is a constant, and
+- **The application with no mailbox at all.** `const emptyApp = false;` (line 5970) is a constant, and
   every one of the seven screen gates is `st.screen === "…" && !emptyApp`. Nothing anywhere draws the
   true branch, so **the design does not cover a deployment with no mailbox** — a session that needs
   that screen is designing something the project has not settled, and it goes to the owner rather than
