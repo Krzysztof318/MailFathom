@@ -83,7 +83,6 @@ internal sealed class StoredThreadStateStore(
             terms);
 
         var awaiting = await Awaiting(counted, dbContext.EmailThreadStates.AsNoTracking())
-            .OrderBy(conversation => conversation.EmailThreadId)
             .Take(batchSize)
             .ToArrayAsync(cancellationToken);
 
@@ -212,11 +211,20 @@ internal sealed class StoredThreadStateStore(
     /// <summary>Groups the narrowed mail by conversation and keeps the ones no stored state currently describes.</summary>
     /// <param name="selected">The narrowed mail of one account.</param>
     /// <param name="states">The states already stored, untracked because nothing here writes.</param>
-    /// <returns>One row per conversation awaiting a state, carrying the shape it has now.</returns>
+    /// <returns>One row per conversation awaiting a state, carrying the shape it has now, ordered by conversation.</returns>
     /// <remarks>
+    /// <para>
     /// A left join rather than two round trips, and the comparison is the whole selection: a conversation with no state
     /// has never been derived, and one whose state was derived from a different count or a different newest arrival has
     /// changed since. Writing the state against the shape read here is what takes the conversation back out.
+    /// </para>
+    /// <para>
+    /// The ordering is stated here rather than by the caller because it has to be applied before the projection. A
+    /// caller ordering the returned rows orders by a member of a constructed <see cref="ThreadAwaitingStateRow" />,
+    /// which the provider cannot reduce back to the grouped column and therefore refuses to translate — a failure the
+    /// whole pass ends on rather than one row. Ordering the grouping's own key leaves the caller with nothing but the
+    /// bound to apply.
+    /// </para>
     /// </remarks>
     internal static IQueryable<ThreadAwaitingStateRow> Awaiting(
         IQueryable<StoredEmailEntity> selected,
@@ -234,6 +242,7 @@ internal sealed class StoredThreadStateStore(
         where stored == null
             || stored.DerivedFromMessageCount != conversation.MessageCount
             || stored.DerivedFromLatestArrival != conversation.LatestArrival
+        orderby conversation.EmailThreadId
         select new ThreadAwaitingStateRow(
             conversation.EmailThreadId,
             conversation.MessageCount,
