@@ -252,6 +252,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
             scope.GetRequiredService<IMailboxMutationAuditTrail>(),
             ClientSignalPublishers.ReachingNobody,
+            scope.GetRequiredService<IMailFolderResolutionStore>(),
             new MailboxMutationOptions());
 
         return await performer.PerformAsync(

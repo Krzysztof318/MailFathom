@@ -30,6 +30,22 @@ public interface IMailFolderResolutionStore
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken);
 
+    /// <summary>Gets the alias whose current binding names a remote folder.</summary>
+    /// <param name="account">The account owning the bindings.</param>
+    /// <param name="remotePath">The remote folder the alias is looked for by.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The alias currently bound to that folder, or <see langword="null" /> when the account binds no alias to it.</returns>
+    /// <remarks>
+    /// The reverse of the read above, and the only way back from a remote path to the name everything a client is told
+    /// is expressed in: a mutation names where it files by the path an IMAP command is issued against, and a folder
+    /// crossed into has to be announced by its alias. Only a current binding answers, because a generation the alias has
+    /// since moved off names the folder it used to be.
+    /// </remarks>
+    Task<MailFolderAlias?> GetAliasBoundToAsync(
+        MailAccountIdentity account,
+        RemoteFolderPath remotePath,
+        CancellationToken cancellationToken);
+
     /// <summary>Stages a binding so the generation exists before any occurrence is stored under it.</summary>
     /// <param name="session">The open session whose transaction the staged insert joins.</param>
     /// <param name="account">The account owning the alias.</param>

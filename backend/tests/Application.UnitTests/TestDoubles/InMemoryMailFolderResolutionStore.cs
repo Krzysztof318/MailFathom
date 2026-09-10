@@ -51,6 +51,24 @@ internal sealed class InMemoryMailFolderResolutionStore : IMailFolderResolutionS
     }
 
     /// <inheritdoc />
+    public Task<MailFolderAlias?> GetAliasBoundToAsync(
+        MailAccountIdentity account,
+        RemoteFolderPath remotePath,
+        CancellationToken cancellationToken)
+    {
+        this.ResolutionReadCount++;
+
+        var bound = this.bindings
+            .Where(binding => binding.Key.AccountId == account.Id.Value
+                && binding.Value.RemotePath.NamesSameFolderAs(remotePath))
+            .Select(binding => binding.Key.Alias)
+            .OrderBy(alias => alias.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        return Task.FromResult<MailFolderAlias?>(bound.Length == 0 ? null : bound[0]);
+    }
+
+    /// <inheritdoc />
     public Task SaveResolutionAsync(
         IPersistenceSession session,
         MailAccountIdentity account,

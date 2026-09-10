@@ -671,9 +671,68 @@ public sealed class MailboxMutationPerformerTests
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 
-    /// <summary>A change the mailbox settled stops being pending on the screen, so the row is named once it has.</summary>
+    /// <summary>A settled move changes two folders, so the folder the message left and the folder it landed in are both named.</summary>
     [Fact]
-    public async Task PerformAsync_WhenTheMailboxSettledTheChange_SignalsTheStoredMessageAsChanged()
+    public async Task PerformAsync_WhenASettledChangeNamesADestination_SignalsBothFoldersAsChanged()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+        var context = new PerformerContext(signals: signals);
+        var archive = context.FolderResolutions.Bind(Account.Id, MailFolderAlias.Create("archive"), ArchivePath.Value);
+        var request = RelocationRequest();
+        context.AnswerRelocationWith(ArchivedAt);
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        Assert.All(
+            channel.Published,
+            signal =>
+            {
+                Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+                Assert.Equal(SyntheticMailUser.Deployment, signal.User);
+                Assert.Equal([request.StoredEmailId], signal.Emails);
+            });
+        Assert.Equal(
+            [archive.Alias.Value, InboxFolder.Alias.Value],
+            channel.Published.Select(static signal => signal.Folder!.Value.Value).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>A change that files nowhere moves one folder, so nothing beyond the folder the message is in is named.</summary>
+    [Fact]
+    public async Task PerformAsync_WhenASettledChangeNamesNoDestination_SignalsOnlyTheFolderTheMessageIsIn()
+    {
+        // Arrange
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider();
+        await using var signals = new ClientSignals([channel], clock);
+        var context = new PerformerContext(signals: signals);
+        context.FolderResolutions.Bind(Account.Id, MailFolderAlias.Create("archive"), ArchivePath.Value);
+        var request = RequestFor("set-seen");
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
+        Assert.Equal(InboxFolder.Alias, signal.Folder);
+        Assert.Equal([request.StoredEmailId], signal.Emails);
+    }
+
+    /// <summary>A folder this deployment does not mirror has no alias to re-read, so a move into one names the source alone.</summary>
+    [Fact]
+    public async Task PerformAsync_WhenTheDestinationIsBoundToNoAlias_SignalsOnlyTheFolderTheMessageLeft()
     {
         // Arrange
         var channel = new RecordingClientSignalChannel();
@@ -691,10 +750,7 @@ public sealed class MailboxMutationPerformerTests
 
         // Assert
         var signal = Assert.Single(channel.Published);
-        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
-        Assert.Equal(SyntheticMailUser.Deployment, signal.User);
         Assert.Equal(InboxFolder.Alias, signal.Folder);
-        Assert.Equal([request.StoredEmailId], signal.Emails);
     }
 
     /// <summary>Assembles the performer over an in-memory record store and a substituted write session.</summary>
@@ -738,10 +794,13 @@ public sealed class MailboxMutationPerformerTests
                     TimeProvider.System),
                 this.AuditTrail,
                 signals ?? ClientSignalPublishers.ReachingNobody,
+                this.FolderResolutions,
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
         }
 
         internal InMemoryMailboxMutationRecordStore Store { get; } = new();
+
+        internal InMemoryMailFolderResolutionStore FolderResolutions { get; } = new();
 
         internal RecordingMailboxMutationAuditTrail AuditTrail { get; } = new();
 
