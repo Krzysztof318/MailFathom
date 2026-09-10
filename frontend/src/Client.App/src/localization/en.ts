@@ -547,9 +547,8 @@ export const en = {
     'reading.significance': 'Why this may matter',
     'reading.commitment': 'What is committed to',
     'reading.said': '{aspect}: {text}',
-    'reading.title': 'What MailFathom made of this message',
-    'reading.about':
-        'Each reading below was derived from the message and can be checked against the passages it rests on.',
+    'reading.title': 'What MailFathom read from this message',
+    'reading.about': 'Every reading below comes from this message alone, and each one shows the fragment it rests on.',
     'reading.check': 'Check what MailFathom made of it',
     'reading.close': 'Close',
     'reading.reason': 'Why: {reason}',

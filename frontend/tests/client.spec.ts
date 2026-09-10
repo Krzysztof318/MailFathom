@@ -1353,7 +1353,7 @@ test('opens what MailFathom made of a message from its own row, with the passage
     await enriched.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Check what MailFathom made of it' }).click();
 
-    const checking = page.getByRole('dialog', { name: 'What MailFathom made of this message' });
+    const checking = page.getByRole('dialog', { name: 'What MailFathom read from this message' });
 
     await expect(checking.getByText('A model — agents/reader')).toBeVisible();
     await expect(checking.getByText('Please confirm the bays you want before the end of the week.')).toBeVisible();

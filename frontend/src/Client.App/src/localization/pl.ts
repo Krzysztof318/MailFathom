@@ -551,7 +551,7 @@ export const pl: Catalogue = {
     'reading.said': '{aspect}: {text}',
     'reading.title': 'Co MailFathom wyczytał z tej wiadomości',
     'reading.about':
-        'Każdy odczyt poniżej powstał z tej wiadomości i można go sprawdzić w fragmentach, na których się opiera.',
+        'Każdy odczyt poniżej pochodzi wyłącznie z tej wiadomości i pokazuje fragment, na którym się opiera.',
     'reading.check': 'Sprawdź, co MailFathom z tego wyczytał',
     'reading.close': 'Zamknij',
     'reading.reason': 'Dlaczego: {reason}',

@@ -518,3 +518,69 @@ describe('MessageRow, a row that moved', () => {
         expect(row.className).not.toContain('animate-row-changed');
     });
 });
+
+// The mark the design draws on the tile, which opens what MailFathom read from the message. It is drawn out of the
+// accessibility tree deliberately — a row is an `option` of a listbox and holds no focusable descendant — so it is
+// found by the name it shows a pointer rather than by a role.
+function markedRow({
+    onReadings,
+    onPoint = vi.fn(),
+}: {
+    onReadings?: (() => void) | undefined;
+    onPoint?: (event: unknown) => void;
+}): void {
+    render(
+        <LocalizationProvider>
+            <ul>
+                <MessageRow
+                    email={email}
+                    position={1}
+                    open={false}
+                    selected={false}
+                    focusable
+                    onReadings={onReadings}
+                    onOpen={() => undefined}
+                    onPoint={onPoint}
+                    onPointerEnter={() => undefined}
+                    onElement={() => undefined}
+                />
+            </ul>
+        </LocalizationProvider>,
+    );
+}
+
+describe('MessageRow, the mark that opens what was read', () => {
+    it('opens the readings of the message it is drawn on', () => {
+        const asked = vi.fn();
+
+        markedRow({ onReadings: asked });
+        fireEvent.click(screen.getByTitle('What MailFathom made of it'));
+
+        expect(asked).toHaveBeenCalledOnce();
+    });
+
+    it('is drawn on no row whose message carries nothing that was read from it', () => {
+        markedRow({});
+
+        expect(screen.queryByTitle('What MailFathom made of it')).toBeNull();
+    });
+
+    it('leaves the row unselected, a press on the mark being about the mark rather than about the message', () => {
+        const pointed = vi.fn();
+
+        markedRow({ onReadings: () => undefined, onPoint: pointed });
+
+        const mark = screen.getByTitle('What MailFathom made of it');
+
+        fireEvent.pointerDown(mark, { pointerType: 'mouse' });
+        fireEvent.pointerUp(mark, { pointerType: 'mouse' });
+
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('announces nothing of its own, the row menu being the path that carries this surface a name', () => {
+        markedRow({ onReadings: () => undefined });
+
+        expect(screen.getByTitle('What MailFathom made of it').getAttribute('aria-hidden')).toBe('true');
+    });
+});

@@ -842,6 +842,7 @@ export function MessageList({
                                     arrived={arrivedRows.has(email.id)}
                                     changed={changedRows.has(email.id)}
                                     note={readingOn(email)}
+                                    onReadings={checkingReadings(email)}
                                     onOpen={() => {
                                         open(row);
                                     }}

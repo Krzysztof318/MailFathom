@@ -76,6 +76,7 @@ export function MessageRow({
     arrived,
     changed,
     note,
+    onReadings,
     onOpen,
     onPoint,
     onPress,
@@ -104,6 +105,12 @@ export function MessageRow({
 
     /** What the row has to say about the message beyond what it draws, in the line the height already reserves. */
     readonly note?: ReactNode;
+
+    /**
+     * Opens what MailFathom read from this message, or absent where it read nothing from it and where the list offers
+     * no such surface at all.
+     */
+    readonly onReadings?: (() => void) | undefined;
     readonly onOpen: () => void;
 
     /**
@@ -316,6 +323,33 @@ export function MessageRow({
                             </span>
                         </span>
                     ) : null}
+
+                    {/* What MailFathom read from this message, opened from the row the design project draws it on and
+                        offered only where there is a reading to open. It is a mark rather than a control, and that is
+                        an accessibility obligation rather than a shortcut: a row is an `option` of a listbox and holds
+                        no focusable descendant, so a button here would take the keyboard path off the list. The
+                        announced path to the same surface is the row's own menu, which a pointer, a finger and a
+                        keyboard each reach — this is the pointer's shortcut to it and is hidden from everything that
+                        would otherwise announce a second, unreachable copy of it. */}
+                    {onReadings === undefined ? null : (
+                        <span
+                            aria-hidden="true"
+                            title={translate('list.readings')}
+                            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-accent-soft hover:text-accent-deep pointer-coarse:size-8"
+                            onPointerDown={(event) => {
+                                event.stopPropagation();
+                            }}
+                            onPointerUp={(event) => {
+                                event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onReadings();
+                            }}
+                        >
+                            <Icon name="auto_awesome" className="size-4 pointer-coarse:size-4.75" />
+                        </span>
+                    )}
 
                     <ReceivedAt at={email.receivedAt} />
                 </div>

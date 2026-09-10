@@ -25,12 +25,16 @@ import { readingNames, readingSources } from './messageReadings';
 // produced it, and the passages of the message it was drawn from — which is the whole of what makes a mark something
 // somebody can disagree with rather than something they have to take.
 //
-// **A modal rather than something that opens on the row.** Two things decide that and neither is taste: a row is an
-// `option` of a listbox, which holds no focusable descendant, and its height is what the window above it does
-// arithmetic over — so a reading that expanded where it stands would take the keyboard path off the list and put every
-// row below it somewhere other than where the list drew the space for it. What opens this is the row's own menu, which
-// a pointer, a finger and a keyboard already reach four ways. The design project draws neither this surface nor an
-// affordance that opens it, which is a gap in it rather than a shape settled here.
+// **A modal rather than something that opens on the row**, which is what the design draws as well. Two things decide
+// that here and neither is taste: a row is an `option` of a listbox, which holds no focusable descendant, and its
+// height is what the window above it does arithmetic over — so a reading that expanded where it stands would take the
+// keyboard path off the list and put every row below it somewhere other than where the list drew the space for it.
+//
+// **The row's mark opens it under a pointer, and the row's menu is the path everything else takes.** The design puts a
+// symbol on the tile between the thread count and the time, and this client draws it there — but hidden from the
+// accessibility tree and reachable by pointer alone, for the listbox reason above. What a keyboard, a screen reader and
+// a finger held on the row each reach is the menu entry, which was this surface's only affordance before the mark and
+// remains the one that carries its name.
 //
 // **The evidence is fetched rather than carried.** A row publishes passage identifiers because a list page carrying
 // the passages themselves would be publishing a body it had no reason to, so the words arrive when somebody asks to
@@ -125,7 +129,10 @@ function AskedMessage({
                 const due = mark.dueAt === null ? null : wordInstant(mark.dueAt, locale, 'full');
 
                 return (
-                    <section key={mark.aspect} className="flex flex-col gap-1.5 rounded-xl border border-line p-3">
+                    <section
+                        key={mark.aspect}
+                        className="flex flex-col gap-2 rounded-xl border border-line bg-sunken px-3.75 py-3.25"
+                    >
                         <div className="flex flex-wrap items-center gap-1.5">
                             <h3 className="text-2xs font-semibold tracking-widest text-muted uppercase">
                                 {translate(readingNames[mark.aspect])}
@@ -206,15 +213,17 @@ function MarkEvidence({ mark, evidence }: { readonly mark: MailEnrichmentMark; r
     }
 
     return (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col gap-2">
             {mark.evidence.map((passage) => {
                 const cited = evidence.passages.get(passage);
                 const words = cited?.text ?? null;
 
+                // Bounded rather than as long as the passage is, which is what the design draws: a card is a summary,
+                // and one quotation running the height of the dialog would push every reading after it off the screen.
                 return (
                     <li
                         key={passage}
-                        className="border-s-2 border-s-line-strong ps-2.5 text-sm text-text-soft text-pretty"
+                        className="max-h-37.5 overflow-y-auto rounded-e-lg border-s-2 border-s-line-strong bg-panel px-3 py-2.5 text-sm text-text-soft text-pretty"
                     >
                         {words ?? <span className="text-faint">{translate(insteadOf(cited))}</span>}
                     </li>
