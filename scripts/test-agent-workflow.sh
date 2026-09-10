@@ -4188,12 +4188,51 @@ run_select_board_status() {
     "$state_file" > "$output_file" 2>&1
 }
 
+# A conflict nothing has a verdict about — no review on the head in front of us — says only that a
+# change which had been ready stopped merging, so it moves an item out of `Ready to merge` and out of
+# nowhere else.
 select_board_status_earns_conflicts_from_ready_to_merge_alone() {
   local output_file="$test_directory/select-board-status-conflicting"
 
   run_select_board_status 'CONFLICTING' "$output_file"
 
   assert_file_content $'Conflicts\tReady to merge\t' "$output_file"
+}
+
+# An approved head that stopped merging is the one `Ready to merge` would describe but for the
+# conflict, so it carries that rule's authority: an approval that met a conflict before its pipelines
+# finished never reached `Ready to merge`, and a rule bounded to that column would leave it in review.
+select_board_status_earns_conflicts_from_any_column_for_an_approved_head() {
+  local output_file="$test_directory/select-board-status-approved-conflicting"
+
+  run_select_board_status 'CONFLICTING' "$output_file" 'current' "$board_state_green_checks"
+
+  assert_file_content $'Conflicts\t\tDone,Blocked' "$output_file"
+}
+
+# A verdict is asked before whether the change still merges. Asked the other way round, a conflicting
+# head would print `Conflicts` for a write refused everywhere but `Ready to merge`, and the withheld
+# approval or the failed check it pre-empted would never be published — the item would stay in review.
+select_board_status_earns_changes_requested_on_a_pull_request_that_stopped_merging() {
+  local output_file
+  local checks
+  local approval
+
+  output_file="$test_directory/select-board-status-conflicting-withheld"
+
+  run_select_board_status 'CONFLICTING' "$output_file" 'commented' "$board_state_green_checks"
+
+  assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
+
+  checks="$(jq -c '.[0].conclusion = "FAILURE"' <<< "$board_state_green_checks")"
+
+  for approval in none current; do
+    output_file="$test_directory/select-board-status-conflicting-failed-${approval}"
+
+    run_select_board_status 'CONFLICTING' "$output_file" "$approval" "$checks"
+
+    assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
+  done
 }
 
 # `UNKNOWN` is the answer GitHub gives while it is still computing one, which is the state every open
@@ -4250,15 +4289,18 @@ select_board_status_earns_nothing_while_a_check_is_still_running() {
   local output_file
   local checks
   local approval
+  local mergeable
 
   checks="$(jq -c '.[0].status = "IN_PROGRESS" | .[0].conclusion = ""' <<< "$board_state_green_checks")"
 
-  for approval in current commented; do
-    output_file="$test_directory/select-board-status-pending-check-${approval}"
+  for mergeable in MERGEABLE CONFLICTING; do
+    for approval in current commented; do
+      output_file="$test_directory/select-board-status-pending-check-${mergeable}-${approval}"
 
-    run_select_board_status 'MERGEABLE' "$output_file" "$approval" "$checks"
+      run_select_board_status "$mergeable" "$output_file" "$approval" "$checks"
 
-    assert_file_content '' "$output_file"
+      assert_file_content '' "$output_file"
+    done
   done
 
   # A check that already failed beside one still running is the same wait. The failure is not going
@@ -4344,8 +4386,10 @@ select_board_status_reads_neither_codeql_nor_its_own_checks() {
 }
 
 # A draft is work being written rather than a change asking for anything, and its checks are red as
-# often as not while it is.
-select_board_status_earns_nothing_on_a_draft() {
+# often as not while it is. The one question still asked of it is whether it merges, because a change
+# converted back to draft from `Ready to merge` owes the rebase exactly as it did before — and that
+# answer keeps its narrower authority, since a draft is asked for no verdict of its own.
+select_board_status_asks_a_draft_only_whether_it_still_merges() {
   local output_file="$test_directory/select-board-status-draft"
   local checks
 
@@ -4354,6 +4398,12 @@ select_board_status_earns_nothing_on_a_draft() {
   run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks" 'true'
 
   assert_file_content '' "$output_file"
+
+  output_file="$test_directory/select-board-status-conflicting-draft"
+
+  run_select_board_status 'CONFLICTING' "$output_file" 'current' "$checks" 'true'
+
+  assert_file_content $'Conflicts\tReady to merge\t' "$output_file"
 }
 
 # The `workflow_run` list has no `workflows-ignore`, so what a pull request runs and what this
@@ -4610,6 +4660,23 @@ pull_request_rules_decide_the_pull_request_a_concluded_pipeline_ran_on() {
   assert_contains 'Deciding pull request 1' "$output_file"
   assert_contains 'option=option-ready' "$board_mutations_file"
   assert_contains 'Issue 12 moved from In review to Ready to merge' "$output_file"
+}
+
+# An approval that met a conflict before its pipelines finished never reached `Ready to merge`, so
+# the item is still in review when the last pipeline concludes — and the conflict is written from
+# there, with the authority the rule states rather than one the step supplies.
+pull_request_rules_move_an_approved_pull_request_that_stopped_merging_out_of_review() {
+  local output_file="$test_directory/pull-request-rules-approved-conflicting-output"
+  local workflow_run_head_sha='head-commit'
+  local commit_pull_requests='[{"number": 1, "state": "open"}]'
+  local reviewed='true'
+  local checks_json='[{"workflow": "CI", "name": "Required CI", "status": "COMPLETED", "conclusion": "SUCCESS"}]'
+
+  run_pull_request_rules_board 'CONFLICTING' 'In review' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-conflicts' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In review to Conflicts' "$output_file"
 }
 
 # A pipeline that ran on `main` itself, or on a head whose pull request has since closed, decides
@@ -10206,6 +10273,8 @@ run_test board_status_moves_an_item_a_rule_is_entitled_to_move
 run_test board_status_leaves_an_item_outside_the_required_statuses
 run_test board_status_stops_writing_when_its_window_is_gone
 run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
+run_test select_board_status_earns_conflicts_from_any_column_for_an_approved_head
+run_test select_board_status_earns_changes_requested_on_a_pull_request_that_stopped_merging
 run_test select_board_status_earns_nothing_until_github_has_decided
 run_test select_board_status_earns_ready_to_merge_when_the_review_and_the_checks_agree
 run_test select_board_status_earns_nothing_from_an_approval_of_an_older_head
@@ -10214,11 +10283,12 @@ run_test select_board_status_earns_changes_requested_from_a_failed_check
 run_test select_board_status_earns_changes_requested_from_a_withheld_approval
 run_test select_board_status_earns_nothing_from_a_withheld_approval_of_an_older_head
 run_test select_board_status_reads_neither_codeql_nor_its_own_checks
-run_test select_board_status_earns_nothing_on_a_draft
+run_test select_board_status_asks_a_draft_only_whether_it_still_merges
 run_test pull_request_rules_listen_to_every_workflow_a_pull_request_runs
 run_test pull_request_rules_move_a_pull_request_that_stopped_merging
 run_test pull_request_rules_move_nothing_for_a_pull_request_that_still_merges
 run_test pull_request_rules_decide_the_pull_request_a_concluded_pipeline_ran_on
+run_test pull_request_rules_move_an_approved_pull_request_that_stopped_merging_out_of_review
 run_test pull_request_rules_decide_nothing_for_a_head_no_open_pull_request_has
 run_test pull_request_rules_wait_for_github_to_decide_mergeability
 run_test pull_request_rules_report_the_pull_requests_the_ceiling_cut

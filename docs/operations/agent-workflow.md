@@ -1022,12 +1022,6 @@ into a pull request that then never reaches `Ready to merge`.
 
 Four rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
 
-- A pull request that **no longer merges** moves the issues it closes from `Ready to merge`
-  to `Conflicts`. `Ready to merge` says the change is waiting on nothing but the owner
-  pressing the button, and a conflict is precisely the discovery that it is not. From
-  `Ready to merge` and from nowhere else — an item still being written, already blocked, or
-  already done says nothing about whether a conflict is news, and a rule that moved those
-  would report the same conflict on every push to `main` for as long as it went unresolved.
 - A **check that failed** on the head earns `Changes requested`, whatever the review said.
   That column says the change is waiting on the agent rather than on the owner, and a red
   pipeline is exactly that whether the objection was written by a reader or produced by a
@@ -1040,27 +1034,45 @@ Four rules live in `.github/pull-request/select-board-status.sh`, read top to bo
   status check cannot block a merge, which is exactly why GitHub's built-in
   `Code changes requested` workflow never fires for it — this rule is the column's only
   writer.
-- An **approved head** earns `Ready to merge`, and this is the rule the pipeline exists for.
-  `Fathom review` reads the diff and cannot see the pipeline, so an approval published while
-  `Required CI` is still running says nothing about whether the change builds; both halves
-  are asked here, where both are visible. Either verdict has to be of the head in front of
-  us — GitHub keeps a review against the commit it was written on — and this one also needs
-  the pull request to read `MERGEABLE` rather than merely not `CONFLICTING`, because a
-  column claiming there is nothing left to wait for is claimed from an answer rather than
-  from the absence of one.
+- An **approved head** earns `Ready to merge` where it still merges and `Conflicts` where it
+  does not, and this is the rule the pipeline exists for. `Fathom review` reads the diff and
+  cannot see the pipeline, so an approval published while `Required CI` is still running
+  says nothing about whether the change builds; both halves are asked here, where both are
+  visible. Either verdict has to be of the head in front of us — GitHub keeps a review
+  against the commit it was written on — and `Ready to merge` also needs the pull request to
+  read `MERGEABLE` rather than merely not `CONFLICTING`, because a column claiming there is
+  nothing left to wait for is claimed from an answer rather than from the absence of one.
+  The two columns carry one authority, every status but `Done` and `Blocked`: both say the
+  reviewer and the pipelines agree, and they differ only in whether the owner merges or the
+  agent rebases. That is what moves an approval that met a conflict before its pipelines
+  finished, which never reached `Ready to merge`.
+- A pull request that **no longer merges** and that none of the rules above describes moves
+  the issues it closes from `Ready to merge` to `Conflicts`. That is a draft, and a head no
+  review has answered: neither carries a verdict, so all the rule can say is that a change
+  which had been ready stopped merging. `Ready to merge` says the change is waiting on
+  nothing but the owner pressing the button, and a conflict is precisely the discovery that
+  it is not. From `Ready to merge` and from nowhere else — an item still being written,
+  already blocked, or already done says nothing about whether a conflict is news, and a rule
+  that moved those would report the same conflict on every push to `main` for as long as it
+  went unresolved.
 
-**The last three are decided only once every pipeline outside the ignored set has finished.**
-That is one condition stated where the checks are counted rather than three copies of it, and
-it holds for both verdicts because both claim something about the whole state of the change:
-`Ready to merge` says nothing is left to wait for, and `Changes requested` says what is owed
-is the agent's answer — while a run still in flight can add to what that answer has to cover.
-So a review published minutes before `Required CI` finishes moves nothing until it does, a
-check that failed beside one still running waits with it, and the pipeline that concludes
-last raises the event that asks again. The conflict rule is the one asked before that wait,
-because a conflict is news about a verdict already published rather than a verdict being
-published.
+**Every rule but a draft's is decided only once every pipeline outside the ignored set has
+finished.** That is one condition stated where the checks are counted rather than a copy of it
+in each rule, and it holds for every verdict because each claims something about the whole
+state of the change: `Ready to merge` and `Conflicts` say nothing is left to wait for but one
+act, and `Changes requested` says what is owed is the agent's answer — while a run still in
+flight can add to what that answer has to cover. So a review published minutes before
+`Required CI` finishes moves nothing until it does, a check that failed beside one still
+running waits with it, and the pipeline that concludes last raises the event that asks again.
 
-Two sets of checks are not read, and a draft earns none of the last three rules. `CodeQL`
+**Whether the change still merges is asked after the verdicts, not before them.** A conflict
+is not an answer to what a reader or a pipeline objected to: a head the reviewer withheld
+approval on owes the answer and the rebase both, and the column that says the agent owes
+something is `Changes requested`. Asked first, the conflict rule would print a status whose
+write is refused everywhere but `Ready to merge`, and the verdict it pre-empted would never be
+published — the item would stay in `In review` until a hand moved it.
+
+Two sets of checks are not read, and a draft earns none of the verdicts. `CodeQL`
 is not a required check on `main`: a finding there is worth acting on and does not make the
 change unmergeable, so reading it would hold every pull request out of `Ready to merge` for
 a question the ruleset does not ask. `Apply pull request rules`'s own checks are not read
@@ -1073,7 +1085,7 @@ That is also why `CodeQL` may still be running when a verdict is published: it i
 the wait for the same reason it is outside the rules, which is that merging does not wait on
 it either.
 
-The conflict rule is asked before that, and deliberately: it is true of an item already in
+A draft is still asked the last rule, and deliberately: it is true of an item already in
 `Ready to merge`, which is a pull request that had been ready and has since stopped merging.
 Converting one back to draft does not make the conflict less true, and the rebase is owed
 either way, so a draft still leaves that column when its branch stops merging.
