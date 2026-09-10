@@ -272,7 +272,11 @@ records it. **Concurrency has no ceiling of its own here either**: how many acco
 `Mail:MaxConcurrentAccounts`, and how many provider calls are in flight is
 `Resilience:AiProviderInvocation:ConcurrencyLimit`. What this section adds is a *rate* for the description workload —
 `Embeddings:ImageDescription:MaxRequestsPerMinute`, paced separately from the embedding provider's, because the two are
-different endpoints with different published quotas.
+different endpoints with different published quotas. That rate is the *deployment's* — its slot marker is a row every
+replica moves — while the concurrency limit beside it stays each process's, which is the split
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md)
+records: a rate names a quota the provider counts across the deployment, and an in-flight count names what one process
+has open.
 
 **Reaching a ceiling waits rather than fails.** Both are read before a message is opened, so the account run ends where
 it is with that message untouched and unstamped. The surrounding synchronization run succeeds, nothing is dropped — a

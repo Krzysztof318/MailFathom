@@ -550,7 +550,11 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
-            ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+            ProviderRequestPacer.Create(
+                ProviderPacedWorkloads.EmailEmbedding,
+                maxRequestsPerMinute: 0,
+                new InMemoryProviderPaceMarker(TimeProvider.System),
+                TimeProvider.System),
             ownership ?? new StubMailOwnership(),
             egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }

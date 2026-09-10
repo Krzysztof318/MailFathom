@@ -268,13 +268,16 @@ Three settings bound the volume instead, and each answers a different question:
 | Bound | Setting | Default | The question it answers | Scope |
 | --- | --- | --- | --- | --- |
 | Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? | One folder run |
-| In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole process |
-| Per user | `MaxStoredContentBytesPerUser` | *(none)* | How much of that may one person hold? | One user, process-wide |
-| At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | The whole process |
+| In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole deployment |
+| Per user | `MaxStoredContentBytesPerUser` | *(none)* | How much of that may one person hold? | One user, deployment-wide |
+| At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | One process — a deployment of *n* replicas may hold *n* × this in memory |
 
-Three of the four are process-wide, and that is the point of them rather than an implementation detail: each bounds a
-resource every concurrent folder run draws on at once, so a per-run version of any of them would be no bound at all. The
-per-user one is process-wide in the same sense and is simply counted per person rather than once.
+Three of the four bound something no per-run version could bound: each names a resource every concurrent folder run
+draws on at once. The first two are the *deployment's*, and they mean it — the storage they bound is one content store
+however many replicas write into it, so the reservation a run holds between deciding and writing lives in that store
+rather than in the process that took it. The buffer bound is the one that stays a process's, because what it bounds is
+that process's own memory; a deployment running several replicas gets that much per replica, which is the honest
+reading and the one an operator sizing a container needs.
 
 All four are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
 times rather than three rules: a bound smaller than a single message would not make that message rare, it would make it
@@ -327,24 +330,29 @@ There is deliberately **no default ceiling**. No number MailFathom could pick wo
 guessed too low would stop a healthy deployment from storing mail. Unset means content storage is bounded by the disk,
 which is what a deployment gets until it says otherwise.
 
-**The ceiling is one budget for the process, not one per run.** Several folder work units write into the same content
-store at the same moment, so a ceiling each of them evaluated against its own measurement would let every one of them
-find the same room and take it — and the deployment would pass the configured limit by as much as those runs were
-allowed to fetch between them. Room is therefore *claimed* from a single process-wide ceiling before a payload is
-fetched, and kept only for what was actually stored: an abandoned fetch, a message that had left the folder, and a
-rolled-back commit each give their claim back, so the level tracks what storage holds rather than what runs intended to
-put there.
+**The ceiling is one budget for the deployment, not one per run and not one per replica.** Several folder work units
+write into the same content store at the same moment — in one process and, above one replica, in several — so a ceiling
+each of them evaluated against its own measurement would let every one of them find the same room and take it, and the
+deployment would pass the configured limit by as much as those runs were allowed to fetch between them.
 
-Each run still measures the store when it begins, and that measurement replaces the level rather than accumulating on
-top of it, so space a vacuum reclaimed is noticed. Bytes claimed while the measurement was in flight are carried onto
-the new reading instead of being overwritten by it, and a measurement older than one already adopted is discarded — two
-runs measuring at once cannot make the newer reading lose to the slower query.
+Room is therefore *claimed* in the content store itself before a payload is fetched, in one statement that sweeps what
+has expired, measures what storage occupies plus what every unexpired claim reserves, decides against both ceilings, and
+writes the claim — serialized so that two claims made at the same moment cannot both be admitted against the same
+reading. A claim is given back once the payload has reached storage or been abandoned: an abandoned fetch, a message
+that had left the folder, and a rolled-back commit each release theirs, so what binds tracks what storage holds or is
+about to rather than what runs intended to put there. A claim whose holder stopped answering expires after five
+minutes, which is what stops a replica that died from reserving room forever.
 
-What the level is measured as is PostgreSQL's own accounting of what the content table occupies — its heap, its indexes,
-and the out-of-line storage the payloads live in — read from the catalog in constant time rather than summed over the
-rows. That is the quantity a disk fills with, and it is cheap enough to read once per folder run. Two consequences
-follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage overhead is
-part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
+Nothing is remembered between claims, so nothing has to be re-measured when a run begins and no reading can go stale:
+the occupancy and the outstanding claims are read inside the statement that takes the claim, on the database's clock
+rather than on any replica's. A deployment that configures neither ceiling takes no claim and never reaches the
+claim table, which is what keeps the cost of a bound on the deployments that asked for one.
+
+What the occupancy is measured as is PostgreSQL's own accounting of what the content table occupies — its heap, its
+indexes, and the out-of-line storage the payloads live in — read from the catalogue in constant time rather than summed
+over the rows. That is the quantity a disk fills with. Two consequences follow from it and are intended: the number is
+somewhat above the sum of the message sizes, because storage overhead is part of what fills a disk; and space a
+deletion freed counts as occupied until the database reclaims it.
 
 ### One user's share stops their mail and nobody else's
 
@@ -359,8 +367,9 @@ content whole.
 The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
 different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
 that person to wait. A run that left messages for both reasons reports both, one measurement each, so neither remedy
-is hidden by the other. One message is deferred by one of them rather than by both, because the instance's room is
-claimed first and a user is never charged for a payload the instance had no room for.
+is hidden by the other. One message is deferred by one of them rather than by both: both ceilings are answered from one
+reading, and where both are reached the instance's refusal is the one reported, because raising a person's share
+changes nothing while the instance itself is full.
 
 **The two ceilings are counted in different quantities, deliberately.** The instance's is what the disk fills with,
 which only PostgreSQL's catalog can report; a user's is what their payloads hold, because a catalog answers for a

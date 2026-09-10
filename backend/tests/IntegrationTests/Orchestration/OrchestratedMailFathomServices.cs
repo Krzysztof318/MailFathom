@@ -366,7 +366,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // The process-wide buffer bound, registered by the composition root for the same reason. It is generous here
         // because the suite runs one work unit at a time and nothing it asserts is about waiting for the budget.
         builder.Services.AddSingleton(new RawMimeMemoryBudget(64L * 1024L * 1024L));
-        builder.Services.AddSingleton(new StoredContentCeiling(ceilingBytes: null));
+        // Scoped for the reason the composition root registers it that way: what it claims against is a row every
+        // replica moves, reached through the scoped session that owns the connection.
+        builder.Services.AddScoped(provider => new StoredContentCeiling(
+            provider.GetRequiredService<IStoredContentClaimStore>(),
+            ceilingBytes: null));
         builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new MailboxConvergenceOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
@@ -387,8 +391,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // rate. The per-message bound is reachable rather than shipped, for the reason its constant states.
         builder.Services.AddSingleton(EmbeddingInputBound.Create(EmbeddingInputCharacterCeiling));
         builder.Services.AddSingleton(EmbeddingSpendBudget.Unbounded);
-        builder.Services.AddSingleton(ProviderRequestPacer.Create(
+        builder.Services.AddScoped(provider => ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
             maxRequestsPerMinute: 0,
+            provider.GetRequiredService<IProviderPaceMarker>(),
             TimeProvider.System));
         // The attachment reading's own two ceilings and its own rate, on the same terms: nothing here reaches a chat
         // provider, so the budget bounds nothing and the pacer delays nothing. Registered rather than left out because
@@ -396,9 +402,13 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // the deriver takes the pacer by key — so the first orchestrated test to resolve an attachment pass would fail
         // to build the container rather than fail an assertion.
         builder.Services.AddSingleton(AttachmentDerivationBudget.Unbounded);
-        builder.Services.AddKeyedSingleton(
+        builder.Services.AddKeyedScoped(
             ServiceCollectionExtensions.ImageDescriptionPacerKey,
-            (_, _) => ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
+            (provider, _) => ProviderRequestPacer.Create(
+                ProviderPacedWorkloads.AttachmentImageDescription,
+                maxRequestsPerMinute: 0,
+                provider.GetRequiredService<IProviderPaceMarker>(),
+                TimeProvider.System));
         // The bounds a composition root reads from the EmbeddingBackfill section. Small here on purpose: a test that
         // proves a walk is bounded needs the bound to be reachable within the mail it stored.
         builder.Services.AddSingleton(new StoredEmailEmbeddingBackfillOptions

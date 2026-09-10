@@ -281,6 +281,13 @@ fewer round trips rather than more work in flight.
 which already caps it. A job waiting on the per-type ceiling holds none of the instance-wide one, so a bulk
 re-evaluation of one kind of work is never the reason another kind never runs.
 
+**Both concurrency ceilings are one process's.** What they bound is the threads, the connections, and the memory of the
+process holding the jobs, which is a quantity a second replica has its own of — so a deployment running *n* replicas
+runs up to *n* × `MaxConcurrentJobs` at once, and that is the figure to hold against a database's connection limit or a
+remote dependency's own concurrency.
+[ADR 0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) records why an in-flight
+count stays a process's where a rate and a spend become the deployment's.
+
 `MaxQueueDepthPerType` bounds what may be waiting rather than what is running. An enqueue against a queue already
 holding that many jobs of a type is refused and says so, and the caller slows down, asks again later, or stops
 producing — the work is neither queued nor lost, and a request whose work is already queued is answered with that job
@@ -314,8 +321,8 @@ instant.
 | --- | --- | --- | --- | --- |
 | `Jobs:Enabled` | bool | `true` | turning it off leaves enqueued work where it is, for a replica that runs it | restart |
 | `Jobs:BatchSize` | int | `5` | 1 – 100; how many jobs one pass claims. Each of them waits for a concurrency slot, so this bounds what one claim takes rather than what runs at once | restart |
-| `Jobs:MaxConcurrentJobs` | int | `4` | 1 – 32; how many jobs this instance runs at once, across every type together. Kept well below the connection pool a stock connection string provides, so the pool is never what expresses the limit | restart |
-| `Jobs:MaxConcurrentJobsPerType` | int | `2` | 1 – 32, and at most `Jobs:MaxConcurrentJobs`; how many jobs of one type run at once. A job waiting on this holds none of the instance-wide ceiling | restart |
+| `Jobs:MaxConcurrentJobs` | int | `4` | 1 – 32; how many jobs this instance runs at once, across every type together. **One process's** — a deployment of *n* replicas runs up to *n* × this, which is deliberate, because what it bounds is the process's own threads and connections. Kept well below the connection pool a stock connection string provides, so the pool is never what expresses the limit | restart |
+| `Jobs:MaxConcurrentJobsPerType` | int | `2` | 1 – 32, and at most `Jobs:MaxConcurrentJobs`; how many jobs of one type run at once. **One process's**, multiplying by the replica count exactly as the ceiling above does. A job waiting on this holds none of the instance-wide ceiling | restart |
 | `Jobs:MaxQueueDepthPerType` | int | `10000` | 1 – 1000000; how many jobs of one type may be waiting before enqueuing is refused as backpressure. Applies whether or not `Jobs:Enabled` is on | restart |
 | `Jobs:LeaseDuration` | TimeSpan | `00:05:00` | 2 s – 1 h; how long work stays held after the process running it stops existing, which is the delay before a crash is recovered from | restart |
 | `Jobs:ExecutionTimeout` | TimeSpan | `00:02:00` | 1 s – 1 h, and strictly shorter than `Jobs:LeaseDuration`; exceeding it cancels the job, which counts as a transient failure and is attempted again. Raise it where this kind of work legitimately takes longer | restart |
@@ -344,7 +351,7 @@ Settings, per class:
 | `Resilience:<Class>:CircuitBreakerFailureRatio` | double | 0.01 – 1.0 |
 | `Resilience:<Class>:CircuitBreakerMinimumThroughput` | int | 2 – 1000 |
 | `Resilience:<Class>:CircuitBreakerSamplingDuration` / `CircuitBreakerBreakDuration` | TimeSpan | — |
-| `Resilience:<Class>:ConcurrencyLimit` | int | 1 – 1000 |
+| `Resilience:<Class>:ConcurrencyLimit` | int | 1 – 1000; **one process's** — a deployment of *n* replicas admits up to *n* × this at once, so divide it by the replica count where a remote dependency's own concurrency is what is being respected |
 
 Defaults, per class:
 

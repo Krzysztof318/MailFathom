@@ -187,7 +187,7 @@ public sealed class DiscoveryPlanningAgentTests
 
         // Assert
         Assert.Equal(new MailAnsweringRunSpend(1, 18, 0, 0), runLedger.Read());
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(11, 7));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(11, 7), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A run with no allowance left for another call is refused before anything leaves the deployment.</summary>

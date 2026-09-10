@@ -541,15 +541,19 @@ internal static class HostComposition
             provider.GetRequiredService<MailSynchronizationOptions>().ToConvergenceOptions());
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().ToSynchronizationOptions());
-        // A singleton, because the ceilings are one answer for the one content store every account writes into. Reading
-        // them per scope would give each concurrent folder run ceilings of its own, which is the sum they exist to
-        // bound — and the per-user level would stop bounding anything at all, since two runs of one user would each
-        // hold a level the other could not see.
-        builder.Services.AddSingleton(provider =>
+        // Scoped, although the ceilings are one answer for the one content store every account writes into, because
+        // nothing about that answer is held here any more: what a claim is admitted against is read inside the
+        // statement that takes it, so a run holds the configured numbers and no state a second run could disagree
+        // with. That is also what makes the bound the deployment's rather than the process's — a level held in memory
+        // would be a level the other replicas could not see.
+        builder.Services.AddScoped(provider =>
         {
             var settings = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current;
 
-            return new StoredContentCeiling(settings.MaxStoredContentBytes, settings.MaxStoredContentBytesPerUser);
+            return new StoredContentCeiling(
+                provider.GetRequiredService<IStoredContentClaimStore>(),
+                settings.MaxStoredContentBytes,
+                settings.MaxStoredContentBytesPerUser);
         });
         // A singleton, because what it bounds is the memory of the whole process rather than of any one run: a budget read
         // per scope would give every concurrent work unit a budget of its own, which is the sum this exists to bound. That
@@ -772,17 +776,24 @@ internal static class HostComposition
         // singleton for the same reason the budget above is: it is a statement about this installation.
         builder.Services.AddSingleton(provider =>
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.ToAttachmentDerivationBudget());
-        // A singleton because the reservation it hands out is what makes one process's requests add up to the declared
-        // rate; one per scope would let every worker send at the full rate on its own.
-        builder.Services.AddSingleton(provider => ProviderRequestPacer.Create(
+        // Scoped, although what it paces is the deployment's rate rather than a scope's, because the reservation it
+        // hands out is a row every replica moves rather than a field this process holds: there is nothing left here for
+        // a second instance to disagree with, and the marker is reached through the scoped session that owns the
+        // connection.
+        builder.Services.AddScoped(provider => ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.MaxRequestsPerMinute,
+            provider.GetRequiredService<IProviderPaceMarker>(),
             provider.GetRequiredService<TimeProvider>()));
         // The second pacer, keyed because it is the second: describing pictures is its own workload against its own
         // chat quota, and one pacer shared with embedding would let either workload's burst spend the other's slots.
-        builder.Services.AddKeyedSingleton(
+        // It names its own marker for the same reason, so the two rates queue on two rows rather than on one.
+        builder.Services.AddKeyedScoped(
             ServiceCollectionExtensions.ImageDescriptionPacerKey,
             (provider, _) => ProviderRequestPacer.Create(
+                ProviderPacedWorkloads.AttachmentImageDescription,
                 provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.ImageDescription.MaxRequestsPerMinute,
+                provider.GetRequiredService<IProviderPaceMarker>(),
                 provider.GetRequiredService<TimeProvider>()));
 
         // Read the same way and for the same reason as the embedding declaration: whether this deployment generates text

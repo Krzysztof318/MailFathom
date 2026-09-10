@@ -15,6 +15,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -640,7 +641,11 @@ public sealed class EmailAttachmentTextDeriverTests
 
     /// <summary>A pacer that never waits, so what these tests measure is the walk rather than a rate.</summary>
     private static ProviderRequestPacer Unpaced() =>
-        ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System);
+        ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.AttachmentImageDescription,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(TimeProvider.System),
+            TimeProvider.System);
 
     private static EmailAttachmentTextRunBudget Budget() => new(1024L * 1024);
 

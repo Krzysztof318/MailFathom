@@ -2853,7 +2853,7 @@ public sealed class MailboxSynchronizerTests
             contentInventory ?? new InMemoryStoredEmailContentInventory(),
             userContentLedger ?? new InMemoryUserStoredContentLedger(),
             new StubMailOwnership(),
-            storedContentCeiling ?? new StoredContentCeiling(ceilingBytes: null),
+            storedContentCeiling ?? new StoredContentCeiling(new InMemoryStoredContentClaimStore(), ceilingBytes: null),
             rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             mutations,
@@ -3040,7 +3040,9 @@ public sealed class MailboxSynchronizerTests
             [metadata],
             occurrence.Uid,
             inventory: inventory,
-            storedContentCeiling: new StoredContentCeiling(1000));
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                1000));
 
         // Act
         var result = await arrangement.Synchronizer.SynchronizeAsync(MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId), InboxMapping, CancellationToken.None);
@@ -3088,7 +3090,10 @@ public sealed class MailboxSynchronizerTests
         var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
         var metadata = MetadataOf(occurrence, 600);
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
-        var ceiling = new StoredContentCeiling(100_000, 1000);
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(900)
+            .Holding(SyntheticMailUser.Deployment, 900);
+        var ceiling = new StoredContentCeiling(claims, 100_000, 1000);
         var arrangement = ArrangeContentRun(
             options,
             uidValidity,
@@ -3120,8 +3125,8 @@ public sealed class MailboxSynchronizerTests
 
         // The refusal gave the deployment's claim straight back, so somebody else's run finds the instance's room where
         // it was — which is what makes the bound one person's share rather than a slower way to fill the deployment.
-        var elsewhere = ceiling.TryClaim(SyntheticMailUser.Another, 600);
-        using var claim = elsewhere.Claim;
+        var elsewhere = await ceiling.TryClaimAsync(SyntheticMailUser.Another, 600, TestContext.Current.CancellationToken);
+        await using var claim = elsewhere.Claim;
         Assert.NotNull(claim);
         Assert.Equal(StoredContentBound.None, elsewhere.ReachedBound);
     }
@@ -3153,7 +3158,9 @@ public sealed class MailboxSynchronizerTests
             [],
             inspectedThroughUid: null,
             inventory: inventory,
-            storedContentCeiling: new StoredContentCeiling(100_000),
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                100_000),
             classificationSettings: ClassifyingTheInbox());
         StubRetrievedContent(arrangement.Session, options, deferred, 600);
 
@@ -3188,7 +3195,9 @@ public sealed class MailboxSynchronizerTests
             [],
             inspectedThroughUid: null,
             inventory: inventory,
-            storedContentCeiling: new StoredContentCeiling(100_000));
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                100_000));
         StubRetrievedContent(arrangement.Session, options, deferred, 600);
 
         // Act
@@ -3197,7 +3206,12 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(1, result.ContentVolume.RefilledEmailCount);
         Assert.Equal(600, result.ContentVolume.StoredBytes);
-        Assert.Equal(1500, result.ContentVolume.StoredContentBytes);
+
+        // What the catalogue answered as the run ended, rather than a figure the run added up as it went: the ceiling
+        // is the deployment's, so what storage holds is what every replica's writes left there and not what this run
+        // put in. The inventory here answers the same 900 it was arranged with, which is what a catalogue that has not
+        // been re-measured reports.
+        Assert.Equal(900, result.ContentVolume.StoredContentBytes);
         await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(deferred, options.MaxRawMimeBytes, CancellationToken.None);
         await arrangement.MetadataRepository.Received(1).UpsertMetadataAsync(
             Arg.Any<IPersistenceSession>(),
@@ -3245,7 +3259,9 @@ public sealed class MailboxSynchronizerTests
             [],
             inspectedThroughUid: null,
             inventory: inventory,
-            storedContentCeiling: new StoredContentCeiling(100_000));
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                100_000));
         arrangement.Session
             .FetchEmailContentWithoutSettingSeenAsync(departed, options.MaxRawMimeBytes, CancellationToken.None)
             .Returns(RemoteEmailContentFetchResult.NoLongerHeld());
@@ -3276,7 +3292,9 @@ public sealed class MailboxSynchronizerTests
             [],
             inspectedThroughUid: null,
             inventory: inventory,
-            storedContentCeiling: new StoredContentCeiling(1000));
+            storedContentCeiling: new StoredContentCeiling(
+                new InMemoryStoredContentClaimStore().HoldingInTotal(900),
+                1000));
 
         // Act
         var result = await arrangement.Synchronizer.SynchronizeAsync(MailAccountIdentity.Create(SyntheticMailUser.Deployment, accountId), InboxMapping, CancellationToken.None);

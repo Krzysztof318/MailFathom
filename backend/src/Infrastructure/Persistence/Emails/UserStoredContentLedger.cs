@@ -245,7 +245,7 @@ internal sealed class UserStoredContentLedger(MailFathomDbContext dbContext) : I
     /// which only <c>EmbeddingSpendGate</c> reaches. So the refusal belongs here rather than at a caller: without it an
     /// unnamed user would be given a counter row of its own keyed by an empty identifier, and bytes would be counted,
     /// maintained, and re-derived for "nobody" — which reads as a working figure until somebody asks whose it was.
-    /// <c>StoredContentCeiling.LevelOf</c> refuses the same argument for the same reason.
+    /// <c>StoredContentCeiling</c> refuses the same argument for the same reason.
     /// </remarks>
     private static Guid RequireNamedUser(MailUserId user)
     {

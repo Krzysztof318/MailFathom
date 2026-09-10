@@ -61,6 +61,8 @@
          the embedding run alike, so the two doubles that answer them are linked wherever either is arranged. -->
     <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
     <Compile Include="..\shared\InMemoryUserStoredContentLedger.cs" Link="InMemoryUserStoredContentLedger.cs" />
+    <Compile Include="..\shared\InMemoryStoredContentClaimStore.cs" Link="InMemoryStoredContentClaimStore.cs" />
+    <Compile Include="..\shared\InMemoryProviderPaceMarker.cs" Link="InMemoryProviderPaceMarker.cs" />
   </ItemGroup>
 
   <ItemGroup>

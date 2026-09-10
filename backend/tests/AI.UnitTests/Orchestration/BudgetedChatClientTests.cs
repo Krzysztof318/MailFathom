@@ -74,7 +74,7 @@ public sealed class BudgetedChatClientTests
         await client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken);
 
         // Assert
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(90, 30));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(90, 30), Arg.Any<CancellationToken>());
         await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(
             () => client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken));
     }
@@ -92,7 +92,7 @@ public sealed class BudgetedChatClientTests
         await client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken);
 
         // Assert
-        spendLedger.DidNotReceive().RecordSpend(Arg.Any<ChatTokenUsage>());
+        await spendLedger.DidNotReceive().RecordSpendAsync(Arg.Any<ChatTokenUsage>(), Arg.Any<CancellationToken>());
         await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(
             () => client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken));
     }

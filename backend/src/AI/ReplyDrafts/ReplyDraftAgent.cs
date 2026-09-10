@@ -130,7 +130,7 @@ internal sealed class ReplyDraftAgent : IReplyDraftWriter
         // rather than being a second, unmetered way of reaching the provider. The refusal travels because a person
         // pressed a button: falling back here would leave them typing into a composer and waiting for a draft that
         // this deployment had already decided not to pay for.
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }

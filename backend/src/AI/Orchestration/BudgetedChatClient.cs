@@ -65,7 +65,7 @@ internal sealed class BudgetedChatClient : Microsoft.Extensions.AI.DelegatingCha
             var usage = new ChatTokenUsage(reported.InputTokenCount ?? 0, reported.OutputTokenCount ?? 0);
 
             this.runLedger.RecordSpend(usage);
-            this.spendLedger.RecordSpend(usage);
+            await this.spendLedger.RecordSpendAsync(usage, cancellationToken);
         }
 
         return response;

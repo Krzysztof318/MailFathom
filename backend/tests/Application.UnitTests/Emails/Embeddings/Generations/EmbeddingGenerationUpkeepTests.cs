@@ -290,7 +290,11 @@ public sealed class EmbeddingGenerationUpkeepTests
                         new InMemoryEmbeddingSpendLedger(),
                         EmbeddingSpendBudget.Unbounded,
                         new FakeTimeProvider()),
-                    ProviderRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+                    ProviderRequestPacer.Create(
+                        ProviderPacedWorkloads.EmailEmbedding,
+                        maxRequestsPerMinute: 0,
+                        new InMemoryProviderPaceMarker(TimeProvider.System),
+                        TimeProvider.System),
                     new StubMailOwnership(),
                     SensitiveContentEgressGuards.Inactive()),
                 concurrencyRetryPolicy,

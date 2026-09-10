@@ -175,7 +175,7 @@ public sealed class MailboxQuestionReader
                 : MailAnsweringUnavailableException.TemporarilyUnable();
         }
 
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }

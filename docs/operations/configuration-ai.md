@@ -285,7 +285,7 @@ next, never what a search is currently able to do; only an activation does that.
 | `Embeddings:AllowTrimVectors` | bool | `false` | with it off, a declared dimension above 2000 is refused at startup; with it on, a wider answer is cut to the declared width and renormalized | restart |
 | `Embeddings:MaxPassagesPerRequest` | int | `64` | 1 – 2048; the batch bound, applied before the provider sees a request | restart |
 | `Embeddings:RequestTimeout` | TimeSpan | `00:01:00` | positive; one request to one endpoint | restart |
-| `Embeddings:MaxQueuedEmails` | int | `1024` | 1 – 1000000; newly synchronized messages that may wait to be embedded at once, beyond which synchronization stops offering and the backfill reaches the rest | restart |
+| `Embeddings:MaxQueuedEmails` | int | `1024` | 1 – 1000000; newly synchronized messages that may wait to be embedded at once, beyond which synchronization stops offering and the backfill reaches the rest. **One process's**, because the queue is this process's own memory: a deployment of *n* replicas may hold *n* × this waiting | restart |
 
 ### What an instance is willing to spend
 
@@ -298,7 +298,7 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message. Charged twice per message and never more: once against the body, and once against every attachment of that message together, in walk order | restart |
-| `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
+| `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it. **The deployment's, not each replica's** — the slot marker is a row every replica moves forward, which is what makes the declared rate the one the provider sees | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
 | `Embeddings:MaxInputCharactersPerPeriodPerUser` | long | `0` | zero or positive; the characters one period may send for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
 | `Embeddings:SpendPeriod` | TimeSpan | `1.00:00:00` | 1 min – 31 days; the fixed window the ceiling is counted over, anchored at the Unix epoch so every restart places it identically | restart |
@@ -336,7 +336,9 @@ the number.
 **Concurrency is not here.** How many provider calls may be in flight at once is
 `Resilience:AiProviderInvocation:ConcurrencyLimit`, which is the one setting that owns that question; [outbound
 resilience](../architecture/outbound-resilience.md) holds it, and a second limiter beside it would make two keys answer
-for one behaviour.
+for one behaviour. It is also **one process's** rather than the deployment's, and deliberately so: an in-flight count
+is what a process's own sockets, threads, and memory are spent on, so a deployment of *n* replicas may have *n* × that
+many calls in flight. Divide it by the replica count where the provider's own concurrency is what is being respected.
 
 ### Describing an image attachment — `Embeddings:ImageDescription`
 
@@ -373,7 +375,7 @@ the passage and the embedding are delivered and the ranking is not, and no tool 
 | `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent. A value outside the range stops the start, naming this key | restart |
 | `Embeddings:ImageDescription:MaxDescriptionsPerPeriod` | long | `0` | zero or positive; the description calls one period may make. `0` declares no ceiling at all, which is the default and means an enabled feature can produce a bill nobody agreed to. Counted in calls rather than in characters, because a chat provider prices a picture per request rather than per word | restart |
 | `Embeddings:ImageDescription:MaxDescriptionsPerPeriodPerUser` | long | `0` | zero or positive, and at most `MaxDescriptionsPerPeriod` where that is set; the calls one period may make for any **one** user. `0` declares no per-user ceiling, which is what a deployment serving one user wants | restart |
-| `Embeddings:ImageDescription:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a chat provider whose quota is stated per minute; a caller takes the next free slot and waits for it, and it paces this workload alone rather than sharing the embedding provider's rate | restart |
+| `Embeddings:ImageDescription:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a chat provider whose quota is stated per minute; a caller takes the next free slot and waits for it, and it paces this workload alone rather than sharing the embedding provider's rate. **The deployment's, not each replica's**, on its own marker row beside the embedding workload's | restart |
 
 **What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
 is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
@@ -807,10 +809,13 @@ hour, so a refused caller has a roll-over instant to come back at. A client that
 of one window and again at the start of the next has therefore spent twice the ceiling across an interval of the same
 length.
 
-Unlike the embedding ceiling, this ledger is **process-local and not durable**: a restart begins the current window with
-nothing spent. The difference is deliberate and is stated rather than implied — an embedding sweep charges inside a
-transaction that was committing vectors anyway, while answering opens no write of its own, so a durable count here would
-put a database write on the path of every provider call in every run.
+Like the embedding ceiling, this ledger is **the deployment's and it is durable**: the period is one row every replica
+admits against, so a restart resumes the window where the deployment left it and three replicas share the configured
+allowance rather than each getting the whole of it. The write is made once per admitted run rather than once per
+provider call, which is what [ADR
+0031](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md) settled: a rate and a spend
+become the deployment's, and what it costs to make them so is a write beside a run that is already about to spend a
+provider's tokens.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -822,8 +827,8 @@ put a database write on the path of every provider call in every run.
 | `MailAnswering:MaxAnswerCharacters` | int | `20000` | 1 – 1000000; how much of the model's answer one response carries. Cut rather than refused, and the response says it was cut | restart |
 | `MailAnswering:MaxCitations` | int | `20` | 1 – 1000; how many messages one response names. Cut the same way and reported the same way | restart |
 | `MailAnswering:AggregatePeriod` | TimeSpan | `01:00:00` | positive; how long one period lasts before what was spent in it is forgotten. An hour rather than a day, because a ceiling an operator only meets once a day is one they meet after the spend has happened | restart |
-| `MailAnswering:MaxRunsPerPeriod` | int | `30` | 1 – 1000000; the ceiling on how enthusiastic a client may be. Nothing about the MCP surface stops one from asking a hundred questions in a minute, and without this a per-run ceiling bounds each of those hundred and none of the total. A question over it is refused with `57001` | restart |
-| `MailAnswering:MaxTokensPerPeriod` | long | `300000` | 1 – 10000000000; the same ceiling in what a provider bills. Checked before a run begins, against what the runs of this period have consumed so far | restart |
+| `MailAnswering:MaxRunsPerPeriod` | int | `30` | 1 – 1000000; the ceiling on how enthusiastic a client may be. Nothing about the MCP surface stops one from asking a hundred questions in a minute, and without this a per-run ceiling bounds each of those hundred and none of the total. A question over it is refused with `57001`. **The deployment's, not each replica's** — the period is a ledger row every replica admits against, so what the deployment spends is what was configured | restart |
+| `MailAnswering:MaxTokensPerPeriod` | long | `300000` | 1 – 10000000000; the same ceiling in what a provider bills. Checked before a run begins, against what the runs of this period have consumed so far — every replica's, from the same ledger row, so this is **the deployment's** rather than each replica's | restart |
 
 ## `EmbeddingBackfill`
 

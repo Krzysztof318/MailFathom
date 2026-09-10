@@ -163,7 +163,10 @@ internal static class SynchronizationTestHost
         // Bounded generously, so no test here waits on a budget it never meant to exercise: what these tests are about
         // is the supervisor's scheduling and failure isolation, and the budget itself is asserted where it lives.
         services.AddSingleton(new RawMimeMemoryBudget(long.MaxValue));
-        services.AddSingleton(new StoredContentCeiling(ceilingBytes: null));
+        services.AddSingleton<IStoredContentClaimStore>(new InMemoryStoredContentClaimStore());
+        services.AddSingleton(provider => new StoredContentCeiling(
+            provider.GetRequiredService<IStoredContentClaimStore>(),
+            ceilingBytes: null));
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
         services.AddSingleton(CreateMutationStoreWithNothingRecorded());
@@ -323,7 +326,11 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<ISensitiveContentPostures>());
         services.AddSingleton(Substitute.For<ISensitiveContentDerivationTelemetry>());
         services.AddScoped<SensitiveContentDerivationGuard>();
-        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, TimeProvider.System));
+        services.AddSingleton(ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(TimeProvider.System),
+            TimeProvider.System));
         services.AddScoped<EmailAttachmentTextDeriver>();
 
         // The two aggregate ceilings the pass reads before it opens a message, composed against an empty ledger and a

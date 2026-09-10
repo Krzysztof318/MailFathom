@@ -250,7 +250,7 @@ public sealed class DiscoveryCompositionAgentTests
 
         // Assert
         Assert.Equal(new MailAnsweringRunSpend(1, 49, 0, 0), runLedger.Read());
-        spendLedger.Received(1).RecordSpend(new ChatTokenUsage(40, 9));
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(40, 9), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A run with no allowance left is refused before the mail is sent, which is the one failure the composition does not answer around.</summary>

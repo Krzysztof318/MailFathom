@@ -8,8 +8,9 @@ namespace MailFathom.Application.Synchronization;
 /// <param name="FetchedBytes">How many raw MIME bytes the run read from the mail server.</param>
 /// <param name="StoredBytes">How many of those bytes reached local content storage.</param>
 /// <param name="StoredContentBytes">
-/// How much local storage the stored content occupies now, which is what it occupied when the run began plus what the
-/// run wrote. It is the level a ceiling is compared against, so it is reported whether or not one is configured.
+/// How much local storage the stored content occupies, measured as the run ends. It is the operator's reading of the
+/// quantity a ceiling is set against rather than a figure any decision was taken from, so it is reported whether or not
+/// a ceiling is configured.
 /// </param>
 /// <param name="DeferredForStorageEmailCount">
 /// How many occurrences were recorded without their content because the deployment's storage had reached its ceiling.

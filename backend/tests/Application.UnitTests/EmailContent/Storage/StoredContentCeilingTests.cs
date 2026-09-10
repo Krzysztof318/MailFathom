@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -12,294 +11,337 @@ namespace MailFathom.Application.UnitTests.EmailContent.Storage;
 public sealed class StoredContentCeilingTests
 {
     [Fact]
-    public void TryClaim_WithinBothCeilings_TakesTheRoomAndReportsTheNewLevel()
+    public async Task TryClaimAsync_WithinBothCeilings_TakesTheRoom()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(1000, 800);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 200, measuredUserBytes: 200);
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(200)
+            .Holding(SyntheticMailUser.Deployment, 200);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 800);
 
         // Act
-        var attempt = ceiling.TryClaim(SyntheticMailUser.Deployment, 300);
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            300,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        using var claim = attempt.Claim;
+        await using var claim = attempt.Claim;
         Assert.NotNull(claim);
         Assert.Equal(StoredContentBound.None, attempt.ReachedBound);
         Assert.Equal(300, claim.ClaimedBytes);
-        Assert.Equal(500, ceiling.OccupiedBytes);
-        Assert.Equal(500, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
+        Assert.Equal(300, claims.ReservedBytes);
     }
 
-    /// <summary>The ceiling holds across the runs that share it, which is the whole reason it is not a per-run value.</summary>
+    /// <summary>The ceiling holds across everything that shares the store, which is why the claim is not a process's.</summary>
     /// <remarks>
-    /// Several folder work units run at the same moment by default. Each of them measures the store before it writes,
-    /// so a ceiling each of them evaluated for itself would let every one of them find the same room and take it — and
-    /// the deployment would pass its configured limit by as much as those runs were allowed to fetch between them.
+    /// Several folder work units run at the same moment by default, in one process and — above one replica — in
+    /// several. Each of them would read the same pre-write occupancy, so a claim each of them held for itself would let
+    /// every one of them find the same room and take it, and the deployment would pass its configured limit by as much
+    /// as those runs were allowed to fetch between them.
     /// </remarks>
     [Fact]
-    public void TryClaim_SeveralRunsAgainstOneMeasurement_StopsAtTheCeilingRatherThanPerRun()
+    public async Task TryClaimAsync_SeveralRunsAgainstOneOccupancy_StopsAtTheCeilingRatherThanPerRun()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 0, measuredUserBytes: 0);
+        var claims = new InMemoryStoredContentClaimStore();
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
 
         // Act
-        // Every run reads the same pre-write occupancy, exactly as concurrent runs would.
-        var attempts = Enumerable
-            .Range(0, 4)
-            .Select(_ => ceiling.TryClaim(SyntheticMailUser.Deployment, 400))
-            .ToArray();
+        var attempts = new List<StoredContentClaimAttempt>();
+
+        for (var run = 0; run < 4; run++)
+        {
+            attempts.Add(await ceiling.TryClaimAsync(
+                SyntheticMailUser.Deployment,
+                400,
+                TestContext.Current.CancellationToken));
+        }
 
         // Assert
         Assert.Equal(2, attempts.Count(attempt => attempt.Claim is not null));
-        Assert.Equal(800, ceiling.OccupiedBytes);
+        Assert.Equal(800, claims.ReservedBytes);
 
         foreach (var attempt in attempts)
         {
-            attempt.Claim?.Dispose();
+            await DisposeAsync(attempt);
         }
     }
 
-    /// <summary>A refusal names the wider fact, because raising one user's share would not answer a full instance.</summary>
+    /// <summary>A claim one replica took binds the next, which is what makes the ceiling the deployment's.</summary>
+    /// <remarks>
+    /// Two ceilings over one store are what two replicas are: each reads the same occupancy and neither can see what
+    /// the other reserved since. Sharing the claims is the whole of the difference, and without it both would admit a
+    /// payload the store has room for only once.
+    /// </remarks>
     [Fact]
-    public void TryClaim_TheDeploymentHasNoRoom_RefusesNamingTheDeployment()
+    public async Task TryClaimAsync_AClaimAnotherReplicaHolds_RefusesTheSecondPayload()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(1000, 1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 900, measuredUserBytes: 100);
+        var claims = new InMemoryStoredContentClaimStore();
+        var oneReplica = new StoredContentCeiling(claims, ceilingBytes: 1000);
+        var anotherReplica = new StoredContentCeiling(claims, ceilingBytes: 1000);
 
         // Act
-        var attempt = ceiling.TryClaim(SyntheticMailUser.Deployment, 200);
+        var first = await oneReplica.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            700,
+            TestContext.Current.CancellationToken);
+        var second = await anotherReplica.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            700,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(first.Claim);
+        Assert.Null(second.Claim);
+        Assert.Equal(StoredContentBound.Deployment, second.ReachedBound);
+
+        await DisposeAsync(first);
+    }
+
+    [Fact]
+    public async Task TryClaimAsync_ThePayloadWouldPassTheDeploymentCeiling_RefusesAndNamesIt()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore().HoldingInTotal(900);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 1000);
+
+        // Act
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            200,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(attempt.Claim);
         Assert.Equal(StoredContentBound.Deployment, attempt.ReachedBound);
-        Assert.Equal(900, ceiling.OccupiedBytes);
+        Assert.Equal(0, claims.ReservedBytes);
     }
 
-    /// <summary>A user at their share is a different fact from a full instance, and the refusal has to say which.</summary>
     [Fact]
-    public void TryClaim_TheUserIsAtTheirShare_RefusesNamingTheUserAndGivesTheDeploymentClaimBack()
+    public async Task TryClaimAsync_OneUserAtTheirShareWhileTheDeploymentHasRoom_RefusesAndNamesTheUser()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(10_000, 1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 900, measuredUserBytes: 900);
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(300)
+            .Holding(SyntheticMailUser.Deployment, 300);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 400);
 
         // Act
-        var attempt = ceiling.TryClaim(SyntheticMailUser.Deployment, 200);
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            200,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(attempt.Claim);
         Assert.Equal(StoredContentBound.User, attempt.ReachedBound);
-
-        // The deployment's level is taken first, so a refusal by the user has to hand it straight back: leaving it
-        // charged would let one user meeting their share consume room the rest of the instance is entitled to.
-        Assert.Equal(900, ceiling.OccupiedBytes);
-        Assert.Equal(900, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
     }
 
-    /// <summary>What one user's share bounds is that user's mail, and nobody else's run notices.</summary>
-    /// <remarks>
-    /// This is the whole point of bounding storage per user rather than only per deployment: an instance serving
-    /// several people stops storing content for the one who has reached their share and keeps storing it whole for
-    /// everybody else, instead of every mailbox on the deployment degrading together.
-    /// </remarks>
+    /// <summary>Both refusals at once report the deployment's, because raising a share changes nothing while it is full.</summary>
     [Fact]
-    public void TryClaim_OneUserIsAtTheirShare_LeavesAnotherUserStoringContentNormally()
+    public async Task TryClaimAsync_BothCeilingsReached_ReportsTheDeploymentRatherThanTheUser()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(10_000, 1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 1200, measuredUserBytes: 1000);
-        Measure(ceiling, SyntheticMailUser.Another, measuredBytes: 1200, measuredUserBytes: 200);
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(900)
+            .Holding(SyntheticMailUser.Deployment, 900);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: 1000);
 
         // Act
-        var refused = ceiling.TryClaim(SyntheticMailUser.Deployment, 300);
-        var admitted = ceiling.TryClaim(SyntheticMailUser.Another, 300);
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            200,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        using var claim = admitted.Claim;
-        Assert.Null(refused.Claim);
-        Assert.Equal(StoredContentBound.User, refused.ReachedBound);
+        Assert.Equal(StoredContentBound.Deployment, attempt.ReachedBound);
+    }
+
+    /// <summary>One user's share is theirs, so another user's payloads never count against it.</summary>
+    [Fact]
+    public async Task TryClaimAsync_AnotherUserHoldingTheirShare_LeavesThisUsersRoomWhole()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore()
+            .HoldingInTotal(800)
+            .Holding(SyntheticMailUser.Another, 800);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 10_000, userCeilingBytes: 900);
+
+        // Act
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            700,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(attempt.Claim);
+
+        await DisposeAsync(attempt);
+    }
+
+    /// <summary>A claim nothing wrote is given back, so an abandoned fetch leaves the ceiling where it found it.</summary>
+    [Fact]
+    public async Task DisposeAsync_AClaimNothingWrote_GivesTheRoomBack()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore();
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            900,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await DisposeAsync(attempt);
+
+        // Assert
+        Assert.Equal(0, claims.OutstandingClaimCount);
+        Assert.Equal(0, claims.ReservedBytes);
+    }
+
+    /// <summary>Releasing twice releases once, because the expiry covers a holder that never reached disposal.</summary>
+    [Fact]
+    public async Task DisposeAsync_TheSameClaimTwice_ReleasesItOnce()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore();
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            400,
+            TestContext.Current.CancellationToken);
+        var claim = attempt.Claim;
         Assert.NotNull(claim);
-        Assert.Equal(StoredContentBound.None, admitted.ReachedBound);
-        Assert.Equal(500, ceiling.OccupiedBytesFor(SyntheticMailUser.Another));
-        Assert.Equal(1000, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
-    }
-
-    /// <summary>Room claimed for a payload that was never written goes back, so an abandoned fetch costs nothing.</summary>
-    [Fact]
-    public void Dispose_ClaimThatStoredNothing_ReturnsTheRoomToBothLevels()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(1000, 1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 100, measuredUserBytes: 100);
 
         // Act
-        using (var claim = ceiling.TryClaim(SyntheticMailUser.Deployment, 500).Claim)
-        {
-            Assert.NotNull(claim);
-        }
+        await claim.DisposeAsync();
+        await claim.DisposeAsync();
 
         // Assert
-        Assert.Equal(100, ceiling.OccupiedBytes);
-        Assert.Equal(100, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
+        Assert.Equal(0, claims.OutstandingClaimCount);
     }
 
-    /// <summary>A payload smaller than its advertised size gives the difference back to both levels.</summary>
+    /// <summary>A replica that died holds room until its claim expires, and no longer.</summary>
     [Fact]
-    public void Settle_StoredLessThanClaimed_KeepsOnlyWhatWasStored()
+    public async Task TryClaimAsync_AClaimWhoseHolderStoppedAnswering_AdmitsAgainOnceItHasExpired()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(1000, 1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 100, measuredUserBytes: 100);
-
-        // Act
-        using (var claim = ceiling.TryClaim(SyntheticMailUser.Deployment, 500).Claim)
-        {
-            claim!.Settle(200);
-        }
-
-        // Assert
-        Assert.Equal(300, ceiling.OccupiedBytes);
-        Assert.Equal(300, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
-    }
-
-    /// <summary>A measurement taken while another run was writing keeps those bytes rather than overwriting them.</summary>
-    /// <remarks>
-    /// The reading describes the store as it was when the query ran, so bytes claimed after that moment are not in it.
-    /// Adopting the reading alone would forget them, and the ceiling would drift below what storage actually holds by
-    /// however much was written during every measurement.
-    /// </remarks>
-    [Fact]
-    public void Observe_ClaimTakenWhileMeasuring_CarriesItOntoTheNewReading()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(10_000, 10_000);
-        var markBeforeMeasuring = ceiling.MarkBefore(SyntheticMailUser.Deployment);
-
-        // Act
-        // A concurrent run claims and stores while the measurement is in flight.
-        var concurrent = ceiling.TryClaim(SyntheticMailUser.Deployment, 700);
-        concurrent.Claim!.Settle(700);
-        ceiling.Observe(
+        var claims = new InMemoryStoredContentClaimStore();
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: 1000);
+        var abandoned = await ceiling.TryClaimAsync(
             SyntheticMailUser.Deployment,
-            measuredBytes: 1000,
-            measuredUserBytes: 400,
-            markBeforeMeasuring);
+            900,
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(abandoned.Claim);
 
-        // Assert
-        Assert.Equal(1700, ceiling.OccupiedBytes);
-        Assert.Equal(1100, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
-    }
-
-    /// <summary>A slower measurement does not overwrite a newer one that already landed.</summary>
-    [Fact]
-    public void Observe_MeasurementOlderThanOneAlreadyAdopted_IsDiscarded()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(10_000, 10_000);
-        var olderMark = ceiling.MarkBefore(SyntheticMailUser.Deployment);
-        using var claim = ceiling.TryClaim(SyntheticMailUser.Deployment, 500).Claim;
-        claim!.Settle(500);
-        var newerMark = ceiling.MarkBefore(SyntheticMailUser.Deployment);
-
-        // Act
-        ceiling.Observe(SyntheticMailUser.Deployment, measuredBytes: 4000, measuredUserBytes: 3000, newerMark);
-        ceiling.Observe(SyntheticMailUser.Deployment, measuredBytes: 100, measuredUserBytes: 50, olderMark);
-
-        // Assert
-        Assert.Equal(4000, ceiling.OccupiedBytes);
-        Assert.Equal(3000, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
-    }
-
-    /// <summary>With no ceiling configured nothing is ever refused, and both levels are still tracked.</summary>
-    [Fact]
-    public void TryClaim_NoCeilingConfigured_AlwaysGrantsRoom()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(ceilingBytes: null);
-        Measure(
-            ceiling,
+        var refusedWhileHeld = await ceiling.TryClaimAsync(
             SyntheticMailUser.Deployment,
-            measuredBytes: 500_000_000,
-            measuredUserBytes: 500_000_000);
+            900,
+            TestContext.Current.CancellationToken);
 
         // Act
-        var attempt = ceiling.TryClaim(SyntheticMailUser.Deployment, 100_000_000);
+        claims.ExpireEveryClaim();
+
+        var admittedAfterExpiry = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            900,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        using var claim = attempt.Claim;
+        Assert.Equal(StoredContentBound.Deployment, refusedWhileHeld.ReachedBound);
+        Assert.NotNull(admittedAfterExpiry.Claim);
+
+        await DisposeAsync(admittedAfterExpiry);
+    }
+
+    /// <summary>A deployment that bounds neither population reaches no store at all.</summary>
+    [Fact]
+    public async Task TryClaimAsync_NeitherCeilingConfigured_GrantsWithoutClaimingAnything()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore().HoldingInTotal(long.MaxValue / 2);
+        var ceiling = new StoredContentCeiling(claims, ceilingBytes: null);
+
+        // Act
+        var attempt = await ceiling.TryClaimAsync(
+            SyntheticMailUser.Deployment,
+            900,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(attempt.Claim);
+        Assert.Equal(0, claims.OutstandingClaimCount);
         Assert.False(ceiling.IsConfigured);
         Assert.False(ceiling.IsConfiguredPerUser);
-        Assert.NotNull(claim);
-        Assert.Equal(600_000_000, ceiling.OccupiedBytes);
-        Assert.Equal(600_000_000, ceiling.OccupiedBytesFor(SyntheticMailUser.Deployment));
+
+        await DisposeAsync(attempt);
     }
 
-    /// <summary>A deployment bounding only itself leaves every user free of a share, which is the default shape.</summary>
     [Fact]
-    public void TryClaim_OnlyTheDeploymentIsBounded_AdmitsWhateverThatCeilingAdmits()
+    public async Task TryClaimAsync_AUserNamingNobody_IsRefused()
     {
         // Arrange
-        var ceiling = new StoredContentCeiling(1000);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 0, measuredUserBytes: 0);
+        var ceiling = new StoredContentCeiling(new InMemoryStoredContentClaimStore(), ceilingBytes: 1000);
 
         // Act
-        var attempt = ceiling.TryClaim(SyntheticMailUser.Deployment, 900);
-
         // Assert
-        using var claim = attempt.Claim;
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => ceiling.TryClaimAsync(default, 100, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task TryClaimAsync_APayloadOfNoSize_IsRefused(long bytes)
+    {
+        // Arrange
+        var ceiling = new StoredContentCeiling(new InMemoryStoredContentClaimStore(), ceilingBytes: 1000);
+
+        // Act
+        // Assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => ceiling.TryClaimAsync(SyntheticMailUser.Deployment, bytes, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Constructor_ACeilingOfNoSize_IsRefused()
+    {
+        // Arrange
+        var claims = new InMemoryStoredContentClaimStore();
+
+        // Act
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => new StoredContentCeiling(claims, ceilingBytes: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new StoredContentCeiling(claims, ceilingBytes: 1000, userCeilingBytes: -1));
+    }
+
+    [Fact]
+    public void Constructor_WithoutAClaimStore_IsRefused()
+    {
+        // Arrange
+        // Act
+        // Assert
+        Assert.Throws<ArgumentNullException>(() => new StoredContentCeiling(null!, ceilingBytes: 1000));
+    }
+
+    [Fact]
+    public void Constructor_BothCeilingsConfigured_ReportsBothAsConfigured()
+    {
+        // Arrange
+        var ceiling = new StoredContentCeiling(
+            new InMemoryStoredContentClaimStore(),
+            ceilingBytes: 1000,
+            userCeilingBytes: 400);
+
+        // Act
+        // Assert
         Assert.True(ceiling.IsConfigured);
-        Assert.False(ceiling.IsConfiguredPerUser);
-        Assert.NotNull(claim);
+        Assert.True(ceiling.IsConfiguredPerUser);
     }
 
-    /// <summary>A ceiling is measured and claimed for a named user, so every member refuses one naming nobody.</summary>
-    /// <remarks>
-    /// Without the refusal an unnamed user would be given a level of its own, and bytes would be admitted against a
-    /// ceiling for "nobody" — which reads as a working bound until somebody asks whose share it was.
-    /// </remarks>
-    [Fact]
-    public void EveryMember_AUserNamingNobody_IsRefused()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(1000, 800);
-        var nobody = default(MailUserId);
-
-        // Act, Assert
-        Assert.Throws<ArgumentException>(() => ceiling.MarkBefore(nobody));
-        Assert.Throws<ArgumentException>(() => ceiling.OccupiedBytesFor(nobody));
-        Assert.Throws<ArgumentException>(() => ceiling.Observe(nobody, 100, 100, default));
-        Assert.Throws<ArgumentException>(() => ceiling.TryClaim(nobody, 100));
-    }
-
-    /// <summary>The refusal leaves nothing claimed, because a claim whose scope was never handed back is never released.</summary>
-    [Fact]
-    public void TryClaim_AUserNamingNobody_LeavesTheDeploymentLevelUntouched()
-    {
-        // Arrange
-        var ceiling = new StoredContentCeiling(1000, 800);
-        Measure(ceiling, SyntheticMailUser.Deployment, measuredBytes: 200, measuredUserBytes: 200);
-
-        // Act
-        Assert.Throws<ArgumentException>(() => ceiling.TryClaim(default, 300));
-
-        // Assert
-        Assert.Equal(200, ceiling.OccupiedBytes);
-    }
-
-    [Fact]
-    public void Constructor_ACeilingThatIsNotPositive_IsRefused()
-    {
-        // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => new StoredContentCeiling(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new StoredContentCeiling(1000, -1));
-    }
-
-    private static void Measure(
-        StoredContentCeiling ceiling,
-        MailUserId user,
-        long measuredBytes,
-        long measuredUserBytes) =>
-        ceiling.Observe(user, measuredBytes, measuredUserBytes, ceiling.MarkBefore(user));
+    private static ValueTask DisposeAsync(StoredContentClaimAttempt attempt) =>
+        attempt.Claim?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

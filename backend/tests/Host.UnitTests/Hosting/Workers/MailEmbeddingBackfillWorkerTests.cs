@@ -525,7 +525,11 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddSingleton(spendBudget ?? EmbeddingSpendBudget.Unbounded);
         services.AddSingleton(
             CreateLedgerReporting(consumedInputCharacterCount, deploymentConsumedInputCharacterCount));
-        services.AddSingleton(ProviderRequestPacer.Create(maxRequestsPerMinute: 0, world.TimeProvider));
+        services.AddSingleton(ProviderRequestPacer.Create(
+            ProviderPacedWorkloads.EmailEmbedding,
+            maxRequestsPerMinute: 0,
+            new InMemoryProviderPaceMarker(world.TimeProvider),
+            world.TimeProvider));
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();

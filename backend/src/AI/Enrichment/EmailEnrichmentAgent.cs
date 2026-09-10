@@ -135,7 +135,7 @@ internal sealed class EmailEnrichmentAgent : IEmailEnricher
 
         // Admitted before anything is composed or scanned, so a period this deployment has already spent costs nothing
         // to refuse. The count is what stops enrichment from spending an allowance a question would otherwise have.
-        if (!this.spendLedger.TryAdmitRun())
+        if (!await this.spendLedger.TryAdmitRunAsync(cancellationToken))
         {
             return this.Withhold(EmailEnrichmentWithholding.AllowanceExhausted);
         }

@@ -4,6 +4,7 @@
 
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Accounts.Configurations;
+using MailFathom.Infrastructure.Persistence.AiProviders.Configurations;
 using MailFathom.Infrastructure.Persistence.Answering.Configurations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts.Configurations;
@@ -77,6 +78,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<UserStoredContentEntity> UserStoredContent => this.Set<UserStoredContentEntity>();
 
+    internal DbSet<StoredContentClaimEntity> StoredContentClaims => this.Set<StoredContentClaimEntity>();
+
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
     internal DbSet<MailFolderEntity> MailFolders => this.Set<MailFolderEntity>();
@@ -96,6 +99,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<EmailEmbeddingEntity> EmailEmbeddings => this.Set<EmailEmbeddingEntity>();
 
     internal DbSet<EmbeddingSpendPeriodEntity> EmbeddingSpendPeriods => this.Set<EmbeddingSpendPeriodEntity>();
+
+    internal DbSet<ProviderPaceMarkerEntity> ProviderPaceMarkers => this.Set<ProviderPaceMarkerEntity>();
 
     internal DbSet<AttachmentDerivationSpendPeriodEntity> AttachmentDerivationSpendPeriods =>
         this.Set<AttachmentDerivationSpendPeriodEntity>();
@@ -167,6 +172,9 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
 
+    internal DbSet<MailAnsweringSpendPeriodEntity> MailAnsweringSpendPeriods =>
+        this.Set<MailAnsweringSpendPeriodEntity>();
+
     internal DbSet<MailAnsweringAuditEntryEntity> MailAnsweringAuditEntries =>
         this.Set<MailAnsweringAuditEntryEntity>();
 
@@ -210,6 +218,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new UserPortraitConfiguration());
         modelBuilder.ApplyConfiguration(new UserStoredContentConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredContentClaimConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());
         modelBuilder.ApplyConfiguration(new StoredEmailConfiguration());
@@ -220,6 +229,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EmbeddingProfileConfiguration());
         modelBuilder.ApplyConfiguration(new EmailEmbeddingConfiguration());
         modelBuilder.ApplyConfiguration(new EmbeddingSpendPeriodConfiguration());
+        modelBuilder.ApplyConfiguration(new ProviderPaceMarkerConfiguration());
         modelBuilder.ApplyConfiguration(new AttachmentDerivationSpendPeriodConfiguration());
         modelBuilder.ApplyConfiguration(new EmailContentRepairRequestConfiguration());
         modelBuilder.ApplyConfiguration(new EmailSpamClassificationConfiguration());
@@ -251,6 +261,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MailDraftAttachmentConfiguration());
         modelBuilder.ApplyConfiguration(new MailDraftAttachmentContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxMutationAuditEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new MailAnsweringSpendPeriodConfiguration());
         modelBuilder.ApplyConfiguration(new MailAnsweringAuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new MailAnsweringAuditedEmailConfiguration());
         modelBuilder.ApplyConfiguration(new MailRuleExecutionConfiguration());

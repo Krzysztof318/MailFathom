@@ -1066,6 +1066,25 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_answering_audited_emails", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringSpendPeriodEntity", b =>
+                {
+                    b.Property<DateTimeOffset>("PeriodStartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("PeriodStartsAt");
+
+                    b.Property<int>("AdmittedRunCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("AdmittedRunCount");
+
+                    b.Property<long>("ConsumedTokenCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ConsumedTokenCount");
+
+                    b.HasKey("PeriodStartsAt");
+
+                    b.ToTable("mail_answering_spend_periods", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentContentEntity", b =>
                 {
                     b.Property<Guid>("MailDraftAttachmentId")
@@ -2181,6 +2200,22 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("outgoing_email_recipients", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ProviderPaceMarkerEntity", b =>
+                {
+                    b.Property<string>("Workload")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("Workload");
+
+                    b.Property<DateTimeOffset>("NextSlotAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("NextSlotAt");
+
+                    b.HasKey("Workload");
+
+                    b.ToTable("provider_pace_markers", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
                 {
                     b.Property<Guid>("RecurringSendId")
@@ -2415,6 +2450,31 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasName("pk_spam_classification_runs");
 
                     b.ToTable("spam_classification_runs", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredContentClaimEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<long>("ClaimedByteCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ClaimedByteCount");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ExpiresAt");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("stored_content_claims", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
