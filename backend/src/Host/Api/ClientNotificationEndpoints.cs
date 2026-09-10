@@ -12,11 +12,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves the signed-in person their own notification centre: what happened, how much of it is unread, and both ways of marking it read.</summary>
+/// <summary>Serves the signed-in person their own notification centre: what happened, how much of it is unread, both ways of marking it read, and taking rows out of it for good.</summary>
 /// <remarks>
 /// <para>
-/// Four routes over one person's own working state. The centre is a list newest first, a count on its own for the bell
-/// that draws a badge without opening the panel, one notification's read state, and the control that clears the lot.
+/// Five routes over one person's own working state. The centre is a list newest first, a count on its own for the bell
+/// that draws a badge without opening the panel, one notification's read state, the control that clears the lot, and
+/// the erasure that takes named rows out of it.
 /// </para>
 /// <para>
 /// <b>Nothing here streams.</b> This surface has no server-sent events and gains none for this, so a client asks on an
@@ -31,11 +32,14 @@ namespace MailFathom.Host.Api;
 /// nobody holds — so nothing here reports whether such a notification exists.
 /// </para>
 /// <para>
-/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the two writes included.</b> Marking a notification
-/// read changes what this deployment draws for one person about mail they can already see; it reaches no mail server
-/// and moves nothing in a mailbox. It is the preferences write's reasoning rather than the mutation routes': a person
-/// whose mail accounts an administrator maintains does not hold a write grant and still has to be able to clear their
-/// own bell. Nothing here is a power a credential granted to read a mailbox did not already have.
+/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the three writes included.</b> Marking a
+/// notification read, and taking one out of the centre, each change what this deployment draws for one person about
+/// mail they can already see; neither reaches a mail server and neither moves anything in a mailbox — what an erasure
+/// removes is a record this deployment derived, and the message it pointed at stays exactly where it is, which is why
+/// it is not <see cref="MailFathomPermission.MailDelete" />. It is the preferences write's reasoning rather than the
+/// mutation routes': a person whose mail accounts an administrator maintains does not hold a write grant and still has
+/// to be able to clear their own bell. Nothing here is a power a credential granted to read a mailbox did not already
+/// have.
 /// </para>
 /// <para>
 /// <b>The page is clamped rather than refused.</b> Every other paged reading in this repository serves an operator
@@ -248,7 +252,7 @@ internal static class ClientNotificationEndpoints
         // An empty identifier addresses nothing and the domain refuses to wrap one, so it is dropped here rather than
         // becoming a failed request: a caller that sent it named nothing, which is what an erasure of nothing answers.
         var erased = await notifications.EraseAsync(
-            [.. named.Where(named2 => named2 != Guid.Empty).Select(NotificationId.Create)],
+            [.. named.Where(identifier => identifier != Guid.Empty).Select(NotificationId.Create)],
             cancellationToken);
 
         return TypedResults.Ok(new ClientDeletedNotificationsResponse(
