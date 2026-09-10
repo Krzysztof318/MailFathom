@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
-import { actPending, nothingActed, type MailboxAct, type MailboxActs } from './useMailboxActs';
+import { actPending, nothingActed, opensAsDraft, type MailboxAct, type MailboxActs } from './useMailboxActs';
 
 const email: MailTimelineEntry = {
     id: 'message-1',
@@ -64,5 +64,23 @@ describe('actPending', () => {
     it('stops saying a message is being marked unread once the deployment reports it unread', () => {
         expect(actPending(asking('markUnread'), email)).toBe('markUnread');
         expect(actPending(asking('markUnread'), { ...email, unread: true })).toBeNull();
+    });
+});
+
+// Where a message opens is decided by what its own account calls the folder it is in rather than by what the folder
+// is named: a deployment whose drafts folder is `Entwürfe` still opens one in the composer.
+describe('opensAsDraft', () => {
+    it('says a message in the folder its account labels for drafts is one to carry on writing', () => {
+        expect(opensAsDraft({ ...nothingActed, folderRoleOf: () => 'Drafts' }, email)).toBe(true);
+    });
+
+    it('says a message in any other folder is one to read', () => {
+        expect(opensAsDraft({ ...nothingActed, folderRoleOf: () => 'Inbox' }, email)).toBe(false);
+    });
+
+    // A session that may not file mail reads no folders at all, so nothing says which folder is for drafts — and a
+    // message opened as mail is the answer that costs a reader nothing.
+    it('says a message is one to read where no folder was read at all', () => {
+        expect(opensAsDraft(nothingActed, email)).toBe(false);
     });
 });

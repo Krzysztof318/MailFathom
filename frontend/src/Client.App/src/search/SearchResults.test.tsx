@@ -7,6 +7,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { everything } from '../workspace/mailScope';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -112,6 +113,8 @@ interface Drawn {
     readonly online: boolean;
     readonly narrowed: boolean;
     readonly onWiden: () => void;
+    readonly acts: MailboxActs;
+    readonly onOpenDraft: ((storedEmailId: string) => void) | null;
 }
 
 // Opening is the frame's, exactly as it is for the message list, so this stands in for what the frame does with the
@@ -123,6 +126,7 @@ function ResultsOpeningIntoTheWorkspace(drawn: {
     readonly online: boolean;
     readonly narrowed: boolean;
     readonly onWiden: () => void;
+    readonly onOpenDraft: ((storedEmailId: string) => void) | null;
 }) {
     const { revise } = useWorkspace();
 
@@ -138,21 +142,31 @@ function ResultsOpeningIntoTheWorkspace(drawn: {
 
 function resultsUnder(
     transport: MailFathomTransport,
-    { ask = anywhere, online = true, narrowed = false, onWiden = () => undefined }: Partial<Drawn> = {},
+    {
+        ask = anywhere,
+        online = true,
+        narrowed = false,
+        onWiden = () => undefined,
+        acts = nothingActed,
+        onOpenDraft = null,
+    }: Partial<Drawn> = {},
 ): ReactElement {
     return (
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <ResultsOpeningIntoTheWorkspace
-                    session={session}
-                    transport={transport}
-                    ask={ask}
-                    online={online}
-                    narrowed={narrowed}
-                    onWiden={onWiden}
-                />
-                <SelectionProbe />
-            </WorkspaceProvider>
+            <MailboxActsContext value={acts}>
+                <WorkspaceProvider>
+                    <ResultsOpeningIntoTheWorkspace
+                        session={session}
+                        transport={transport}
+                        ask={ask}
+                        online={online}
+                        narrowed={narrowed}
+                        onWiden={onWiden}
+                        onOpenDraft={onOpenDraft}
+                    />
+                    <SelectionProbe />
+                </WorkspaceProvider>
+            </MailboxActsContext>
         </LocalizationProvider>
     );
 }
@@ -400,6 +414,41 @@ describe('SearchResults', () => {
 
         expect(carried().selection).toBe('message-2');
         expect(await rows()).toHaveLength(2);
+    });
+
+    // A search reaches across every folder, so a drafts folder is among what it can find. What a reader asked for
+    // there is the words back under their own cursor rather than the reading pane, exactly as in the list — and the
+    // frame is what performs it, this column only saying which result was opened.
+    it('asks the frame to carry a draft on rather than opening it in the reading pane', async () => {
+        const carriedOn = vi.fn();
+
+        render(
+            resultsUnder(answering(pageOf([result(1)])), {
+                acts: { ...nothingActed, folderRoleOf: () => 'Drafts' },
+                onOpenDraft: carriedOn,
+            }),
+        );
+
+        const found = await rows();
+
+        fireEvent.pointerDown(found[0] ?? document.body);
+
+        expect(carriedOn).toHaveBeenCalledWith('message-1');
+        expect(carried().selection).toBeNull();
+    });
+
+    // Nothing about a draft changes what the column does where the frame offered no way to carry one on: the result
+    // opens as any other does, rather than being a row that answers nothing when it is pressed.
+    it('opens a draft in the reading pane where the frame offered no composer to carry it on in', async () => {
+        render(
+            resultsUnder(answering(pageOf([result(1)])), { acts: { ...nothingActed, folderRoleOf: () => 'Drafts' } }),
+        );
+
+        const found = await rows();
+
+        fireEvent.pointerDown(found[0] ?? document.body);
+
+        expect(carried().selection).toBe('message-1');
     });
 
     it('opens the result the keyboard is on', async () => {

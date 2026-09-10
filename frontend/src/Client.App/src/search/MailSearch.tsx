@@ -72,6 +72,7 @@ export function MailSearch({
     online,
     children,
     onOpen,
+    onOpenDraft,
     now = systemClock,
 }: {
     readonly session: ClientSession;
@@ -88,6 +89,9 @@ export function MailSearch({
 
     /** Opens a result, handed straight to the results below — the reason `MessageList` gives. */
     readonly onOpen: (storedEmailId: string, subject: string | null) => void;
+
+    /** Opens a result that is a draft in the composer, or `null` where the frame has no composer to open one in. */
+    readonly onOpenDraft: ((storedEmailId: string) => void) | null;
 
     /**
      * What the current instant is, which is the calendar day the deployment resolves a relative expression against.
@@ -316,6 +320,7 @@ export function MailSearch({
                             setAsk(widened(ask));
                         }}
                         onOpen={onOpen}
+                        onOpenDraft={onOpenDraft}
                     />
                 </>
             )}

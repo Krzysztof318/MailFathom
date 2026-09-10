@@ -26,7 +26,7 @@ import { Skeleton } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
-import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
+import { opensAsDraft, useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
 import { useComposing } from '../composer/useComposing';
 import { MessageReading } from '../messageRows/MessageReading';
 import { leadingReading, readingsOf } from '../messageRows/messageReadings';
@@ -522,8 +522,22 @@ export function MessageList({
         const email = rowAt(held, row);
 
         if (email !== null) {
-            onOpen(email.id, email.subject, email.threadId);
+            opened(email);
         }
+    }
+
+    // What pressing a row does, which is not one thing: a draft is a message somebody was writing, so it opens in the
+    // composer they were writing it in rather than in the pane that reads mail. Everything else is the frame's to
+    // place, which is what `onOpen` asks for. A client whose credential may not write mail composes nothing, so a
+    // draft opens there as an ordinary message rather than as a control that does nothing.
+    function opened(email: MailTimelineEntry): void {
+        if (composing.offered && opensAsDraft(acts, email)) {
+            composing.compose({ kind: 'draft', storedEmailId: email.id });
+
+            return;
+        }
+
+        onOpen(email.id, email.subject, email.threadId);
     }
 
     function point(event: PointerEvent<HTMLLIElement>, row: number): void {
@@ -566,7 +580,7 @@ export function MessageList({
         // as open, and a selection is the modifier's, the drag's, the menu's, or the keyboard's to make.
         dragging.current = true;
         setAnchor(email.id);
-        onOpen(email.id, email.subject, email.threadId);
+        opened(email);
     }
 
     // Closing the menu puts focus back on the row it was opened from, because that is where the reader was: a menu

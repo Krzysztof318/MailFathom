@@ -4,6 +4,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
+    readMailBody,
     readMailMessage,
     type ClientFailureReason,
     type ClientSession,
@@ -18,7 +19,14 @@ import { sizeOf } from '../localization/octets';
 import { useLocalization } from '../localization/useLocalization';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { useToasts, type Toast } from '../toasts/useToasts';
-import { anythingWritten, answerTo, nothingWrittenYet, type ComposerOpening, type Composition } from './composition';
+import {
+    anythingWritten,
+    answerTo,
+    draftContinued,
+    nothingWrittenYet,
+    type ComposerOpening,
+    type Composition,
+} from './composition';
 import { DiscardConfirmation } from './DiscardConfirmation';
 import { forgetComposition, rememberComposition, rememberedComposition } from './keptComposition';
 import { RecipientField } from './RecipientField';
@@ -110,8 +118,9 @@ const withdrawalTitle = {
 const reachableControls =
     'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
 
-const titles: Readonly<Record<'new' | MailDraftAnswer, MessageKey>> = {
+const titles: Readonly<Record<'new' | 'draft' | MailDraftAnswer, MessageKey>> = {
     new: 'compose.titleNew',
+    draft: 'compose.titleDraft',
     senderOnly: 'compose.titleReply',
     everyone: 'compose.titleReplyAll',
     forward: 'compose.titleForward',
@@ -189,6 +198,41 @@ export function Composer({
         };
     }, [session, transport, opening]);
 
+    // A draft is read the same way an answer is, and in two reads rather than one: the message route describes who it
+    // is for and what it is about, and the body route is what holds the words. The body is asked for without the
+    // sender's own markup, because what goes back into the composer is the reduced tree rather than markup this client
+    // never parses — `draftWords.ts` is where that reading is stated. A body that could not be read opens the draft on
+    // what the message route did answer, so the addresses and the subject are not lost with the words.
+    useEffect(() => {
+        if (opening.kind !== 'draft') {
+            return;
+        }
+
+        let listening = true;
+
+        void Promise.all([
+            readMailMessage(session, transport, opening.storedEmailId),
+            readMailBody(session, transport, opening.storedEmailId, { remoteImages: false, fullHtml: false }),
+        ]).then(([answer, body]) => {
+            if (!listening) {
+                return;
+            }
+
+            if (answer.outcome === 'failed') {
+                setReading({ kind: 'unread', reason: answer.failure.reason });
+
+                return;
+            }
+
+            setKnown([...new Set(answer.value.headers.participants.map((participant) => participant.address))]);
+            setComposition((held) => held ?? draftContinued(answer.value, body.outcome === 'read' ? body.value : null));
+        });
+
+        return () => {
+            listening = false;
+        };
+    }, [session, transport, opening]);
+
     // The local draft, kept continuously so that a reload returns to what was being written rather than to nothing.
     // A browser store is something outside React, which is what an effect synchronizes with.
     useEffect(() => {
@@ -198,14 +242,16 @@ export function Composer({
     }, [composition]);
 
     // Opening the composer is a view change, so focus goes into it rather than staying on the control that opened it.
-    // Once, as the fields appear, on the first one there is to write in — the words for an answer, whose recipients are
-    // written already, and the recipients for a message of its own.
+    // Once, as the fields appear, on the first one there is to write in — the words wherever the recipients are written
+    // already, which an answer and a draft carried on both are, and the recipients for a message of its own.
     const written = composition !== null;
 
     useEffect(() => {
         if (written) {
             frame.current
-                ?.querySelector<HTMLElement>(opening.kind === 'answer' ? '[contenteditable="true"]' : 'input')
+                ?.querySelector<HTMLElement>(
+                    opening.kind === 'answer' || opening.kind === 'draft' ? '[contenteditable="true"]' : 'input',
+                )
                 ?.focus();
         }
     }, [written, opening.kind]);
@@ -334,7 +380,7 @@ export function Composer({
     // a chosen file is held here until the message is saved or sent, so it costs nothing and is offered offline.
     const sendable = online && stillBeingWritten;
 
-    const title = translate(titles[opening.kind === 'new' ? 'new' : opening.answers]);
+    const title = translate(titles[opening.kind === 'answer' ? opening.answers : opening.kind]);
 
     return (
         <section
@@ -382,7 +428,7 @@ export function Composer({
             </div>
 
             {composition === null ? (
-                <BeforeAnythingIsWritten reading={reading} />
+                <BeforeAnythingIsWritten reading={reading} opening={opening} />
             ) : (
                 <>
                     {accounts.length > 1 && composition.answering === null ? (
@@ -584,21 +630,38 @@ function opened(opening: ComposerOpening, accounts: readonly MailAccount[]): Com
 }
 
 function sameOpening(kept: Composition, opening: ComposerOpening): boolean {
-    return opening.kind === 'new'
-        ? kept.answering === null
-        : kept.answering?.storedEmailId === opening.storedEmailId && kept.answering.answers === opening.answers;
+    switch (opening.kind) {
+        case 'new':
+            return kept.answering === null && kept.continuing === null;
+        case 'draft':
+            return kept.continuing === opening.storedEmailId;
+        case 'answer':
+            return (
+                kept.answering?.storedEmailId === opening.storedEmailId && kept.answering.answers === opening.answers
+            );
+    }
 }
 
 // The composer before there is a message in it, which happens only for an answer: the conversation it is written
 // against has to be read before it can be addressed. Both states say what is happening, and the way out of either is
 // the control the header already carries — with nothing written, it closes rather than asking.
-function BeforeAnythingIsWritten({ reading }: { readonly reading: Reading }) {
+function BeforeAnythingIsWritten({
+    reading,
+    opening,
+}: {
+    readonly reading: Reading;
+    readonly opening: ComposerOpening;
+}) {
     const { translate } = useLocalization();
+
+    // What is being read differs between the two openings that read anything at all, and so does what a reader is
+    // owed while it happens: an answer waits on the message it answers, a draft on the words that reader wrote.
+    const said = opening.kind === 'draft' ? 'compose.readingDraft' : 'compose.reading';
 
     return (
         <div className="flex flex-1 flex-col items-start gap-3 px-4.25 py-6">
             <p aria-live="polite" className="text-base text-muted text-pretty">
-                {translate(reading.kind === 'reading' ? 'compose.reading' : failureSaid[reading.reason])}
+                {translate(reading.kind === 'reading' ? said : failureSaid[reading.reason])}
             </p>
         </div>
     );

@@ -338,11 +338,13 @@ export const pl: Catalogue = {
     'act.moveClose': 'Zamknij',
 
     'compose.titleNew': 'Nowa wiadomość',
+    'compose.titleDraft': 'Szkic',
     'compose.titleReply': 'Odpowiedź',
     'compose.titleReplyAll': 'Odpowiedź do wszystkich',
     'compose.titleForward': 'Przekazanie dalej',
     'compose.close': 'Zamknij wiadomość',
     'compose.reading': 'Odczytujemy wiadomość, na którą odpowiadasz…',
+    'compose.readingDraft': 'Wczytywanie szkicu, który kontynuujesz…',
     'compose.from': 'Od',
     'compose.to': 'Do',
     'compose.cc': 'DW',

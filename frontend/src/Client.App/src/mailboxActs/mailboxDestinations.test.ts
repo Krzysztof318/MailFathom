@@ -74,13 +74,26 @@ describe('folderWithRole', () => {
 });
 
 describe('destinationsFor', () => {
-    it('offers the folders of the one account the messages are in, named by their place on the server', () => {
+    it('offers the one account the messages are in, its folders named by their role and their place on the server', () => {
         expect(destinationsFor(wholeMailbox, [inWork('message-1')])).toStrictEqual([
-            { alias: 'work-archive', name: 'Archive' },
-            { alias: 'work-inbox', name: 'INBOX' },
-            { alias: 'work-clients', name: 'Projects / Clients' },
-            { alias: 'work-trash', name: 'Trash' },
+            {
+                accountId: 'work',
+                accountName: 'work',
+                ordinal: 1,
+                destinations: [
+                    { alias: 'work-inbox', name: 'INBOX', role: 'Inbox' },
+                    { alias: 'work-archive', name: 'Archive', role: 'Archive' },
+                    { alias: 'work-trash', name: 'Trash', role: 'Trash' },
+                    { alias: 'work-clients', name: 'Projects / Clients', role: null },
+                ],
+            },
         ]);
+    });
+
+    it('counts the account the way the folder column counts its groups, so a mailbox keeps its colour', () => {
+        const oneAccount = directoryOf({ work: [folder('work-inbox', 'Inbox', ['INBOX'])] });
+
+        expect(destinationsFor(oneAccount, [inWork('message-1')])[0]?.ordinal).toBe(0);
     });
 
     it('offers nothing across two accounts, a folder belonging to the account it is in', () => {

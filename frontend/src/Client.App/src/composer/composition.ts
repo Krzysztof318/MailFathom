@@ -2,7 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { MailDraftAnswer, MailDraftComposition, MailMessage, MailParticipant } from '@mailfathom/client-backend';
+import type {
+    MailBody,
+    MailDraftAnswer,
+    MailDraftComposition,
+    MailMessage,
+    MailParticipant,
+} from '@mailfathom/client-backend';
+import { draftWords } from './draftWords';
 import { htmlOf, plainTextOf, type WrittenNode } from './writtenText';
 
 // What somebody is writing, as values rather than as anything on the screen. The composer draws it, the confirmation
@@ -14,15 +21,29 @@ import { htmlOf, plainTextOf, type WrittenNode } from './writtenText';
 // and edits before anything is saved. The account, the subject, and the threading identifiers of an answer are the
 // deployment's and are never sent from here — `wireComposition` is where that shows.
 
-/** What opening the composer is: a message of its own, or an answer to one this deployment holds. */
+/**
+ * What opening the composer is: a message of its own, an answer to one this deployment holds, or a draft already in a
+ * drafts folder being carried on with.
+ */
 export type ComposerOpening =
     | { readonly kind: 'new' }
-    | { readonly kind: 'answer'; readonly answers: MailDraftAnswer; readonly storedEmailId: string };
+    | { readonly kind: 'answer'; readonly answers: MailDraftAnswer; readonly storedEmailId: string }
+    | { readonly kind: 'draft'; readonly storedEmailId: string };
 
 /** What the author has written, and what it is being written against. */
 export interface Composition {
     /** The message this answers and which answer it is, or `null` for a message of its own. */
     readonly answering: { readonly storedEmailId: string; readonly answers: MailDraftAnswer } | null;
+
+    /**
+     * The message in a drafts folder this was opened from, or `null` where it was not opened from one.
+     *
+     * It says where the words came from and nothing else: a save still writes a draft of its own, because the client
+     * surface publishes no route that reads a draft back or takes a stored message over as the one being written. What
+     * it is for is telling one composition from another — a message of its own and a draft carried on with both answer
+     * nothing, so without it the tab would restore whichever of the two it kept last into either.
+     */
+    readonly continuing: string | null;
 
     /** The account it goes out as, which an answer reads from the message it answers and therefore never states. */
     readonly account: string;
@@ -56,7 +77,7 @@ export const mostRecipientsInOneHeader = 256;
 
 /** A message of its own, addressed to nobody and about nothing yet. */
 export function nothingWrittenYet(account: string): Composition {
-    return { answering: null, account, subject: '', to: [], cc: [], bcc: [], words: [] };
+    return { answering: null, continuing: null, account, subject: '', to: [], cc: [], bcc: [], words: [] };
 }
 
 /**
@@ -72,6 +93,7 @@ export function answerTo(message: MailMessage, answers: MailDraftAnswer): Compos
 
     return {
         answering: { storedEmailId: message.storedEmailId, answers },
+        continuing: null,
         account: message.account,
         subject: answeredSubject(message.headers.subject, answers),
 
@@ -81,6 +103,30 @@ export function answerTo(message: MailMessage, answers: MailDraftAnswer): Compos
         cc: answers === 'everyone' ? everybody.filter((address) => !to.includes(address)) : [],
         bcc: [],
         words: [],
+    };
+}
+
+/**
+ * The draft somebody has just opened, put back into the composer that writes one.
+ *
+ * A draft is a message this deployment already holds, so nothing here is composed: the account, the addresses, the
+ * subject, and the words are read back exactly as they were filed. What it is not is the deployment's own draft
+ * record — the client surface publishes no route that reads one back — so `continuing` says which stored message the
+ * words came from and a save still writes a draft of its own beside it.
+ *
+ * @param message The draft being carried on with, as the deployment described it.
+ * @param body Its body as the deployment reduced it, or `null` where it could not be read.
+ */
+export function draftContinued(message: MailMessage, body: MailBody | null): Composition {
+    return {
+        answering: null,
+        continuing: message.storedEmailId,
+        account: message.account,
+        subject: message.headers.subject ?? '',
+        to: addressesOf(message.headers.participants, ['To']),
+        cc: addressesOf(message.headers.participants, ['Cc']),
+        bcc: addressesOf(message.headers.participants, ['Bcc']),
+        words: body === null ? [] : draftWords(body),
     };
 }
 

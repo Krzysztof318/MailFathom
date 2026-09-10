@@ -45,6 +45,15 @@ describe('Switch', () => {
         expect(chosen).toHaveBeenCalledWith(false);
     });
 
+    // The input is hidden by being taken out of the flow, so whichever ancestor is positioned is the one it stands
+    // against. A panel that scrolls and is not one reports it as overflow standing below everything a reader can see,
+    // which is a second scrollbar on a surface that already has one — so the control carries the containing block.
+    it('keeps the input it hides inside a box of its own, rather than against whatever happens to be positioned', () => {
+        drawn(false, () => undefined);
+
+        expect(screen.getByRole('switch').parentElement?.classList.contains('relative')).toBe(true);
+    });
+
     // What an inert switch refuses is the browser's own activation behaviour, which `fireEvent` dispatches past, so
     // what is asserted here is the state a browser reads that from rather than a click it would never have delivered.
     it('is inert rather than absent where the screen cannot act on it', () => {

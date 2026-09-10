@@ -75,25 +75,25 @@ describe('arrivesAt', () => {
     it('arrives at the message somebody was sent to, which is the context they came for', () => {
         const messages = [message('one', 0, true), message('two', 1), message('three', 2)];
 
-        expect(arrivesAt(messages, 'two')).toStrictEqual({ storedEmailId: 'two', amongOthers: true });
+        expect(arrivesAt(messages, 'two')).toStrictEqual({ storedEmailId: 'two' });
     });
 
     it('arrives at the latest of a conversation nobody named a message in', () => {
         const messages = [message('one', 0), message('two', 1, true), message('three', 2)];
 
-        expect(arrivesAt(messages, null)).toStrictEqual({ storedEmailId: 'three', amongOthers: false });
+        expect(arrivesAt(messages, null)).toStrictEqual({ storedEmailId: 'three' });
     });
 
     it('arrives at the latest where the message named is not among those read', () => {
         const messages = [message('one', 0), message('two', 1, true)];
 
-        expect(arrivesAt(messages, 'somewhere-else')).toStrictEqual({ storedEmailId: 'two', amongOthers: false });
+        expect(arrivesAt(messages, 'somewhere-else')).toStrictEqual({ storedEmailId: 'two' });
     });
 
-    it('arrives among others where the message named is the conversation only up to its latest', () => {
+    it('arrives at a message inside the history rather than at the latest, where that is what was named', () => {
         const messages = [message('one', 0), message('two', 1), message('three', 2)];
 
-        expect(arrivesAt(messages, 'one')).toStrictEqual({ storedEmailId: 'one', amongOthers: true });
+        expect(arrivesAt(messages, 'one')).toStrictEqual({ storedEmailId: 'one' });
     });
 
     it('arrives nowhere in a conversation holding no message anybody may see', () => {
@@ -102,39 +102,39 @@ describe('arrivesAt', () => {
 });
 
 describe('arrivalMark', () => {
-    const amongOthers = { storedEmailId: 'two', amongOthers: true };
-    const alone = { storedEmailId: 'three', amongOthers: false };
+    const insideTheHistory = { storedEmailId: 'two' };
+    const theLatest = { storedEmailId: 'three' };
 
     it('marks the message somebody opened from the list as the one they opened', () => {
-        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two' }, amongOthers, false)).toBe('list');
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two' }, insideTheHistory, false)).toBe('list');
     });
 
     it('marks nothing in a conversation opened on its own subject, where nobody was sent to a message', () => {
-        expect(arrivalMark({ threadId: 'a-conversation', openAt: null }, alone, false)).toBeNull();
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: null }, theLatest, false)).toBeNull();
     });
 
     it('marks nothing while the conversation has not decided where it arrives', () => {
         expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two' }, null, false)).toBeNull();
     });
 
-    it('marks nothing where the conversation stood the reader in front of that message alone', () => {
-        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'three' }, alone, false)).toBeNull();
+    it('marks the latest message of a conversation opened from the list, the history being shown beside it', () => {
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'three' }, theLatest, false)).toBe('list');
     });
 
     it('marks a message landed on from a search result as one somebody was brought to', () => {
-        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, amongOthers, false)).toBe(
-            'result',
-        );
+        expect(
+            arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, insideTheHistory, false),
+        ).toBe('result');
     });
 
     it('marks a landing that has settled as nothing at all, which is the ordinary open message', () => {
         expect(
-            arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, amongOthers, true),
+            arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, insideTheHistory, true),
         ).toBeNull();
     });
 
     it('marks a landing arrived at alone, it saying what the client just did rather than where somebody is', () => {
-        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'three', fromResult: true }, alone, false)).toBe(
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'three', fromResult: true }, theLatest, false)).toBe(
             'result',
         );
     });

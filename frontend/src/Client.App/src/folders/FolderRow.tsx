@@ -3,13 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { KeyboardEvent } from 'react';
-import type { MailFolderRole } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
-import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { folderRoleLabels } from '../workspace/mailScope';
+import { folderRoleIcons, folderRoleLabels } from '../workspace/mailScope';
 import type { FolderTreeRow } from './folderTreeRows';
 
 // One row of the tree, which is its own component because it is the row of a list and because it carries everything a
@@ -40,19 +38,6 @@ import type { FolderTreeRow } from './folderTreeRows';
 // than the list sits where its last entry does: a mailbox nested six deep is rare, and a row indented off the side of
 // a narrow column is worse than one that stops moving.
 const levelIndents: readonly string[] = ['ps-2.75', 'ps-6', 'ps-9', 'ps-12', 'ps-14'];
-
-const roleIcons: Readonly<Record<MailFolderRole, IconName>> = {
-    Inbox: 'inbox',
-    Drafts: 'draft',
-    Sent: 'send',
-    Archive: 'archive',
-    Junk: 'report',
-    Trash: 'delete',
-    Flagged: 'flag',
-    Important: 'label_important',
-    All: 'all_inbox',
-    Outbox: 'outbox',
-};
 
 // How a row is drawn, which is four cases rather than one expression: a group or a folder, each at the column's width
 // or at the rail's. Named here rather than spelled into the markup, for the reason `frontend/src`'s instructions give
@@ -137,7 +122,7 @@ export function FolderRow({
                 <MailboxMark ordinal={groupOrdinal} />
             ) : (
                 <Icon
-                    name={row.role === null ? 'folder' : roleIcons[row.role]}
+                    name={row.role === null ? 'folder' : folderRoleIcons[row.role]}
                     className={`${folded ? 'size-6' : 'size-4.5'} shrink-0 ${selected ? 'text-accent-deep' : 'text-muted'}`}
                 />
             )}

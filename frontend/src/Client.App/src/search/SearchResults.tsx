@@ -21,6 +21,7 @@ import {
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization, type Translate } from '../localization/useLocalization';
+import { opensAsDraft, useMailboxActs } from '../mailboxActs/useMailboxActs';
 import { MessageRow } from '../messageRows/MessageRow';
 import { estimatedRowHeight, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -74,6 +75,7 @@ export function SearchResults({
     narrowed,
     onWiden,
     onOpen,
+    onOpenDraft,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
@@ -90,9 +92,18 @@ export function SearchResults({
 
     /** Opens a result, which the list asks for rather than performs — the reason `MessageList` gives. */
     readonly onOpen: (storedEmailId: string, subject: string | null) => void;
+
+    /**
+     * Opens a result that is a draft in the composer, or `null` where the frame has no composer to open one in.
+     *
+     * Asked for rather than performed, for the same reason opening a message is: what a draft opens *into* is the
+     * frame's, and a list that reached for the composer itself would be the second component deciding it.
+     */
+    readonly onOpenDraft: ((storedEmailId: string) => void) | null;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const acts = useMailboxActs();
 
     const [found, setFound] = useState<FoundMail | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -251,6 +262,16 @@ export function SearchResults({
             citedAttachment:
                 cited === undefined ? null : { storedEmailId: result.id, position: cited.attachmentPosition },
         });
+        // A result that is a draft opens where it was written, exactly as a row in the mailbox's own list does — the
+        // message a search lands on is the same message in the same folder. Where the frame offered no way to open one
+        // — a credential that may not write mail — the draft opens as an ordinary message rather than as a press that
+        // does nothing.
+        if (onOpenDraft !== null && opensAsDraft(acts, result)) {
+            onOpenDraft(result.id);
+
+            return;
+        }
+
         onOpen(result.id, result.subject);
     }
 

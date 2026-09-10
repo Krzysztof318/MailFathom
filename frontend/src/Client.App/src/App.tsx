@@ -761,6 +761,26 @@ export function App({
                                                                                 accounts={mailAccounts}
                                                                                 online={connection.online}
                                                                                 onOpen={openTabs.openMail}
+                                                                                onOpenDraft={
+                                                                                    // A result that is a draft opens
+                                                                                    // where it was written. Handed
+                                                                                    // down only where there is a
+                                                                                    // composer to open, so a
+                                                                                    // credential that may not write
+                                                                                    // mail opens it as a message. Read
+                                                                                    // from the grant rather than off
+                                                                                    // `composing`, which holds what
+                                                                                    // had focus and is therefore not a
+                                                                                    // value to read while rendering.
+                                                                                    writesMail
+                                                                                        ? (storedEmailId) => {
+                                                                                              composing.compose({
+                                                                                                  kind: 'draft',
+                                                                                                  storedEmailId,
+                                                                                              });
+                                                                                          }
+                                                                                        : null
+                                                                                }
                                                                             >
                                                                                 <MessageList
                                                                                     key={scopeKey(workspace.scope)}
@@ -883,7 +903,14 @@ export function App({
 
 // What a composer is mounted under, so that asking for a second message replaces the first rather than editing it.
 function openingKey(opening: ComposerOpening): string {
-    return opening.kind === 'new' ? 'new' : `${opening.answers}:${opening.storedEmailId}`;
+    switch (opening.kind) {
+        case 'new':
+            return 'new';
+        case 'draft':
+            return `draft:${opening.storedEmailId}`;
+        case 'answer':
+            return `${opening.answers}:${opening.storedEmailId}`;
+    }
 }
 
 // What is being read on the right of the mail space: one message, the conversation it belongs to, the sender's own

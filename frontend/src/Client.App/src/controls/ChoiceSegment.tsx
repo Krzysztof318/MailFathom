@@ -41,7 +41,9 @@ export function ChoiceSegment({
 
     return (
         <label
-            className={`cursor-pointer transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${look.shape} ${
+            // `relative` for the reason `Switch` carries one: the radio is hidden by being taken out of the flow, and
+            // an ancestor that scrolls would otherwise report it as overflow standing outside every clip.
+            className={`relative cursor-pointer transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${look.shape} ${
                 chosen ? look.chosen : look.unchosen
             }`}
         >

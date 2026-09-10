@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailFolderDirectory, MailFolderRole } from '@mailfathom/client-backend';
+import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 
 // What the client is looking at, which the list, the search, and the next question are all asked against. It is one
@@ -64,6 +65,26 @@ export const folderRoleLabels: Readonly<Record<MailFolderRole, MessageKey>> = {
     Important: 'folder.important',
     All: 'folder.all',
     Outbox: 'folder.outbox',
+};
+
+/**
+ * The symbol each role is drawn with, which stands beside the name for the same reason the name stands instead of the
+ * provider's: it says what the folder is rather than what it was called.
+ *
+ * Exhaustive by its own type, as the names above are, and stated here beside them because the tree is no longer the
+ * only screen drawing a folder — the dialog that files mail into one draws the same folders and owes the same symbol.
+ */
+export const folderRoleIcons: Readonly<Record<MailFolderRole, IconName>> = {
+    Inbox: 'inbox',
+    Drafts: 'draft',
+    Sent: 'send',
+    Archive: 'archive',
+    Junk: 'report',
+    Trash: 'delete',
+    Flagged: 'flag',
+    Important: 'label_important',
+    All: 'all_inbox',
+    Outbox: 'outbox',
 };
 
 /** Whether the value is one of the roles this surface publishes. */

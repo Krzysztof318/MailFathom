@@ -6,11 +6,18 @@ import { useRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
-import type { MoveDestination } from './mailboxDestinations';
+import type { MoveDestination, MoveDestinationGroup } from './mailboxDestinations';
 import { MoveChoice } from './MoveChoice';
 
-const archive: MoveDestination = { alias: 'work-archive', name: 'Archive' };
-const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients' };
+const archive: MoveDestination = { alias: 'work-archive', name: 'INBOX.Archiwum', role: 'Archive' };
+const clients: MoveDestination = { alias: 'work-clients', name: 'Projects / Clients', role: null };
+
+const work: MoveDestinationGroup = {
+    accountId: 'work',
+    accountName: 'Northwind \u00b7 work',
+    ordinal: 0,
+    destinations: [archive, clients],
+};
 
 // What stands in for the control a strip draws to open this dialog. Named through a value rather than written into
 // the markup because the lint rule that keeps copy in the catalogues reads the markup, and this is a test's scaffold
@@ -31,7 +38,7 @@ function Asking({ onChosen }: { readonly onChosen: (destination: MoveDestination
                 {opener}
             </button>
 
-            <MoveChoice asked={asked} destinations={[archive, clients]} onChosen={onChosen} />
+            <MoveChoice asked={asked} groups={[work]} onChosen={onChosen} />
         </>
     );
 }
@@ -53,6 +60,15 @@ describe('MoveChoice', () => {
         expect(screen.getByRole('dialog', { name: 'File in another folder' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Archive' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Projects / Clients' })).toBeDefined();
+    });
+
+    it('gathers the folders under the account they belong to, rather than as one list of folders from nowhere', () => {
+        open();
+
+        const group = screen.getByRole('region', { name: work.accountName });
+
+        expect(group).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Archive' }).closest('section')).toBe(group);
     });
 
     it('answers with the folder that was picked, which is what the act is then performed with', () => {

@@ -85,6 +85,7 @@ function compositionIn(value: unknown): Composition | null {
     const subject = record['subject'];
     const words = writtenTextIn(record['words']);
     const answering = answeringIn(record['answering'] ?? null);
+    const continuing = record['continuing'] ?? null;
     const to = addressesIn(record['to']);
     const cc = addressesIn(record['cc']);
     const bcc = addressesIn(record['bcc']);
@@ -105,7 +106,16 @@ function compositionIn(value: unknown): Composition | null {
         return null;
     }
 
-    return { answering, account, subject, to, cc, bcc, words };
+    // An answer and a draft carried on are two messages to have started from, and nothing here writes both at once —
+    // so a value carrying both is a shape this client did not write, whatever each half of it says on its own.
+    if (
+        continuing !== null &&
+        (answering !== null || typeof continuing !== 'string' || continuing.length > longestIdentifier)
+    ) {
+        return null;
+    }
+
+    return { answering, continuing, account, subject, to, cc, bcc, words };
 }
 
 // Answers `undefined` for a shape it refuses, because `null` is what a message of its own legitimately kept.

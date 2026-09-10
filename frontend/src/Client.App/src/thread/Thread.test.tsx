@@ -579,7 +579,7 @@ describe('Thread', () => {
         expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 
-    it('marks nothing on a message it stood the reader in front of alone, however much history they then show', async () => {
+    it('marks the latest message once the history stands beside it, and nothing while it stands alone', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'three' });
 
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
@@ -588,7 +588,7 @@ describe('Thread', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show 2 earlier messages' }));
 
         expect(screen.getByText('The whole of what one says.')).toBeDefined();
-        expect(screen.queryByText('Opened from the list')).toBeNull();
+        expect(screen.getByText('Opened from the list')).toBeDefined();
     });
 
     it('marks a message a search result brought somebody to only until it has been seen', async () => {

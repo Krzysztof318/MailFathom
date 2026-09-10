@@ -44,6 +44,41 @@ function draftBody(overrides: Readonly<Record<string, unknown>> = {}): string {
     });
 }
 
+// What the deployment reduced a draft's body to, which is what a draft opened in the composer is written from.
+function readBody(): string {
+    return JSON.stringify({
+        storedEmailId: messageId,
+        availability: 'Readable',
+        plainText: { text: 'Half a thought', originalCharacterCount: 14, truncation: 'None' },
+        document: {
+            schemaVersion: 1,
+            blocks: [
+                {
+                    type: 'paragraph',
+                    version: 1,
+                    alignment: 'Inherited',
+                    content: [
+                        {
+                            text: 'Half a thought',
+                            emphasis: 'None',
+                            foreground: null,
+                            link: null,
+                        },
+                    ],
+                },
+            ],
+            refusal: 'None',
+            removedRemoteReferenceCount: 0,
+            retainedRemoteImageCount: 0,
+            inlineImageCount: 0,
+            undrawnInlineImageCount: 0,
+            truncated: false,
+        },
+        selfContainedHtml: null,
+        remoteImagesRequested: false,
+    });
+}
+
 // The message an answer is written against, which the composer reads before it can address one.
 function messageBody(): string {
     return JSON.stringify({
@@ -78,6 +113,7 @@ function messageBody(): string {
 /** What each route answers with, so one test states only the answer it is about. */
 interface Answers {
     readonly message?: { readonly status: number; readonly body: string };
+    readonly body?: { readonly status: number; readonly body: string };
     readonly save?: { readonly status: number; readonly body: string };
     readonly send?: { readonly status: number; readonly body: string };
     readonly withdrawal?: { readonly status: number; readonly body: string };
@@ -100,6 +136,10 @@ function deployment(answers: Answers = {}): { transport: MailFathomTransport; as
 }
 
 function answerFor(request: ClientRequest, answers: Answers): { status: number; body: string } {
+    if (request.path.includes('/body')) {
+        return answers.body ?? { status: 200, body: readBody() };
+    }
+
     if (request.path.includes('/messages/')) {
         return answers.message ?? { status: 200, body: messageBody() };
     }
@@ -190,7 +230,7 @@ function drawComposer(
 // The composer itself. Under jsdom the window reads narrow, where the composer stands over the whole screen and is
 // therefore a dialog rather than a region — so this names it by the label it carries in either shape.
 function composerFrame(): HTMLElement {
-    return screen.getByRole('dialog', { name: /^(New message|Reply|Reply to everyone|Forward)$/u });
+    return screen.getByRole('dialog', { name: /^(New message|Draft|Reply|Reply to everyone|Forward)$/u });
 }
 
 /** The send confirmation, named rather than taken by role alone: the composer around it is a dialog too. */
@@ -260,6 +300,7 @@ describe('Composer, a message of its own', () => {
     it('starts from what this tab was writing rather than from an empty message', () => {
         rememberComposition({
             answering: null,
+            continuing: null,
             account: 'work',
             subject: 'Invoice',
             to: ['ada@example.invalid'],
@@ -1003,6 +1044,59 @@ describe('Composer, a message of its own', () => {
     });
 });
 
+describe('Composer, a draft', () => {
+    const continued: ComposerOpening = { kind: 'draft', storedEmailId: messageId };
+
+    it('says it is reading the draft rather than a message being answered, which is a different wait', () => {
+        drawComposer(continued);
+
+        expect(screen.getByText('Reading the draft you are carrying on…')).toBeDefined();
+    });
+
+    // A draft is not an answer, so what opens is the window somebody writes a message in: the addresses they had
+    // typed, the subject still theirs to edit, and the words back where they left them.
+    it('opens as the window a message is written in, on what was filed rather than on nothing', async () => {
+        drawComposer(continued);
+
+        expect(await screen.findByRole('dialog', { name: 'Draft' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Remove reader@example.invalid from To' })).toBeDefined();
+        expect(screen.getByText('Half a thought')).toBeDefined();
+    });
+
+    // A draft's recipients are written already, exactly as an answer's are, so what somebody came back for is the
+    // words rather than the address standing above them.
+    it('opens with the cursor in the words rather than in recipients that are already written', async () => {
+        drawComposer(continued);
+
+        await screen.findByText('Half a thought');
+
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+    });
+
+    it('offers the subject for editing, a draft being a message of its own rather than one the deployment words', async () => {
+        drawComposer(continued);
+
+        const subject = await screen.findByRole('textbox', { name: 'Subject' });
+
+        expect((subject as HTMLInputElement).value).toBe('Quarterly invoice');
+    });
+
+    // The words are what a draft is, so a body the deployment could not answer with is a draft to carry on rather
+    // than a window to refuse: what was filed as its headers still opens.
+    it('opens on the headers alone where the words could not be read, rather than refusing the draft', async () => {
+        drawComposer(continued, { body: { status: 503, body: '' } });
+
+        expect(await screen.findByRole('dialog', { name: 'Draft' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Remove reader@example.invalid from To' })).toBeDefined();
+    });
+
+    it('says what went wrong where the draft itself could not be read, rather than opening an empty window', async () => {
+        drawComposer(continued, { message: { status: 503, body: '' } });
+
+        expect(await screen.findByText(/did not answer/u)).toBeDefined();
+    });
+});
+
 describe('Composer, an answer', () => {
     const replying: ComposerOpening = { kind: 'answer', answers: 'everyone', storedEmailId: messageId };
 
@@ -1110,6 +1204,7 @@ describe('Composer, an answer', () => {
     it('reads nothing where this tab was already writing that answer', () => {
         rememberComposition({
             answering: { storedEmailId: messageId, answers: 'everyone' },
+            continuing: null,
             account: 'work',
             subject: 'Re: Quarterly invoice',
             to: ['billing@example.invalid'],
