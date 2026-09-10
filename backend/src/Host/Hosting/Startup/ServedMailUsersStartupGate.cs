@@ -594,8 +594,8 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <remarks>The record names no user. The identity is a generated identifier for a person this deployment serves, and what an operator needs from this line is how the roster came out rather than who is on it.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "This deployment serves {ServedUserCount} users: {ConfiguredUserCount} read from configuration and {AdoptedUserCount} from their own document.")]
-    private partial void LogUsersResolved(int servedUserCount, int configuredUserCount, int adoptedUserCount);
+        Message = "This deployment serves {ServedUserCount} users: {ConfiguredUserCount} read from configuration and {OwnDocumentUserCount} from their own document.")]
+    private partial void LogUsersResolved(int servedUserCount, int configuredUserCount, int ownDocumentUserCount);
 
     /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the user whose declared section has stopped being applied. Every part of that section is named, because the scanning block still binds and is still judged for a user read from their own document and then decides nothing, so a line naming only the mail accounts would leave an operator who switched a scanner on there with no sentence explaining why nothing changed.</remarks>
     [LoggerMessage(
