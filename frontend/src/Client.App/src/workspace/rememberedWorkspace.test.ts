@@ -10,7 +10,7 @@ const storageKey = 'mailfathom.workspace';
 
 const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
-    collapsed: ['account:personal'],
+    foldsToggled: ['account:personal'],
     mailboxesFolded: true,
     panelsHidden: true,
     selection: 'AAMkAD-42',
@@ -166,6 +166,18 @@ describe('rememberedWorkspace', () => {
         expect(recentSearches).toHaveLength(1);
     });
 
+    // A tree whose folds were never touched is the whole of what a workspace kept before this field says about
+    // them, so the rest of it — the mailbox somebody was reading, what they had picked out, what they searched for —
+    // is read back rather than thrown away with the one field that moved.
+    it('reads a workspace kept before a fold could be moved as one whose folds nobody has moved', () => {
+        const { foldsToggled, ...before } = kept;
+
+        stored(before);
+
+        expect(rememberedWorkspace()).toEqual({ ...kept, foldsToggled: [] });
+        expect(foldsToggled).toHaveLength(1);
+    });
+
     // A workspace kept before the column could be folded is one this client wrote, so it opens on what was kept with
     // the column at the width every workspace before it was drawn at.
     it('reads a workspace kept before the column could fold as one drawn at the column width', () => {
@@ -263,15 +275,18 @@ describe('rememberedWorkspace', () => {
         },
         {
             shape: 'folded rows that are not rows',
-            value: JSON.stringify({ ...emptyWorkspace, collapsed: [42] }),
+            value: JSON.stringify({ ...emptyWorkspace, foldsToggled: [42] }),
         },
         {
             shape: 'a folded row longer than any key this client writes',
-            value: JSON.stringify({ ...emptyWorkspace, collapsed: ['a'.repeat(1_025)] }),
+            value: JSON.stringify({ ...emptyWorkspace, foldsToggled: ['a'.repeat(1_025)] }),
         },
         {
             shape: 'more folded rows than a tree has',
-            value: JSON.stringify({ ...emptyWorkspace, collapsed: Array.from({ length: 513 }, () => 'account:work') }),
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                foldsToggled: Array.from({ length: 513 }, () => 'account:work'),
+            }),
         },
         {
             shape: 'a question longer than anybody typed',

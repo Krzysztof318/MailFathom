@@ -24,7 +24,7 @@ const storageKey = 'mailfathom.workspace';
 // What a stored workspace may carry before it is read as somebody's edit rather than as this client's own writing. A
 // tree holds tens of rows, a question is a sentence, and an identifier — a message, an account, a folder alias — is a
 // name the service assigned, so each of the three is far above anything the client itself writes there.
-const mostCollapsedRows = 512;
+const mostToggledFolds = 512;
 const longestQuestion = 4_096;
 const longestIdentifier = 256;
 
@@ -119,7 +119,7 @@ function workspaceIn(value: unknown): Workspace | null {
     const chosen = record['askScopeKey'] ?? null;
     const askScopeKey = chosen === null ? null : namedScopeKeyIn(chosen);
     const askedBefore = askedBeforeIn(record['askedBefore'] ?? []);
-    const collapsed = collapsedIn(record['collapsed']);
+    const foldsToggled = foldsToggledIn(record['foldsToggled'] ?? []);
     const mailboxesFolded = record['mailboxesFolded'] ?? false;
     const panelsHidden = record['panelsHidden'] ?? false;
     const selection = record['selection'] ?? null;
@@ -132,7 +132,7 @@ function workspaceIn(value: unknown): Workspace | null {
         scope === null ||
         (chosen !== null && askScopeKey === null) ||
         askedBefore === null ||
-        collapsed === null ||
+        foldsToggled === null ||
         selected === null ||
         recentSearches === null ||
         conversation === undefined
@@ -157,7 +157,7 @@ function workspaceIn(value: unknown): Workspace | null {
     // pressed a control to open.
     return {
         scope,
-        collapsed,
+        foldsToggled,
         mailboxesFolded,
         panelsHidden,
         selection,
@@ -336,8 +336,8 @@ function isIdentifier(value: unknown): value is string {
     return typeof value === 'string' && value.length <= longestIdentifier;
 }
 
-function collapsedIn(value: unknown): readonly string[] | null {
-    if (!Array.isArray(value) || value.length > mostCollapsedRows) {
+function foldsToggledIn(value: unknown): readonly string[] | null {
+    if (!Array.isArray(value) || value.length > mostToggledFolds) {
         return null;
     }
 

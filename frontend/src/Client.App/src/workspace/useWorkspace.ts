@@ -20,12 +20,14 @@ export interface Workspace {
     readonly scope: MailScope;
 
     /**
-     * The rows of the folder tree somebody has folded away, by the key each row is identified with.
+     * The rows of the folder tree somebody has moved away from the fold they open at, by each row's own key.
      *
-     * Folded rather than unfolded, so a tree nobody has touched shows what is in it: a user who opens the client and
-     * sees a column of closed mailboxes has to open every one of them before the client says anything.
+     * Two kinds of row open two ways: a mailbox opens showing its folders, because a column of closed mailboxes says
+     * nothing until every one of them has been pressed, and a folder opens with its subfolders away, because a
+     * mailbox filed three levels deep would otherwise arrive as everything it has ever held. So what is recorded is
+     * the move rather than the state — one set covering both directions, where two sets could disagree.
      */
-    readonly collapsed: readonly string[];
+    readonly foldsToggled: readonly string[];
 
     /**
      * Whether the mailbox column is folded to its icon rail rather than drawn at the width that carries names.
@@ -163,7 +165,7 @@ export interface WorkspaceRevision {
 
 export const emptyWorkspace: Workspace = {
     scope: everything,
-    collapsed: [],
+    foldsToggled: [],
     mailboxesFolded: false,
     panelsHidden: false,
     selection: null,

@@ -15,8 +15,25 @@ import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { AiFilters } from './AiFilters';
 import { BackToList } from './BackToList';
 import { MailboxesDrawerContext } from './mailboxesDrawer';
-import { ListWidthGrip } from './ListWidthGrip';
-import { listWidthWithin, readListWidth, storeListWidth } from './listWidth';
+import {
+    listWidthWithin,
+    narrowestList,
+    readListWidth,
+    storeListWidth,
+    listWidthStep,
+    startingListWidth,
+    widestList,
+} from './listWidth';
+import {
+    mailboxesWidthStep,
+    mailboxesWidthWithin,
+    narrowestMailboxes,
+    readMailboxesWidth,
+    startingMailboxesWidth,
+    storeMailboxesWidth,
+    widestMailboxes,
+} from './mailboxesWidth';
+import { WidthGrip } from './WidthGrip';
 import { MailToolbar } from './MailToolbar';
 import { SelectionBar } from './SelectionBar';
 import { useStripFit } from './useStripFit';
@@ -104,6 +121,7 @@ export function MailSpace({
     const twoPanes = useTwoPanes();
     const desktop = useDesktopComposition();
     const [listWidth, setListWidth] = useState(() => readListWidth(person));
+    const [mailboxesWidth, setMailboxesWidth] = useState(() => readMailboxesWidth(person));
 
     // How the toolbar fits its width is measured here rather than in the toolbar, because what it decides is drawn in
     // two places: the names in the strip, and — once composing no longer fits beside them — the floating control over
@@ -247,25 +265,55 @@ export function MailSpace({
 
             <div className="flex min-h-0 flex-1">
                 {desktop ? (
-                    <aside
-                        aria-label={translate('mailboxes.open')}
-                        className={`flex shrink-0 flex-col border-e border-line bg-sunken ${folded ? 'w-mailboxes-folded' : 'w-mailboxes'}`}
-                    >
-                        <Mailboxes
-                            folders={folders}
-                            status={status}
-                            folded={folded}
-                            control={
-                                <SurfaceControl
-                                    label={translate(folded ? 'mailboxes.unfold' : 'mailboxes.fold')}
-                                    icon={folded ? 'chevron_right' : 'chevron_left'}
-                                    onActivate={() => {
-                                        revise({ mailboxesFolded: !folded });
-                                    }}
-                                />
-                            }
-                        />
-                    </aside>
+                    <>
+                        <aside
+                            aria-label={translate('mailboxes.open')}
+                            /* Folded, the column is the rail's own width and nothing is draggable about it; open, it is
+                           whatever this person dragged it to, which the token is the starting value of rather than
+                           the width it is drawn at. */
+                            className={`flex shrink-0 flex-col bg-sunken ${folded ? 'w-mailboxes-folded border-e border-line' : ''}`}
+                            style={folded ? undefined : { width: `${String(mailboxesWidth)}px` }}
+                        >
+                            <Mailboxes
+                                folders={folders}
+                                status={status}
+                                folded={folded}
+                                control={
+                                    <SurfaceControl
+                                        label={translate(folded ? 'mailboxes.unfold' : 'mailboxes.fold')}
+                                        icon={folded ? 'chevron_right' : 'chevron_left'}
+                                        onActivate={() => {
+                                            revise({ mailboxesFolded: !folded });
+                                        }}
+                                    />
+                                }
+                            />
+                        </aside>
+
+                        {/* The boundary is only there where the column is drawn as one: folded to its rail it is the
+                            width the rail is, and a grip on it would offer to widen something the fold decided. The
+                            line it draws is the border the column would otherwise carry. */}
+                        {folded ? null : (
+                            <WidthGrip
+                                label={translate('folders.width')}
+                                hint={translate('folders.widthHint')}
+                                narrowest={narrowestMailboxes}
+                                widest={widestMailboxes}
+                                step={mailboxesWidthStep}
+                                startingWidth={startingMailboxesWidth}
+                                width={mailboxesWidth}
+                                onWidth={(moved) => {
+                                    setMailboxesWidth(mailboxesWidthWithin(moved));
+                                }}
+                                onChosen={(chosen) => {
+                                    const settled = mailboxesWidthWithin(chosen);
+
+                                    setMailboxesWidth(settled);
+                                    storeMailboxesWidth(person, settled);
+                                }}
+                            />
+                        )}
+                    </>
                 ) : (
                     <dialog
                         ref={drawer}
@@ -357,7 +405,13 @@ export function MailSpace({
                     column at a time has nothing between them, and the tablet's list is the width the design draws it
                     at. The line the grip draws is the border the list would otherwise carry. */}
                 {twoPanes && desktop ? (
-                    <ListWidthGrip
+                    <WidthGrip
+                        label={translate('mail.listWidth')}
+                        hint={translate('mail.listWidthHint')}
+                        narrowest={narrowestList}
+                        widest={widestList}
+                        step={listWidthStep}
+                        startingWidth={startingListWidth}
                         width={listWidth}
                         onWidth={(moved) => {
                             setListWidth(withinTheRoom(moved));

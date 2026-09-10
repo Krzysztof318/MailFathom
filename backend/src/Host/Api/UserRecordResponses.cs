@@ -127,6 +127,27 @@ internal sealed record UserMailAccountRequest(long Version, string? Account);
 /// <param name="AccountId">The identifier the account was declared under.</param>
 internal sealed record UserMailAccountRemovalRequest(long Version, string? AccountId);
 
+/// <summary>One folder declared into a mail account of the acting user's record.</summary>
+/// <param name="Version">The version the record was read at.</param>
+/// <param name="AccountId">The identifier the account the folder belongs to was declared under.</param>
+/// <param name="Folder">The declaration, as the JSON object a configuration file would have written.</param>
+/// <remarks>The folder travels as the document a file states it in for the reason a mail account does: it is the same shape, judged by the same binder, so a setting a folder gains needs nothing added here.</remarks>
+internal sealed record UserFolderRequest(long Version, string? AccountId, string? Folder);
+
+/// <summary>One folder of the acting user's record stated afresh, in place of the one carrying an alias.</summary>
+/// <param name="Version">The version the record was read at.</param>
+/// <param name="AccountId">The identifier the account the folder belongs to was declared under.</param>
+/// <param name="Alias">The alias the folder being changed is declared under, which the declaration itself may move away from.</param>
+/// <param name="Folder">The folder as it is to stand, as the JSON object a configuration file would have written.</param>
+/// <remarks>The alias is carried beside the declaration rather than read out of it, because renaming a folder is exactly the change where the two differ: what is being replaced is found by the name it has now, and what replaces it carries the name it is taking.</remarks>
+internal sealed record UserFolderReplacementRequest(long Version, string? AccountId, string? Alias, string? Folder);
+
+/// <summary>The folder a mail account of the acting user's record stops declaring.</summary>
+/// <param name="Version">The version the record was read at.</param>
+/// <param name="AccountId">The identifier the account the folder belongs to was declared under.</param>
+/// <param name="Alias">The alias the folder was declared under.</param>
+internal sealed record UserFolderRemovalRequest(long Version, string? AccountId, string? Alias);
+
 /// <summary>Material an administrator asks this deployment to store for one user.</summary>
 /// <param name="Name">The stable declared name used for rotation and audit.</param>
 /// <param name="Material">The material to seal, carried only in this request.</param>

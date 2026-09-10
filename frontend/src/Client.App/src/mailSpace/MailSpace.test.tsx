@@ -13,6 +13,7 @@ import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { BackToList } from './BackToList';
 import { listWidthStep, readListWidth, startingListWidth, storeListWidth } from './listWidth';
+import { mailboxesWidthStep, readMailboxesWidth, startingMailboxesWidth, storeMailboxesWidth } from './mailboxesWidth';
 import { useMailboxesDrawer } from './mailboxesDrawer';
 import { MailSpace } from './MailSpace';
 
@@ -290,6 +291,29 @@ describe('MailSpace, wide', () => {
         expect(readListWidth('karolina')).toBe(startingListWidth + 64);
     });
 
+    it('opens the mailbox column at the width this person last settled on, and keeps where they move it to', () => {
+        storeMailboxesWidth('karolina', 320);
+
+        renderSpace(desktop, {}, 'karolina');
+
+        const grip = screen.getByRole('separator', { name: 'Mailbox column width' });
+        expect(grip.getAttribute('aria-valuenow')).toBe('320');
+        expect(screen.getByRole('complementary').style.width).toBe('320px');
+
+        fireEvent.keyDown(grip, { key: 'ArrowRight' });
+
+        expect(screen.getByRole('complementary').style.width).toBe(`${String(320 + mailboxesWidthStep)}px`);
+        expect(readMailboxesWidth('karolina')).toBe(320 + mailboxesWidthStep);
+    });
+
+    it('opens the mailbox column at the starting width for somebody who has settled on none', () => {
+        renderSpace(desktop, {}, 'marta');
+
+        expect(screen.getByRole('separator', { name: 'Mailbox column width' }).getAttribute('aria-valuenow')).toBe(
+            String(startingMailboxesWidth),
+        );
+    });
+
     it('draws the three columns side by side, with the toolbar over them', () => {
         renderSpace(desktop);
 
@@ -322,7 +346,12 @@ describe('MailSpace, wide', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Expand the mailbox column' }));
 
         expect(screen.queryByRole('button', { name: 'Expand the mailbox column' })).toBeNull();
-        expect(screen.getByRole('complementary').className).toContain('w-mailboxes');
+
+        // Open, the column is whatever this person dragged it to rather than a width the stylesheet names, so what
+        // says it is open is the width it is drawn at and the boundary that moves it.
+        expect(screen.getByRole('complementary').className).not.toContain('w-mailboxes-folded');
+        expect(screen.getByRole('complementary').style.width).toBe('210px');
+        expect(screen.getByRole('separator', { name: 'Mailbox column width' })).toBeDefined();
     });
 
     it('keeps the mailboxes in the folded rail, and drops what a rail has no room to say', () => {

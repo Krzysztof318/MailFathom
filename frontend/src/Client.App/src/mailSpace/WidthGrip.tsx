@@ -3,29 +3,56 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react';
-import { useLocalization } from '../localization/useLocalization';
-import { listWidthStep, narrowestList, startingListWidth, widestList } from './listWidth';
 
-// The grip on the boundary between the message list and the reading pane, which is what lets a reader give either side
-// more room. It draws the line the design project puts there and it is the control on it — those are one element
-// rather than two, because a boundary somebody can move is a boundary they have to be able to point at.
+// The grip on a boundary between two columns, which is what lets a reader give either side more room. It draws the
+// line the design project puts there and it is the control on it — those are one element rather than two, because a
+// boundary somebody can move is a boundary they have to be able to point at.
 //
-// It is a separator that takes focus, which is what ARIA calls a window splitter: the position it reports is the width
-// of the pane before it, so a reader who cannot see the columns still knows where the boundary stands and how far it
-// may go. Everything it can be done with a pointer it can be done with the keyboard — the arrows move it in steps, and
-// `Home` returns it to the width it started at, which is what a double-click does for a mouse.
+// **One component for both boundaries the Mail space has**, the one between the mailboxes and the list and the one
+// between the list and the reading pane. What differs between them is four numbers and two sentences, which is what
+// it takes as props; what does not differ is everything below, and a second grip resembling this one is how a client
+// comes to have two boundaries that behave differently under the keyboard.
+//
+// It is a separator that takes focus, which is what ARIA calls a window splitter: the position it reports is the
+// width of the pane before it, so a reader who cannot see the columns still knows where the boundary stands and how
+// far it may go. Everything it can be done with a pointer it can be done with the keyboard — the arrows move it in
+// steps, and `Home` returns it to the width it started at, which is what a double-click does for a mouse.
 //
 // One pointer path rather than one per input, because pointer events are what a mouse, a finger, and a pen all arrive
 // as. Capturing the pointer is what keeps a drag with it once it has left the five pixels the grip is drawn at, and
 // `touch-none` is what keeps a finger dragging the boundary from scrolling the list underneath it instead.
 
-export function ListWidthGrip({
+export function WidthGrip({
+    label,
+    hint,
     width,
+    narrowest,
+    widest,
+    step,
+    startingWidth,
     onWidth,
     onChosen,
 }: {
-    /** How wide the list is drawn right now, which is the position this reports and the width a drag starts from. */
+    /** What the boundary is called, which is the name a reader who cannot see the columns hears. */
+    readonly label: string;
+
+    /** What moving it does, as the pointer's own hint. */
+    readonly hint: string;
+
+    /** How wide the pane before it is drawn right now, which is the position this reports and a drag starts from. */
     readonly width: number;
+
+    /** The narrowest that pane may be, which is the least this reports as a separator. */
+    readonly narrowest: number;
+
+    /** The widest it may be. */
+    readonly widest: number;
+
+    /** How far one arrow press moves the boundary. */
+    readonly step: number;
+
+    /** The width `Home` and a double-click return the boundary to. */
+    readonly startingWidth: number;
 
     /** The width to draw while the boundary is being moved. */
     readonly onWidth: (width: number) => void;
@@ -33,8 +60,6 @@ export function ListWidthGrip({
     /** The width somebody settled on, which is the one worth keeping. */
     readonly onChosen: (width: number) => void;
 }) {
-    const { translate } = useLocalization();
-
     // What a drag is: the pointer that started it, and where it and the boundary stood then. A ref rather than state,
     // because nothing on the screen is drawn from it and a moving pointer would otherwise render for every pixel of
     // its own bookkeeping.
@@ -87,7 +112,7 @@ export function ListWidthGrip({
     }
 
     function moveByKey(event: KeyboardEvent<HTMLDivElement>): void {
-        const moved = keyboardWidths[event.key];
+        const moved = keyboardWidths(width, step, startingWidth)[event.key];
 
         if (moved === undefined) {
             return;
@@ -95,19 +120,19 @@ export function ListWidthGrip({
 
         // The arrows scroll the column behind the grip otherwise, and `Home` takes the page to the top of it.
         event.preventDefault();
-        onChosen(moved(width));
+        onChosen(moved);
     }
 
     return (
         <div
             role="separator"
             aria-orientation="vertical"
-            aria-label={translate('mail.listWidth')}
+            aria-label={label}
             aria-valuenow={Math.round(width)}
-            aria-valuemin={narrowestList}
-            aria-valuemax={widestList}
+            aria-valuemin={narrowest}
+            aria-valuemax={widest}
             tabIndex={0}
-            title={translate('mail.listWidthHint')}
+            title={hint}
             /* Five pixels is what the design draws, and it is less than a finger or a shaking hand can reliably hit —
                so the line stays five pixels and the target around it is widened to twenty-five with a pseudo-element,
                which is the accessibility obligation rather than a departure from the design. */
@@ -117,17 +142,23 @@ export function ListWidthGrip({
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
             onDoubleClick={() => {
-                onChosen(startingListWidth);
+                onChosen(startingWidth);
             }}
             onKeyDown={moveByKey}
         />
     );
 }
 
-// What each key the grip answers does to the width. A lookup rather than a chain inside the handler, so the keys the
+// What each key the grip answers moves the width to. A lookup rather than a chain inside the handler, so the keys the
 // control offers are one list a reader can see the whole of.
-const keyboardWidths: Readonly<Record<string, ((width: number) => number) | undefined>> = {
-    ArrowLeft: (width) => width - listWidthStep,
-    ArrowRight: (width) => width + listWidthStep,
-    Home: () => startingListWidth,
-};
+function keyboardWidths(
+    width: number,
+    step: number,
+    startingWidth: number,
+): Readonly<Record<string, number | undefined>> {
+    return {
+        ArrowLeft: width - step,
+        ArrowRight: width + step,
+        Home: startingWidth,
+    };
+}
