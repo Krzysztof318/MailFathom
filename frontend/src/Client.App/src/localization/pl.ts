@@ -14,6 +14,7 @@ export const pl: Catalogue = {
     'shell.language': 'Język',
     'shell.theme': 'Motyw',
     'shell.spaces': 'Przestrzenie',
+    'shell.refresh': 'Odśwież',
     'shell.signOut': 'Wyloguj',
     'shell.clientVersion': 'v{client}',
     'shell.versions': 'v{client} · wdrożenie {deployment}',

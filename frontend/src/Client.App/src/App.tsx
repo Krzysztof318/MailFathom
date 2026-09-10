@@ -67,6 +67,7 @@ import { AccountMenu } from './shell/AccountMenu';
 import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
+import { Refresh } from './shell/Refresh';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
 import { useBackNavigation } from './shellOperations/backNavigation';
@@ -844,6 +845,16 @@ export function App({
                                                             current={space}
                                                             onPointerDown={swipe.onNavigationPointerDown}
                                                             onClickCapture={swipe.onNavigationClickCapture}
+                                                            refresh={
+                                                                // On the same grant the bell is, and for the same reason: today
+                                                                // the two things it reads again are the mail and the centre, and
+                                                                // a credential that may read neither would press it for nothing.
+                                                                readsMail ? (
+                                                                    <Refresh
+                                                                        readNotificationsAgain={notifications.readAgain}
+                                                                    />
+                                                                ) : null
+                                                            }
                                                             notifications={
                                                                 // Offered on the grant the routes are admitted under, and absent
                                                                 // rather than inert without it: a bell that could never answer is

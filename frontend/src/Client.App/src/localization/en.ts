@@ -15,6 +15,7 @@ export const en = {
     'shell.language': 'Language',
     'shell.theme': 'Theme',
     'shell.spaces': 'Spaces',
+    'shell.refresh': 'Refresh',
     'shell.signOut': 'Sign out',
     'shell.clientVersion': 'v{client}',
     'shell.versions': 'v{client} · deployment {deployment}',

@@ -59,6 +59,7 @@ const acts = {
     remove: vi.fn(),
     follow: vi.fn(),
     show: vi.fn(),
+    readAgain: vi.fn(),
 };
 
 function centre(held: Partial<Centre> = {}): Centre {
@@ -66,6 +67,7 @@ function centre(held: Partial<Centre> = {}): Centre {
         unreadCount: 1,
         shown: true,
         notifications: [mail, meeting],
+        arrived: new Set<string>(),
         reading: false,
         failure: null,
         ...acts,

@@ -61,6 +61,13 @@ export interface NotificationCentre {
     /** The window of the centre the panel draws, newest first. */
     readonly notifications: readonly ClientNotification[];
 
+    /**
+     * The rows that were not there the last time this client read the centre, which is what a row opening itself is
+     * drawn from. It is empty after the first read of a credential's centre, because everything is new then and
+     * nothing arrived.
+     */
+    readonly arrived: ReadonlySet<string>;
+
     /** Whether the page behind the panel is being read for the first time, which is what the panel says while it waits. */
     readonly reading: boolean;
 
@@ -69,6 +76,13 @@ export interface NotificationCentre {
 
     readonly show: () => void;
     readonly hide: () => void;
+
+    /**
+     * Reads what has happened again, whether or not the panel is open. It is what the rail's refresh asks of the
+     * centre: the count is polled on its own and a page is read when somebody looks, so a reader who wants to know
+     * now has nothing to press without it.
+     */
+    readonly readAgain: () => void;
 
     /** Puts one notification into the read state stated, which is what the row's own control does. */
     readonly markRead: (ids: readonly string[], read: boolean) => void;
@@ -116,6 +130,7 @@ export function useNotificationCentre(
     const [unreadCount, setUnreadCount] = useState(0);
     const [shown, setShown] = useState(false);
     const [notifications, setNotifications] = useState<readonly ClientNotification[]>([]);
+    const [arrived, setArrived] = useState<ReadonlySet<string>>(new Set());
     const [reading, setReading] = useState(false);
     const [failure, setFailure] = useState<ClientFailureReason | null>(null);
 
@@ -154,6 +169,7 @@ export function useNotificationCentre(
         setCredential(session);
         setUnreadCount(0);
         setNotifications([]);
+        setArrived(new Set());
         setShown(false);
         setFailure(null);
     }
@@ -231,6 +247,13 @@ export function useNotificationCentre(
 
     const hide = useCallback((): void => {
         setShown(false);
+    }, []);
+
+    // The same token a rise in the count bumps, so asking for it by hand and something having arrived stay one
+    // mechanism rather than two reads racing on the same route. The count comes with it because the badge is what a
+    // reader who does not open the panel is looking at.
+    const readAgain = useCallback((): void => {
+        setAsked((token) => token + 1);
     }, []);
 
     // Coming back through the notification the operating system showed is the same act as reaching for the bell, so it
@@ -362,6 +385,7 @@ export function useNotificationCentre(
 
             setFailure(null);
             setNotifications(page);
+            setArrived(seen === null ? new Set() : new Set(page.map((row) => row.id).filter((id) => !seen.has(id))));
             known.current = { session, ids: new Set(page.map((notification) => notification.id)) };
 
             // The first read is what this client has, rather than what has just happened, so nothing is announced from
@@ -489,10 +513,12 @@ export function useNotificationCentre(
         unreadCount,
         shown,
         notifications,
+        arrived,
         reading,
         failure,
         show,
         hide,
+        readAgain,
         markRead,
         markAllRead,
         remove,

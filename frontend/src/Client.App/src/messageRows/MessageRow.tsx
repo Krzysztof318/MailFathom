@@ -73,6 +73,8 @@ export function MessageRow({
     open,
     selected,
     focusable,
+    arrived,
+    changed,
     note,
     onOpen,
     onPoint,
@@ -87,6 +89,18 @@ export function MessageRow({
     readonly open: boolean;
     readonly selected: boolean;
     readonly focusable: boolean;
+
+    /**
+     * Whether this row arrived in a list the reader was already looking at, which is what it lands for. It is false
+     * for every row of a list's first read: that list appeared, and nothing arrived in it.
+     */
+    readonly arrived?: boolean;
+
+    /**
+     * Whether the deployment named this message as one that changed, which is what the row is washed and marked for.
+     * A list whose rows nothing signals about — the search results — hands neither.
+     */
+    readonly changed?: boolean;
 
     /** What the row has to say about the message beyond what it draws, in the line the height already reserves. */
     readonly note?: ReactNode;
@@ -209,7 +223,14 @@ export function MessageRow({
             //
             // Vertical panning stays the scroller's and everything sideways is the row's, which is what stops a browser
             // from taking the gesture over as a scroll before it has been read.
-            className="relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row"
+            //
+            // One of the two animations at most, and the arrival wins: a row that has only just been drawn has nothing
+            // to have changed from, so washing it as well would be marking it against a version of itself the reader
+            // never saw. Both are the design project's, and `styles.css` holds why the arrival here is the travel
+            // without the height a flowing list gets.
+            className={`relative h-message-row-narrow touch-pan-y overflow-hidden border-b border-b-sunken workspace:h-message-row ${
+                arrived === true ? 'animate-row-landing' : changed === true ? 'animate-row-changed' : ''
+            }`}
         >
             {carrying === undefined ? null : (
                 // What the row is being carried off is showing: the act, named and drawn, against the edge the finger

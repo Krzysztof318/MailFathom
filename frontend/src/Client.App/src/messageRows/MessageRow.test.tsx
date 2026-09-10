@@ -35,6 +35,30 @@ const email: MailTimelineEntry = {
     threadMessageCount: null,
 };
 
+function drawMoved(moved: { readonly arrived?: boolean; readonly changed?: boolean }): HTMLElement {
+    render(
+        <LocalizationProvider>
+            <ul>
+                <MessageRow
+                    email={email}
+                    position={1}
+                    open={false}
+                    selected={false}
+                    focusable
+                    arrived={moved.arrived ?? false}
+                    changed={moved.changed ?? false}
+                    onOpen={() => undefined}
+                    onPoint={() => undefined}
+                    onPointerEnter={() => undefined}
+                    onElement={() => undefined}
+                />
+            </ul>
+        </LocalizationProvider>,
+    );
+
+    return screen.getByRole('option');
+}
+
 function drawRow(
     note?: string,
     unread = false,
@@ -465,5 +489,32 @@ describe('MessageRow, under a finger carried across it', () => {
         });
 
         expect(pressed).not.toHaveBeenCalled();
+    });
+});
+
+// The standing rule for every list in this client: the skeleton is drawn once, when the list holds nothing, and every
+// change after it reaches the rows it touched. A row is where that lands, and what it draws is the one thing about it
+// that moved.
+describe('MessageRow, a row that moved', () => {
+    it('lands into its place where it arrived in a list the reader was already looking at', () => {
+        expect(drawMoved({ arrived: true }).className).toContain('animate-row-landing');
+    });
+
+    it('is washed and marked where the deployment said this message changed', () => {
+        expect(drawMoved({ changed: true }).className).toContain('animate-row-changed');
+    });
+
+    it('draws the arrival alone where a row both arrived and was named as changed, having no version to change from', () => {
+        const row = drawMoved({ arrived: true, changed: true });
+
+        expect(row.className).toContain('animate-row-landing');
+        expect(row.className).not.toContain('animate-row-changed');
+    });
+
+    it('draws neither where nothing about the row moved, which is every row of a list that was just read', () => {
+        const row = drawMoved({});
+
+        expect(row.className).not.toContain('animate-row-landing');
+        expect(row.className).not.toContain('animate-row-changed');
     });
 });

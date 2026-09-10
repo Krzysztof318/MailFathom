@@ -56,6 +56,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
+import { noRows, rowsNoticed } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -126,6 +127,18 @@ export function MessageList({
     // the sentences off leaves the reader on the row they were on instead of at the top of the folder.
     const [readingsShown, setReadingsShown] = useState(opening.readingsShown);
     const [held, setHeld] = useState<HeldTimeline>(nothingHeld);
+
+    // Which rows the reader is meant to notice, and which they have already seen. The standing rule for every list in
+    // this client is that the skeleton is drawn once, when the list holds nothing, and every change after it reaches
+    // the rows it actually touched — so these three are what a row is told about itself.
+    //
+    // `drawnBefore` is a ref rather than state because nothing on the screen is drawn from it and it must not restart
+    // the read below when it grows; it is `null` until the first page for this listing lands, which is what keeps the
+    // first read from animating every row as an arrival. It is bounded for the reason `mostPlacesRemembered` is: a
+    // reader scrolling a folder of two hundred thousand messages would otherwise grow it without end.
+    const drawnBefore = useRef<Set<string> | null>(null);
+    const [arrivedRows, setArrivedRows] = useState<ReadonlySet<string>>(noRows);
+    const [changedRows, setChangedRows] = useState<ReadonlySet<string>>(noRows);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
 
     const [scrollTop, setScrollTop] = useState(0);
@@ -230,6 +243,14 @@ export function MessageList({
                     // account a message is in nor which folder it would be leaving.
                     listed.drew(result.value.emails);
                     setHeld((current) => answered(current, result.value, asked));
+
+                    const noticed = rowsNoticed(
+                        drawnBefore.current,
+                        result.value.emails.map((email) => email.id),
+                    );
+
+                    drawnBefore.current = noticed.shown;
+                    setArrivedRows(noticed.arrived);
                 }
             },
         );
@@ -319,6 +340,7 @@ export function MessageList({
 
                 if (signal.kind === 'mail.changed' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld((current) => changeNoticed(current, signal.emails));
+                    setChangedRows(new Set(signal.emails));
                 }
             }),
         [signalledChanges, scope],
@@ -385,6 +407,14 @@ export function MessageList({
             stand: (view) => {
                 readWith({ ...listing, filters: narrowedToView(listing.filters, view, new Date()) });
             },
+
+            // The same act the deployment's own arrival signal performs, and deliberately the same one: the leading
+            // page is let go of and read again while the reader is looking at it, so the list is never emptied and
+            // never stands as a skeleton of itself. A reader who has scrolled away keeps every row in front of them
+            // and meets the new leading page when they come back to it.
+            readAgain: () => {
+                setHeld(arrivalNoticed);
+            },
         });
 
         return () => {
@@ -426,6 +456,12 @@ export function MessageList({
         setHeld(nothingHeld);
         setFailure(null);
         setFocusedRow(0);
+
+        // A folder somebody moved to is a list being drawn for the first time rather than one that changed, so it is
+        // drawn as the skeleton and none of what arrives in it is an arrival.
+        drawnBefore.current = null;
+        setArrivedRows(noRows);
+        setChangedRows(noRows);
 
         // The position goes back with them. Emptying the list unmounts the scroller, so the one that comes back is at
         // the top whatever this state says — and a window computed from where the reader was in the old listing draws
@@ -803,6 +839,8 @@ export function MessageList({
                                     open={workspace.selection === email.id}
                                     selected={workspace.selected.includes(email.id)}
                                     focusable={row === focusedRow}
+                                    arrived={arrivedRows.has(email.id)}
+                                    changed={changedRows.has(email.id)}
                                     note={readingOn(email)}
                                     onOpen={() => {
                                         open(row);

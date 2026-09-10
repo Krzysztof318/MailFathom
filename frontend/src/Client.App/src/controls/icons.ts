@@ -82,6 +82,7 @@ export const iconNames = [
     'pending_actions',
     'person',
     'progress_activity',
+    'refresh',
     'reply',
     'reply_all',
     'report',
