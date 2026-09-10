@@ -80,12 +80,23 @@ reports and never gates: nothing it prints is a finding until it is confirmed in
 the file it points at, and it names the untracked paths no diff contains rather
 than describing less than the change while looking complete.
 
-The fast script restores the solution, builds it in Release configuration, runs
-all unit tests without rebuilding, and formats the C# files the branch changed —
-each against whichever of the two solutions holds it, which
+The fast script restores the solution, builds it whole in Release configuration,
+runs without rebuilding the unit suites the change can have broken, and formats
+the C# files the branch changed — each against whichever of the two solutions
+holds it, which
 [Building and testing the client](#building-and-testing-the-client) describes for
 the client half. It is the only one that rewrites source files, and every
 `dotnet format` pass it runs is a repairing one.
+
+Which suites those are is read from what each test project names in its own
+`Include` attributes, and the relation is direct rather than transitive: a change
+to `Domain` runs `Domain.UnitTests` and not the `Application.UnitTests` that
+exercises the same types one layer up. A change reaching a path the service build
+reads that no test project names — a package pin, a shared build property,
+`global.json`, the solution file — is not narrowed at all and runs every suite.
+The run prints how many it ran of how many there are and names them, and `CI` runs
+all of them on the pull request.
+[Entry points](agent-workflow.md#entry-points) carries the whole rule.
 
 Nothing behind it verifies, because the build in front of it has already reported
 most of what there is to report. `backend/Directory.Build.props` sets
@@ -122,10 +133,14 @@ every path the branch touched is a C# file it added or edited, and runs whenever
 one was removed or moved. `CI` asks both questions unconditionally, so the local
 narrowing withholds an earlier verdict rather than the verdict.
 
-The full script fetches the base branch and refuses to continue when the branch
-does not contain it, so it needs access to the remote and cannot run offline.
-Rebase onto the fetched base when it reports the branch is behind. The fast
-script queries only local Git state and remains available offline.
+Both scripts fetch the base branch and refuse to continue when the branch does not
+contain it, so both need access to the remote and neither runs offline. Rebase onto
+the fetched base when either reports the branch is behind. The one checkout that
+carries on regardless is one whose remotes name no MailFathom at all: there is no
+base for it to be behind, so the fast script prints the hint and continues while
+the full one refuses.
+[The base is asked twice locally and never in the pipeline](agent-workflow.md#the-base-is-asked-twice-locally-and-never-in-the-pipeline)
+carries why neither the pipeline nor any workflow asks the same question.
 
 The base is `main` on whichever remote points at `Krzysztof318/MailFathom` —
 `origin` here, and conventionally `upstream` in a fork, where `origin` is the

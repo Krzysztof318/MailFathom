@@ -408,24 +408,37 @@ verify_fast_names_the_suites_it_left_to_the_pipeline() {
 }
 
 # The narrowing stops where the change stops being about one project. A package pin, a shared build
-# property, or the solution file can move the verdict on a project nothing in the change touched, so
-# no selection is honest there and the whole solution runs — exactly as it did before the fast loop
-# narrowed anything.
+# property, the solution file, or the SDK pin can move the verdict on a project nothing in the change
+# touched, so no selection is honest there and the whole solution runs — exactly as it did before the
+# fast loop narrowed anything.
+#
+# Both paths are asserted because the two are reached differently and only one of them is under
+# `backend/`. `global.json` stands for the shared build inputs above both stacks — `NuGet.config` and
+# `.config/**` beside it — which a rule written around `backend/` alone would skip as uninteresting
+# rather than refuse to narrow around, leaving an SDK bump verified by whichever suite the C# file
+# beside it happened to name. Each runs beside the fixture branch's own C# file, which is what makes
+# the assertion about the shared input rather than about a branch with nothing else on it.
 verify_fast_runs_every_suite_when_a_shared_build_input_changed() {
-  : > "$invocation_log"
-  printf '<Project />\n' > "$repository_root/backend/Directory.Packages.props"
-  git -C "$repository_root" add backend/Directory.Packages.props
+  local shared_build_input
 
-  (
-    cd "$repository_root"
-    VERIFY_FORCE=1 "$scripts_directory/verify-fast.sh"
-  ) > /dev/null 2>&1
+  for shared_build_input in backend/Directory.Packages.props global.json; do
+    : > "$invocation_log"
+    printf '{}\n' > "$repository_root/$shared_build_input"
+    git -C "$repository_root" add "$shared_build_input"
 
-  git -C "$repository_root" rm --quiet --force --cached backend/Directory.Packages.props
-  rm -f "$repository_root/backend/Directory.Packages.props"
+    (
+      cd "$repository_root"
+      VERIFY_FORCE=1 "$scripts_directory/verify-fast.sh"
+    ) > /dev/null 2>&1
 
-  assert_contains 'test --solution backend/MailFathom.slnx --configuration Release --no-build' \
-    "$invocation_log"
+    git -C "$repository_root" rm --quiet --force --cached "$shared_build_input"
+    rm -f "$repository_root/$shared_build_input"
+
+    if ! grep -Fq 'test --solution backend/MailFathom.slnx --configuration Release --no-build' "$invocation_log"; then
+      printf 'verify-fast.sh narrowed the suite for a change to %s\n' "$shared_build_input" >&2
+      return 1
+    fi
+  done
 }
 
 # The base check is the fast loop's now as well as the full gate's, and it is the one question `CI`

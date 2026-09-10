@@ -4,8 +4,9 @@
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 
-# Which unit suites a change can have broken. Sourced by the fast loop; it defines one function and
-# runs nothing on its own.
+# Which unit suites a change can have broken. Sourced by the fast loop after
+# `scripts/resolve-changed-stacks.sh`, whose `change_reaches_service_stack` it calls to decide which
+# changed paths it has to have an answer about; it defines two functions and runs nothing on its own.
 #
 # The solution's whole suite is fifteen thousand tests and about eighty seconds of a machine several
 # sessions share, and almost none of it reads the project a change touched. What decides here is what
@@ -29,10 +30,10 @@
 # The unit-test projects the changed paths reach, one per line, or a non-zero status meaning the
 # change cannot be narrowed and the whole solution answers for it. Run from the repository root.
 #
-# A path under `backend/` that no test project names is what returns that status: a package pin, a
-# shared build property, the solution file, or a source file no suite links. Each of those can move
-# the verdict on a project nothing in the change touched, so the conservative answer is the whole
-# solution rather than a guess at which suites read it.
+# A path the service build reads that no test project names is what returns that status: a package
+# pin, a shared build property, the solution file, the SDK pin, a source file no suite links. Each of
+# those can move the verdict on a project nothing in the change touched, so the conservative answer is
+# the whole solution rather than a guess at which suites read it.
 resolve_changed_unit_suites() {
   local changed_path project_file project_directory include include_path covered index matched
   local -a selected=()
@@ -61,7 +62,12 @@ resolve_changed_unit_suites() {
   done
 
   for changed_path in "$@"; do
-    [[ "$changed_path" == backend/* ]] || continue
+    # Every path the service build reads is asked about, not only the ones under `backend/`.
+    # `global.json` pins the SDK, `NuGet.config` decides what restores, and `.config/**` decides what
+    # is run and measured — each can move the verdict on every project while naming none of them, so
+    # each has to reach the refusal below rather than be skipped as uninteresting. What this passes
+    # over is a path no service build reads at all: a page, a client file, a deployment asset.
+    change_reaches_service_stack "$changed_path" || continue
 
     matched=''
 

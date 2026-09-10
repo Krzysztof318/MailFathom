@@ -98,7 +98,7 @@ Role: <owner's checkout or fork, and the board access the probe returned>
 Docs: <pass or n/a with evidence>
 Changelog: <pass or n/a with evidence>
 Licenses: <pass or n/a with evidence>
-Full verification: <command and result>
+Verification: <scripts/verify-fast.sh and its result, naming the unit suites it ran; scripts/verify-full.sh and its result only where it was also run, and nothing about it otherwise>
 Diff review: <scope and exclusions>
 Commit: <hash and subject>
 Push: <remote and branch>
