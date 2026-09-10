@@ -25,8 +25,9 @@ namespace MailFathom.Application.Synchronization;
 /// A raise arriving while nothing is waiting is kept, which is the case that has to be right rather than a corner: the
 /// record is often written while the account is mid-run, and a raise dropped there would be a change waiting out the
 /// whole of the next interval. It is kept per account rather than per change, so a hundred messages filed at once bring
-/// one run forward instead of a hundred, and it is spent by the wait that takes it — a raise never survives into a
-/// second wait, which would be a run brought forward for work already done.
+/// one run forward instead of a hundred, and it is spent by whichever of the two answers it — the run already under way,
+/// at one of its own stage boundaries, or the wait that follows it. A raise never survives what answered it, which would
+/// be a run brought forward for work already done.
 /// </para>
 /// </remarks>
 public sealed class MailAccountRunSignal
@@ -36,6 +37,18 @@ public sealed class MailAccountRunSignal
     /// <summary>Says that an account has something written down that its next run should not wait an interval for.</summary>
     /// <param name="account">The account whose run is worth bringing forward.</param>
     public void BringForward(MailAccountId account) => this.WaitFor(account).BringForward();
+
+    /// <summary>Takes a raise standing against an account, so a run already under way answers it instead of the next one.</summary>
+    /// <param name="account">The account whose run is already going.</param>
+    /// <returns><see langword="true" /> when a raise was standing and this call spent it.</returns>
+    /// <remarks>
+    /// The wait between runs is not the only place a raise can be answered: a run reads the records at every one of its
+    /// own stage boundaries, and a change authored while it was under way is carried there rather than waiting out the
+    /// stages left. Spending the raise here is what keeps the wait after that run from bringing a run forward for work
+    /// this one has already done, and answering <see langword="false" /> is what keeps a boundary with nothing authored
+    /// against it from costing a query.
+    /// </remarks>
+    public bool TakeRaise(MailAccountId account) => this.WaitFor(account).TakeRaise();
 
     /// <summary>Registers the wait an account is about to make, so a raise can end it.</summary>
     /// <param name="account">The account about to wait.</param>
@@ -132,6 +145,21 @@ public sealed class MailAccountRunSignal
             // account's gate.
             claimed.Cancel();
             claimed.Dispose();
+        }
+
+        internal bool TakeRaise()
+        {
+            lock (this.gate)
+            {
+                if (!this.raised)
+                {
+                    return false;
+                }
+
+                this.raised = false;
+
+                return true;
+            }
         }
 
         internal Wait Register(CancellationToken stopping)

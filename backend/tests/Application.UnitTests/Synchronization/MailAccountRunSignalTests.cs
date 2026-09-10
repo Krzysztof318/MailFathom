@@ -11,8 +11,9 @@ namespace MailFathom.Application.UnitTests.Synchronization;
 /// <summary>Covers what ends an account's wait between synchronization runs, and what a wait it arrived beside does with it.</summary>
 /// <remarks>
 /// The whole of this type is about timing, so the cases are the orderings: brought forward while a wait is registered,
-/// brought forward while none is, and brought forward for another account. Each is a real sequence — the record is
-/// written by a request whose timing against the account's own loop nothing coordinates.
+/// brought forward while none is, taken by the run already going before any wait sees it, and brought forward for
+/// another account. Each is a real sequence — the record is written by a request whose timing against the account's own
+/// loop nothing coordinates.
 /// </remarks>
 public sealed class MailAccountRunSignalTests
 {
@@ -118,6 +119,69 @@ public sealed class MailAccountRunSignalTests
         using var next = signal.Register(Account, CancellationToken.None);
 
         Assert.True(next.Token.IsCancellationRequested);
+    }
+
+    /// <summary>A run already going answers the raise at its next stage boundary, which is what a change authored mid-run waits for.</summary>
+    [Fact]
+    public void TakeRaise_BroughtForwardWhileTheRunWasGoing_TakesItAndLeavesTheWaitAfterwardsUnbrought()
+    {
+        // Arrange
+        var signal = new MailAccountRunSignal();
+        signal.BringForward(Account);
+
+        // Act
+        var taken = signal.TakeRaise(Account);
+
+        // Assert
+        Assert.True(taken);
+
+        using var waiting = signal.Register(Account, CancellationToken.None);
+
+        Assert.False(waiting.Token.IsCancellationRequested);
+    }
+
+    /// <summary>A boundary is reached several times a run, and one with nothing authored against it must cost no query at all.</summary>
+    [Fact]
+    public void TakeRaise_NothingBroughtForward_ReportsThereIsNothingToCarry()
+    {
+        // Arrange
+        var signal = new MailAccountRunSignal();
+
+        // Act
+        var taken = signal.TakeRaise(Account);
+
+        // Assert
+        Assert.False(taken);
+    }
+
+    /// <summary>One raise is one run brought forward, so the boundaries after the one that took it find nothing left.</summary>
+    [Fact]
+    public void TakeRaise_TheBoundaryBeforeItAlreadyTookTheRaise_ReportsThereIsNothingToCarry()
+    {
+        // Arrange
+        var signal = new MailAccountRunSignal();
+        signal.BringForward(Account);
+        signal.TakeRaise(Account);
+
+        // Act
+        var taken = signal.TakeRaise(Account);
+
+        // Assert
+        Assert.False(taken);
+    }
+
+    [Fact]
+    public void TakeRaise_BroughtForwardForAnotherAccount_LeavesThisAccountWithNothingToCarry()
+    {
+        // Arrange
+        var signal = new MailAccountRunSignal();
+        signal.BringForward(Another);
+
+        // Act
+        var taken = signal.TakeRaise(Account);
+
+        // Assert
+        Assert.False(taken);
     }
 
     /// <summary>A wait already over must not take the next one's, which would be a change waiting out the interval it was raised to avoid.</summary>

@@ -423,16 +423,31 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>
-    /// A change somebody authored reaches the mail server through this run and through nothing else, so the wait in
-    /// front of it is what a person watching a message stay where they deleted it is waiting out. The clock never moves
-    /// in this test, which is what makes the second run attributable to the signal rather than to the interval.
+    /// A change somebody authored reaches the mail server through this account's own runs and through nothing else, so
+    /// the wait in front of it is what a person watching a message stay where they deleted it is waiting out. The clock
+    /// never moves in this test, which is what makes the second convergence pass attributable to the raise rather than
+    /// to the interval. Which of the two carries it follows from where the raise lands, and the claim holds either way:
+    /// a run already under way takes it at its next stage boundary, and one landing past the last of those boundaries is
+    /// taken by the wait that follows and carried by the run it brings forward.
     /// </summary>
     [Fact]
-    public async Task RunAsync_AChangeBroughtTheRunForward_RunsAgainWithoutWaitingOutTheInterval()
+    public async Task RunAsync_AChangeBroughtTheRunForward_ConvergesAgainWithoutWaitingOutTheInterval()
     {
         // Arrange
-        var attemptCount = 0;
-        var secondRunStarted = new TaskCompletionSource();
+        var convergencePassCount = 0;
+        var convergedAfterTheRaise = new TaskCompletionSource();
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref convergencePassCount) == 2)
+                {
+                    convergedAfterTheRaise.TrySetResult();
+                }
+
+                return Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]);
+            });
         await using var emptyMailbox = CreateEmptyMailbox();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         sessionFactory
@@ -441,25 +456,18 @@ public sealed class AccountSynchronizationSupervisorTests
                 Arg.Any<MailFolderResolution>(),
                 Arg.Any<MailTransportSecurityPolicy>(),
                 Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                if (Interlocked.Increment(ref attemptCount) == 2)
-                {
-                    secondRunStarted.TrySetResult();
-                }
-
-                return Task.FromResult(emptyMailbox);
-            });
+            .Returns(Task.FromResult(emptyMailbox));
         await using var harness = CreateHarness(
             SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
-            sessionFactory);
+            sessionFactory,
+            mutationRecordStore: recordStore);
         var supervision = harness.StartSupervision();
 
         // Act: kept where it lands, so whether it arrives before or during the first run decides nothing.
         harness.RunSignal.BringForward(MailAccountId.Create("primary"));
 
         // Assert
-        await secondRunStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await convergedAfterTheRaise.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
         await harness.StopSchedulingAsync();
         await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
     }
@@ -623,6 +631,121 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.Contains(
             harness.Logger.Messages,
             message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A change authored while a run is under way is the ordinary timing rather than a corner, and the stages that
+    /// follow the folders are minutes of derivation on a busy account. The run is held at the stage after the one that
+    /// authored the change, so it can neither have ended nor been followed by another: a second convergence pass
+    /// observed there is this run's own.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AChangeIsAuthoredWhileTheRunIsUnderWay_ConvergesItWithoutWaitingTheRunOut()
+    {
+        // Arrange
+        var convergencePassCount = 0;
+        var convergedAfterTheChangeWasAuthored = new TaskCompletionSource();
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref convergencePassCount) == 2)
+                {
+                    convergedAfterTheChangeWasAuthored.TrySetResult();
+                }
+
+                return Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]);
+            });
+        var releaseTheRun = new TaskCompletionSource();
+        var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
+        attachmentTextStore
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => HoldTheStageUntilReleasedAsync(releaseTheRun));
+        var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            mutationRecordStore: recordStore,
+            chunkingStore: chunkingStore,
+            attachmentTextStore: attachmentTextStore);
+
+        // Authored from the stage before the held one, so the change lands mid-run at a point this test controls
+        // rather than wherever the scheduler happened to put it.
+        chunkingStore
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                harness.RunSignal.BringForward(MailAccountId.Create("primary"));
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]);
+            });
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await convergedAfterTheChangeWasAuthored.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("finished in", StringComparison.Ordinal));
+
+        releaseTheRun.SetResult();
+        await harness.StopSchedulingAsync();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The boundaries are passed several times a run on every account, and nearly every one of them has nothing
+    /// authored against it. Such a boundary must cost nothing at all — no record read, and so no write session and no
+    /// IMAP command behind one.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_NothingWasAuthoredWhileTheRunWasUnderWay_ReadsNoRecordAtItsStageBoundaries()
+    {
+        // Arrange
+        var recordStore = Substitute.For<IMailboxMutationRecordStore>();
+        recordStore
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]));
+        var releaseTheRun = new TaskCompletionSource();
+        var everyEarlierBoundaryPassed = new TaskCompletionSource();
+        var attachmentTextStore = Substitute.For<IStoredEmailAttachmentTextStore>();
+        attachmentTextStore
+            .GetEmailsAwaitingAttachmentTextAsync(
+                Arg.Any<MailAccountIdentity>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                everyEarlierBoundaryPassed.TrySetResult();
+
+                return HoldTheStageUntilReleasedAsync(releaseTheRun);
+            });
+        await using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            mutationRecordStore: recordStore,
+            attachmentTextStore: attachmentTextStore);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await everyEarlierBoundaryPassed.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert: the pass at the top of the run, and not one of the boundaries behind it.
+        await recordStore.Received(1).ReadOutstandingAsync(
+            Arg.Any<MailAccountIdentity>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+
+        releaseTheRun.SetResult();
+        await harness.StopSchedulingAsync();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
     }
 
     /// <summary>An alias nobody advertises is fixed by an edit, so waiting longer for it would only slow the folders that work.</summary>
@@ -1340,6 +1463,15 @@ public sealed class AccountSynchronizationSupervisorTests
         await release.Task;
 
         return mailbox;
+    }
+
+    /// <summary>Models a stage that does not finish, so a run cannot end while a test reads what happened before it.</summary>
+    private static async Task<IReadOnlyList<EmailAwaitingAttachmentText>> HoldTheStageUntilReleasedAsync(
+        TaskCompletionSource release)
+    {
+        await release.Task;
+
+        return [];
     }
 
     /// <summary>Models a folder the server serves and that holds no email, which is the cheapest successful run there is.</summary>
