@@ -69,6 +69,11 @@ export function listWidthKey(person: string): string {
     return `mailfathom.listWidth.${digestOf(person)}`;
 }
 
+/** What the width somebody dragged the mailbox column to is written under, which is the width above's other half. */
+export function mailboxesWidthKey(person: string): string {
+    return `mailfathom.mailboxesWidth.${digestOf(person)}`;
+}
+
 /**
  * What the last telemetry answer the deployment gave is written under, which names the person for the same reason the
  * width above does — and here it is a privacy obligation rather than a convenience.

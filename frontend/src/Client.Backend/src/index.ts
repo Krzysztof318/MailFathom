@@ -105,6 +105,18 @@ export {
     type MailFolderDirectory,
     type MailFolderRole,
 } from './mailFolders';
+export {
+    declareMailFolder,
+    folderDeclarationRoute,
+    folderRemovalRoute,
+    folderReplacementRoute,
+    readFolderConfigurationVersion,
+    replaceMailFolder,
+    userRecordRoute,
+    withdrawMailFolder,
+    type DeclaredMailFolder,
+    type MailFolderConfigurationOutcome,
+} from './mailFolderConfiguration';
 // `mailAttachmentRequest` is deliberately unpublished: a caller composing it would compose it outside the span this
 // package opens, so the request would carry no trace context and no record would be kept of it. `readMailAttachment`
 // is how a download is reached, and the same holds for the portrait requests further down.

@@ -241,6 +241,59 @@ export const en = {
     'folders.reading': 'Reading mailboxes and folders…',
     'folders.failed': 'The mailboxes and folders could not be read: {reason}.',
     'folders.unread': '{count} unread',
+    'folders.showSubfolders': 'Show subfolders',
+    'folders.collapseSubfolders': 'Collapse subfolders',
+    'folders.width': 'Mailbox column width',
+    'folders.widthHint':
+        'Drag to give the mailboxes more room, or double-click to return the column to its usual width.',
+
+    'folders.newFolder': 'New folder',
+    'folders.newFolderInside': 'New folder inside',
+    'folders.markAllRead': 'Mark all as read',
+    'folders.editFolder': 'Edit folder',
+    'folders.deleteFolder': 'Delete folder',
+
+    'folders.newFolderTitle': 'New folder',
+    'folders.editFolderTitle': 'Edit folder',
+    'folders.inMailbox': '{mailbox}',
+    'folders.insideFolder': '{mailbox} — inside “{folder}”',
+    'folders.name': 'Folder name',
+    'folders.remotePath': 'Remote path',
+    'folders.remotePathHint': 'Path on the mail server. The parent folder is created if it does not exist yet.',
+    'folders.create': 'Create folder',
+    'folders.save': 'Save changes',
+    'folders.nameEmpty': 'A folder needs a name.',
+    'folders.tooDeep': 'A folder nests three levels deep at most, and this one would be deeper.',
+    'folders.aliasTaken': 'This mailbox already has a folder of that name.',
+    'folders.remotePathEmpty': 'A folder needs a place on the mail server.',
+    'folders.writeFailed': 'The folder could not be changed: {reason}.',
+    'folders.writeRefused': 'The deployment refused the change: {reason}',
+
+    'folders.deleteQuestion': 'Delete {folder}?',
+    'folders.deleteConsequence': 'MailFathom stops reading {folder} in {mailbox}.',
+    'folders.deleteKeepsNested': 'The folders inside it stay, and are read as folders of their own from now on.',
+    'folders.deleteKeepsMail': 'The mail already stored from it stays here, and the folder stays on your mail server.',
+
+    'folders.created': 'Created {folder} in {mailbox}.',
+    'folders.renamed': 'Renamed to {folder} in {mailbox}.',
+    'folders.removed': 'Stopped reading {folder} in {mailbox}.',
+    'folders.allRead': 'All read in {folder}.',
+    'folders.markingRead': 'Marking everything read in {folder}…',
+    'folders.nothingUnread': 'Nothing was unread in {folder}.',
+    'folders.markingReadStopped': 'The messages already marked read stay marked read.',
+    'folders.markReadFailed': 'Not everything could be marked read in {folder}: {reason}.',
+    'folders.markedReadInPart.one':
+        'The first {count} unread message in {folder} was marked read. Ask again for the rest.',
+    'folders.markedReadInPart.few':
+        'The first {count} unread messages in {folder} were marked read. Ask again for the rest.',
+    'folders.markedReadInPart.many':
+        'The first {count} unread messages in {folder} were marked read. Ask again for the rest.',
+    'folders.markedReadInPart.other':
+        'The first {count} unread messages in {folder} were marked read. Ask again for the rest.',
+    'folders.newFolderHere': 'New folder here',
+    'folders.namePlaceholder': 'e.g. Contracts 2027',
+    'folders.remotePathPlaceholder': '{base}Contracts 2027',
+    'folders.close': 'Close',
 
     'mailboxes.heading': 'Folders',
     'mailboxes.fold': 'Collapse the mailbox column',
@@ -659,6 +712,8 @@ export const en = {
         'This credential may not write a draft on this deployment, so writing a message is not offered. Whoever runs the deployment can grant that.',
     'grant.sendMail':
         'This credential may not send mail from this deployment, so a message can be written and filed as a draft but not sent. Whoever runs the deployment can grant that.',
+    'grant.manageFolders':
+        'This credential may not change which folders this deployment reads, so making, renaming and removing a folder are not offered. Whoever runs the deployment can grant that.',
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',

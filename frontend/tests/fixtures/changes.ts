@@ -43,7 +43,7 @@ export const movesPartlyRecorded = {
         {
             storedEmailId: newsletterId,
             outcome: 'recorded',
-            destinationFolder: 'ARCHIVE-2024',
+            destinationFolder: 'ARCHIVE/2024',
             change: { mutation: 'relocate', recordId: '00000000-0000-4000-8000-0000000000a3', state: 'pending' },
         },
         { storedEmailId: markupOnlyId, outcome: 'message-not-found', destinationFolder: null, change: null },

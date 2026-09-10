@@ -67,7 +67,7 @@ describe('WorkspaceProvider', () => {
 
     it.each<Partial<Workspace>>([
         { scope: { kind: 'account', accountId: 'work' } },
-        { collapsed: ['account:work'] },
+        { foldsToggled: ['account:work'] },
         { selection: 'AAMkAD-42' },
         { fragment: { messageId: 'AAMkAD-42', text: 'the part of the message somebody pointed at' } },
         { question: 'what did Nordwind send' },
@@ -82,7 +82,7 @@ describe('WorkspaceProvider', () => {
     it('opens on what the last run of this tab was looking at, so a reload returns to it', () => {
         const change: Partial<Workspace> = {
             scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
-            collapsed: ['account:personal'],
+            foldsToggled: ['account:personal'],
             selection: 'AAMkAD-42',
         };
         const { rerender } = renderProbe(change);

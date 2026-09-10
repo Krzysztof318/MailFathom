@@ -243,6 +243,60 @@ export const pl: Catalogue = {
     'folders.reading': 'Odczytywanie skrzynek i folderów…',
     'folders.failed': 'Nie udało się odczytać skrzynek i folderów: {reason}.',
     'folders.unread': 'nieprzeczytane: {count}',
+    'folders.showSubfolders': 'Pokaż podfoldery',
+    'folders.collapseSubfolders': 'Zwiń podfoldery',
+    'folders.width': 'Szerokość kolumny skrzynek',
+    'folders.widthHint':
+        'Przeciągnij, aby dać skrzynkom więcej miejsca, albo kliknij dwukrotnie, aby wrócić do zwykłej szerokości kolumny.',
+
+    'folders.newFolder': 'Nowy folder',
+    'folders.newFolderInside': 'Nowy folder wewnątrz',
+    'folders.markAllRead': 'Oznacz wszystko jako przeczytane',
+    'folders.editFolder': 'Edytuj folder',
+    'folders.deleteFolder': 'Usuń folder',
+
+    'folders.newFolderTitle': 'Nowy folder',
+    'folders.editFolderTitle': 'Edytuj folder',
+    'folders.inMailbox': '{mailbox}',
+    'folders.insideFolder': '{mailbox} — wewnątrz „{folder}”',
+    'folders.name': 'Nazwa folderu',
+    'folders.remotePath': 'Ścieżka na serwerze',
+    'folders.remotePathHint':
+        'Ścieżka na serwerze pocztowym. Folder nadrzędny zostanie utworzony, jeśli jeszcze nie istnieje.',
+    'folders.create': 'Utwórz folder',
+    'folders.save': 'Zapisz zmiany',
+    'folders.nameEmpty': 'Folder musi mieć nazwę.',
+    'folders.tooDeep': 'Folder zagnieżdża się najwyżej na trzech poziomach, a ten byłby głębiej.',
+    'folders.aliasTaken': 'Ta skrzynka ma już folder o tej nazwie.',
+    'folders.remotePathEmpty': 'Folder musi mieć miejsce na serwerze pocztowym.',
+    'folders.writeFailed': 'Nie udało się zmienić folderu: {reason}.',
+    'folders.writeRefused': 'Wdrożenie odrzuciło zmianę: {reason}',
+
+    'folders.deleteQuestion': 'Usunąć folder {folder}?',
+    'folders.deleteConsequence': 'MailFathom przestanie czytać folder {folder} w skrzynce {mailbox}.',
+    'folders.deleteKeepsNested': 'Foldery wewnątrz niego zostają i od tej pory są czytane jako osobne foldery.',
+    'folders.deleteKeepsMail': 'Poczta już z niego pobrana zostaje tutaj, a sam folder zostaje na serwerze pocztowym.',
+
+    'folders.created': 'Utworzono folder {folder} w skrzynce {mailbox}.',
+    'folders.renamed': 'Zmieniono nazwę na {folder} w skrzynce {mailbox}.',
+    'folders.removed': 'MailFathom przestał czytać folder {folder} w skrzynce {mailbox}.',
+    'folders.allRead': 'Wszystko przeczytane w folderze {folder}.',
+    'folders.markingRead': 'Oznaczanie wszystkiego jako przeczytane w folderze {folder}…',
+    'folders.nothingUnread': 'W folderze {folder} nie było nic nieprzeczytanego.',
+    'folders.markingReadStopped': 'Wiadomości już oznaczone jako przeczytane pozostaną oznaczone.',
+    'folders.markReadFailed': 'Nie udało się oznaczyć wszystkiego jako przeczytane w folderze {folder}: {reason}.',
+    'folders.markedReadInPart.one':
+        'Oznaczono jako przeczytaną pierwszą {count} nieprzeczytaną wiadomość w folderze {folder}. Poproś ponownie o resztę.',
+    'folders.markedReadInPart.few':
+        'Oznaczono jako przeczytane pierwsze {count} nieprzeczytane wiadomości w folderze {folder}. Poproś ponownie o resztę.',
+    'folders.markedReadInPart.many':
+        'Oznaczono jako przeczytane pierwszych {count} nieprzeczytanych wiadomości w folderze {folder}. Poproś ponownie o resztę.',
+    'folders.markedReadInPart.other':
+        'Oznaczono jako przeczytane pierwszych {count} nieprzeczytanych wiadomości w folderze {folder}. Poproś ponownie o resztę.',
+    'folders.newFolderHere': 'Nowy folder tutaj',
+    'folders.namePlaceholder': 'np. Umowy 2027',
+    'folders.remotePathPlaceholder': '{base}Umowy 2027',
+    'folders.close': 'Zamknij',
 
     'mailboxes.heading': 'Katalogi',
     'mailboxes.fold': 'Zwiń panel skrzynek',
@@ -662,6 +716,8 @@ export const pl: Catalogue = {
         'To poświadczenie nie może zapisywać szkiców w tym wdrożeniu, więc nie oferujemy pisania wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.sendMail':
         'To poświadczenie nie może wysyłać poczty z tego wdrożenia, więc wiadomość można napisać i zapisać jako szkic, ale nie wysłać. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.manageFolders':
+        'To poświadczenie nie może zmieniać tego, które foldery czyta to wdrożenie, więc nie oferujemy tworzenia, zmiany nazwy ani usuwania folderu. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',
