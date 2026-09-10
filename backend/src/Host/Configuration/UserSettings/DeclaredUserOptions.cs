@@ -54,13 +54,13 @@ internal sealed class DeclaredUserOptions
     /// Zero is an ordinary state rather than an unfinished one: a user is declared before their first mailbox is,
     /// and one whose last mailbox is withdrawn is still a user. The property is named as the persisted record names
     /// it, so a path reads <c>Accounts:0:MailAccounts:0</c> and says which of the two collections each segment is —
-    /// and so an adoption materializes what the file supplied under the name the document already uses.
+    /// and so a mailbox stated again in a record is written under the name the file already used.
     /// </remarks>
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
 
     /// <summary>Gets what this user's mail is scanned for, within what the deployment provides.</summary>
     /// <remarks>
-    /// The same block an adopted record carries, judged by the same rules, so an operator writing a posture into the
+    /// The same block a user's own record carries, judged by the same rules, so an operator writing a posture into the
     /// file and a user writing one into their own record are refused for the same reasons in the same words. A
     /// deployment that states nothing here scans this user's mail exactly as it scans everybody's.
     /// </remarks>

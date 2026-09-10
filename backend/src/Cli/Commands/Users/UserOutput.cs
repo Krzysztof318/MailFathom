@@ -25,7 +25,7 @@ internal static class UserOutput
     /// </remarks>
     internal const string RecordSuppliedByAConfigurationSource =
         "A configuration source supplies this user's mail accounts, so their record is empty and every change to it is "
-        + "refused. Run 'mfctl user adopt' to move them into their own record first.";
+        + "refused. Change them where they are declared.";
 
     /// <summary>Writes the users a deployment holds, one to a line.</summary>
     /// <param name="console">Where the listing is written.</param>
@@ -88,7 +88,7 @@ internal static class UserOutput
         if (answer.Code == UserRecordWriteAnswer.RecordReadFromConfiguration)
         {
             context.Console.WriteNotice(
-                "Run 'mfctl user adopt' to move this user's mail accounts out of the deployment's files and into their own record. Every change afterwards is an ordinary one.");
+                "Change this user's mail accounts where the configuration source declares them. Nothing moves them into their record for you: stop declaring this user there, restart, and declare their mailboxes again with 'mfctl user account add'.");
         }
 
         return refused ? CliExitCode.Failure : CliExitCode.Success;
@@ -97,5 +97,5 @@ internal static class UserOutput
     /// <summary>Says where one user's mail accounts are read from, in the words an operator edits.</summary>
     private static string DescribeSource(MailUserRosterEntry user) => user.RecordIsTheirOwn
         ? "their own record, maintained with 'mfctl user account'"
-        : "a configuration source; 'mfctl user adopt' moves them into their own record";
+        : "a configuration source, which is where they are changed";
 }

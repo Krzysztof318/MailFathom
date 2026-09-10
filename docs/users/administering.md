@@ -648,7 +648,7 @@ reads for them is maintained:
 ```console
 $ mfctl user list
 3f1d... (Alex)
-    mail accounts: a configuration source; 'mfctl user adopt' moves them into their own record
+    mail accounts: a configuration source, which is where they are changed
 7c02... (Sam)
     mail accounts: their own record, maintained with 'mfctl user account'
 
@@ -686,30 +686,18 @@ is asking about. With two people there is no such answer, so give the MCP and cl
 belonging to a person — `mfctl credential create` is that — or switch them off. The refusal says which of the two
 applies.
 
-**Their mailboxes come from your files until you adopt them.** A user your configuration declares is read from that
-declaration on every start, so changing their mailboxes here is refused until `mfctl user adopt` moves them into their
-own record. It shows what it would move and asks first, and after it there is no going back: the files no longer decide
-that person's mailboxes, and `mfctl user account add` and `mfctl user account remove` are what change them. Everyone
-else goes on being read from the files exactly as before.
+**Their mailboxes come from your files for as long as your files declare them, and nothing imports them.** A user
+your configuration declares is read from that declaration on every start, so changing their mailboxes with
+`mfctl user account` is refused: your file is where they are changed. Everyone else goes on being read from wherever
+they are read from.
 
-Whatever else your files decide about that one user moves with the mailboxes: the spam classification posture, and the
-[`SensitiveContent`](../features/sensitive-content-scanning.md) block if their declaration states one. The preview names
-each of those settings beside the accounts, because an adoption that left one behind would switch it off for that person
-and no file would reach them to switch it back on.
-
-```console
-$ mfctl user adopt --user 3f1d...
-Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
-  work (Work mailbox)
-  family (Family mailbox)
-  from MailSynchronization:Accounts
-Move these 2 mail accounts into this user's record, so the configuration stops deciding them? [y/N]
-```
-
-Clear `MailSynchronization:Accounts` afterwards. The adoption copies those declarations into the record and leaves the
-file untouched. The published user document takes precedence in the running process immediately; clearing the stale
-section prevents the next start from refusing a deployment whose user records and deployment section occupy the same
-account naming space.
+Moving such a person into a record of their own is yours to perform rather than a command's. Remove their declaration
+from the file — with `MailSynchronization:Accounts` that is the whole section — restart so the next start stops serving
+them from it, then state their mailboxes with `mfctl user account add`, whose credentials are supplied afresh as part
+of each declaration. Whatever else that declaration decided about them is stated again the same way: the spam
+classification posture, and the [`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one,
+both of which a record carries in blocks of its own. Nothing carries any of it across for you, and a person whose
+mailboxes are still declared in a file loses nothing by being left there.
 
 **Withdrawing a mailbox is not deleting mail, and removing a user is.** `mfctl user account remove` stops MailFathom
 synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run

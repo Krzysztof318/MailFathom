@@ -223,8 +223,6 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
 | `POST /api/admin/users/{userId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
-| `GET /api/admin/users/{userId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that user would copy out of this deployment's files — the configuration path behind their mail accounts, each account it would move, and each classification and scanning setting it would commit with them — and writes nothing. |
-| `POST /api/admin/users/{userId}/record/adoption` | `mailfathom.admin.configuration.write` | Copies those accounts and that posture into the user's own record and marks the row as theirs. **This is the one route that moves one person's mailboxes out of a deployment's files and into its database.** |
 | `POST /api/admin/users/{userId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that user rotates the existing row and returns the same reference. It refuses when the user does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/users/{userId}/credentials` | `mailfathom.admin.read` | Reads one user's [credentials](#user-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
 | `POST /api/admin/users/{userId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the user already holds the hundred credentials one user may. |
@@ -1187,7 +1185,6 @@ such user exists rather than editing somebody else's mailboxes.
 | `mfctl user rename --display-name <name>` | Replaces the label that user is told apart by |
 | `mfctl user account add --from-file <path>` | Declares one more mailbox in that record |
 | `mfctl user account remove --id <account>` | Stops the record declaring one mailbox, leaving its stored mail alone |
-| `mfctl user adopt` | Moves that user's mail accounts out of this deployment's files and into their own record |
 | `mfctl user remove` | Erases the user and every message this deployment holds for them, which cannot be undone |
 
 Every command but `list` and `add` takes `--user`, and none of them needs it on a deployment holding one user,
@@ -1246,39 +1243,27 @@ signed ticket rather than a credential, so nothing in the URL names a user and t
 deployment serving several it therefore answers `409` instead of the file. Recording the user in the ticket is what
 ends that, and it changes the capability's own format.
 
-**Adoption is what moves a user off this deployment's files, and nothing else does.** Until then that user's mail
-accounts are read from a configuration source on every start, and a write to their record is refused rather than
-committed — because committing it would leave two answers to which mailboxes this deployment reads, and the file would
-win at the next restart. The refusal names the command to run:
+**Nothing moves a user off this deployment's files.** A user a configuration source declares has their mail accounts
+read from that declaration on every start, and a write to their record is refused rather than committed — because
+committing it would leave two answers to which mailboxes this deployment reads, and the file would win at the next
+restart. The refusal names where those mailboxes are actually changed:
 
 ```console
 $ mfctl user account add --from-file work-mailbox.json
 This user's mail accounts are supplied by a configuration source, so their record is empty and a change written into
-it would leave them served from less than the file supplies. Run 'mfctl user adopt' to move them into their own record
-first; every change afterwards is an ordinary one.
-
-$ mfctl user adopt
-Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
-  work (Work mailbox)
-  family (Family mailbox)
-  from MailSynchronization:Accounts
-It would also commit this deployment's spam classification posture into their record, which decides what happens to
-their junk from then on:
-  SpamClassification:Actions:MoveToJunkFolder = true
-  SpamClassification:Enabled = true
-Move these 2 mail accounts into this user's record, so the configuration stops deciding them? [y/N]
+it would leave them served from less than the file supplies. Change them where they are declared; nothing moves a
+configuration source's declarations into a record.
+Change this user's mail accounts where the configuration source declares them. Nothing moves them into their record
+for you: stop declaring this user there, restart, and declare their mailboxes again with 'mfctl user account add'.
 ```
 
-The preview is read from the deployment and the adoption is a separate request, so what an operator agrees to is what
-the deployment reports rather than what the command guessed; `--yes` is how a scripted adoption states the agreement
-instead. A user recorded through `mfctl user add` was never read from a file and needs no adoption, and the preview
-says so.
+So a deployment moving a person out of its files does it in that order — the declaration goes, the next start stops
+serving them from it, and `mfctl user account add` states their mailboxes into the record — and the credentials each
+account needs are stated afresh as part of it, because nothing carries a secret reference across for you. A user
+recorded through `mfctl user add` was never read from a file and their record is their own from the first moment.
 
-**The mailboxes are not the whole of what moves.** An adoption carries the classification posture the deployment's
-`SpamClassification` section decides for that user into their record beside their accounts, because leaving it behind
-would switch somebody's spam protection off on the strength of an administrative act about where their settings live.
-Only the keys a user's record may hold travel — the engine settings stay the deployment's — and the preview names
-each one with the value it would take, since two of them file mail and mark it read on that user's own mail server.
+`mfctl config adopt` is a different command about a different thing — the deployment's own settings moving into the
+persisted layer, which has nothing to do with whose mailboxes these are — and it is unaffected.
 
 **`mfctl user edit` is the command for a change that is more than one mailbox.** `user account add` and
 `user account remove` each name one, and the deployment composes it into the record, so changing two of them — or
@@ -1306,7 +1291,7 @@ somebody's password. Material supplied through these routes is sealed under the 
 [data-encryption key](secret-provisioning.md) like every other MailFathom secret, and what the record keeps is the
 reference to it.
 
-**A committed user record is published to the running process.** Recording, adopting, changing, or erasing a user
+**A committed user record is published to the running process.** Recording, changing, or erasing a user
 replaces the runtime account snapshot after the database commit. The coordinator stops scheduling the superseded
 account set and starts the new one without a restart. A synchronization run already in flight keeps the snapshot it
 began with and drains before its supervisor ends, so one run never reads two document versions.

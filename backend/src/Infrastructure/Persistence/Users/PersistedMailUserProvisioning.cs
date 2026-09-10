@@ -21,8 +21,8 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// </para>
 /// <para>
 /// The document is provisioned as the empty object and is never written here. A user read from configuration is
-/// served from their declaration, so filling the column would be the adoption that stops the file reaching them —
-/// which is a deliberate act with a command of its own rather than something a start does on their behalf.
+/// served from their declaration, so filling the column would stop the file reaching them — which is an administrative
+/// write rather than something a start does on their behalf.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]

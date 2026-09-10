@@ -20,7 +20,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <para>
 /// Every change here produces a candidate record and puts it through the one binder both directions share, so a record
 /// a write accepts is a record the next start would read. Nothing patches the row in place: the caller states an act —
-/// a saved document, one mailbox added, one withdrawn, an adoption — and what the act composes is judged whole.
+/// a saved document, one mailbox added, one withdrawn — and what the act composes is judged whole.
 /// </para>
 /// <para>
 /// Two callers reach it and the pairs of entry points are what separate them. An administrator names the user and
@@ -33,7 +33,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// One refusal is the reason this service exists rather than a writer being called directly. A user a configuration
 /// source still supplies holds an empty record, so a change accepted into it would leave them served from a record
 /// holding less than the file was supplying — a mailbox that stops being synchronized because somebody edited a
-/// setting beside it. Every write but the adoption is refused for that user, and the adoption is what moves them.
+/// setting beside it. Every write is refused for that user, and the file is where their mail accounts are changed.
 /// </para>
 /// <para>
 /// The one rule that reads which of the two is acting is the secret-bearing settings. A secret reference is a path into
@@ -252,70 +252,6 @@ internal sealed class UserRecordAdministration(
             cancellationToken);
     }
 
-    /// <summary>Reports what adopting one user would move out of this deployment's files into their record.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The preview, or <see langword="null" /> when this deployment holds no such user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>
-    /// The mailboxes are not the whole of what the adoption commits, so the preview names the classification posture
-    /// beside them. Two of those settings act on the user's own mail server and the adoption is one-way, which is why
-    /// an operator confirming one is shown what it would switch on rather than only where their mailboxes came from.
-    /// </remarks>
-    internal async Task<UserAdoptionPreview?> ReadAdoptableAsync(
-        MailUserId user,
-        CancellationToken cancellationToken)
-    {
-        RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminRead);
-
-        if (await documents.ReadAsync(user, cancellationToken) is not { } record)
-        {
-            return null;
-        }
-
-        var source = this.SourceOf(user);
-
-        return new UserAdoptionPreview(
-            user,
-            record.DisplayName,
-            record.Version,
-            source,
-            configured.SectionFor(user)?.Path,
-            [
-                .. configured.DeclaredFor(user).Select(account => new UserAdoptableMailAccount(
-                    MailSynchronizationOptions.TryReadAccountId(account.AccountId) ?? string.Empty,
-                    account.DisplayName)),
-            ],
-            [.. configured.ClassificationAdoptionFor(user).Select(UserAdoptableRecordSetting.For)],
-            [.. configured.SensitiveContentAdoptionFor(user).Select(UserAdoptableRecordSetting.For)]);
-    }
-
-    /// <summary>Moves one user's mail accounts out of this deployment's files and into their own record.</summary>
-    /// <param name="user">The user being adopted.</param>
-    /// <param name="expectedVersion">The version the preview was read over.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns>What the write did, or <see langword="null" /> when this deployment holds no such user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
-    /// <remarks>
-    /// The one act that moves a decision from a file into the database for a user, and the only thing in MailFathom
-    /// that ever does it. It commits even where the file supplies nothing, because what it settles is not only the
-    /// mailboxes: the marker beside the document is what tells the next start to stop applying the configured section
-    /// to this user, and a user declared with no mailboxes is one an operator may still have meant to move.
-    /// </remarks>
-    internal Task<UserRecordWriteOutcome?> AdoptAsync(
-        MailUserId user,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        RequireNamed(user);
-        authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        return this.MoveIntoTheRecordAsync(user, expectedVersion, cancellationToken);
-    }
-
     /// <summary>Reads one user's record, redacted, with the source their mail accounts come from beside it.</summary>
     private async Task<UserRecordReading?> ReadAsync(MailUserId user, CancellationToken cancellationToken) =>
         await documents.ReadAsync(user, cancellationToken) is { } record
@@ -340,7 +276,7 @@ internal sealed class UserRecordAdministration(
         UserRecordAuthority authority,
         CancellationToken cancellationToken)
     {
-        if (await this.OpenAsync(user, expectedVersion, permitConfigurationServed: false, cancellationToken)
+        if (await this.OpenAsync(user, expectedVersion, cancellationToken)
             is not { } opened)
         {
             return null;
@@ -408,7 +344,7 @@ internal sealed class UserRecordAdministration(
         UserRecordAuthority authority,
         CancellationToken cancellationToken)
     {
-        if (await this.OpenAsync(user, expectedVersion, permitConfigurationServed: false, cancellationToken)
+        if (await this.OpenAsync(user, expectedVersion, cancellationToken)
             is not { } opened)
         {
             return null;
@@ -444,7 +380,7 @@ internal sealed class UserRecordAdministration(
         UserRecordAuthority authority,
         CancellationToken cancellationToken)
     {
-        if (await this.OpenAsync(user, expectedVersion, permitConfigurationServed: false, cancellationToken)
+        if (await this.OpenAsync(user, expectedVersion, cancellationToken)
             is not { } opened)
         {
             return null;
@@ -480,56 +416,6 @@ internal sealed class UserRecordAdministration(
             : await this.JudgeAndCommitAsync(user, opened.Record, candidate, authority, cancellationToken);
     }
 
-    /// <summary>Materializes what a configuration source supplies for a user into their record.</summary>
-    private async Task<UserRecordWriteOutcome?> MoveIntoTheRecordAsync(
-        MailUserId user,
-        long expectedVersion,
-        CancellationToken cancellationToken)
-    {
-        if (await this.OpenAsync(user, expectedVersion, permitConfigurationServed: true, cancellationToken)
-            is not { } opened)
-        {
-            return null;
-        }
-
-        if (opened.Refusal is { } refusal)
-        {
-            return refusal;
-        }
-
-        if (this.SourceOf(user) == MailUserAccountSource.UserDocument)
-        {
-            return UserRecordWriteOutcome.NothingToChange(
-                opened.Record.Version,
-                $"This user's mail accounts already come from their own record, so there is nothing to adopt and version {opened.Record.Version} stays in force.");
-        }
-
-        string candidate;
-
-        try
-        {
-            candidate = SettingsDocumentPatch.Apply(opened.Record.Json, configured.AdoptionEditsFor(user));
-        }
-        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
-        {
-            // The record being patched is a row rather than a buffer somebody just typed, so this is the one
-            // composition here whose input nobody in the request authored. It is still refused rather than left to
-            // fault, because the answer an operator needs is the same either way: which document could not be read,
-            // and that nothing was written.
-            return UserRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                opened.Record.Version,
-                [$"The user's record is not a document of settings this deployment can read, so the accounts a configuration source declares were not moved into it: {refused.Message}"]);
-        }
-
-        return await this.JudgeAndCommitAsync(
-            user,
-            opened.Record,
-            candidate,
-            UserRecordAuthority.Administrator,
-            cancellationToken);
-    }
-
     /// <summary>Reads the record a change is composed over, and refuses the two cases nothing further should be done for.</summary>
     /// <remarks>
     /// The version is checked here as well as in the statement, so an edit authored against a record somebody else has
@@ -539,7 +425,6 @@ internal sealed class UserRecordAdministration(
     private async Task<OpenedRecord?> OpenAsync(
         MailUserId user,
         long expectedVersion,
-        bool permitConfigurationServed,
         CancellationToken cancellationToken)
     {
         if (await documents.ReadAsync(user, cancellationToken) is not { } inForce)
@@ -547,13 +432,13 @@ internal sealed class UserRecordAdministration(
             return null;
         }
 
-        if (!permitConfigurationServed && this.SourceOf(user) != MailUserAccountSource.UserDocument)
+        if (this.SourceOf(user) != MailUserAccountSource.UserDocument)
         {
             return new OpenedRecord(inForce, UserRecordWriteOutcome.Refused(
                 MailFathomErrorCode.UserRecordReadFromConfiguration,
                 inForce.Version,
                 [
-                    $"This user's mail accounts are supplied by a configuration source, so their record is empty and a change written into it would leave them served from less than the file supplies. Run 'mfctl user adopt' to move them into their own record first; every change afterwards is an ordinary one.",
+                    $"This user's mail accounts are supplied by a configuration source, so their record is empty and a change written into it would leave them served from less than the file supplies. Change them where they are declared; nothing moves a configuration source's declarations into a record.",
                 ]));
         }
 
@@ -768,7 +653,7 @@ internal sealed class UserRecordAdministration(
     private MailUserAccountSource SourceOf(MailUserId user) => servedUsers.SourceFor(user);
 
     /// <summary>The path a refusal about a user's own record names, which is the record rather than a file.</summary>
-    /// <remarks>The same word the startup gate uses for an adopted user, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
+    /// <remarks>The same word the startup gate uses for a user read from their own document, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
     private const string RecordPath = "document";
 
     private static void RequireNamed(MailUserId user)

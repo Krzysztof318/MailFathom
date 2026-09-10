@@ -1344,51 +1344,6 @@ internal sealed class AdminApiClient
             NoSuchUser);
     }
 
-    /// <summary>Reads what adopting one user would move out of the deployment's files into their record.</summary>
-    /// <param name="token">The bearer credential to present.</param>
-    /// <param name="userId">The user asked about.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The preview and the version the adoption is composed over.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a preview.</exception>
-    internal Task<UserAdoptionPreview> ReadUserAdoptionAsync(
-        string token,
-        Guid userId,
-        CancellationToken cancellationToken) =>
-        this.RequestAsync(
-            HttpMethod.Get,
-            AdminEndpointRoutes.UserAdoptionPath(userId),
-            token,
-            CliJsonContext.Default.UserAdoptionPreview,
-            cancellationToken,
-            absenceMessage: NoSuchUser);
-
-    /// <summary>Moves one user's mail accounts out of the deployment's files and into their own record.</summary>
-    /// <param name="token">The bearer credential to present.</param>
-    /// <param name="userId">The user being adopted.</param>
-    /// <param name="request">The version the preview was read over.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>What the adoption did.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
-    internal Task<UserRecordWriteAnswer> AdoptUserAsync(
-        string token,
-        Guid userId,
-        UserAdoptionRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        return this.RequestAsync(
-            HttpMethod.Post,
-            AdminEndpointRoutes.UserAdoptionPath(userId),
-            token,
-            CliJsonContext.Default.UserRecordWriteAnswer,
-            cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.UserAdoptionRequest),
-            NoSuchUser);
-    }
-
     /// <summary>Reads the credentials one user's clients present.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="userId">The user being asked about.</param>

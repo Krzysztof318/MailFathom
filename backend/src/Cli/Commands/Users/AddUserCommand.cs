@@ -17,8 +17,8 @@ namespace MailFathom.Cli.Commands.Users;
 /// </para>
 /// <para>
 /// A new user's mail accounts are their own record's from the first moment, so nothing about them is in a
-/// configuration file and <c>user account add</c> is what puts a mailbox there. That is why recording somebody is a
-/// small act and adopting an existing user is not: this one moves no decision out of a file.
+/// configuration file and <c>user account add</c> is what puts a mailbox there. Nothing here moves a decision out of
+/// a file: a user a configuration source declares goes on being read from it.
 /// </para>
 /// </remarks>
 internal static class AddUserCommand

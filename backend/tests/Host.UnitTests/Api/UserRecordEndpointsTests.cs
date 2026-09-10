@@ -589,46 +589,6 @@ public sealed class UserRecordEndpointsTests
             TestContext.Current.CancellationToken);
     }
 
-    /// <summary>The preview names what stops deciding this user's mailboxes once the adoption commits, which is the part an operator weighs.</summary>
-    [Fact]
-    public async Task ReadAdoptableAsync_AUserThisDeploymentHolds_ReportsWhetherThereIsAnAdoptionToPerform()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminRead]);
-        deployment.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        deployment.Serving(new ServedMailUser(SyntheticMailUser.Deployment, "alex", MailUserAccountSource.UserDocument, []));
-
-        // Act
-        var result = await UserRecordEndpoints.ReadAdoptableAsync(
-            SyntheticMailUser.Deployment.Value,
-            deployment.Records,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var preview = Assert.IsType<Ok<UserAdoptionPreviewResponse>>(result.Result).Value!;
-
-        Assert.False(preview.ReadFromConfiguration);
-        Assert.Null(preview.ConfigurationPath);
-    }
-
-    [Fact]
-    public async Task AdoptAsync_ARequestStatingANegativeVersion_IsRefusedWithoutReachingTheStore()
-    {
-        // Arrange
-        var deployment = new UserRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
-
-        // Act
-        var result = await UserRecordEndpoints.AdoptAsync(
-            SyntheticMailUser.Deployment.Value,
-            deployment.Records,
-            new UserAdoptionRequest(-1),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
-        await deployment.Documents.DidNotReceiveWithAnyArgs().ReadAsync(default, TestContext.Current.CancellationToken);
-    }
-
     /// <summary>Every route asks the use case for its permission with the transport absent, so an entrypoint added later cannot widen the surface by forgetting a route filter.</summary>
     [Fact]
     public async Task ReadRosterAsync_ACallerHoldingNothing_IsRefusedByTheUseCaseRatherThanByTheRoute()

@@ -35,7 +35,7 @@ internal sealed record UserErasure(
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the next write is composed over.</param>
 /// <param name="Source">Where this user's mail accounts are read from today.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write but an adoption refused.</param>
+/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write into their record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the deployment's redaction marker.</param>
 internal sealed record UserRecord(
     [property: JsonPropertyName("user")] Guid User,
@@ -71,45 +71,6 @@ internal sealed record UserMailAccountRequest(
 internal sealed record UserMailAccountRemovalRequest(
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("accountId")] string AccountId);
-
-/// <summary>The version an adoption was previewed over.</summary>
-/// <param name="Version">The version the preview reported.</param>
-internal sealed record UserAdoptionRequest([property: JsonPropertyName("version")] long Version);
-
-/// <summary>What adopting one user would move into their record.</summary>
-/// <param name="User">The user asked about.</param>
-/// <param name="DisplayName">The label the user is recorded under.</param>
-/// <param name="Version">The version the record stands at, which the adoption is accepted against.</param>
-/// <param name="Source">Where this user's mail accounts are read from today.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is whether there is an adoption to perform at all.</param>
-/// <param name="ConfigurationPath">The configuration path that stops deciding them once the adoption commits, and nothing where no source supplies them.</param>
-/// <param name="MailAccounts">The mail accounts the adoption would move, empty where the source supplies none.</param>
-/// <param name="Classification">The classification posture the adoption would commit beside them, empty where the deployment states none.</param>
-/// <param name="SensitiveContent">The scanning block the adoption would commit beside them, empty where their declaration states none.</param>
-internal sealed record UserAdoptionPreview(
-    [property: JsonPropertyName("user")] Guid User,
-    [property: JsonPropertyName("displayName")] string? DisplayName,
-    [property: JsonPropertyName("version")] long Version,
-    [property: JsonPropertyName("source")] string? Source,
-    [property: JsonPropertyName("readFromConfiguration")] bool ReadFromConfiguration,
-    [property: JsonPropertyName("configurationPath")] string? ConfigurationPath,
-    [property: JsonPropertyName("mailAccounts")] IReadOnlyList<UserAdoptableMailAccount>? MailAccounts,
-    [property: JsonPropertyName("classification")] IReadOnlyList<UserAdoptableRecordSetting>? Classification,
-    [property: JsonPropertyName("sensitiveContent")] IReadOnlyList<UserAdoptableRecordSetting>? SensitiveContent);
-
-/// <summary>One mail account an adoption would move into a user's record.</summary>
-/// <param name="AccountId">The identifier the account is declared under.</param>
-/// <param name="DisplayName">The name the account is published under.</param>
-internal sealed record UserAdoptableMailAccount(
-    [property: JsonPropertyName("accountId")] string? AccountId,
-    [property: JsonPropertyName("displayName")] string? DisplayName);
-
-/// <summary>One classification setting an adoption would commit into a user's record.</summary>
-/// <param name="Path">The path the setting is written at in the record.</param>
-/// <param name="Value">The value it takes, which is what the deployment's section states today.</param>
-internal sealed record UserAdoptableRecordSetting(
-    [property: JsonPropertyName("path")] string? Path,
-    [property: JsonPropertyName("value")] string? Value);
 
 /// <summary>What one write to a user's record produced.</summary>
 /// <param name="Committed">Whether the record moved to a new version.</param>

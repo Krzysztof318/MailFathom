@@ -16,7 +16,7 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// The source travels with the document because the two answer one question together. A user a configuration source
 /// still supplies holds an empty record, and reading that without being told why would look like a user with no
 /// mailboxes rather than one whose mailboxes are in a file — so the caller is told which of the two it is holding, and
-/// a client can offer the adoption instead of an edit that would be refused.
+/// a client can say where those mailboxes are changed instead of offering an edit that would be refused.
 /// </remarks>
 internal sealed record UserRecordReading(
     MailUserId User,

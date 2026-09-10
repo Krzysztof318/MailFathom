@@ -243,8 +243,7 @@ internal static class HostComposition
         // authentication schemes were registered from: the startup gate and the provisioning ask the same instance so
         // the two cannot come to different answers about one deployment.
         builder.Services.AddSingleton<SeveralUserAdmission>();
-        // What a configuration source still supplies for one user, which is what an adoption moves and what a record
-        // is judged against. A singleton because both halves of it — the file and the published runtime roster — are
+        // What a configuration source still supplies for one user, which is what a record is judged against. A singleton because both halves of it — the file and the published runtime roster — are
         // properties of the deployment rather than of a request.
         builder.Services.AddSingleton<ConfiguredUserSettings>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission

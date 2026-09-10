@@ -166,10 +166,10 @@ public readonly record struct MailFathomErrorCode
 
     /// <summary>Gets subcategory 2, configuration sources: a user's record was written while a configuration source still supplies their mail accounts.</summary>
     /// <remarks>
-    /// The refusal that keeps an adoption an explicit act. A user a file declares is served from that declaration
-    /// and holds an empty document, so a change accepted into it would leave them served from a record holding less
-    /// than the file was supplying — a mailbox that stops being synchronized because somebody edited a setting beside
-    /// it. What the message names is the command that moves the user, after which every later write is ordinary.
+    /// A user a file declares is served from that declaration and holds an empty document, so a change accepted into
+    /// it would leave them served from a record holding less than the file was supplying — a mailbox that stops being
+    /// synchronized because somebody edited a setting beside it. What the message names is the declaration those
+    /// mailboxes are actually changed in; nothing copies one into a record.
     /// </remarks>
     public static MailFathomErrorCode UserRecordReadFromConfiguration { get; } = new(12015);
 

@@ -42,7 +42,7 @@ internal sealed record ServedMailUser(
 {
     /// <summary>Gets whether a configuration source still reaches this user's mail accounts.</summary>
     /// <remarks>
-    /// False from the moment an adoption writes their document, and permanently: their accounts have stopped being
+    /// False from the moment a committed record writes their document, and permanently: their accounts have stopped being
     /// configuration keys rather than merely losing precedence, so neither the file nor an environment variable nor a
     /// command-line argument reaches them afterwards.
     /// </remarks>

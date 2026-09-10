@@ -3,15 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.SensitiveContent;
-using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Finds what a configuration source supplies for one user, and what adopting it would write into their record.</summary>
+/// <summary>Finds what a configuration source supplies for one user.</summary>
 /// <remarks>
 /// <para>
 /// A user is served from one of three sources and only two of them are configuration. Which of the two it is decides
@@ -20,82 +17,22 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// holds, while a declared user's mailboxes are a numbered entry of the top-level collection of users.
 /// </para>
 /// <para>
-/// Their mailboxes are not the whole of what a file supplies them. Everything a configuration source still decides for
-/// a user has to move in the one act that ends the file's reach over them, so an adoption carries their classification
-/// posture beside their accounts — and each further block the user record grows joins the same act rather than being
-/// left behind by it.
-/// </para>
-/// <para>
-/// What an adoption writes is those same settings as configuration keys rather than as a serialized object, and that is
-/// the whole reason this reads the section instead of the bound records beside it. A key survives a property the binder
-/// does not know about, a value the file wrote in a shape the type would have normalized, and a setting a later release
-/// adds — so what is persisted is what the operator wrote, which is what makes an adoption a move rather than a
-/// rewrite.
-/// </para>
-/// <para>
-/// It reads the deployment's live configuration rather than the roster's copy for the same reason: the roster is what
-/// the start reconciled, and what an adoption moves is what the files say now.
+/// It reads the deployment's live configuration rather than the roster's copy, because what a write into a user's
+/// record is judged against is what the files say now rather than what the last start reconciled.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reading.")]
 internal sealed class ConfiguredUserSettings(IConfiguration configuration, ServedMailUsers servedUsers)
 {
-    /// <summary>The property a user's record holds their mail accounts under, which every adopted account key is rooted at.</summary>
-    private const string MailAccountsProperty = nameof(UserAccountOptions.MailAccounts);
-
-    /// <summary>The settings of the deployment's classification section that are a user's own to hold.</summary>
-    /// <remarks>
-    /// Matched case-insensitively, because a configuration key keeps whatever casing the operator wrote it in and every
-    /// reader that acts on one compares it that way. A section written as <c>"enabled"</c> in JSON or as
-    /// <c>SPAMCLASSIFICATION__ENABLED</c> in the environment decides a user's classification exactly as the spelling
-    /// here does, so an ordinal comparison would drop their posture at the one act that cannot be undone.
-    /// </remarks>
-    private static readonly string[] OwnPostureSettings =
-    [
-        nameof(UserSpamClassificationOptions.Enabled),
-        nameof(UserSpamClassificationOptions.UseScanner),
-        nameof(UserSpamClassificationOptions.ScannedFolders),
-        nameof(UserSpamClassificationOptions.ScannerThreshold),
-        nameof(UserSpamClassificationOptions.Actions),
-    ];
-
-    /// <summary>Finds the configuration section one user's mail accounts are declared in.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>The section, or <see langword="null" /> when no configuration source reaches this user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>
-    /// A user who has adopted, and a user this process's roster does not hold at all, both answer with nothing —
-    /// the first because their record is their own from now on, the second because they were provisioned after the
-    /// roster was settled and no file has ever named them. Neither is a failure: both are users an ordinary write
-    /// reaches.
-    /// </remarks>
-    public IConfigurationSection? SectionFor(MailUserId user)
-    {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("A configured declaration is looked up for a named user.", nameof(user));
-        }
-
-        var served = servedUsers.Users.FirstOrDefault(candidate => candidate.User == user);
-
-        return served?.Source switch
-        {
-            MailUserAccountSource.DeploymentSection => configuration.GetSection(
-                $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}"),
-            MailUserAccountSource.UserDeclaration => this.DeclaredSectionFor(user),
-            _ => null,
-        };
-    }
-
     /// <summary>Gets whether a configuration source names this user, whatever their mail accounts are read from.</summary>
     /// <param name="user">The user asked about.</param>
     /// <returns><see langword="true" /> when a file declares them, or when they are the sole user of a deployment declaring none.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
-    /// A different question from <see cref="SectionFor" />, and the two answer apart for a user who has adopted while
-    /// a file goes on naming them: their mail accounts are their own, their label is still the declaration's, and their
-    /// row is one a start writes again after it is removed. So this is what an act a start would undo asks — the
-    /// relabel and the erasure — while the section is what an adoption moves.
+    /// A different question from <see cref="DeclaredFor" />, and the two answer apart for a user whose record is their
+    /// own while a file goes on naming them: their mail accounts are their own, their label is still the declaration's,
+    /// and their row is one a start writes again after it is removed. So this is what an act a start would undo asks —
+    /// the relabel and the erasure — while the declarations are what a write into their record is judged against.
     /// </remarks>
     public bool DeclaredByAConfigurationSource(MailUserId user)
     {
@@ -140,136 +77,46 @@ internal sealed class ConfiguredUserSettings(IConfiguration configuration, Serve
     /// <param name="user">The user asked about.</param>
     /// <returns>The declarations, empty when no configuration source reaches this user.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>Bound rather than left as keys, because this is what a preview names the accounts by and an operator confirms an adoption against.</remarks>
-    public IReadOnlyList<MailSynchronizationAccountOptions> DeclaredFor(MailUserId user) =>
-        this.SectionFor(user)?.Get<List<MailSynchronizationAccountOptions>>() ?? [];
-
-    /// <summary>States the changes that would materialize everything a configuration source decides for one user into their record.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>
-    /// One change per configuration key the sections supply — the user's mail accounts, the classification posture
-    /// <see cref="ClassificationAdoptionFor" /> reports, and the scanning block
-    /// <see cref="SensitiveContentAdoptionFor" /> reports — empty when no configuration source reaches this user.
-    /// </returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
     /// <remarks>
-    /// The mail-account section's keys are taken relative to it and re-rooted at the record's own collection, so
-    /// <c>Accounts:1:MailAccounts:0:Host</c> and <c>MailSynchronization:Accounts:0:Host</c> both become
-    /// <c>MailAccounts:0:Host</c> — which is the one property a user's record holds mailboxes under, whichever of the
-    /// two sections the operator had been writing in. The posture and the scanning block are re-rooted the same way,
-    /// each at the record's own block, and move for the reason stated on the methods that read them.
+    /// A user whose record is their own, and a user this process's roster does not hold at all, both answer with
+    /// nothing — the first because their record decides their mailboxes from now on, the second because they were
+    /// provisioned after the roster was settled and no file has ever named them. Neither is a failure: both are users
+    /// an ordinary write reaches.
     /// </remarks>
-    public IReadOnlyList<ConfigurationEdit> AdoptionEditsFor(MailUserId user)
+    public IReadOnlyList<MailSynchronizationAccountOptions> DeclaredFor(MailUserId user)
     {
-        if (this.SectionFor(user) is not { } section)
+        if (!user.IsSpecified)
         {
-            return [];
+            throw new ArgumentException("A configured declaration is looked up for a named user.", nameof(user));
         }
 
-        // A section enumerates itself under the empty key, and a key whose value is null is a section rather than a
-        // setting: neither states a value, and an edit composed from either would address nothing.
-        return
-        [
-            .. section.AsEnumerable(makePathsRelative: true)
-                .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
-                .OrderBy(setting => setting.Key, StringComparer.Ordinal)
-                .Select(setting => ConfigurationEdit.SetTo($"{MailAccountsProperty}:{setting.Key}", setting.Value!)),
-            .. this.ClassificationAdoptionEdits(),
-            .. this.SensitiveContentAdoptionEdits(user),
-        ];
+        var served = servedUsers.Users.FirstOrDefault(candidate => candidate.User == user);
+
+        IConfigurationSection? section = served?.Source switch
+        {
+            MailUserAccountSource.DeploymentSection => configuration.GetSection(
+                $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}"),
+            MailUserAccountSource.UserDeclaration => this.DeclaredSectionFor(user),
+            _ => null,
+        };
+
+        return section?.Get<List<MailSynchronizationAccountOptions>>() ?? [];
     }
 
-    /// <summary>States the classification posture an adoption would commit into one user's record.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>One change per posture key the deployment's section supplies, empty when no configuration source reaches this user.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>
-    /// Published beside the accounts rather than left inside the adoption, because two of these settings act on the
-    /// user's own mail server and an adoption cannot be undone: what an operator confirms has to name them.
-    /// </remarks>
-    public IReadOnlyList<ConfigurationEdit> ClassificationAdoptionFor(MailUserId user) =>
-        this.SectionFor(user) is null ? [] : [.. this.ClassificationAdoptionEdits()];
-
-    /// <summary>States the scanning block an adoption would commit into one user's record.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>One change per scanning key their declaration states, empty where it states none.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>
-    /// Published beside the accounts for the reason the classification posture is: what an operator confirms in an act
-    /// that cannot be undone has to name everything that stops being read from the file.
-    /// </remarks>
-    public IReadOnlyList<ConfigurationEdit> SensitiveContentAdoptionFor(MailUserId user) =>
-        [.. this.SensitiveContentAdoptionEdits(user)];
-
-    /// <summary>States the changes that would carry a user's declared scanning block into their record.</summary>
-    /// <remarks>
-    /// <para>
-    /// It moves with the mailboxes for the reason the classification posture does: a user served from a declaration
-    /// has their mail scanned on that declaration's terms, and a handover leaving the block behind would switch a
-    /// scanner off over their mail on the strength of an administrative act about where their settings live — silently,
-    /// and permanently, since no configuration source reaches an adopted user afterwards.
-    /// </para>
-    /// <para>
-    /// Only a declared user has such a block. The sole user a deployment serves from its own mail section states no
-    /// scanning of their own and reads the deployment's section, which goes on reaching them as the floor every
-    /// composition starts from, so there is nothing there for an adoption to carry.
-    /// </para>
-    /// </remarks>
-    private IEnumerable<ConfigurationEdit> SensitiveContentAdoptionEdits(MailUserId user) =>
-        (this.DeclaredEntryFor(user)?.GetSection(UserSensitiveContentOptions.BlockName))
-            ?.AsEnumerable(makePathsRelative: true)
-            .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
-            .OrderBy(setting => setting.Key, StringComparer.Ordinal)
-            .Select(setting => ConfigurationEdit.SetTo(
-                $"{UserSensitiveContentOptions.BlockName}:{setting.Key}",
-                setting.Value!))
-        ?? [];
-
-    /// <summary>States the changes that would carry the deployment's classification posture into a user's record.</summary>
-    /// <remarks>
-    /// <para>
-    /// The posture moves with the mailboxes because an adoption is a move rather than a rewrite: a user served from a
-    /// configuration source has their mail classified on the deployment's section's terms, and a handover that left the
-    /// section behind would switch their classification off on the strength of an administrative act about where their
-    /// settings live. From the commit onwards the record is what decides it, and the section reaches them no longer.
-    /// </para>
-    /// <para>
-    /// Only the settings a user's own block declares are carried. The section also states where the scanner daemon is,
-    /// what one scan may spend, how long a verdict may hold the index back, and how wide a run's batches are, and none
-    /// of those is a user's to hold — a record carrying one would be refused by the strict binding, which is the same
-    /// answer this filter reaches before the candidate is composed.
-    /// </para>
-    /// </remarks>
-    private IEnumerable<ConfigurationEdit> ClassificationAdoptionEdits() =>
-        configuration.GetSection(SpamClassificationOptions.SectionName)
-            .AsEnumerable(makePathsRelative: true)
-            .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
-            .Where(setting => OwnPostureSettings.Contains(
-                setting.Key.Split(':')[0],
-                StringComparer.OrdinalIgnoreCase))
-            .OrderBy(setting => setting.Key, StringComparer.Ordinal)
-            .Select(setting => ConfigurationEdit.SetTo(
-                $"{UserSpamClassificationOptions.RecordProperty}:{setting.Key}",
-                setting.Value!));
-
-    /// <summary>Finds the entry of the user collection this user is declared in, by the key it was written under.</summary>
+    /// <summary>Finds the mailbox section of the user-collection entry this user is declared in, by the key it was written under.</summary>
     /// <remarks>
     /// The key rather than the position the entry bound at, for the reason
     /// <see cref="Access.TransportAuthenticationOptions.ConfigurationKey" /> states about the other collection an
     /// operator numbers by hand: the binder appends one element per child and records no key, so a source numbering its
     /// entries with a gap makes the two different numbers and the position then addresses a section nobody wrote. What
-    /// that would cost here is an adoption committing an empty record over a user whose mailboxes the file declares.
+    /// that would cost here is a user's declared mailboxes reading as somebody else's.
     /// <para>
     /// A declaration the file no longer carries answers with nothing, which is a file edited between the start that
     /// reconciled the roster and this read, and so does a collection whose children and bound elements no longer
     /// correspond — a shape only a source changing under the read produces, and one where no key can be trusted.
     /// </para>
     /// </remarks>
-    private IConfigurationSection? DeclaredSectionFor(MailUserId user) =>
-        this.DeclaredEntryFor(user)?.GetSection(nameof(DeclaredUserOptions.MailAccounts));
-
-    /// <summary>Finds the whole declaration entry one user is written in, which holds their mailboxes and their scanning block.</summary>
-    private IConfigurationSection? DeclaredEntryFor(MailUserId user)
+    private IConfigurationSection? DeclaredSectionFor(MailUserId user)
     {
         var declared = DeclaredUsers.ReadFrom(configuration);
         var entries = configuration.GetSection(DeclaredUserOptions.SectionName).GetChildren().ToArray();
@@ -283,6 +130,6 @@ internal sealed class ConfiguredUserSettings(IConfiguration configuration, Serve
             .Zip(declared)
             .FirstOrDefault(candidate => DeclaredUsers.TryReadIdentifier(candidate.Second.Id) == user.Value);
 
-        return entry.First;
+        return entry.First?.GetSection(nameof(DeclaredUserOptions.MailAccounts));
     }
 }

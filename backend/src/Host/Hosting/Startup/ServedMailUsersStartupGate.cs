@@ -19,10 +19,10 @@ namespace MailFathom.Host.Hosting.Startup;
 /// per user is the relational envelope — the identifier, the label, the version, the instants — because
 /// <c>mailbox_accounts.UserId</c> is a foreign key and the integrity of the mail graph is relational rather than a
 /// predicate over a document. So this gate gives every declared user that row and nothing inside it: their mail
-/// accounts go on being read from the effective configuration until an adoption writes their document.
+/// accounts go on being read from the effective configuration for as long as a declaration supplies them.
 /// </para>
 /// <para>
-/// The handover is per user and never happens here. A user whose row carries the runtime-written marker is served
+/// Which source reaches a user is decided per user, and nothing here moves anybody. A user whose row carries the runtime-written marker is served
 /// from their own document, permanently and for that user alone, and every other user goes on being read from the
 /// file beside them. What this gate does about it is report which of the two each user is, because a section somebody
 /// goes on editing for a user that no longer reads it is exactly the mistake nothing else would surface.
@@ -360,12 +360,12 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     private static MailUserId IdentifierOf(DeclaredUserOptions declaration) =>
         MailUserId.Create(DeclaredUsers.TryReadIdentifier(declaration.Id)!.Value);
 
-    /// <summary>Serves one user from the document their row holds, which is what an adoption made the source.</summary>
+    /// <summary>Serves one user from the document their row holds, which is what a committed record made the source.</summary>
     /// <remarks>
     /// The document is put through the one binder both directions share, so what a user's record is judged by here is
     /// what a write to it would be judged by. A record that will not bind stops the start rather than leaving that
-    /// user served from a section they have stopped reading: the alternative is a deployment quietly synchronizing the
-    /// mailboxes an adoption was meant to replace.
+    /// user served from a section they have stopped reading: the alternative is a deployment quietly synchronizing
+    /// mailboxes the record was meant to have replaced.
     /// <para>
     /// It is read as a record already held, which drops exactly one rule — see <see cref="UserRecordArrival" />. The
     /// scanning block a stored record carries is composed against the deployment's section rather than refused against
@@ -504,11 +504,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <summary>Refuses mail accounts left in the deployment's own section that no served user reads.</summary>
     /// <remarks>
     /// <para>
-    /// Adopting the sole user of a deployment that declares none copies <c>MailSynchronization:Accounts</c> into their
-    /// record and leaves the section where it was. Their entry then reads that record rather than the section, so the
-    /// section belongs to nobody — and it is still bound, still searched first by the per-account lookup, and still the
-    /// answer every read gets. What the operator was told is the opposite: that editing the configuration those
-    /// accounts came from no longer changes what the deployment reads for them.
+    /// A deployment whose sole user is read from their own record, while <c>MailSynchronization:Accounts</c> still
+    /// declares accounts, has a section belonging to nobody — and it is still bound, still searched first by the
+    /// per-account lookup, and still the answer every read gets. So the mailboxes that user's record declares would be
+    /// synchronized under the file's settings instead, which is the opposite of what a record being their own means.
     /// </para>
     /// <para>
     /// The file's own reading cannot see this. <c>DeclaredUsers</c> refuses that section beside declared users, and
@@ -598,7 +597,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Message = "This deployment serves {ServedUserCount} users: {ConfiguredUserCount} read from configuration and {AdoptedUserCount} from their own document.")]
     private partial void LogUsersResolved(int servedUserCount, int configuredUserCount, int adoptedUserCount);
 
-    /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the user whose declared section has stopped being applied. Every part of that section is named, because the scanning block still binds and is still judged for an adopted user and then decides nothing, so a line naming only the mail accounts would leave an operator who switched a scanner on there with no sentence explaining why nothing changed.</remarks>
+    /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the user whose declared section has stopped being applied. Every part of that section is named, because the scanning block still binds and is still judged for a user read from their own document and then decides nothing, so a line naming only the mail accounts would leave an operator who switched a scanner on there with no sentence explaining why nothing changed.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The user labelled {UserDisplayName} is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.")]

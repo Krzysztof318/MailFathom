@@ -92,7 +92,7 @@ One entry exists in this release: the top-level `Accounts` collection of user ac
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
 
-**A row's document is bound at startup and after each accepted write through MailFathom, for a user who has taken their record over and for no other.** Each row holds the declarations and the user-level settings that are one person's own, and [the users a deployment serves](#the-users-a-deployment-serves) below is which of the two sources each user is read from and how a user moves between them. Until a user is adopted their document is not read at all — their mail accounts come from configuration — so a `settings_accounts` row written by hand for a user still read from their file changes nothing and is neither judged nor refused.
+**A row's document is bound at startup and after each accepted write through MailFathom, for a user who has taken their record over and for no other.** Each row holds the declarations and the user-level settings that are one person's own, and [the users a deployment serves](#the-users-a-deployment-serves) below is which of the two sources each user is read from and how a user moves between them. A user a configuration source still declares has their document left unread — their mail accounts come from that declaration — so a `settings_accounts` row written by hand for such a user changes nothing and is neither judged nor refused.
 
 Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the user*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it, and [the users a deployment serves](#the-users-a-deployment-serves) states it: no two users this deployment serves may name a mail account alike, wherever each of them is read from. A write refuses a name another user of the settled roster already answers to; a start refuses a roster in which one name reaches two users, which is where a collision two writes made in one process run is first visible, because each of those writes was judged against a roster the other had not moved. So `work` under two users is refused whether it was written into a file or into two records. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
@@ -152,8 +152,8 @@ Users are the top-level `Accounts` collection. It is **not** `MailSynchronizatio
 | `Accounts:<n>:SensitiveContent` | No | What this user wants their own mail scanned for, on top of what the deployment requires — [below](#what-a-user-may-say-about-scanning-their-own-mail) |
 
 A declared user states no settings of their own beyond their mailboxes. Everything else about them — how their mail is
-classified included — is read from the deployment's own sections until their document is written, which is what
-[the handover](#the-handover-and-what-it-costs) does.
+classified included — is read from the deployment's own sections for as long as a declaration supplies them, which is
+what [which source reaches a user](#which-source-reaches-a-user) settles.
 
 A user declaring no mailbox is an ordinary state rather than an unfinished one: a user exists before their first mailbox does, and one whose last mailbox is withdrawn is still a user. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
 
@@ -241,7 +241,7 @@ This deployment declared no user and held none, so one has been recorded for the
 
 Every account in `MailSynchronization:Accounts` belongs to that sole user. Once users *are* declared there is no sole user for that section's accounts to belong to, so declaring both is **refused**: move each of those accounts under the user who owns it, as an entry of that user's `MailAccounts`.
 
-The same section is **refused** once nobody reads it. An adoption copies the accounts into the user's own record and leaves the section where it was. The published user document takes precedence in the replica that handled the write immediately; clear `MailSynchronization:Accounts` afterwards so the next start does not meet an account section that belongs to nobody. A start that meets it refuses and names the section.
+The same section is **refused** once nobody reads it. A deployment that stops declaring its sole user there clears `MailSynchronization:Accounts` in the same edit, so the next start does not meet an account section that belongs to nobody. A start that meets it refuses and names the section.
 
 Two further bounds hold while users are declared. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all. And no two users this deployment serves may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two users shared would reach whichever declaration the lookup met first. Give each mailbox a name no other user uses. The bound holds over the whole roster rather than over the file: a start reads every served user's mail accounts, from their declaration or from their own record, and refuses a start in which one name reaches two of them, naming the names to change.
 
@@ -267,35 +267,29 @@ A user the database holds, no file declares, and who has **no record of their ow
 The user labelled sam is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.
 ```
 
-### The handover, and what it costs
+### Which source reaches a user
 
-**The handover is per user and never happens by itself.** A start reads each row's runtime-written marker and serves that user from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing in a start sets it: no upgrade, no import, and no first start adopts anybody. What sets it is [`mfctl user adopt`](admin-endpoint.md#users-and-their-records), which an operator runs for one user at a time, having been shown what it would move and having said yes. A user recorded through `mfctl user add` was never read from a file and is read from their own record from the start.
+**Which source a user is read from is decided per user, and nothing moves anybody between them.** A start reads each row's document marker and serves that user from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing in a start sets it: no upgrade, no import, and no first start writes anybody's document. What sets it is [`mfctl user add`](admin-endpoint.md#users-and-their-records), which records somebody no file has ever named, and whose record is their own from the first moment. There is no command that takes a user a file declares and writes their declarations into a record: an operator moving somebody removes the declaration, restarts, and states the mailboxes again with `mfctl user account add`, credentials included.
 
-**`mfctl config` never writes a user's mail accounts, adopted or not.** They live in a store of their own rather than in the deployment's document, so a change naming one is **refused** there and the refusal names both ways they are actually changed:
+**`mfctl config` never writes a user's mail accounts, wherever they are read from.** They live in a store of their own rather than in the deployment's document, so a change naming one is **refused** there and the refusal names both ways they are actually changed:
 
 ```
 MailFathom persists Accounts:0:MailAccounts:0:Host in the user-accounts store rather than in the deployment's own
 document, so this is not where it is changed. A user still read from a configuration source is changed in the
 declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at
-the next restart; a user who has been adopted is changed with 'mfctl user account add' and 'mfctl user account
+the next restart; a user read from their own record is changed with 'mfctl user account add' and 'mfctl user account
 remove', or with 'mfctl user edit' for their whole record at once.
 ```
 
-The user routes are the ones that do write that store, and until a user is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl user adopt`, which is the one act that moves them.
+The user routes are the ones that do write that store, and for a user a configuration source declares **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names the declaration as where those mailboxes are changed.
 
-**What adoption moves is the posture as well as the mailboxes.** A user served from a configuration source has their
-mail classified on the deployment's `SpamClassification` section's terms, so a handover that left it behind would switch
-their spam protection off on the strength of an administrative act about where their settings live. The section's own
-keys — and only those a user may hold — are copied into the record with the accounts, and from the commit onwards the
-record is what decides them.
+**A user read from their own record is reached by no configuration source at all** — not the provisioned file, and not an environment variable or a command-line argument either. Their accounts are not configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them, and what repairs a deployment whose file no longer reaches a user it used to.
 
-**Once a user is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches a user it used to.
-
-This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and adoption writes nothing into anybody's file. What it does is stop MailFathom reading one user's section out of it, which the file itself cannot show; the startup line naming that user is what says so, and it is worth reading after any adoption.
+This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What decides which source reaches a user is the marker beside their row, which the file itself cannot show; the startup line naming that user is what says so.
 
 ### One user's own classification posture
 
-An adopted user's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
+A user read from their own record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
 of their posture from the moment the document is written — the deployment's section reaches them no longer, and the two
 are never unioned. That is what makes switching classification off in a record actually switch it off.
 

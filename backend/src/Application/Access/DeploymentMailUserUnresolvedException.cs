@@ -50,12 +50,12 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// <returns>The failure to raise.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="accountCount" /> is not positive.</exception>
     /// <remarks>
-    /// The state an adoption leaves behind: the accounts are copied into the user's record and the section they were
-    /// copied from is still there, so the deployment holds two declarations of one mailbox. It is not an ambiguity a
+    /// The state a half-finished move out of the files leaves behind: every user reads a record of their own and the
+    /// section is still there, so the deployment holds two declarations of one mailbox. It is not an ambiguity a
     /// reader resolves, because the per-account lookup searches that section first and the record second and answers
-    /// from the file — which is the opposite of what the adoption told the operator it had done. Refused rather than
-    /// ignored for that reason: the settings a mailbox is synchronized under would silently be the ones the operator
-    /// believes they have stopped editing.
+    /// from the file — which is the opposite of what a record being the user's own means. Refused rather than ignored
+    /// for that reason: the settings a mailbox is synchronized under would silently be the ones the operator believes
+    /// they have stopped editing.
     /// </remarks>
     public static DeploymentMailUserUnresolvedException DeploymentSectionServesNobody(int accountCount)
     {
@@ -65,8 +65,8 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
             $"MailSynchronization:Accounts declares {accountCount} mail accounts and no user this deployment serves "
             + "reads that section: every user it holds reads a record of their own. An account's settings are "
             + "resolved from that section before any record, so those declarations would be what each mailbox is "
-            + "synchronized under while the records they were adopted into were ignored. Clear "
-            + "MailSynchronization:Accounts, which the adoption copied into the user's record.");
+            + "synchronized under while the records naming the same mailboxes were ignored. Clear "
+            + "MailSynchronization:Accounts, which no user this deployment serves reads.");
     }
 
     /// <summary>Reports a deployment holding several users while its mail accounts are declared in the section that names none.</summary>

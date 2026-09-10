@@ -23,7 +23,7 @@ namespace MailFathom.Host.Api;
 /// Two things are administered here and they are deliberately different sizes. The roster is the deployment's — who it
 /// holds at all — and every act on it is one call: record somebody, list them, erase somebody. One user's record is
 /// theirs, and the acts on it are the ones an operator performs repeatedly: read it, save it edited, declare one more
-/// mailbox, withdraw one, and the adoption that moves them off the deployment's files for good.
+/// mailbox, and withdraw one.
 /// </para>
 /// <para>
 /// The whole of it is administrative and none of it is anywhere else. A deployment-wide catalog of the people it serves
@@ -73,9 +73,6 @@ internal static class UserRecordEndpoints
     /// </remarks>
     internal const string UserMailAccountRemovalRoute = $"{UserMailAccountsRoute}/removal";
 
-    /// <summary>The route one user's adoption is previewed at and performed on.</summary>
-    internal const string UserAdoptionRoute = $"{UserRecordRoute}/adoption";
-
     /// <summary>The route material for one user's record is stored or rotated at.</summary>
     internal const string UserSecretsRoute = $"{UserRoute}/secrets";
 
@@ -122,13 +119,6 @@ internal static class UserRecordEndpoints
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
         api.MapPost(UserMailAccountRemovalRoute, RemoveMailAccountAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
-            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
-
-        api.MapGet(UserAdoptionRoute, ReadAdoptableAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
-
-        api.MapPost(UserAdoptionRoute, AdoptAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
@@ -392,59 +382,6 @@ internal static class UserRecordEndpoints
         }
 
         return Answered(await records.RemoveMailAccountAsync(user, accountId, request.Version, cancellationToken));
-    }
-
-    /// <summary>Reports what adopting one user would move out of this deployment's files into their record.</summary>
-    /// <param name="userId">The user asked about.</param>
-    /// <param name="records">The record administration.</param>
-    /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the preview, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request names nobody.</returns>
-    /// <remarks>The preview names the configuration path that stops deciding this user's mailboxes once the adoption commits, which is the part an operator weighs: the file goes on being read for everybody else and stops being read for them.</remarks>
-    internal static async Task<Results<Ok<UserAdoptionPreviewResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> ReadAdoptableAsync(
-        Guid userId,
-        [FromServices] UserRecordAdministration records,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-
-        if (!TryReadUser(userId, out var user))
-        {
-            return EmptyUser();
-        }
-
-        var preview = await records.ReadAdoptableAsync(user, cancellationToken);
-
-        return preview is null
-            ? NoSuchUser()
-            : TypedResults.Ok(UserAdoptionPreviewResponse.For(preview));
-    }
-
-    /// <summary>Moves one user's mail accounts out of this deployment's files and into their own record.</summary>
-    /// <param name="userId">The user being adopted.</param>
-    /// <param name="records">The record administration.</param>
-    /// <param name="request">The version the preview was read over.</param>
-    /// <param name="cancellationToken">Cancels the read and the commit.</param>
-    /// <returns><c>200</c> with what the adoption did, <c>404</c> when this deployment holds no such user, or <c>400</c> when the request states no version.</returns>
-    internal static async Task<Results<Ok<UserRecordWriteResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> AdoptAsync(
-        Guid userId,
-        [FromServices] UserRecordAdministration records,
-        [FromBody] UserAdoptionRequest request,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!TryReadUser(userId, out var user))
-        {
-            return EmptyUser();
-        }
-
-        if (StatedVersion(request.Version) is { } refused)
-        {
-            return refused;
-        }
-
-        return Answered(await records.AdoptAsync(user, request.Version, cancellationToken));
     }
 
     /// <summary>Stores or rotates material one user's record reaches through a database reference.</summary>

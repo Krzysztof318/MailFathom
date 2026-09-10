@@ -170,7 +170,7 @@ public sealed class UserRecordAdministrationTests
     /// somebody edited a record nobody was reading.
     /// </summary>
     [Fact]
-    public async Task AddMailAccountAsync_AUserAConfigurationSourceStillSupplies_IsRefusedNamingTheAdoption()
+    public async Task AddMailAccountAsync_AUserAConfigurationSourceStillSupplies_IsRefusedNamingTheConfigurationSource()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -186,7 +186,7 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.UserRecordReadFromConfiguration, outcome!.Refusal);
-        Assert.Contains("mfctl user adopt", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Contains("Change them where they are declared", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
@@ -820,209 +820,6 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
     }
 
-    /// <summary>The preview is what an operator confirms an adoption against, so it names the section and the mailboxes the move would materialize.</summary>
-    [Fact]
-    public async Task ReadAdoptableAsync_AUserServedFromTheDeploymentSection_NamesTheSectionAndTheMailboxesItSupplies()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminRead, DeploymentSectionDeclaring("configured"));
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var preview = await harness.Records.ReadAdoptableAsync(
-            SyntheticMailUser.Deployment,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(preview!.HasSomethingToAdopt);
-        Assert.Equal("MailSynchronization:Accounts", preview.ConfigurationPath);
-        Assert.Equal(["configured"], preview.MailAccounts.Select(account => account.AccountId));
-    }
-
-    /// <summary>The posture moves with the mailboxes, so the preview names it: two of its settings act on that user's own mail server.</summary>
-    /// <remarks>
-    /// An adoption cannot be undone, and an operator shown only a section path and a list of mailboxes would be
-    /// committing a filing and a marking without either being named. The engine settings beside them stay the
-    /// deployment's, so a preview naming one would be naming something the adoption does not carry.
-    /// </remarks>
-    [Fact]
-    public async Task ReadAdoptableAsync_ADeploymentStatingAClassificationPosture_NamesWhatItWouldCommit()
-    {
-        // Arrange
-        var configuration = DeploymentSectionDeclaring("configured");
-
-        configuration["SpamClassification:Enabled"] = "true";
-        configuration["SpamClassification:Actions:MoveToJunkFolder"] = "true";
-        configuration["SpamClassification:ClassificationWait"] = "01:00:00";
-
-        var harness = new RecordHarness(MailFathomPermission.AdminRead, configuration);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var preview = await harness.Records.ReadAdoptableAsync(
-            SyntheticMailUser.Deployment,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(
-            ["SpamClassification:Actions:MoveToJunkFolder=true", "SpamClassification:Enabled=true"],
-            preview!.Classification.Select(setting => $"{setting.Path}={setting.Value}"));
-    }
-
-    /// <summary>A user whose record is already their own has nothing to adopt, which is a preview offering nothing rather than an absent one.</summary>
-    [Fact]
-    public async Task ReadAdoptableAsync_AUserWhoseRecordIsAlreadyTheirOwn_OffersNothingToAdopt()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminRead, DeploymentSectionDeclaring("configured"));
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.UserDocument));
-
-        // Act
-        var preview = await harness.Records.ReadAdoptableAsync(
-            SyntheticMailUser.Deployment,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.False(preview!.HasSomethingToAdopt);
-        Assert.Null(preview.ConfigurationPath);
-    }
-
-    /// <summary>The one act that moves a decision from a file into the database, and the only thing in MailFathom that ever does it.</summary>
-    [Fact]
-    public async Task AdoptAsync_AUserServedFromTheDeploymentSection_CommitsTheirConfiguredMailboxesIntoTheirRecord()
-    {
-        // Arrange
-        var harness = new RecordHarness(
-            MailFathomPermission.AdminConfigurationWrite,
-            DeploymentSectionDeclaring("configured"));
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var outcome = await harness.Records.AdoptAsync(
-            SyntheticMailUser.Deployment,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(outcome!.IsCommitted);
-        await harness.Store.Received(1).CommitAsync(
-            SyntheticMailUser.Deployment,
-            Arg.Is<string>(candidate => candidate!.Contains("configured", StringComparison.Ordinal)),
-            1,
-            Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// The one composition here whose input nobody in the request authored: the row is what the patch is applied to, so
-    /// a row that is not a document of settings is reported as a refusal naming what could not be read rather than left
-    /// to fault. What an operator needs either way is the same — which document, and that nothing was written.
-    /// </summary>
-    [Fact]
-    public async Task AdoptAsync_ARowThatIsNotADocumentOfSettings_IsRefusedWithoutCommitting()
-    {
-        // Arrange
-        var harness = new RecordHarness(
-            MailFathomPermission.AdminConfigurationWrite,
-            DeploymentSectionDeclaring("configured"));
-        harness.Holding(SyntheticMailUser.Deployment, "[]", version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var outcome = await harness.Records.AdoptAsync(
-            SyntheticMailUser.Deployment,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Contains(
-            "not a document of settings this deployment can read",
-            Assert.Single(outcome.Messages),
-            StringComparison.Ordinal);
-        await harness.Store.DidNotReceiveWithAnyArgs()
-            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
-    }
-
-    /// <summary>Adoption is the one act permitted to open the record of a user a configuration source supplies, which is what makes it the way out of that state.</summary>
-    [Fact]
-    public async Task AdoptAsync_AUserServedFromTheirOwnDeclaration_IsNotRefusedTheWayAnOrdinaryWriteIs()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var outcome = await harness.Records.AdoptAsync(
-            SyntheticMailUser.Deployment,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.NotEqual(MailFathomErrorCode.UserRecordReadFromConfiguration, outcome!.Refusal);
-    }
-
-    /// <summary>A user already reading their own record has nothing to move, and saying so is not a refusal.</summary>
-    [Fact]
-    public async Task AdoptAsync_AUserWhoseMailboxesAlreadyComeFromTheirOwnRecord_ChangesNothing()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 2);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.UserDocument));
-
-        // Act
-        var outcome = await harness.Records.AdoptAsync(
-            SyntheticMailUser.Deployment,
-            expectedVersion: 2,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(outcome!.IsSettled);
-        Assert.False(outcome.IsCommitted);
-        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
-    }
-
-    /// <summary>
-    /// It commits even where the file supplies nothing, because the marker beside the document is what tells the next
-    /// start to stop applying the configured section to this user.
-    /// </summary>
-    [Fact]
-    public async Task AdoptAsync_AUserWhoseConfigurationSectionDeclaresNoMailbox_StillCommitsSoTheNextStartStopsReadingTheSection()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var outcome = await harness.Records.AdoptAsync(
-            SyntheticMailUser.Deployment,
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(outcome!.IsCommitted);
-    }
-
-    [Fact]
-    public async Task AdoptAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefused()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminRead);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
-            () => harness.Records.AdoptAsync(
-                SyntheticMailUser.Deployment,
-                expectedVersion: 1,
-                TestContext.Current.CancellationToken));
-    }
-
     private static ServedMailUser Serving(
         MailUserId user,
         MailUserAccountSource source,
@@ -1035,16 +832,6 @@ public sealed class UserRecordAdministrationTests
             {
                 AccountId = accountId,
             })]);
-
-    private static Dictionary<string, string?> DeploymentSectionDeclaring(string accountId) => new()
-    {
-        ["MailSynchronization:Accounts:0:AccountId"] = accountId,
-        ["MailSynchronization:Accounts:0:DisplayName"] = accountId,
-        ["MailSynchronization:Accounts:0:Host"] = "imap.example.test",
-        ["MailSynchronization:Accounts:0:UserName"] = "mailfathom@example.test",
-        ["MailSynchronization:Accounts:0:Secrets:Password:Name"] = $"{accountId}-password",
-        ["MailSynchronization:Accounts:0:Secrets:Password:SecretReference"] = $"file:/run/secrets/{accountId}-password",
-    };
 
     private static string AccountSaved(string accountId, string host, string secretReference) =>
         $$"""

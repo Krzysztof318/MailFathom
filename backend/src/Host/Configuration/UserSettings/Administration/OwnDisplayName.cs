@@ -147,5 +147,5 @@ internal sealed class OwnDisplayName(
     /// operator wrote is in their file rather than in anything this deployment could report back to the person.
     /// </remarks>
     private const string DeclaredElsewhere =
-        "A configuration source declares your mail accounts, so this deployment reads your name from it too and writes that name back at every start — a change made here would stand until the next restart and then revert. Ask whoever administers this deployment to change the name in your entry of the top-level Accounts collection, or to move your accounts into your own record with 'mfctl user adopt'.";
+        "A configuration source declares your mail accounts, so this deployment reads your name from it too and writes that name back at every start — a change made here would stand until the next restart and then revert. Ask whoever administers this deployment to change the name in your entry of the top-level Accounts collection.";
 }

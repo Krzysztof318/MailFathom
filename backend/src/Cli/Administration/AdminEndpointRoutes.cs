@@ -243,11 +243,6 @@ internal static class AdminEndpointRoutes
     internal static string UserMailAccountRemovalPath(Guid userId) =>
         $"{UserMailAccountsPath(userId)}/removal";
 
-    /// <summary>Where one user's adoption is previewed, and where it is performed.</summary>
-    /// <param name="userId">The user the path names.</param>
-    /// <returns>The path.</returns>
-    internal static string UserAdoptionPath(Guid userId) => $"{UserRecordPath(userId)}/adoption";
-
     /// <summary>Where one user's credentials are listed and provisioned, whichever method each is presented by.</summary>
     /// <param name="userId">The user the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>

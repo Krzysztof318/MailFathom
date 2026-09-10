@@ -12,7 +12,7 @@ namespace MailFathom.Application.Access;
 /// The envelope is all this writes. A user a file declares is served from that declaration, so nothing here copies
 /// the declaration into their document: the row exists because <c>mailbox_accounts.UserId</c> is a foreign key and the
 /// integrity of the mail graph is relational, and the document column stays the empty object it was provisioned with
-/// until an explicit adoption fills it.
+/// until an administrative write fills it.
 /// </para>
 /// <para>
 /// Both operations are idempotent, because a start runs them on every restart against a roster that ordinarily has not

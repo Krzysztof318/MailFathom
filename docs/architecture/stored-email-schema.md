@@ -280,8 +280,8 @@ opens a tab.
 
 **It is a table of its own rather than a second column on `settings_accounts`**, because what it holds is not
 configuration. Nothing binds it against a deployment's files, nothing about it decides which mailboxes are read, and a
-person whose mail accounts an administrator still maintains writes here freely while the record above refuses them
-until an adoption moves them.
+person whose mail accounts an administrator still maintains writes here freely while the record above goes on
+refusing them.
 
 **There is no version column, and that is the contract.** A write is an upsert on the key and the last one wins,
 because the only writers are one person's own devices: two of them disagreeing about a switch they both set is not a

@@ -177,7 +177,7 @@ schema gate, because that table is the schema's, and a deployment it cannot reco
 
 | What the gate found | What it means | What to do |
 |---|---|---|
-| Several user records still reading the deployment's section, and no user declared | The deployment has acquired users while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each user in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is; a user whose record is already their own is not one of these, and a deployment whose users have all been adopted starts without declaring anybody |
+| Several user records still reading the deployment's section, and no user declared | The deployment has acquired users while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each user in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is; a user whose record is already their own is not one of these, and a deployment all of whose users are read from their own records starts without declaring anybody |
 | More user records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
 | A start that would leave more user records than a deployment serves | The records held and the users newly declared each fit within the 256, and only their sum does not — a user the file no longer declares keeps their record | Nothing was written: remove the user records this deployment no longer serves, then declare the new users |
 | A user declared under an identifier the deployment does not hold them under | The identifier every mail account, stored message, and job of theirs hangs on was changed in the file | Restore the identifier the deployment holds, or give the new one a label of its own if it is meant to be a second person |
@@ -193,7 +193,7 @@ while it cannot say whose mail it is serving.
 `MailSynchronization:Accounts` and belong to the one user such a deployment holds — the row the release's schema
 provisions, or one the gate records where the deployment holds none at all. A user the deployment holds and the file
 no longer declares is not refused either: where their record is their own — every user recorded through `mfctl user
-add`, and every one that has been adopted — they are served from it, after the users a file names; where it is not,
+add`, and every one read from their own record — they are served from it, after the users a file names; where it is not,
 they are kept, they are not served, and a warning names them, because their mail is neither read nor refreshed while
 they stay that way.
 
