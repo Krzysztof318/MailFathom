@@ -14,10 +14,10 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <summary>One user's configurable record, as the document their <c>settings_accounts</c> row holds.</summary>
 /// <remarks>
 /// <para>
-/// This is the typed shape of a single element of the top-level <c>Accounts</c> collection, which is the collection of
-/// user accounts and deliberately not <c>MailSynchronization:Accounts</c>. One user is one document and one row,
-/// whichever mailboxes they own, so declaring a second mailbox for somebody adds an entry here rather than a row to
-/// the table.
+/// This is the typed shape of what one user's row holds, and no configuration source states it: a user is recorded
+/// rather than declared, so the document arrives from <c>settings_accounts</c> and from the commands that write it.
+/// One user is one document and one row, whichever mailboxes they own, so recording a second mailbox for somebody adds
+/// an entry here rather than a row to the table.
 /// </para>
 /// <para>
 /// What belongs in it is whatever is that user's own rather than the deployment's. Today that is their mail-account
@@ -41,9 +41,9 @@ internal sealed class UserAccountOptions : IValidatableObject
     /// <summary>Gets or sets the mail accounts this user owns, which may be none.</summary>
     /// <remarks>
     /// Zero is an ordinary state rather than an unfinished one: a user is provisioned before their first mailbox is
-    /// declared, and one whose last mailbox is withdrawn is still a user. It is named for what it holds rather than
-    /// repeating the word the collection above already carries, so a path reads <c>Accounts:…:MailAccounts:0</c> and
-    /// says which of the two collections each segment is.
+    /// recorded, and one whose last mailbox is withdrawn is still a user. It is named for what it holds rather than
+    /// for the row it hangs off, so a path within the record reads <c>MailAccounts:0</c> and says what each segment is
+    /// without borrowing the word the deployment's own mail section carries.
     /// </remarks>
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
 

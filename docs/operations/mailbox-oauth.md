@@ -302,7 +302,7 @@ $ mfctl mailbox authorize --provider google --client-id <client-id> --account wo
 
 To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client. A stored
 token is held per user and account rather than per account identifier — an identifier names one mailbox within the
-user who declared it — so the statement names both, and reading the user out of `settings_accounts` refuses rather
+user who owns it — so the statement names both, and reading the user out of `settings_accounts` refuses rather
 than guesses if a deployment ever holds more than one:
 
 ```sql

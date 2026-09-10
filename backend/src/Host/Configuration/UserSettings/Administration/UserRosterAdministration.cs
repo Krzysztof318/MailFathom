@@ -19,10 +19,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// Provisioning writes the envelope and then commits the empty record, which is two statements and one act. The second
-/// is what makes the user's mail accounts their own from the start, and it replaces nothing: nothing declares a user
-/// nobody had until this call, so there is no configuration section for the record to be quietly superseding. A user a
-/// file <em>does</em> declare stays served from it for as long as the file declares them, which is the refusal the
-/// record administration carries.
+/// is what makes the user's mail accounts their own from the start, and it replaces nothing: no configuration source
+/// names a user, so there is no section for the record to be quietly superseding. The one user the deployment's own
+/// <c>MailSynchronization:Accounts</c> supplies stays served from it for as long as that section states anything,
+/// which is the refusal the record administration carries.
 /// </para>
 /// <para>
 /// Every operation asks for its own permission with the transport absent, as every other permission-bearing use case in
@@ -64,7 +64,7 @@ internal sealed partial class UserRosterAdministration(
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        var held = await directory.ReadUsersAsync(DeclaredUsers.MaximumDeclaredUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
 
         // Read once rather than per entry: the declarations are a reflection bind of the whole collection, and this
         // route is read unconditionally by six of the commands `mfctl user` publishes.
@@ -104,17 +104,17 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(DeclaredUsers.MaximumDeclaredUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
 
         if (held.Count > 0 && admission.AdmitsACallerNamingNoUser)
         {
             return UserProvisioningOutcome.Refused(admission.Refusal);
         }
 
-        if (held.Count + 1 > DeclaredUsers.MaximumDeclaredUsers)
+        if (held.Count + 1 > ServedMailUsers.MaximumUsers)
         {
             return UserProvisioningOutcome.Refused(
-                $"This deployment already holds the {DeclaredUsers.MaximumDeclaredUsers} users one deployment may serve. Remove a user it no longer serves before recording another.");
+                $"This deployment already holds the {ServedMailUsers.MaximumUsers} users one deployment may serve. Remove a user it no longer serves before recording another.");
         }
 
         if (held.Any(record => StringComparer.Ordinal.Equals(record.DisplayName, label)))
@@ -172,9 +172,9 @@ internal sealed partial class UserRosterAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     /// <remarks>
     /// The label is what an administrator selects a user by and is keyed by nothing, so changing it moves no mail and
-    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. A user a
-    /// file declares is relabelled by that file at every start, so a rename written here for one of them lasts until
-    /// the next; the label to change is the declaration's, and this reaches a user nothing declares.
+    /// invalidates no identifier — which is why this is the configuration grant rather than the erasing one. It reaches
+    /// every user this deployment holds, the one its own mail section belongs to included: a label lives on the row and
+    /// no configuration source states one.
     /// </remarks>
     internal async Task<UserRelabelOutcome> RelabelAsync(
         MailUserId user,
@@ -194,7 +194,7 @@ internal sealed partial class UserRosterAdministration(
         }
 
         var label = displayName!.Trim();
-        var held = await directory.ReadUsersAsync(DeclaredUsers.MaximumDeclaredUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
 
         if (held.All(record => record.User != user))
         {
@@ -230,11 +230,10 @@ internal sealed partial class UserRosterAdministration(
     /// deployment the caller asked about rather than the roster the erasure left.
     /// </para>
     /// <para>
-    /// A user a configuration source names is refused rather than erased. The next start reconciles the declarations
-    /// against the roster and writes back every declared user the roster no longer holds, under the identifier the
-    /// declaration carries and with the mail accounts it supplies — so the erasure would run, the mail would go, and
-    /// the person would be recreated and their mailboxes downloaded again. A deletion request answered that way is
-    /// worse than one refused, so what comes back names the declaration to remove first.
+    /// The user the deployment's own mail section belongs to is refused rather than erased. The next start records a
+    /// user for that section wherever it holds none, under an identifier it mints — so the erasure would run, the mail
+    /// would go, and the person would be recreated and their mailboxes downloaded again. A deletion request answered
+    /// that way is worse than one refused, so what comes back names the section to clear first.
     /// </para>
     /// </remarks>
     internal async Task<UserErasureOutcome> EraseAsync(MailUserId user, CancellationToken cancellationToken)
@@ -291,11 +290,11 @@ internal sealed partial class UserRosterAdministration(
 
     /// <summary>The sentence an erasure a start would undo is refused with.</summary>
     /// <remarks>
-    /// It names both shapes a declaration takes, because which one an operator has is decided by their own file rather
-    /// than by anything this deployment could report without publishing that file back to them.
+    /// It names the section rather than the person, because what the operator has to act on is the file this
+    /// deployment reads its own mailboxes from.
     /// </remarks>
     private const string DeclaredElsewhere =
-        "A configuration source declares this user, and a start writes every declared user it no longer holds back into the roster — so erasing them here would destroy their mail and then recreate the person and download it again. Remove their entry from the top-level Accounts collection, or the mail accounts of MailSynchronization:Accounts where this deployment declares no users, and erase them once no source names them.";
+        "This deployment's own MailSynchronization:Accounts supplies this user's mail accounts, and a start records a user for that section wherever it holds none — so erasing them here would destroy their mail and then recreate the person and download it again. Clear MailSynchronization:Accounts, and erase them once no configuration source reaches them.";
 
     private static string LabelTaken(string label) =>
         $"Another user of this deployment is already recorded as '{label}'. A label is what an administrator selects a user by, so two users carrying one would leave nothing to select on: choose another.";

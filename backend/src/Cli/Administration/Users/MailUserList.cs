@@ -21,12 +21,13 @@ internal sealed record MailUserList(
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
 /// <param name="Served">Whether the running deployment is serving them.</param>
-/// <param name="DeclaredInConfiguration">Whether a configuration source names them, so a start puts their label back and writes their row again after an erasure.</param>
+/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies their mailboxes, so an erasure of them is refused rather than performed.</param>
 /// <remarks>
 /// The label is here because an identifier is what a command needs and a person is what an operator is thinking about;
 /// the three flags are here because each is a different thing to act on — the first says whether a change to their
-/// mail accounts is written into their record or into a file, the second says whether this user's mail is read now,
-/// and the third says the deployment's own files are where this user is changed and removed.
+/// mail accounts is written into their record or into the deployment's own section, the second says whether this
+/// user's mail is read now, and the third says that section is where this user's mailboxes are changed and cleared
+/// before they can be erased.
 /// </remarks>
 internal sealed record MailUserRosterEntry(
     [property: JsonPropertyName("id")] Guid Id,

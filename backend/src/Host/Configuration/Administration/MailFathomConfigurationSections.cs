@@ -27,8 +27,8 @@ namespace MailFathom.Host.Configuration.Administration;
 /// <c>Logging</c> and <c>ConnectionStrings</c> are framework-shaped rather than MailFathom's, which is why the key set
 /// leaves them out; they are named here anyway, because an operator reading a deployment's settings means those too and
 /// a deployment supplies them exactly as it supplies the rest. <c>Accounts</c> is MailFathom's and is absent from the
-/// key set for a different reason: it is routed out of the root document into the user-account store, so no options
-/// class binds it.
+/// key set for a different reason: it is the collection a deployment once declared its users in, nothing binds it any
+/// more, and it stays named here so an operator whose configuration still carries it can read it back and clear it.
 /// </para>
 /// </remarks>
 internal static class MailFathomConfigurationSections

@@ -10,10 +10,9 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Configuration.UserSettings;
 
 /// <summary>
-/// Covers where one user's configured mailboxes are read from. The two sections are not interchangeable — the
-/// deployment's own names no user and belongs to whichever sole user such a deployment holds, while a declared user's
-/// is a numbered entry of the user collection — and what is read is what the files say now rather than what the roster
-/// copied at the start.
+/// Covers which users a configuration source still reaches. One section is left that reaches anybody — the
+/// deployment's own, which names no user and belongs to whichever sole user such a deployment holds — and what is read
+/// is what the files say now rather than what the roster copied at the start.
 /// </summary>
 public sealed class ConfiguredUserSettingsTests
 {
@@ -43,56 +42,10 @@ public sealed class ConfiguredUserSettingsTests
         Assert.Equal(["primary", "archive"], declared.Select(account => account.AccountId));
     }
 
-    /// <summary>A declared user's mailboxes are addressed by the position their declaration occupies, which is how a configuration key names an element.</summary>
-    [Fact]
-    public void DeclaredFor_AUserDeclaringTheirOwnMailboxes_ReadsTheEntryTheyAreDeclaredIn()
-    {
-        // Arrange
-        var reading = Reading(
-            DeclaredUserPair(),
-            Serving(Alex, MailUserAccountSource.UserDeclaration),
-            Serving(Morgan, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var declared = reading.DeclaredFor(Morgan);
-
-        // Assert
-        Assert.Equal(["morgan-work"], declared.Select(account => account.AccountId));
-    }
-
     /// <summary>
-    /// A source may number its entries with a gap, and the binder records no key: it appends one element per child, so
-    /// the position a user bound at and the key an operator wrote come apart. Addressing by the position then reads a
-    /// section nobody wrote, which is one user's declared mailboxes reading as somebody else's.
-    /// </summary>
-    [Fact]
-    public void DeclaredFor_ACollectionNumberedWithAGap_ReadsTheEntryTheKeyNamesRatherThanThePosition()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>(StringComparer.Ordinal)
-            {
-                ["Accounts:0:Id"] = Alex.Value.ToString("D"),
-                ["Accounts:0:DisplayName"] = "alex",
-                ["Accounts:0:MailAccounts:0:AccountId"] = "alex-work",
-                ["Accounts:3:Id"] = Morgan.Value.ToString("D"),
-                ["Accounts:3:DisplayName"] = "morgan",
-                ["Accounts:3:MailAccounts:0:AccountId"] = "morgan-work",
-            },
-            Serving(Alex, MailUserAccountSource.UserDeclaration),
-            Serving(Morgan, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var declared = reading.DeclaredFor(Morgan);
-
-        // Assert
-        Assert.Equal(["morgan-work"], declared.Select(account => account.AccountId));
-    }
-
-    /// <summary>
-    /// A user whose record is their own answers with nothing because their record decides their mailboxes from now on,
-    /// and a user this process's roster does not hold answers with nothing because no file has ever named them. Neither
-    /// is a failure: both are users an ordinary write reaches.
+    /// A user whose record is their own answers with nothing because their record decides their mailboxes, and a user
+    /// this process's roster does not hold answers with nothing because no source has ever named them. Neither is a
+    /// failure: both are users an ordinary write reaches.
     /// </summary>
     /// <param name="onTheRoster">Whether the roster holds the user asked about.</param>
     [Theory]
@@ -102,8 +55,8 @@ public sealed class ConfiguredUserSettingsTests
     {
         // Arrange
         var reading = onTheRoster
-            ? Reading(DeclaredUserPair(), Serving(Alex, MailUserAccountSource.UserDocument))
-            : Reading(DeclaredUserPair(), Serving(Morgan, MailUserAccountSource.UserDeclaration));
+            ? Reading(DeploymentMailbox(), Serving(Alex, MailUserAccountSource.UserDocument))
+            : Reading(DeploymentMailbox(), Serving(Morgan, MailUserAccountSource.DeploymentSection));
 
         // Act
         var declared = reading.DeclaredFor(Alex);
@@ -112,20 +65,36 @@ public sealed class ConfiguredUserSettingsTests
         Assert.Empty(declared);
     }
 
-    /// <summary>A declaration the file no longer carries is a file edited between the start that reconciled the roster and this read.</summary>
+    /// <summary>The roster is what says which users a source reaches, and only the deployment's own section reaches one at all.</summary>
     [Fact]
-    public void DeclaredFor_AUserTheRosterHoldsAndTheFileNoLongerDeclares_ReadsNoMailbox()
+    public void UsersAConfigurationSourceDeclares_ARosterOfBothKinds_NamesTheUserOfTheDeploymentSectionAlone()
     {
         // Arrange
         var reading = Reading(
-            new Dictionary<string, string?>(),
-            Serving(Alex, MailUserAccountSource.UserDeclaration));
+            DeploymentMailbox(),
+            Serving(Alex, MailUserAccountSource.DeploymentSection),
+            Serving(Morgan, MailUserAccountSource.UserDocument));
 
         // Act
-        var declared = reading.DeclaredFor(Alex);
+        var declared = reading.UsersAConfigurationSourceDeclares();
 
         // Assert
-        Assert.Empty(declared);
+        Assert.Equal([Alex], declared);
+    }
+
+    /// <summary>The same question asked of one user, which is what an act a start would undo is refused by.</summary>
+    [Fact]
+    public void DeclaredByAConfigurationSource_AUserOnTheRoster_AnswersFromTheirSource()
+    {
+        // Arrange
+        var section = Reading(DeploymentMailbox(), Serving(Alex, MailUserAccountSource.DeploymentSection));
+        var record = Reading(DeploymentMailbox(), Serving(Alex, MailUserAccountSource.UserDocument));
+
+        // Act
+        var answers = new[] { section.DeclaredByAConfigurationSource(Alex), record.DeclaredByAConfigurationSource(Alex) };
+
+        // Assert
+        Assert.Equal([true, false], answers);
     }
 
     [Fact]
@@ -138,14 +107,9 @@ public sealed class ConfiguredUserSettingsTests
         Assert.Throws<ArgumentException>(() => reading.DeclaredFor(default));
     }
 
-    private static Dictionary<string, string?> DeclaredUserPair() => new()
+    private static Dictionary<string, string?> DeploymentMailbox() => new()
     {
-        ["Accounts:0:Id"] = Alex.Value.ToString("D"),
-        ["Accounts:0:DisplayName"] = "alex",
-        ["Accounts:0:MailAccounts:0:AccountId"] = "alex-work",
-        ["Accounts:1:Id"] = Morgan.Value.ToString("D"),
-        ["Accounts:1:DisplayName"] = "morgan",
-        ["Accounts:1:MailAccounts:0:AccountId"] = "morgan-work",
+        ["MailSynchronization:Accounts:0:AccountId"] = "primary",
     };
 
     private static ServedMailUser Serving(MailUserId user, MailUserAccountSource source) =>

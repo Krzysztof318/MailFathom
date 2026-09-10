@@ -438,7 +438,7 @@ internal sealed class UserRecordAdministration(
                 MailFathomErrorCode.UserRecordReadFromConfiguration,
                 inForce.Version,
                 [
-                    $"This user's mail accounts are supplied by a configuration source, so their record is empty and a change written into it would leave them served from less than the file supplies. Change them where they are declared; nothing moves a configuration source's declarations into a record.",
+                    "This deployment's own MailSynchronization:Accounts supplies this user's mail accounts, so their record is empty and a change written into it would leave them served from less than that section supplies. Change them in that section; nothing moves what it states into a record.",
                 ]));
         }
 
@@ -602,8 +602,8 @@ internal sealed class UserRecordAdministration(
     /// <summary>Names every mail account of the candidate that another user this deployment serves already answers to.</summary>
     /// <remarks>
     /// <para>
-    /// The deployment-wide rule <c>DeclaredUsers</c> states for a file, asked again of a record so that the two cannot
-    /// disagree: a mail account belongs to its user, but this release resolves an account's settings by its identifier
+    /// The deployment-wide bound <c>ServedMailUsersStartupGate</c> holds over a roster, asked again at the write so
+    /// that the two cannot disagree: a mail account belongs to its user, but this release resolves its settings by its identifier
     /// alone, so a name two users share would reach whichever of the two the lookup met first. It is asked of the
     /// published runtime roster rather than of every record the deployment holds, because the roster is what those
     /// lookups actually resolve through — and reading everybody's document per write would be a query about other

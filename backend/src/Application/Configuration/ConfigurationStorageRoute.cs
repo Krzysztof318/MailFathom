@@ -38,8 +38,10 @@ public readonly record struct ConfigurationStorageRoute
 
     /// <summary>Gets the store holding one configuration document per user.</summary>
     /// <remarks>
-    /// The top-level <c>Accounts</c> collection of user accounts is routed here, one document per user rather than
-    /// one per mailbox, which is why those documents are not values inside the root document.
+    /// A user's record is one document per user rather than one per mailbox, which is why those documents are not
+    /// values inside the root document. Nothing an operator writes reaches this store: the paths routed here are the
+    /// ones a deployment used to declare its users under, kept so a write naming one says where those mailboxes are
+    /// actually changed rather than persisting a setting nothing reads.
     /// </remarks>
     public static ConfigurationStorageRoute UserAccounts { get; } = new("user-accounts");
 

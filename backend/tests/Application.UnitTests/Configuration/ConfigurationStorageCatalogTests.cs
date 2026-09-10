@@ -31,8 +31,9 @@ public sealed class ConfigurationStorageCatalogTests
     }
 
     /// <summary>
-    /// The user-account collection is the first special route, and everything beneath it travels with it: a user's
-    /// document is one row in its own store rather than a subtree of the deployment's document.
+    /// The collection a deployment once declared its users in is the first special route, and everything beneath it
+    /// travels with it. Nothing binds those paths any more, and routing them away from the root document is what makes
+    /// a write naming one a refusal that says where a user's mailboxes are changed.
     /// </summary>
     [Theory]
     [InlineData("Accounts")]

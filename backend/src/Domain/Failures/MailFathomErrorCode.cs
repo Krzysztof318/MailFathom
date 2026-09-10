@@ -166,10 +166,10 @@ public readonly record struct MailFathomErrorCode
 
     /// <summary>Gets subcategory 2, configuration sources: a user's record was written while a configuration source still supplies their mail accounts.</summary>
     /// <remarks>
-    /// A user a file declares is served from that declaration and holds an empty document, so a change accepted into
-    /// it would leave them served from a record holding less than the file was supplying — a mailbox that stops being
-    /// synchronized because somebody edited a setting beside it. What the message names is the declaration those
-    /// mailboxes are actually changed in; nothing copies one into a record.
+    /// The sole user the deployment's own mail section supplies is served from it and holds an empty document, so a
+    /// change accepted into that document would leave them served from a record holding less than the section was
+    /// supplying — a mailbox that stops being synchronized because somebody edited a setting beside it. What the message
+    /// names is the section those mailboxes are actually changed in; nothing copies it into a record.
     /// </remarks>
     public static MailFathomErrorCode UserRecordReadFromConfiguration { get; } = new(12015);
 

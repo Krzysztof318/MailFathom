@@ -16,10 +16,8 @@ namespace MailFathom.Cli.Commands.Users;
 /// commands beside it that move a decision out of a file or destroy mail.
 /// </para>
 /// <para>
-/// A file that names a user names their label too, and a start puts that label back, so renaming a declared user
-/// here lasts until the next restart and the declaration is where their label is actually changed. Which kind of user
-/// this was handed is read from the roster rather than guessed, because nothing in the acceptance says it: the route
-/// answers with no body, and a label written over a declaration is written exactly as any other is.
+/// A label written here lasts, for every user this deployment serves. No configuration source names a user any more,
+/// so no start puts a label back and there is no kind of user for whom this reports a change the deployment undoes.
 /// </para>
 /// </remarks>
 internal static class RenameUserCommand
@@ -76,13 +74,6 @@ internal static class RenameUserCommand
             requestedUser,
             cancellationToken);
 
-        // The roster rather than the write's own answer, which is an acceptance and nothing else. What it settles is
-        // whether a configuration source declares this user, because a start rewrites a declared user's label from
-        // the file — and reporting the new label without saying so would be reporting a change that is undone.
-        var roster = await deployment.ReadUsersAsync(profile.Token, cancellationToken);
-        var declared = roster.Users?.FirstOrDefault(candidate => candidate.Id == user)?.DeclaredInConfiguration
-            ?? false;
-
         await deployment.RelabelUserAsync(
             profile.Token,
             user,
@@ -90,13 +81,6 @@ internal static class RenameUserCommand
             cancellationToken);
 
         context.Console.WriteLine($"User {user:D} is now labelled {displayName}.");
-
-        if (declared)
-        {
-            context.Console.WriteNotice(
-                "A configuration source declares this user, and a start reads their label from it, so this one lasts "
-                + "until the deployment is restarted. Change the label in the declaration to keep it.");
-        }
 
         return CliExitCode.Success;
     }
