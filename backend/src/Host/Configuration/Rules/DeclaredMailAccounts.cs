@@ -5,7 +5,6 @@
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.UserSettings;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -42,10 +41,9 @@ internal static class DeclaredMailAccounts
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Both places a mailbox is declared are read: the deployment's own section, and each user's <c>MailAccounts</c>
-    /// under the top-level user collection. A deployment declaring users is refused a non-empty
-    /// <c>MailSynchronization:Accounts</c>, so exactly one of the two is ever populated — and a rule judged against
-    /// only the first would refuse every scope such a file names while naming the section that file may not fill.
+    /// The deployment's own section is the only mailbox declaration a configuration source carries. Every other
+    /// mailbox is in its user's record, which no composition can reach: a rule whose scope names one of those is
+    /// judged at the moment the roster exists, through the overload below.
     /// </remarks>
     public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(IConfiguration configuration)
     {
@@ -56,12 +54,6 @@ internal static class DeclaredMailAccounts
             .. configuration
                 .GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
                 .GetChildren()
-                .Concat(configuration
-                    .GetSection(DeclaredUserOptions.SectionName)
-                    .GetChildren()
-                    .SelectMany(user => user
-                        .GetSection(nameof(DeclaredUserOptions.MailAccounts))
-                        .GetChildren()))
                 .Select(ReadAccount)
                 .OfType<DeclaredMailAccount>(),
         ];

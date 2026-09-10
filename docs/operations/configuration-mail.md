@@ -15,7 +15,7 @@ budget or the coordinator loop itself are marked *restart* below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or under a [declared user](configuration-runtime.md#accounts) | restart |
+| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or in [a user's own record](configuration-sources.md#which-source-reaches-a-user) | restart |
 | `MailSynchronization:Interval` | TimeSpan | `00:05:00` | 10 s – 1 day; measured end-of-run to start-of-run | restart |
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |

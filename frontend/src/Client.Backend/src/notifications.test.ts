@@ -4,8 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    deleteNotifications,
     longestNotificationPage,
     markAllNotificationsRead,
+    mostNotificationsErasedAtOnce,
     readNotifications,
     readUnreadNotificationCount,
     setNotificationRead,
@@ -360,6 +362,64 @@ describe('markAllNotificationsRead', () => {
 
     it('reports a deployment that did not answer as unavailable rather than throwing', async () => {
         const answer = await markAllNotificationsRead(session, () => Promise.reject(new Error('nothing there')));
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
+});
+
+describe('deleteNotifications', () => {
+    it('names every notification in one request rather than sending one per row', async () => {
+        const { transport, requests } = recording({
+            status: 200,
+            body: JSON.stringify({ deleted: 2, unreadCount: 1 }),
+        });
+
+        await deleteNotifications(session, transport, ['n-1', 'n-2']);
+
+        expect(requests).toHaveLength(1);
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/notifications/deletions');
+        expect(requests[0]?.body).toBe(JSON.stringify({ notificationIds: ['n-1', 'n-2'] }));
+    });
+
+    it('reads how many went and what the bell now stands at', async () => {
+        const answer = await deleteNotifications(
+            session,
+            answering({ status: 200, body: JSON.stringify({ deleted: 2, unreadCount: 1 }) }),
+            ['n-1', 'n-2'],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'read', value: { deleted: 2, unreadCount: 1 } });
+    });
+
+    it('refuses more identifiers than the deployment serves without sending anything', async () => {
+        const { transport, requests } = recording({
+            status: 200,
+            body: JSON.stringify({ deleted: 0, unreadCount: 0 }),
+        });
+
+        const answer = await deleteNotifications(
+            session,
+            transport,
+            Array.from({ length: mostNotificationsErasedAtOnce + 1 }, (_, position) => `n-${String(position)}`),
+        );
+
+        expect(requests).toHaveLength(0);
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: null } });
+    });
+
+    it('reports an answer missing either count as unreadable', async () => {
+        const answer = await deleteNotifications(
+            session,
+            answering({ status: 200, body: JSON.stringify({ deleted: 2 }) }),
+            ['n-1'],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('reports a deployment that did not answer as unavailable rather than throwing', async () => {
+        const answer = await deleteNotifications(session, () => Promise.reject(new Error('nothing there')), ['n-1']);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });

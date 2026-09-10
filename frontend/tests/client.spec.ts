@@ -503,6 +503,27 @@ test('carries the question and the scope it is asked under from one space to the
     await expect(page.getByRole('combobox', { name: 'What the question is asked about' })).toHaveValue('account:work');
 });
 
+// The defect this replaced: the stylesheet's focus ring is drawn around whatever took focus, so a transparent field
+// inside a bordered box painted a second rectangle inside the first and the bar read as two nested borders. Only a
+// browser can answer it — jsdom computes no styles — and what it is asked is both halves together, because a field that
+// simply gave its outline up would leave focus invisible. Asked as expressions rather than as closures, for the reason
+// the overflow reading above gives: this suite is compiled without a DOM declaration on purpose.
+const theFocusedAskFieldsOwnOutline = `
+    getComputedStyle(document.activeElement).outlineStyle
+`;
+
+const theBoxAroundTheFocusedAskField = `
+    getComputedStyle(document.activeElement.parentElement).boxShadow
+`;
+
+test('lights the whole ask field on focus rather than drawing a second border inside it', async ({ page }) => {
+    await openSignedIn(page);
+    await page.getByRole('searchbox', { name: 'Ask your mail' }).focus();
+
+    expect(await page.evaluate<string>(theFocusedAskFieldsOwnOutline)).toBe('none');
+    expect(await page.evaluate<string>(theBoxAroundTheFocusedAskField)).not.toBe('none');
+});
+
 test('puts the navigation beside the workspace in a wide window and under it in a narrow one', async ({ page }) => {
     await page.setViewportSize(wideWindow);
     await openSignedIn(page);

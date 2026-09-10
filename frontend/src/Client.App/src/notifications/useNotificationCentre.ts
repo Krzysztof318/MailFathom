@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    deleteNotifications,
     markAllNotificationsRead,
     readNotifications,
     readUnreadNotificationCount,
@@ -74,6 +75,9 @@ export interface NotificationCentre {
 
     /** Marks every unread notification read, in one request. */
     readonly markAllRead: () => void;
+
+    /** Removes the named notifications from the centre for good, in one request. */
+    readonly remove: (ids: readonly string[]) => void;
 
     /** Reads one notification and goes where it leads, which is what a click on the row does. */
     readonly follow: (notification: ClientNotification) => void;
@@ -438,6 +442,49 @@ export function useNotificationCentre(
         });
     }
 
+    // Removing rows is one request rather than one per row, which is what separates it from marking read above: a
+    // deployment that erased some of what was named answers with the count it erased, and there is no per-row state
+    // left to put back — a row that went is gone from the centre either way.
+    function remove(ids: readonly string[]): void {
+        if (session === null || ids.length === 0) {
+            return;
+        }
+
+        const held = notifications;
+        const going = held.filter((row) => ids.includes(row.id));
+
+        if (going.length === 0) {
+            return;
+        }
+
+        // The count moves by what these rows were worth rather than being recomputed from the page, because the bell
+        // counts every notification the deployment holds and a page is only as much of the centre as was read.
+        const goingUnread = going.filter((row) => !row.read).length;
+
+        setNotifications((rows) => rows.filter((row) => !ids.includes(row.id)));
+        setUnreadCount((standing) => Math.max(0, standing - goingUnread));
+
+        // What has already been announced is left alone deliberately. An erased row never comes back in a page, so the
+        // identifier costs nothing to keep; forgetting it would mean a delete that failed and put the rows back
+        // announced them a second time as though they had just arrived.
+        void deleteNotifications(session, transport, ids).then((answer) => {
+            if (inForce.current !== session) {
+                return;
+            }
+
+            if (answer.outcome === 'read') {
+                counted.current = { session, count: answer.value.unreadCount };
+                setUnreadCount(answer.value.unreadCount);
+
+                return;
+            }
+
+            setNotifications(held);
+            setUnreadCount((standing) => standing + goingUnread);
+            toasts.raise({ kind: 'error', title: translate('notifications.notDeleted') });
+        });
+    }
+
     return {
         unreadCount,
         shown,
@@ -448,6 +495,7 @@ export function useNotificationCentre(
         hide,
         markRead,
         markAllRead,
+        remove,
         follow,
     };
 }

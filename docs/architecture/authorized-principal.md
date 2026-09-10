@@ -134,9 +134,9 @@ is, so a request admitted on one carries that user as a claim and the adapter ac
 deployment serve more than one person's mail over one address, and what makes a credential resolving no user refusable
 exactly as an unknown credential is.
 
-The gate settles the whole roster while the host starts — every user the file declares, each with the mail accounts
-they own, every user whose record is already their own and whom no file declares, and the deployment's own
-`MailSynchronization:Accounts` belonging to the sole user such a deployment holds. A caller that names no user needs exactly one user
+The gate settles the whole roster while the host starts — every user the deployment holds, each with the mail accounts
+they own, read from their own record or from the deployment's own `MailSynchronization:Accounts`, which names nobody
+and therefore belongs to the sole user such a deployment holds. No configuration source names a user. A caller that names no user needs exactly one user
 to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or `ClientEndpoint` admits such a
 caller** — which is a surface requiring no authentication and nothing else. Every credential these two surfaces admit is
 a record naming the user it belongs to, whichever of the four methods presents it, so what an entry states is a method

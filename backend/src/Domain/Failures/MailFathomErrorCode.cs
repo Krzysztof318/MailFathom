@@ -166,10 +166,10 @@ public readonly record struct MailFathomErrorCode
 
     /// <summary>Gets subcategory 2, configuration sources: a user's record was written while a configuration source still supplies their mail accounts.</summary>
     /// <remarks>
-    /// A user a file declares is served from that declaration and holds an empty document, so a change accepted into
-    /// it would leave them served from a record holding less than the file was supplying — a mailbox that stops being
-    /// synchronized because somebody edited a setting beside it. What the message names is the declaration those
-    /// mailboxes are actually changed in; nothing copies one into a record.
+    /// The sole user the deployment's own mail section supplies is served from it and holds an empty document, so a
+    /// change accepted into that document would leave them served from a record holding less than the section was
+    /// supplying — a mailbox that stops being synchronized because somebody edited a setting beside it. What the message
+    /// names is the section those mailboxes are actually changed in; nothing copies it into a record.
     /// </remarks>
     public static MailFathomErrorCode UserRecordReadFromConfiguration { get; } = new(12015);
 
@@ -452,6 +452,16 @@ public readonly record struct MailFathomErrorCode
 
     /// <summary>Gets subcategory 2, schema state: the lexical index was built with a different text search configuration than the one configured.</summary>
     public static MailFathomErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
+
+    /// <summary>Gets subcategory 3, the anti-replay record: the assertion a request presented could not be recorded as served, so the request was refused.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more connection-loss failure, because what an operator does about
+    /// it is neither retry nor design out contention. The record is what decides whether a verified assertion is served
+    /// at all, so a store that cannot answer refuses the request — a database that failed and an identifier PostgreSQL
+    /// would not take are the same outcome to the caller, and the difference between them is in the inner exception
+    /// rather than in the code. A rate of these is authentication refusing traffic it would otherwise have served.
+    /// </remarks>
+    public static MailFathomErrorCode ClientAssertionSpendUnrecordable { get; } = new(33001);
 
     /// <summary>Gets subcategory 4, durable jobs: a job payload serialized to more than the enqueue boundary accepts.</summary>
     /// <remarks>
@@ -1084,6 +1094,7 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
+        ClientAssertionSpendUnrecordable,
         JobPayloadTooLarge,
         JobHandOnRefusedAtCapacity,
         PersistenceTransientFailure,

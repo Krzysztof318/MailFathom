@@ -122,6 +122,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.AiProviders;
 using MailFathom.Infrastructure.Persistence.Answering;
+using MailFathom.Infrastructure.Persistence.ClientAssertions;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Coordination;
@@ -386,6 +387,11 @@ public static class ServiceCollectionExtensions
             () => provider.GetRequiredService<FieldEncryptor>(),
             () => provider.GetRequiredService<DatabaseCommandTimeout>()));
         services.AddScoped<IStoredSecretStore, StoredSecretStore>();
+        // A singleton over the pool, like the two configuration statements below it, because it is two bare commands
+        // with no query shape and its caller is an authentication handler rather than a unit of work: the record of a
+        // served assertion belongs to the deployment whether or not the request that produced it goes on to commit
+        // anything.
+        services.AddSingleton<IClientAssertionSpendStore, ClientAssertionSpendStore>();
         // Reads the persisted configuration layer once the process is running, which is what a reload asks. The
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.
@@ -540,9 +546,9 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailUserDirectory, PersistedMailUserDirectory>();
-        // The envelope a declared user is given, beside the read that establishes who is already there. Scoped for the
-        // same reason and used from the same startup step: a declaration reaches this exactly once per start, and never
-        // while a request is being served.
+        // The envelope a user is given, beside the read that establishes who is already there. Scoped for the
+        // same reason and used from the same startup step: a start reaches this at most once, and never while a
+        // request is being served.
         services.AddScoped<IMailUserProvisioning, PersistedMailUserProvisioning>();
         // The credentials a user is admitted by, of every method. Scoped because it reads and writes through the
         // request's own context, and separate from the directory above because that answers which users exist and this

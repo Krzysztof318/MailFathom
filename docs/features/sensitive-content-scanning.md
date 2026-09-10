@@ -52,8 +52,8 @@ wants. So the two switches above are the deployment's floor rather than its whol
 scanning block of its own, and the posture their mail is read under is the stricter of the two.**
 
 The block is part of the user document — the content of the record, not an overlay on the deployment's
-`SensitiveContent` section — and it is written under `Accounts:<index>:SensitiveContent` in the deployment's own file or
-in the user's record.
+`SensitiveContent` section — and it is written under `SensitiveContent` in that record. No configuration source states
+it: a record is reached with `mfctl user edit`, or by the user themselves from the client.
 
 ```jsonc
 {

@@ -57,7 +57,12 @@ const meeting = { ...mail, id: 'n-meeting', kind: 'Calendar', title: 'Standing m
  * The count and the page are separate answers here exactly as they are on the surface, so a test can move one without
  * the other — which is the whole shape the hook is built around.
  */
-function deployment(held: { unreadCount: number; notifications: readonly unknown[]; refuseMarking?: boolean }): {
+function deployment(held: {
+    unreadCount: number;
+    notifications: readonly unknown[];
+    refuseMarking?: boolean;
+    refuseDeleting?: boolean;
+}): {
     transport: MailFathomTransport;
     requests: ClientRequest[];
     hold: (unreadCount: number, notifications?: readonly unknown[]) => void;
@@ -84,6 +89,21 @@ function deployment(held: { unreadCount: number; notifications: readonly unknown
                 return held.refuseMarking === true
                     ? Promise.resolve({ status: 500, headers: {}, body: '' })
                     : answer(JSON.stringify({ markedRead: held.unreadCount, unreadCount: 0 }));
+            }
+
+            if (request.path.endsWith('/deletions')) {
+                if (held.refuseDeleting === true) {
+                    return Promise.resolve({ status: 500, headers: {}, body: '' });
+                }
+
+                const named = (JSON.parse(request.body ?? '{}') as { notificationIds?: readonly string[] })
+                    .notificationIds;
+                const going = named ?? [];
+
+                held.notifications = held.notifications.filter((row) => !going.includes((row as { id: string }).id));
+                held.unreadCount = held.notifications.filter((row) => !(row as { read: boolean }).read).length;
+
+                return answer(JSON.stringify({ deleted: going.length, unreadCount: held.unreadCount }));
             }
 
             if (request.path.endsWith('/read-state')) {
@@ -549,6 +569,84 @@ describe('useNotificationCentre', () => {
 
         expect(result.current.notifications[0]?.read).toBe(false);
         expect(screen.getByText('Your notifications could not be marked read. They stand as they did.')).toBeDefined();
+    });
+
+    it('takes rows out of the centre in one request and lowers the bell by what was unread', async () => {
+        const { transport, requests } = deployment({
+            unreadCount: 2,
+            notifications: [mail, { ...mail, id: 'n-two' }, { ...mail, id: 'n-read', read: true }],
+        });
+        const { result } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        act(() => {
+            result.current.remove(['n-mail', 'n-read']);
+        });
+        await settled();
+
+        expect(pathsAsked(requests).filter((path) => path.endsWith('/notifications/deletions'))).toHaveLength(1);
+        expect(result.current.notifications.map((row) => row.id)).toEqual(['n-two']);
+        expect(result.current.unreadCount).toBe(1);
+    });
+
+    it('puts the rows back and says so where the deployment refused the deletion', async () => {
+        const { transport } = deployment({ unreadCount: 1, notifications: [mail], refuseDeleting: true });
+        const { result } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        act(() => {
+            result.current.remove(['n-mail']);
+        });
+        await settled();
+
+        expect(result.current.notifications.map((row) => row.id)).toEqual(['n-mail']);
+        expect(result.current.unreadCount).toBe(1);
+        expect(screen.getByText('Those notifications could not be deleted. They stand as they did.')).toBeDefined();
+    });
+
+    it('returns the bell to what the deployment counted after a refused deletion, not to what the page held', async () => {
+        const { transport } = deployment({ unreadCount: 5, notifications: [mail], refuseDeleting: true });
+        const { result } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        act(() => {
+            result.current.remove(['n-mail']);
+        });
+        await settled();
+
+        expect(result.current.unreadCount).toBe(5);
+    });
+
+    it('asks nothing of the deployment for a deletion naming no row it is holding', async () => {
+        const { transport, requests } = deployment({ unreadCount: 1, notifications: [mail] });
+        const { result } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        const before = requests.length;
+
+        act(() => {
+            result.current.remove(['n-somebody-elses']);
+        });
+        await settled();
+
+        expect(requests).toHaveLength(before);
+        expect(result.current.notifications.map((row) => row.id)).toEqual(['n-mail']);
     });
 
     it('reads a notification, closes the panel, and goes where it leads, all from one press', async () => {

@@ -14,9 +14,12 @@ import { useLocalization } from '../localization/useLocalization';
 // key to hold on a touch screen, so the menu is where a selection starts.
 //
 // **An item the client cannot yet perform is left out rather than drawn inert**, which is the rule the message row's
-// own menu states. Two items the design project draws are absent under it today: *open the source*, on a notification
-// that names no target, because there is nothing to open; and *delete the notification*, on every row, because the
-// client surface serves no route that removes one — a notification leaves the centre by ageing out of it.
+// own menu states. One item the design project draws is absent under it: *open the source*, on a notification that
+// names no target, because there is nothing to open.
+//
+// **Deleting is last and drawn as what it is.** It takes a row out of the centre for good, so it sits apart from the
+// three acts above it and the question in front of it is the panel's rather than this menu's — a menu that closes as it
+// is chosen from cannot also hold a dialog open.
 
 export function NotificationRowMenu({
     notification,
@@ -24,6 +27,7 @@ export function NotificationRowMenu({
     onSelect,
     onToggleRead,
     onOpen,
+    onDelete,
     onClose,
 }: {
     readonly notification: ClientNotification;
@@ -36,6 +40,9 @@ export function NotificationRowMenu({
 
     /** Reads it and goes where it leads, which is what the row's own press does. */
     readonly onOpen: () => void;
+
+    /** Asks the panel to put the question in front of removing this row for good. */
+    readonly onDelete: () => void;
 
     readonly onClose: () => void;
 }) {
@@ -51,6 +58,7 @@ export function NotificationRowMenu({
         ...(notification.target.kind === 'Nothing'
             ? []
             : [{ icon: 'open_in_new' as const, label: translate('notifications.openSource'), choose: onOpen }]),
+        { icon: 'delete', label: translate('notifications.delete'), destroys: true, choose: onDelete },
     ];
 
     return <ContextMenu header={notification.title} at={at} items={items} onClose={onClose} />;

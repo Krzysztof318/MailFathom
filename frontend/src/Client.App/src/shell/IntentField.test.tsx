@@ -383,3 +383,102 @@ describe('IntentField history', () => {
         expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toBe(document.activeElement);
     });
 });
+
+// The width this bar has is the one thing jsdom cannot answer, and the setup answers every query `false` — so a test
+// about the wide composition states it, and every other test inherits the single-pane reading.
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+
+function theWindowHasRoomForTwoPanes(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: query.includes('min-width'),
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}
+
+afterEach(() => {
+    if (declaredMatchMedia !== undefined) {
+        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
+});
+
+// The design project draws two bars rather than one: the Discover screen's question, and the one under a
+// correspondence, where the act somebody wants is a reply. It is the same field either way, so what these assert is
+// the wording and what an empty press then asks for.
+describe('IntentField wording', () => {
+    it('asks the Discover screen\u2019s own question wherever no correspondence is in scope', () => {
+        theWindowHasRoomForTwoPanes();
+        fieldStanding({});
+
+        expect(screen.getByRole('button', { name: 'Ask' })).toBeDefined();
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
+            'placeholder',
+            'What do you want to ask your mail?',
+        );
+    });
+
+    it('names drafting a reply, and offers both, while a correspondence is being read', () => {
+        theWindowHasRoomForTwoPanes();
+        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+
+        expect(screen.getByRole('button', { name: 'Draft a reply' })).toBeDefined();
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty(
+            'placeholder',
+            'Ask about the thread or draft a reply\u2026',
+        );
+    });
+
+    it('names it the same way over one message and over a passage of one', () => {
+        theWindowHasRoomForTwoPanes();
+        fieldStanding({
+            selection: 'AAMkAD-42',
+            fragment: { messageId: 'AAMkAD-42', text: 'the part somebody pointed at' },
+        });
+
+        expect(screen.getByRole('button', { name: 'Draft a reply' })).toBeDefined();
+    });
+
+    // The list is what is in front of somebody who ticked rows, rather than the exchange, so the bar stays the
+    // Discover screen's.
+    it('keeps the question wherever the rows picked out are the scope', () => {
+        theWindowHasRoomForTwoPanes();
+        fieldStanding({ conversation: null, selected: ['one', 'two'] });
+
+        expect(screen.getByRole('button', { name: 'Ask' })).toBeDefined();
+    });
+
+    // The design shortens the label where the window draws one pane, because there is no room for the sentence beside
+    // the field.
+    it('shortens the label where the window draws a single pane', () => {
+        fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+
+        expect(screen.getByRole('button', { name: 'Draft' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Draft a reply' })).toBeNull();
+    });
+
+    // The control must not name an act the press does not make, so an empty press over a correspondence asks for the
+    // thing the control is called — and the whole sentence rather than the shortened label, because what was asked
+    // cannot depend on how wide the window was.
+    it('asks for the reply the control names when nothing has been typed', () => {
+        const reported = fieldStanding({ conversation: { threadId: 'thread-1', openAt: null } });
+
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(reported().question).toBe('Draft a reply');
+        expect(reported().askedBefore).toEqual([
+            { question: 'Draft a reply', scope: { kind: 'thread', threadId: 'thread-1' } },
+        ]);
+    });
+
+    it('records nothing for an empty press where no correspondence is in scope', () => {
+        const reported = fieldStanding({});
+
+        fireEvent.submit(screen.getByRole('search'));
+
+        expect(reported().askedBefore).toEqual([]);
+    });
+});

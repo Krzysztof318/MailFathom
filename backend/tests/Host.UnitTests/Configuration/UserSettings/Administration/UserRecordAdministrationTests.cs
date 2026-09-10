@@ -165,12 +165,12 @@ public sealed class UserRecordAdministrationTests
     }
 
     /// <summary>
-    /// The refusal this service exists for. A change written into the empty record of a user a file still supplies
-    /// would leave them served from less than the file was supplying — a mailbox that stops being synchronized because
-    /// somebody edited a record nobody was reading.
+    /// The refusal this service exists for. A change written into the empty record of the user the deployment's own
+    /// mail section supplies would leave them served from less than that section was supplying — a mailbox that stops
+    /// being synchronized because somebody edited a record nobody was reading.
     /// </summary>
     [Fact]
-    public async Task AddMailAccountAsync_AUserAConfigurationSourceStillSupplies_IsRefusedNamingTheConfigurationSource()
+    public async Task AddMailAccountAsync_TheUserTheDeploymentsOwnMailSectionSupplies_IsRefusedNamingThatSection()
     {
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
@@ -186,7 +186,7 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.UserRecordReadFromConfiguration, outcome!.Refusal);
-        Assert.Contains("Change them where they are declared", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        Assert.Contains("MailSynchronization:Accounts", Assert.Single(outcome.Messages), StringComparison.Ordinal);
         await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
@@ -286,7 +286,7 @@ public sealed class UserRecordAdministrationTests
         harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
         harness.Roster(
             Serving(SyntheticMailUser.Deployment, MailUserAccountSource.UserDocument),
-            Serving(SyntheticMailUser.Another, MailUserAccountSource.UserDeclaration, "shared-name"));
+            Serving(SyntheticMailUser.Another, MailUserAccountSource.UserDocument, "shared-name"));
 
         // Act
         var outcome = await harness.Records.AddMailAccountAsync(

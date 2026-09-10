@@ -331,8 +331,19 @@ credential is new. The assertion carries three claims and two header parameters:
 - **`exp`** must be present and no more than five minutes ahead — a minute is a good value. This is what a bearer
   credential cannot offer: a captured assertion stops working on its own, whatever anyone does about it.
 - **`jti`** is a fresh unguessable value per assertion — 128 random bits, base64url-encoded, is the right shape. The
-  endpoint refuses an identifier it has already served, so a captured assertion cannot be replayed even inside its
-  remaining seconds.
+  deployment refuses an identifier it has already served, so a captured assertion cannot be replayed even inside its
+  remaining seconds. **The record is the deployment's rather than one instance's**: it is a row written under a unique
+  key in PostgreSQL, so an identifier served by any replica is refused by every replica, and raising `replicaCount`
+  leaves this exactly as strong. It costs one insert on a request that has already verified a signature and is about to
+  reach the database anyway, and nothing is asked of your routing — an assertion presented to a second instance is
+  refused there, whatever sent it to that one. What that insert adds to a request was measured rather than assumed:
+  under a millisecond against a PostgreSQL on the same machine, and unchanged by a hundred thousand rows already in the
+  table. Nothing accumulates either: what the table holds is the last few minutes of your own authenticated traffic.
+  A row is dropped by the first removal after the point past which its assertion can no longer be presented, so it may
+  outlive that point by up to one more permitted lifetime; each instance issues its own removal once per that lifetime
+  rather than one being issued for the deployment; and the removal runs when an assertion is presented rather than on a
+  timer, so a deployment whose assertion traffic stops keeps the rows it held at that moment until the next assertion
+  arrives.
 
 `mfctl` mints all of this for you; see [Signing in with a key pair](admin-endpoint.md#with-a-key-pair).
 
@@ -1822,6 +1833,11 @@ response.
 **The limits are counted in this process alone.** A deployment running several instances enforces them once per process
 rather than once in total; there is no shared state and no coordination between them. Put the total behind a reverse
 proxy or load balancer that bounds it if that matters.
+
+This is a bound being approached per instance rather than a guarantee that stops holding, and the difference is worth
+stating because one other thing on this page could be read the same way and is not: the
+[replay refusal](#key-pairs) an assertion's `jti` buys is the deployment's, kept in the database, and it does not
+weaken by one instance whatever `replicaCount` says.
 
 **It is not DDoS protection.** It bounds what one client can take from the process it is talking to. A flood arriving
 from many sources is a job for a WAF, a CDN, or a hosting provider's own protection, and none of that is in MailFathom.

@@ -12,11 +12,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Serves the signed-in person their own notification centre: what happened, how much of it is unread, and both ways of marking it read.</summary>
+/// <summary>Serves the signed-in person their own notification centre: what happened, how much of it is unread, both ways of marking it read, and taking rows out of it for good.</summary>
 /// <remarks>
 /// <para>
-/// Four routes over one person's own working state. The centre is a list newest first, a count on its own for the bell
-/// that draws a badge without opening the panel, one notification's read state, and the control that clears the lot.
+/// Five routes over one person's own working state. The centre is a list newest first, a count on its own for the bell
+/// that draws a badge without opening the panel, one notification's read state, the control that clears the lot, and
+/// the erasure that takes named rows out of it.
 /// </para>
 /// <para>
 /// <b>Nothing here streams.</b> This surface has no server-sent events and gains none for this, so a client asks on an
@@ -31,11 +32,14 @@ namespace MailFathom.Host.Api;
 /// nobody holds — so nothing here reports whether such a notification exists.
 /// </para>
 /// <para>
-/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the two writes included.</b> Marking a notification
-/// read changes what this deployment draws for one person about mail they can already see; it reaches no mail server
-/// and moves nothing in a mailbox. It is the preferences write's reasoning rather than the mutation routes': a person
-/// whose mail accounts an administrator maintains does not hold a write grant and still has to be able to clear their
-/// own bell. Nothing here is a power a credential granted to read a mailbox did not already have.
+/// <b>Every route is <see cref="MailFathomPermission.MailRead" />, the three writes included.</b> Marking a
+/// notification read, and taking one out of the centre, each change what this deployment draws for one person about
+/// mail they can already see; neither reaches a mail server and neither moves anything in a mailbox — what an erasure
+/// removes is a record this deployment derived, and the message it pointed at stays exactly where it is, which is why
+/// it is not <see cref="MailFathomPermission.MailDelete" />. It is the preferences write's reasoning rather than the
+/// mutation routes': a person whose mail accounts an administrator maintains does not hold a write grant and still has
+/// to be able to clear their own bell. Nothing here is a power a credential granted to read a mailbox did not already
+/// have.
 /// </para>
 /// <para>
 /// <b>The page is clamped rather than refused.</b> Every other paged reading in this repository serves an operator
@@ -65,6 +69,14 @@ internal static class ClientNotificationEndpoints
     /// </remarks>
     internal const string ReadStateRoute = $"{NotificationsRoute}/{{notificationId:guid}}/read-state";
 
+    /// <summary>The route the acting person's notifications are erased on, one or several at a time.</summary>
+    /// <remarks>
+    /// One route rather than a path per notification and a second for a batch, because a person clearing one row and a
+    /// person clearing the eleven they ticked are the same act with a different count — and because a collection named
+    /// in a body is the shape this surface already carries a set of changes in, beside the mail mutations.
+    /// </remarks>
+    internal const string DeletionsRoute = $"{NotificationsRoute}/deletions";
+
     /// <summary>The greatest request body the read-state route reads before refusing it.</summary>
     /// <remarks>
     /// The body is one boolean, so the bound guards against a body that was never a read-state document at all rather
@@ -72,6 +84,14 @@ internal static class ClientNotificationEndpoints
     /// surface is.
     /// </remarks>
     internal const int MaxWriteRequestBytes = 1024;
+
+    /// <summary>The greatest request body the deletion route reads before refusing it.</summary>
+    /// <remarks>
+    /// A full request is <see cref="OwnNotifications.MaximumErasedAtOnce" /> quoted UUIDs and their separators, which
+    /// is a few kilobytes; this stands well above that and well below anything worth streaming, so a body that was
+    /// never a list of identifiers is answered <c>413</c> before the handler is reached rather than parsed.
+    /// </remarks>
+    internal const int MaxDeletionRequestBytes = 8 * 1024;
 
     /// <summary>Maps the notification routes into the client group, so they inherit its requirement, its policy, and its limits.</summary>
     /// <param name="api">The client route group.</param>
@@ -93,6 +113,10 @@ internal static class ClientNotificationEndpoints
             .RequirePermission(MailFathomPermission.MailRead);
 
         api.MapPost(MarkAllReadRoute, MarkAllReadAsync)
+            .RequirePermission(MailFathomPermission.MailRead);
+
+        api.MapPost(DeletionsRoute, EraseAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxDeletionRequestBytes))
             .RequirePermission(MailFathomPermission.MailRead);
     }
 
@@ -192,6 +216,50 @@ internal static class ClientNotificationEndpoints
             new ClientMarkedNotificationsResponse(await notifications.MarkAllReadAsync(cancellationToken), 0));
     }
 
+    /// <summary>Erases the notifications the body names, of those the acting person holds.</summary>
+    /// <param name="request">The notifications to erase.</param>
+    /// <param name="notifications">Performs the erasure, for the person the credential names.</param>
+    /// <param name="cancellationToken">Cancels the write and the count that follows it.</param>
+    /// <returns><c>200</c> with how many went and the count that leaves, or <c>400</c> where more than <see cref="OwnNotifications.MaximumErasedAtOnce" /> are named.</returns>
+    /// <remarks>
+    /// <para>
+    /// A request naming more than one page could hold is refused rather than truncated, which is the opposite of what
+    /// the page size does two routes above and deliberately so: serving the first hundred of a longer list and
+    /// answering <c>200</c> would report an act nobody asked for on rows nobody saw, and this is the one act here that
+    /// cannot be taken back.
+    /// </para>
+    /// <para>
+    /// <b>An identifier that names nothing is not an error.</b> A notification another person holds and one already
+    /// erased are the same answer — neither is counted and neither is reported — so the count is what happened rather
+    /// than what was asked for, and nothing here says whether a notification the caller does not hold exists.
+    /// </para>
+    /// </remarks>
+    internal static async Task<Results<Ok<ClientDeletedNotificationsResponse>, ProblemHttpResult>> EraseAsync(
+        [FromBody] ClientNotificationDeletionRequest request,
+        [FromServices] OwnNotifications notifications,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var named = request.NotificationIds ?? [];
+
+        if (named.Count > OwnNotifications.MaximumErasedAtOnce)
+        {
+            return Refuse($"One request names at most {OwnNotifications.MaximumErasedAtOnce} notifications.");
+        }
+
+        // An empty identifier addresses nothing and the domain refuses to wrap one, so it is dropped here rather than
+        // becoming a failed request: a caller that sent it named nothing, which is what an erasure of nothing answers.
+        var erased = await notifications.EraseAsync(
+            [.. named.Where(identifier => identifier != Guid.Empty).Select(NotificationId.Create)],
+            cancellationToken);
+
+        return TypedResults.Ok(new ClientDeletedNotificationsResponse(
+            erased,
+            await notifications.CountUnreadAsync(cancellationToken)));
+    }
+
     /// <summary>States what a caller has to change, without echoing what they sent.</summary>
     private static ProblemHttpResult Refuse(string stated) =>
         TypedResults.Problem(stated, statusCode: StatusCodes.Status400BadRequest);
@@ -205,6 +273,16 @@ internal static class ClientNotificationEndpoints
 /// </remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ClientNotificationReadStateRequest(bool Read);
+
+/// <summary>The notifications a person asks to have erased from their own centre.</summary>
+/// <param name="NotificationIds">The notifications to erase, at most <see cref="OwnNotifications.MaximumErasedAtOnce" /> of them.</param>
+/// <remarks>
+/// Bound strictly for the reason the read-state request is: a key nothing here binds fails the bind rather than being
+/// ignored, which on an act that cannot be taken back is the difference between a refusal and erasing a set the caller
+/// did not mean to name.
+/// </remarks>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record ClientNotificationDeletionRequest(IReadOnlyList<Guid>? NotificationIds);
 
 /// <summary>One page of what happened to a person, newest first.</summary>
 /// <param name="Notifications">The notifications, newest first.</param>
@@ -342,3 +420,8 @@ internal sealed record ClientNotificationReadStateResponse(Guid Id, bool Read, i
 /// <param name="MarkedRead">How many notifications the request moved, which is zero where none stood unread.</param>
 /// <param name="UnreadCount">How many remain unread, which this request leaves at none.</param>
 internal sealed record ClientMarkedNotificationsResponse(int MarkedRead, int UnreadCount);
+
+/// <summary>What erasing notifications removed, and what that leaves on the bell.</summary>
+/// <param name="Deleted">How many of the named notifications went, which is fewer than were named where any of them was already gone.</param>
+/// <param name="UnreadCount">How many of the person's notifications remain unread, so the bell is redrawn from the answer rather than from a page.</param>
+internal sealed record ClientDeletedNotificationsResponse(int Deleted, int UnreadCount);

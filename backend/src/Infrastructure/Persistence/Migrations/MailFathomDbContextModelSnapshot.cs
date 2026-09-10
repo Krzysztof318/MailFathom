@@ -2452,6 +2452,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("spam_classification_runs", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SpentClientAssertionEntity", b =>
+                {
+                    b.Property<string>("CredentialKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("CredentialKey");
+
+                    b.Property<string>("Identifier")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("Identifier");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ExpiresAt");
+
+                    b.HasKey("CredentialKey", "Identifier");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_spent_client_assertions_expires_at");
+
+                    b.ToTable("spent_client_assertions", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredContentClaimEntity", b =>
                 {
                     b.Property<Guid>("Id")

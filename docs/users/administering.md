@@ -641,14 +641,16 @@ about the whole thing, `mfctl contact delete-collected` erases everything it col
 
 ## Serving more than one person
 
-A deployment that reads your own mail declares one person in its files and needs nothing here. When a second person is
-to be served — a household, a small team — `mfctl user` is where each of them is recorded and where what MailFathom
-reads for them is maintained:
+A deployment that reads your own mail serves one person and needs nothing here: its `MailSynchronization:Accounts`
+supplies that person's mailboxes, and the row MailFathom keeps for them is recorded at the first start. When a second
+person is to be served — a household, a small team — `mfctl user` is where each of them is recorded and where what
+MailFathom reads for them is maintained. **Nothing is written into a file**: a user is recorded rather than declared,
+and there is no configuration section that names one.
 
 ```console
 $ mfctl user list
 3f1d... (Alex)
-    mail accounts: a configuration source, which is where they are changed
+    mail accounts: this deployment's own MailSynchronization:Accounts, which is where they are changed
 7c02... (Sam)
     mail accounts: their own record, maintained with 'mfctl user account'
 
@@ -661,9 +663,8 @@ request reached serves this user now; other replicas pick up the change after th
 
 Every command but `list` and `add` takes `--user` and does not need it while the deployment holds one person: it acts
 on the single user there is, and refuses rather than guessing where there are several. `mfctl user rename` replaces
-the label you tell somebody apart by; nothing is keyed by it, so it moves no mail and invalidates no identifier — and
-where the person is one your configuration declares, that file is where the label is changed, since a start puts the
-declared one back.
+the label you tell somebody apart by; nothing is keyed by it, so it moves no mail and invalidates no identifier, and
+the new label lasts — no start reads anybody's label out of a file any more, so there is nobody a rename is undone for.
 
 **Changing more than one thing about somebody at once is `mfctl user edit`.** `mfctl user account add` and
 `mfctl user account remove` each name one mailbox, so two changes are two commands and the deployment briefly reads what
@@ -686,18 +687,18 @@ is asking about. With two people there is no such answer, so give the MCP and cl
 belonging to a person — `mfctl credential create` is that — or switch them off. The refusal says which of the two
 applies.
 
-**Their mailboxes come from your files for as long as your files declare them, and nothing imports them.** A user
-your configuration declares is read from that declaration on every start, so changing their mailboxes with
-`mfctl user account` is refused: your file is where they are changed. Everyone else goes on being read from wherever
-they are read from.
+**One person's mailboxes still come from your files, and nothing imports them.** That is the sole user
+`MailSynchronization:Accounts` belongs to — the section names nobody, so it can only be theirs — and they are read from
+it on every start, which is why changing their mailboxes with `mfctl user account` is refused: that section is where
+they are changed. Everyone else is read from their own record and reached by no configuration source at all.
 
-Moving such a person into a record of their own is yours to perform rather than a command's. Remove their declaration
-from the file — with `MailSynchronization:Accounts` that is the whole section — restart so the next start stops serving
-them from it, then state their mailboxes with `mfctl user account add`, whose credentials are supplied afresh as part
-of each declaration. Whatever else that declaration decided about them is stated again the same way: the spam
-classification posture, and the [`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one,
-both of which a record carries in blocks of its own. Nothing carries any of it across for you, and a person whose
-mailboxes are still declared in a file loses nothing by being left there.
+Moving that person into a record of their own is yours to perform rather than a command's. Clear
+`MailSynchronization:Accounts` — the whole section — restart so the next start stops serving them from it, then state
+their mailboxes with `mfctl user account add`, whose credentials are supplied afresh with each one. Whatever else that
+section decided about them is stated again the same way: the spam classification posture, and the
+[`SensitiveContent`](../features/sensitive-content-scanning.md) block if it stated one, both of which a record carries
+in blocks of its own. Nothing carries any of it across for you, and a person whose mailboxes still come from that
+section loses nothing by being left there.
 
 **Withdrawing a mailbox is not deleting mail, and removing a user is.** `mfctl user account remove` stops MailFathom
 synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
@@ -705,10 +706,10 @@ already in flight drains against the document version it began with. `mfctl user
 message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
 and nothing puts it back.
 
-It refuses one person: a user your configuration declares. A start writes every declared user it no longer holds back
-into the roster, so the erasure would run, the mail would go, and the same person would be recreated at the next restart
-with their mailboxes downloaded again. Remove their entry from the files first — and the refusal names it — then erase
-them once nothing declares them.
+It refuses one person: the user `MailSynchronization:Accounts` supplies. A start records a user for that section
+wherever the deployment holds none, so the erasure would run, the mail would go, and a person would be recreated at the
+next restart with those mailboxes downloaded again. Clear the section first — and the refusal names it — then erase
+them once no configuration source reaches them.
 
 **A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
 reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring

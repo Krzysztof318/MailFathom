@@ -576,4 +576,12 @@ internal static class PersistenceConstraintNames
     /// person's notifications newest first, and retention erases the same person's oldest.
     /// </remarks>
     internal const string NotificationTimelineIndexName = "ix_notifications_user_occurred";
+
+    /// <summary>The order the spent client assertions are aged out through.</summary>
+    /// <remarks>
+    /// Stated because nothing else says why the column is indexed at all: no query reads a spent assertion, and the one
+    /// statement that touches it other than the insert is the removal of everything already expired. The index is what
+    /// makes that removal proportional to what has expired rather than to everything ever spent.
+    /// </remarks>
+    internal const string SpentClientAssertionExpiryIndexName = "ix_spent_client_assertions_expires_at";
 }

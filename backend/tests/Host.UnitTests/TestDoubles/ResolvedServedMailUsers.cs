@@ -26,16 +26,16 @@ internal static class ResolvedServedMailUsers
             MailUserAccountSource.DeploymentSection,
             MailAccounts: []));
 
-    /// <summary>Builds the roster of a deployment whose file declares each user and the mailboxes they own.</summary>
+    /// <summary>Builds the roster of a deployment whose users are records, each holding the mailboxes they own.</summary>
     /// <param name="user">The user the accounts belong to.</param>
-    /// <param name="displayName">The label the user is declared under.</param>
-    /// <param name="mailAccounts">The mail accounts that user declares.</param>
-    /// <returns>The roster, holding that one declared user.</returns>
-    internal static ServedMailUsers Declaring(
+    /// <param name="displayName">The label the user is recorded under.</param>
+    /// <param name="mailAccounts">The mail accounts that user's record declares.</param>
+    /// <returns>The roster, holding that one recorded user.</returns>
+    internal static ServedMailUsers Recording(
         MailUserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        Serving(new ServedMailUser(user, displayName, MailUserAccountSource.UserDeclaration, mailAccounts));
+        Serving(new ServedMailUser(user, displayName, MailUserAccountSource.UserDocument, mailAccounts));
 
     /// <summary>Builds a roster from the users it is given, in the order they are given.</summary>
     /// <param name="users">The users the deployment serves.</param>

@@ -26,8 +26,8 @@ and add a scanner to what stops their outgoing mail, and may do neither in the o
 switches — the analyzer's address, the ceiling, the timeout, the concurrency, and the rebuild — stay wholly the
 deployment's, and the concurrency is one budget every user shares. [Each user's own
 posture](../features/sensitive-content-scanning.md#each-users-own-posture) is the rule, and
-[`Accounts:<n>:SensitiveContent`](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail) is where
-it is written.
+the [`SensitiveContent` block of their own record](configuration-sources.md#what-a-user-may-say-about-scanning-their-own-mail)
+is where it is written.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -221,9 +221,9 @@ sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
 
 The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that user's
 own accounts maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being
-restated here. For a user served from this section those accounts are
-[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for a user declared
-in the top-level `Accounts` collection or read from their own record they are that user's own `MailAccounts`. The two shapes of an unset list are deliberately
+restated here. For the sole user this deployment's own section supplies those accounts are
+[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for a user read from
+their own record they are that user's own `MailAccounts`. The two shapes of an unset list are deliberately
 distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
 work off without switching the section off.
 

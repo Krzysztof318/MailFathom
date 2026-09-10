@@ -131,7 +131,7 @@ internal static class HostComposition
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
         BoundSettings.AddTo(builder.Services, builder.Configuration);
-        AddServedMailUsers(builder);
+        RefuseTheWithdrawnUserCollection(builder);
 
         AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -154,20 +154,17 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Refuses the users this deployment declares before anything is registered against them.</summary>
+    /// <summary>Refuses a configuration that still declares the users this deployment records.</summary>
     /// <remarks>
-    /// Who this deployment serves decides what every other section is read for, so it is judged first among the groups
-    /// a start takes before its container exists. Nothing here reaches the database: what a declaration says is judged
-    /// on its own, and what the deployment already holds is reconciled against it by the startup gate that can read the
-    /// rows.
+    /// Judged first among the groups a start takes before its container exists, because who this deployment serves
+    /// decides what every other section is read for — and because a file carrying the withdrawn collection describes a
+    /// roster this host would not serve. Nothing here reaches the database: who is served is settled by the startup
+    /// gate that can read the rows.
     /// </remarks>
-    /// <exception cref="OptionsValidationException">Thrown when the declared users could not be served, which fails startup with every problem in the collection at once.</exception>
-    private static void AddServedMailUsers(WebApplicationBuilder builder)
-    {
+    /// <exception cref="OptionsValidationException">Thrown when a configuration source still carries the withdrawn user collection.</exception>
+    private static void RefuseTheWithdrawnUserCollection(WebApplicationBuilder builder) =>
         ComposedSettings.RefuseFirstOf(
-            ComposedSettings.FindUserDeclarationRefusals(builder.Configuration, TimeProvider.System));
-
-    }
+            ComposedSettings.FindWithdrawnUserCollectionRefusals(builder.Configuration));
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
     /// <remarks>

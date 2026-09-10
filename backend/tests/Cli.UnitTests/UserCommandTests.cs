@@ -108,11 +108,12 @@ public sealed class UserCommandTests : IDisposable
     }
 
     /// <summary>
-    /// A start reads a declared user's label from the file it is declared in, so a rename of one lasts until the next
-    /// restart. Reporting the new label without saying so would report a change the deployment undoes.
+    /// No configuration source names a user, so no start puts a label back and a rename lasts for every user a
+    /// deployment serves — including the one its own mail section supplies, which is the case that used to be
+    /// qualified. Nothing may report the label as one the deployment undoes.
     /// </summary>
     [Fact]
-    public async Task Rename_AUserAConfigurationSourceDeclares_SaysTheLabelLastsUntilARestart()
+    public async Task Rename_TheUserTheDeploymentsOwnMailSectionSupplies_ReportsTheLabelWithNothingQualifyingIt()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -131,34 +132,10 @@ public sealed class UserCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(
-            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("until the deployment is restarted", StringComparison.Ordinal));
-    }
-
-    /// <summary>A user nothing declares keeps the label a rename writes, so nothing qualifies what the command reported.</summary>
-    [Fact]
-    public async Task Rename_AUserNoConfigurationSourceDeclares_ReportsTheLabelWithNothingQualifyingIt()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-
-        // Act
-        await this.RunAsync(
-            deployment,
-            "user",
-            "rename",
-            "--user",
-            $"{User:D}",
-            "--display-name",
-            "alexandra",
-            "--endpoint",
-            Endpoint);
-
-        // Assert
+        Assert.Single(deployment.UserRequestsTo(HttpMethod.Put, AdminEndpointRoutes.UserDisplayNamePath(User)));
         Assert.DoesNotContain(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("until the deployment is restarted", StringComparison.Ordinal));
+            line => line.Contains("restart", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>A deployment holding one person is the ordinary shape, so the roster is what settles who a rename acts for.</summary>
@@ -185,7 +162,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The listing is where the two states that decide what to do next are read.</summary>
     [Fact]
-    public async Task List_AUserServedFromConfiguration_SaysAConfigurationSourceIsWhereTheyAreChanged()
+    public async Task List_TheUserTheDeploymentsOwnMailSectionSupplies_SaysThatSectionIsWhereTheyAreChanged()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -197,7 +174,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("a configuration source, which is where they are changed", StringComparison.Ordinal));
+            line => line.Contains("MailSynchronization:Accounts, which is where they are changed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -359,7 +336,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The one refusal a command can repair names the repair, which is the configuration source the mailboxes are declared in.</summary>
     [Fact]
-    public async Task AccountAdd_AUserAConfigurationSourceSupplies_NamesTheConfigurationSourceAsTheRepair()
+    public async Task AccountAdd_TheUserTheDeploymentsOwnMailSectionSupplies_NamesThatSectionAsTheRepair()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.RefusingTheWrite(
@@ -384,7 +361,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("Change this user's mail accounts where the configuration source declares them", StringComparison.Ordinal));
+            line => line.Contains("Change this user's mail accounts in MailSynchronization:Accounts", StringComparison.Ordinal));
     }
 
     /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>

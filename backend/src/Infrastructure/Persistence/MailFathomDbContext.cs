@@ -6,6 +6,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Accounts.Configurations;
 using MailFathom.Infrastructure.Persistence.AiProviders.Configurations;
 using MailFathom.Infrastructure.Persistence.Answering.Configurations;
+using MailFathom.Infrastructure.Persistence.ClientAssertions.Configurations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts.Configurations;
 using MailFathom.Infrastructure.Persistence.Coordination.Configurations;
@@ -73,6 +74,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<ClientPreferencesEntity> ClientPreferences => this.Set<ClientPreferencesEntity>();
 
     internal DbSet<UserPortraitEntity> UserPortraits => this.Set<UserPortraitEntity>();
+
+    internal DbSet<SpentClientAssertionEntity> SpentClientAssertions => this.Set<SpentClientAssertionEntity>();
 
     internal DbSet<StoredSecretEntity> StoredSecrets => this.Set<StoredSecretEntity>();
 
@@ -217,6 +220,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new ClientPreferencesConfiguration());
         modelBuilder.ApplyConfiguration(new UserPortraitConfiguration());
+        modelBuilder.ApplyConfiguration(new SpentClientAssertionConfiguration());
         modelBuilder.ApplyConfiguration(new UserStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredContentClaimConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());

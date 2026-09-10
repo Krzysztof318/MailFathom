@@ -4,6 +4,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ClientFailureReason, ClientNotification } from '@mailfathom/client-backend';
+import { Confirmation } from '../confirmation/Confirmation';
 import { ChoiceSegment } from '../controls/ChoiceSegment';
 import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
@@ -14,6 +15,7 @@ import { useScreenLayer } from '../shell/screenLayers';
 import { useCurrentMinute } from './notificationAge';
 import { NotificationRow } from './NotificationRow';
 import { NotificationRowMenu } from './NotificationRowMenu';
+import { wordNotification } from './notificationWords';
 import type { NotificationCentre as Centre, NotificationFilter } from './useNotificationCentre';
 import type { PanelSwipe } from './usePanelSwipe';
 
@@ -63,6 +65,17 @@ const newCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
     other: 'notifications.new.other',
 };
 
+// How many rows a delete would take, said in the terms of the thing being changed rather than as a count with a noun
+// stuck on it — which is what `confirmation/Confirmation.tsx` asks of every caller.
+const deletingCounted: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'notifications.deleteManyConsequence.other',
+    one: 'notifications.deleteManyConsequence.one',
+    two: 'notifications.deleteManyConsequence.other',
+    few: 'notifications.deleteManyConsequence.few',
+    many: 'notifications.deleteManyConsequence.many',
+    other: 'notifications.deleteManyConsequence.other',
+};
+
 export function NotificationCentre({
     centre,
     swipe,
@@ -81,6 +94,16 @@ export function NotificationCentre({
     const [menu, setMenu] = useState<{ readonly notification: ClientNotification; readonly at: MenuPoint } | null>(
         null,
     );
+
+    // What a delete would take, held apart from the dialog's own openness for the reason the confirmation states: the
+    // element is the state, and this is what the question is being asked *about*. A row's own headline is kept beside
+    // the identifiers because the question names the row rather than counting it, and the row itself is gone from the
+    // list by the time the answer arrives.
+    const asked = useRef<HTMLDialogElement>(null);
+    const [deleting, setDeleting] = useState<{
+        readonly ids: readonly string[];
+        readonly title: string | null;
+    } | null>(null);
 
     // The one thing the platform will not do from a value: a dialog is modal because something called for it to be,
     // so this is the imperative API the state is synchronized with. How it travels on and off the screen is the
@@ -123,6 +146,18 @@ export function NotificationCentre({
 
     function toggleSelected(id: string): void {
         setSelected((held) => (held.includes(id) ? held.filter((chosen) => chosen !== id) : [...held, id]));
+    }
+
+    // The question is put in front of every delete, one row or a selection, because a notification that has gone does
+    // not come back. What it is asked about is recorded here and the dialog is opened imperatively, which is the shape
+    // the confirmation publishes: the element is what holds whether it is standing.
+    function askToDelete(ids: readonly string[], title: string | null): void {
+        if (ids.length === 0) {
+            return;
+        }
+
+        setDeleting({ ids, title });
+        asked.current?.showModal();
     }
 
     return (
@@ -275,6 +310,18 @@ export function NotificationCentre({
                             clear();
                         }}
                     />
+
+                    {/* Last on the bar and apart from the two markings, which is where the design project puts the one
+                        act that takes something away. */}
+                    <Control
+                        label={translate('notifications.deleteSelected')}
+                        icon="delete"
+                        shape="selectedSymbol"
+                        className="text-error-text"
+                        onPress={() => {
+                            askToDelete(picked, null);
+                        }}
+                    />
                 </div>
             )}
 
@@ -324,11 +371,58 @@ export function NotificationCentre({
                         clear();
                         centre.follow(menu.notification);
                     }}
+                    onDelete={() => {
+                        askToDelete(
+                            [menu.notification.id],
+                            wordNotification(menu.notification, locale, translate).title,
+                        );
+                    }}
                     onClose={() => {
                         setMenu(null);
                     }}
                 />
             )}
+
+            {/* One question for both ways of asking it, which is what the confirmation's own note about the caller
+                holding the element is for. What differs between them is the sentence: a row names itself, and a
+                selection says how many go. The heading follows the count rather than which of the two asked, because a
+                selection of one is one notification however it was picked out. */}
+            <Confirmation
+                asked={asked}
+                mark="delete"
+                question={translate(
+                    deleting !== null && deleting.ids.length > 1
+                        ? 'notifications.deleteManyQuestion'
+                        : 'notifications.deleteOneQuestion',
+                )}
+                consequence={
+                    <p className="text-base text-muted text-pretty">
+                        {deleting === null
+                            ? ''
+                            : deleting.title === null
+                              ? translate(deletingCounted[new Intl.PluralRules(locale).select(deleting.ids.length)], {
+                                    count: new Intl.NumberFormat(locale).format(deleting.ids.length),
+                                })
+                              : translate('notifications.deleteOneConsequence', { title: deleting.title })}
+                    </p>
+                }
+                reversal={{ kind: 'permanent', said: translate('notifications.deleteIsFinal') }}
+                ways={[
+                    { said: translate('notifications.keepNotification'), manner: 'back' },
+                    {
+                        said: translate('notifications.deleteSelected'),
+                        manner: 'destroy',
+                        run: () => {
+                            if (deleting !== null) {
+                                centre.remove(deleting.ids);
+                            }
+
+                            clear();
+                            setDeleting(null);
+                        },
+                    },
+                ]}
+            />
         </dialog>
     );
 }

@@ -55,17 +55,18 @@ public sealed class UserRosterAdministrationTests
     }
 
     /// <summary>
-    /// A declaration is what decides whether a user can be erased or usefully relabelled, and it is read from a file
-    /// this process composed rather than from anything the row carries — so an administrator reading the roster is
-    /// told, instead of finding out from a refusal.
+    /// Which source reaches a user is what decides whether they can be erased, and it is read from the roster this
+    /// process settled rather than from anything the row carries — so an administrator reading the roster is told,
+    /// instead of finding out from a refusal.
     /// </summary>
     [Fact]
     public async Task ReadRosterAsync_AUserAConfigurationSourceDeclares_ReportsThemAsDeclaredInConfiguration()
     {
         // Arrange
-        var harness = new RosterHarness(
-            MailFathomPermission.AdminRead,
-            declaredInConfiguration: SyntheticMailUser.Deployment);
+        var harness = new RosterHarness(MailFathomPermission.AdminRead);
+        harness.Serving(
+            new ServedMailUser(SyntheticMailUser.Deployment, "alex", MailUserAccountSource.DeploymentSection, []),
+            new ServedMailUser(SyntheticMailUser.Another, "morgan", MailUserAccountSource.UserDocument, []));
         harness.Holding(
             new MailUserRecord(SyntheticMailUser.Deployment, "alex", DocumentWrittenAtRuntime: false),
             new MailUserRecord(SyntheticMailUser.Another, "morgan", DocumentWrittenAtRuntime: true));
@@ -94,7 +95,7 @@ public sealed class UserRosterAdministrationTests
 
         // Assert
         await harness.Directory.Received(1).ReadUsersAsync(
-            DeclaredUsers.MaximumDeclaredUsers + 1,
+            ServedMailUsers.MaximumUsers + 1,
             Arg.Any<CancellationToken>());
     }
 
@@ -309,7 +310,7 @@ public sealed class UserRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(
         [
-            .. Enumerable.Range(0, DeclaredUsers.MaximumDeclaredUsers)
+            .. Enumerable.Range(0, ServedMailUsers.MaximumUsers)
                 .Select(position => new MailUserRecord(
                     MailUserId.Create(Guid.NewGuid()),
                     $"user-{position}",
@@ -403,33 +404,8 @@ public sealed class UserRosterAdministrationTests
     }
 
     /// <summary>
-    /// A user a file declares is written back by the next start, so erasing them would dispose of their mail and
-    /// hand the person straight back — with their mailboxes downloaded again. The refusal names the declaration to
-    /// remove first rather than performing a deletion the deployment would undo.
-    /// </summary>
-    [Fact]
-    public async Task EraseAsync_AUserADeclarationNames_IsRefusedNamingWhatToRemoveFirst()
-    {
-        // Arrange
-        var harness = new RosterHarness(
-            MailFathomPermission.AdminErase,
-            declaredInConfiguration: SyntheticMailUser.Deployment);
-        harness.Erasing(SyntheticMailUser.Deployment);
-
-        // Act
-        var outcome = await harness.Roster.EraseAsync(
-            SyntheticMailUser.Deployment,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.False(outcome.UserErased);
-        Assert.NotNull(outcome.RefusalMessage);
-        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
-    }
-
-    /// <summary>
-    /// The deployment's own mail-account section names no user, so the sole user it is attributed to is declared by
-    /// that section exactly as a listed user is declared by theirs — and the next start supplies them again.
+    /// The deployment's own mail-account section names no user, so the sole user it is attributed to is supplied by
+    /// that section — and the next start records one for it again.
     /// </summary>
     [Fact]
     public async Task EraseAsync_AUserServedFromTheDeploymentsOwnSection_IsRefusedNamingWhatToRemoveFirst()
@@ -647,8 +623,7 @@ public sealed class UserRosterAdministrationTests
     {
         internal RosterHarness(
             MailFathomPermission granted,
-            ClientEndpointOptions? clientEndpoint = null,
-            MailUserId declaredInConfiguration = default)
+            ClientEndpointOptions? clientEndpoint = null)
         {
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
             principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
@@ -682,16 +657,7 @@ public sealed class UserRosterAdministrationTests
                     []),
             ]);
 
-            var settings = new ConfigurationBuilder()
-                .AddInMemoryCollection(declaredInConfiguration.IsSpecified
-                    ? new Dictionary<string, string?>
-                    {
-                        [$"{DeclaredUserOptions.SectionName}:0:{nameof(DeclaredUserOptions.Id)}"] =
-                            declaredInConfiguration.Value.ToString(),
-                        [$"{DeclaredUserOptions.SectionName}:0:{nameof(DeclaredUserOptions.DisplayName)}"] = "declared",
-                    }
-                    : [])
-                .Build();
+            var settings = new ConfigurationBuilder().Build();
 
             this.Roster = new UserRosterAdministration(
                 new AccessAuthorization(principals),
@@ -726,7 +692,9 @@ public sealed class UserRosterAdministrationTests
             this.ServedUsers.Resolved([new(user, "served", MailUserAccountSource.UserDocument, [])]);
 
         internal void ServingFromTheDeploymentSection(MailUserId user) =>
-            this.ServedUsers.Resolved([new(user, "served", MailUserAccountSource.DeploymentSection, [])]);
+            this.Serving(new ServedMailUser(user, "served", MailUserAccountSource.DeploymentSection, []));
+
+        internal void Serving(params ServedMailUser[] users) => this.ServedUsers.Resolved(users);
 
         internal void Erasing(MailUserId user) =>
             this.Erasure.EraseAsync(user, Arg.Any<CancellationToken>()).Returns(true);

@@ -1,0 +1,115 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Access.Credentials;
+using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Persistence.Entities;
+using Npgsql;
+
+namespace MailFathom.Infrastructure.Persistence.ClientAssertions;
+
+/// <summary>Records a served client assertion in the one table every replica of a deployment writes to.</summary>
+/// <remarks>
+/// <para>
+/// Two bare commands over the data source rather than EF Core queries, for the reason the persisted configuration
+/// document is read as one: neither statement has a query shape, the caller is an authentication handler that is not
+/// inside a unit of work and must not join one, and the outcome the spend needs is the row count PostgreSQL reports for
+/// an insert that may conflict. A tracked entity would turn a conflict into an exception the caller then had to
+/// classify, and would put the record inside whichever transaction happened to be open.
+/// </para>
+/// <para>
+/// The identifiers in both statements come from the mapped entity's own constants, so the statements and the schema are
+/// one description; every value is a parameter, so nothing a client minted is ever composed into text.
+/// </para>
+/// <para>
+/// Each command is bounded by the caller's own cancellation token and by whatever <c>Command Timeout</c> the composed
+/// connection string carries, which is the arrangement the persisted configuration document is read under. It is not
+/// bounded by <c>Persistence:CommandTimeoutSeconds</c>, because that value is written into the EF Core context options
+/// rather than into the pool, and the two statements here open no context.
+/// </para>
+/// <para>
+/// A failure to reach the database is translated rather than absorbed, and the two are separate decisions. It is not
+/// absorbed because the answer this store gives is what decides whether a request is served, so a store that cannot
+/// answer is one whose caller must not serve — turning an outage into a <see langword="true" /> would open the replay
+/// window this exists to close, and turning it into a <see langword="false" /> would report a replay that did not
+/// happen and hide the outage from the operator. It is translated because the port it crosses is an application
+/// contract and the caller is an authentication handler: an <c>NpgsqlException</c> reaching there would put a driver's
+/// type and a server's own message on the path that answers an unauthenticated caller, which is the arrangement the
+/// persisted configuration document is read under and for the same reason.
+/// </para>
+/// </remarks>
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this store.")]
+[RequiresIntegrationCoverage]
+internal sealed class ClientAssertionSpendStore(NpgsqlDataSource dataSource) : IClientAssertionSpendStore
+{
+    /// <summary>Writes the record, and reports having written it, in one statement.</summary>
+    /// <remarks>
+    /// The conflict target is the whole key, so the only insert that does nothing is one whose exact pair is already
+    /// recorded. Which replica issued it does not appear anywhere: the row says the deployment served the assertion,
+    /// which is the property the deployment promises rather than a fact about a process.
+    /// </remarks>
+    private const string SpendIdentifierStatement = $"""
+        INSERT INTO "{SpentClientAssertionEntity.TableName}"
+            ("{SpentClientAssertionEntity.CredentialKeyColumnName}", "{SpentClientAssertionEntity.IdentifierColumnName}", "{SpentClientAssertionEntity.ExpiresAtColumnName}")
+        VALUES (@credentialKey, @identifier, @expiresAt)
+        ON CONFLICT ("{SpentClientAssertionEntity.CredentialKeyColumnName}", "{SpentClientAssertionEntity.IdentifierColumnName}") DO NOTHING;
+        """;
+
+    /// <summary>Removes what has expired, reaching it through the index on the expiry.</summary>
+    /// <remarks>
+    /// The comparison is against the indexed column alone, so the plan is a range over what has already expired rather
+    /// than a scan of everything ever spent — which is what keeps the removal proportional to the traffic since the
+    /// last one instead of to the deployment's whole history of authenticated requests.
+    /// </remarks>
+    private const string RemoveExpiredStatement = $"""
+        DELETE FROM "{SpentClientAssertionEntity.TableName}"
+        WHERE "{SpentClientAssertionEntity.ExpiresAtColumnName}" <= @removableFrom;
+        """;
+
+    /// <inheritdoc />
+    public async Task<bool> TrySpendAsync(
+        string credentialKey,
+        string identifier,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(credentialKey);
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        await using var command = dataSource.CreateCommand(SpendIdentifierStatement);
+        command.Parameters.AddWithValue("credentialKey", credentialKey);
+        command.Parameters.AddWithValue("identifier", identifier);
+        command.Parameters.AddWithValue("expiresAt", expiresAt.ToUniversalTime());
+
+        try
+        {
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new ClientAssertionSpendUnrecordableException(
+                $"The assertion a request presented could not be recorded in {SpentClientAssertionEntity.TableName}, so the request was refused rather than served unrecorded. Check that the database is reachable and that this build's migrations have been applied to it.",
+                exception);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveExpiredAsync(DateTimeOffset removableFrom, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand(RemoveExpiredStatement);
+        command.Parameters.AddWithValue("removableFrom", removableFrom.ToUniversalTime());
+
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new ClientAssertionSpendUnrecordableException(
+                $"The records of assertions past the point they could still be presented could not be removed from {SpentClientAssertionEntity.TableName}. Check that the database is reachable and that this build's migrations have been applied to it.",
+                exception);
+        }
+    }
+}

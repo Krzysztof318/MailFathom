@@ -10,8 +10,8 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// <param name="User">The identifier every mail account and every stored message of theirs hangs on.</param>
 /// <param name="DisplayName">The label an operator tells this user apart by, which nothing resolves them by.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
-/// <param name="Served">Whether this process is serving them, which a held user no source declares is not.</param>
-/// <param name="DeclaredInConfiguration">Whether a configuration source names this user, so a start would put back what an act here changed.</param>
+/// <param name="Served">Whether this process is serving them, which every user it holds is.</param>
+/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies this user's mailboxes, so an erasure of them is refused rather than performed — a start would only record them again.</param>
 /// <remarks>
 /// <para>
 /// The label is here because a column of generated identifiers is not a roster anybody can read. Nothing resolves a
@@ -19,11 +19,11 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// does first, and the identifier says nothing about who the person is.
 /// </para>
 /// <para>
-/// The last three are separate facts and a reader needs all of them. A user held and not served keeps every message
-/// of theirs and synchronizes none of it, which is what a file that stopped declaring them leaves behind; a user
-/// served from a configuration source has an empty record, which is what makes a write to it something to refuse rather
-/// than apply; and a user a file declares carries that file's label and that file's row, whichever source their mail
-/// accounts come from, so a relabel here is undone at the next start and an erasure is written back by it.
+/// The last three are separate facts and a reader needs all of them. Every user this deployment holds is served, so
+/// <c>Served</c> answers whether this process has settled its roster rather than whether anybody was left out of it; a
+/// user the deployment's own mail section supplies has an empty record, which is what makes a write to it something to
+/// refuse rather than apply; and a start records a user for that section wherever it holds none, so an erasure there
+/// would be followed by the person being recreated and their mail downloaded again.
 /// </para>
 /// </remarks>
 internal sealed record UserRosterEntry(

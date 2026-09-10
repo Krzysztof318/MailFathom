@@ -101,7 +101,7 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// <remarks>
     /// Takes the entry rather than the identifier because <see cref="ScopeInForce" /> holds it already, and searching
     /// the roster again per user would make composing the scope quadratic in a roster that may hold
-    /// <see cref="DeclaredUsers.MaximumDeclaredUsers" /> entries — a cost every stored message pays, because the
+    /// <see cref="ServedMailUsers.MaximumUsers" /> entries — a cost every stored message pays, because the
     /// derived-work gate reads the scope once per message a synchronization run stores.
     /// </remarks>
     private SpamClassificationSettings SettingsFor(ServedMailUser served, SpamClassificationOptions deployment)

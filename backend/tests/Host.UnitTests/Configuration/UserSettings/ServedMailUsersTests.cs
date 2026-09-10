@@ -195,6 +195,6 @@ public sealed class ServedMailUsersTests
             displayName,
             mailAccounts.Length == 0
                 ? MailUserAccountSource.DeploymentSection
-                : MailUserAccountSource.UserDeclaration,
+                : MailUserAccountSource.UserDocument,
             mailAccounts);
 }

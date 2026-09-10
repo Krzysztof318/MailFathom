@@ -83,6 +83,23 @@ public interface INotificationStore
     /// </remarks>
     Task<int> MarkAllReadAsync(MailUserId user, CancellationToken cancellationToken);
 
+    /// <summary>Erases the named notifications, of those the given user holds.</summary>
+    /// <param name="user">The user whose notifications are erased, which is what scopes the write.</param>
+    /// <param name="notifications">The notifications to erase, which may name none.</param>
+    /// <param name="cancellationToken">Cancels the erasure.</param>
+    /// <returns>How many notifications were erased, which is fewer than were named where any of them was already gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="notifications" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The user is part of the addressing rather than a filter applied after a lookup, exactly as it is for the read
+    /// state above: an identifier is not a capability, so a notification another user holds is not erased and is not
+    /// reported either. An identifier naming nothing is the same answer, which is what makes erasing something already
+    /// gone the act the caller wanted rather than an error — the count is what happened, never what was asked for.
+    /// </remarks>
+    Task<int> EraseAsync(
+        MailUserId user,
+        IReadOnlyCollection<NotificationId> notifications,
+        CancellationToken cancellationToken);
+
     /// <summary>Erases up to a bounded number of one user's notifications that describe something older than a given instant.</summary>
     /// <param name="user">The user whose notifications are aged.</param>
     /// <param name="occurredBefore">The instant a notification must describe something older than to be erased.</param>

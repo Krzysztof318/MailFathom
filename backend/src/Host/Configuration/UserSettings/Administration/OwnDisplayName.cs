@@ -32,9 +32,9 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// refusal by submitting one.
 /// </para>
 /// <para>
-/// A person whose mail accounts a configuration source still declares is refused, for the reason the record's own
-/// write refuses them: a start relabels every declared user from the declaration, so a name written here would stand
-/// until the next restart and then silently revert. What comes back names the file to correct instead.
+/// A person whose mail accounts the deployment's own section supplies is refused, for the reason the record's own
+/// write refuses them: that record is the operator's rather than theirs, so the name on it is the operator's to set.
+/// What comes back names who to ask instead.
 /// </para>
 /// </remarks>
 [SuppressMessage(
@@ -143,9 +143,9 @@ internal sealed class OwnDisplayName(
 
     /// <summary>The sentence a person whose mail accounts a configuration source declares is refused with.</summary>
     /// <remarks>
-    /// It names both shapes the declaration takes, for the reason the erasure's own refusal does: which one an
-    /// operator wrote is in their file rather than in anything this deployment could report back to the person.
+    /// It names what the person can act on rather than the key behind it: the deployment's own mail section is the
+    /// operator's file, and nothing the person could reach changes what it supplies.
     /// </remarks>
     private const string DeclaredElsewhere =
-        "A configuration source declares your mail accounts, so this deployment reads your name from it too and writes that name back at every start — a change made here would stand until the next restart and then revert. Ask whoever administers this deployment to change the name in your entry of the top-level Accounts collection.";
+        "This deployment's own configuration supplies your mail accounts, so your record is the operator's rather than yours and the name on it is theirs to set. Ask whoever administers this deployment to change it.";
 }

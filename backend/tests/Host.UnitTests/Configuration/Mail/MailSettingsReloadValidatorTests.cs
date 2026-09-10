@@ -19,9 +19,9 @@ namespace MailFathom.Host.UnitTests.Configuration.Mail;
 
 /// <summary>Covers what a reloaded mail declaration has to prove before synchronization is run through it.</summary>
 /// <remarks>
-/// The deployment's own <c>Accounts</c> section names no user, so a start refuses it beside user declarations. The
-/// same file arriving as a reload would otherwise be adopted, and the lookup that resolves a configured account reads
-/// that section first — so a user's mailbox would be run under settings that belong to nobody.
+/// The deployment's own <c>MailSynchronization:Accounts</c> names no user, so a start refuses it once every user reads
+/// a record of their own. The same file arriving as a reload would otherwise be adopted, and the lookup that resolves a
+/// configured account reads that section first — so a user's mailbox would be run under settings that belong to nobody.
 /// </remarks>
 public sealed class MailSettingsReloadValidatorTests
 {
@@ -29,7 +29,7 @@ public sealed class MailSettingsReloadValidatorTests
     public async Task FindConfigurationErrorsAsync_TheDeploymentSectionOnADeploymentServingDeclaredUsers_IsRefused()
     {
         // Arrange
-        var roster = ResolvedServedMailUsers.Declaring(SyntheticMailUser.Deployment, "alex");
+        var roster = ResolvedServedMailUsers.Recording(SyntheticMailUser.Deployment, "alex");
         var validator = new MailSettingsReloadValidator(SecretValidator(), roster);
 
         // Act

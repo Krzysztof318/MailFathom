@@ -10,9 +10,9 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// <summary>Judges one user's mail-account declarations, wherever the declarations came from.</summary>
 /// <remarks>
 /// Three readers ask this and they must not answer differently: the record a <c>settings_accounts</c> row holds, the
-/// section a file declares that user in, and whatever a candidate document would put in either. A rule that held for
-/// one of them would be a naming space that changed shape as declarations moved between the file and the row, and the
-/// ambiguity it exists to refuse would arrive with the move.
+/// deployment's own <c>MailSynchronization:Accounts</c> that the sole user of such a deployment reads, and whatever a
+/// candidate document would put in either. A rule that held for one of them would be a naming space that changed shape
+/// as mailboxes moved between the section and the row, and the ambiguity it exists to refuse would arrive with the move.
 /// </remarks>
 internal static class UserMailAccountRules
 {

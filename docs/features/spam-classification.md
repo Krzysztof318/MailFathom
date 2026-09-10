@@ -176,11 +176,11 @@ is refused at the write, and the refusal names the range.
 
 Which source a user's posture is read from is the same per-user marker that decides where their mail accounts come
 from, described in [the users a deployment serves](../operations/configuration-sources.md#the-users-a-deployment-serves).
-A user still read from a configuration source takes the deployment's `SpamClassification` section; a user whose
-document has been written takes the block that document carries. **The two are never unioned**: switching classification
-off in a record actually switches it off rather than falling back to whatever the file still says. Adoption carries the
-section's posture into the record with the mailboxes, so the handover moves a user's settings rather than resetting
-them.
+The sole user the deployment's own `MailSynchronization:Accounts` supplies takes the deployment's `SpamClassification`
+section; a user whose document has been written takes the block that document carries. **The two are never unioned**:
+switching classification off in a record actually switches it off rather than falling back to whatever the file still
+says. Nothing carries the section's posture into a record, so a deployment moving somebody into one states their posture
+there afresh alongside their mailboxes.
 
 A folder resolves within that user's own mail accounts and nowhere else — both the folders their mail is classified
 over and the folder their junk is filed into. A name only somebody else's account carries is answered exactly as one
