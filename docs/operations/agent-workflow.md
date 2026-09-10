@@ -1044,14 +1044,19 @@ Three rules live in `.github/pull-request/select-board-status.sh`, read top to b
   `MERGEABLE` rather than merely not `CONFLICTING`, because a column claiming there is
   nothing left to wait for is claimed from an answer rather than from the absence of one.
 
-Two sets of checks are not read, and a draft earns nothing at all. `CodeQL` is not a
-required check on `main`: a finding there is worth acting on and does not make the change
-unmergeable, so reading it would hold every pull request out of `Ready to merge` for a
-question the ruleset does not ask. `Apply pull request rules`'s own checks are not read
+Two sets of checks are not read, and a draft earns neither of the last two rules. `CodeQL`
+is not a required check on `main`: a finding there is worth acting on and does not make the
+change unmergeable, so reading it would hold every pull request out of `Ready to merge` for
+a question the ruleset does not ask. `Apply pull request rules`'s own checks are not read
 because nothing they publish says whether the change builds — they are a label and a board
 write — and a rule that read them would be deciding partly from its own run. And a draft is
 work being written rather than a change asking for anything, its checks red as often as not
 while it is.
+
+The conflict rule is asked before that, and deliberately: it is true of an item already in
+`Ready to merge`, which is a pull request that had been ready and has since stopped merging.
+Converting one back to draft does not make the conflict less true, and the rebase is owed
+either way, so a draft still leaves that column when its branch stops merging.
 
 None of this is a gate, and reading it as one would be the mistake to make here. A pull
 request from a fork supplies the workflow files its own checks run from, so what those checks

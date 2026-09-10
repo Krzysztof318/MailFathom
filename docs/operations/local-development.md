@@ -1672,7 +1672,8 @@ the approval and the checks agree. The push sweeps every open pull request and a
 decides the one it ran on. Each job runs on its own events and skips the others, which is what keeps
 the labelling as short as it was: `Fathom review` waits for this workflow's run before it reads the
 labels. It reports no status check and blocks nothing; a draft runs it, because a label is worth
-having while the change is still being written, though no board rule reads a draft. It only ever adds
+having while the change is still being written, and a draft earns neither of the two rules about a
+review and a pipeline, though the conflict rule still reaches one that had been ready. It only ever adds
 a label, so one a hand applied stays. [Rules on the pull
 request](agent-workflow.md#rules-on-the-pull-request) carries the reasoning, including why the
 labelling takes `pull_request` rather than the trigger `Fathom review` holds, why the board half
