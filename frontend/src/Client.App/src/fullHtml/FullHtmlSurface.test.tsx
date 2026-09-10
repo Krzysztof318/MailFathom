@@ -114,7 +114,7 @@ async function drawing(
 
     const view = render(surface(online));
 
-    await screen.findByRole('region', { name: "The sender's own version of this message" });
+    await screen.findByRole('region', { name: 'The original message, as its sender wrote it' });
 
     return (nowOnline) => {
         view.rerender(surface(nowOnline));
@@ -161,7 +161,7 @@ describe('FullHtmlSurface', () => {
 
         await drawing(transport);
 
-        expect(screen.getByText("Reading the sender's own version…")).toBeDefined();
+        expect(screen.getByText('Reading the original message…')).toBeDefined();
     });
 
     it('names the message it is showing, and who sent it and when', async () => {
@@ -179,7 +179,7 @@ describe('FullHtmlSurface', () => {
         await drawing(transport);
 
         expect(document.activeElement).toBe(
-            screen.getByRole('region', { name: "The sender's own version of this message" }),
+            screen.getByRole('region', { name: 'The original message, as its sender wrote it' }),
         );
     });
 
@@ -266,7 +266,7 @@ describe('FullHtmlSurface', () => {
         const { transport } = deploymentServing();
 
         await drawing(transport, { onClose: closed });
-        press('Close this view');
+        press('Close the original message');
 
         expect(closed).toHaveBeenCalledOnce();
     });
@@ -308,7 +308,7 @@ describe('FullHtmlSurface', () => {
         expect(await screen.findByText(/could not be read: no longer there/u)).toBeDefined();
         expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
         expect(closed).not.toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: 'Close this view' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Close the original message' })).toBeDefined();
     });
 
     it('reads both the head and the markup again when the reader tries again', async () => {

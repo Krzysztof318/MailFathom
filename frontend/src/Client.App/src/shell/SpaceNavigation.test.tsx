@@ -10,6 +10,7 @@ import { SpaceNavigation } from './SpaceNavigation';
 
 const handedTheAccount = 'The account control this navigation was handed.';
 const handedTheBell = 'The bell this navigation was handed.';
+const handedTheRefresh = 'The refresh this navigation was handed.';
 
 // The one thing about this component jsdom cannot answer for, because it decides which of the two shapes is in the
 // document rather than how one of them is laid out. It answers narrow to every query unless a test says otherwise, so
@@ -34,6 +35,7 @@ function renderNavigation(offered: readonly Space[] = spaces, current: Space | n
                 current={current}
                 account={<button>{handedTheAccount}</button>}
                 notifications={<button>{handedTheBell}</button>}
+                refresh={<button>{handedTheRefresh}</button>}
                 onPointerDown={() => undefined}
                 onClickCapture={() => undefined}
             />

@@ -43,30 +43,33 @@ function shellAnswering(answers: Readonly<Record<string, unknown>>): Asked[] {
 afterEach(() => {
     delete global['__TAURI__'];
     window.sessionStorage.clear();
+    window.localStorage.clear();
     vi.restoreAllMocks();
 });
 
 describe('credentialStore', () => {
-    it('keeps a credential for the tab where no shell is hosting the client', async () => {
+    it('offers this browser as the place beyond the tab where no shell is hosting the client', async () => {
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('untilTheTabCloses');
+        expect(store.beyondTheTab).toBe('inThisBrowser');
     });
 
-    it('keeps a credential until sign-out where the shell offers a protected store', async () => {
+    it('offers the device’s own store where the shell has a protected one', async () => {
         shellAnswering({ credential_arrangement: 'keptInTheStore' });
 
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('untilSignedOut');
+        expect(store.beyondTheTab).toBe('inTheDeviceStore');
     });
 
-    it('keeps a credential for the run where the shell offers no store, rather than writing it to a file', async () => {
+    // The shell asked for the run and not beyond it, which is ADR 0027's answer for a device that kills the client all
+    // day. `localStorage` is exactly what that refuses, so the checkbox that would reach it is not offered here.
+    it('offers nothing beyond the tab where the shell keeps only the run', async () => {
         shellAnswering({ credential_arrangement: 'keptForTheRun' });
 
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('untilTheClientCloses');
+        expect(store.beyondTheTab).toBe('nowhereTheShellKeepsTheRun');
     });
 
     // An answer this client cannot read says nothing about which head it is on, and the page is the wrong guess on one
@@ -79,27 +82,27 @@ describe('credentialStore', () => {
 
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('notKeptStorageUnreachable');
+        expect(store.beyondTheTab).toBe('nowhereStorageUnreachable');
     });
 
     it('writes nothing the page can see where the shell answers with an arrangement this client does not know', async () => {
         shellAnswering({ credential_arrangement: 'keptSomewhereNewer' });
         const store = await credentialStore();
 
-        expect(await store.keep(deployment, credential)).toBe(false);
+        expect(await store.keep(deployment, credential, true)).toBe(false);
         expect(window.sessionStorage.length).toBe(0);
         expect(window.localStorage.length).toBe(0);
     });
 
     it.each([
-        ['protected storage it could not reach', 'notKeptStorageUnreachable'],
-        ['a key the device discarded', 'notKeptKeyInvalidated'],
-    ])('keeps a credential nowhere where the shell reports %s', async (_, arrangement) => {
+        ['protected storage it could not reach', 'notKeptStorageUnreachable', 'nowhereStorageUnreachable'],
+        ['a key the device discarded', 'notKeptKeyInvalidated', 'nowhereKeyInvalidated'],
+    ])('keeps a credential nowhere where the shell reports %s', async (_, arrangement, beyondTheTab) => {
         shellAnswering({ credential_arrangement: arrangement });
 
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe(arrangement);
+        expect(store.beyondTheTab).toBe(beyondTheTab);
     });
 });
 
@@ -113,7 +116,8 @@ describe('a credential kept nowhere', () => {
             shellAnswering({ credential_arrangement: arrangement });
             const store = await credentialStore();
 
-            expect(await store.keep(deployment, credential)).toBe(false);
+            expect(await store.keep(deployment, credential, true)).toBe(false);
+            expect(await store.keep(deployment, credential, false)).toBe(false);
             expect(await store.read(deployment)).toBeNull();
             expect(window.sessionStorage.length).toBe(0);
             expect(window.localStorage.length).toBe(0);
@@ -147,10 +151,52 @@ describe('a credential kept nowhere', () => {
         const asked = shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated' });
         const store = await credentialStore();
 
-        await store.keep(deployment, credential);
+        await store.keep(deployment, credential, false);
         await store.read(deployment);
 
         expect(asked).toEqual([{ command: 'credential_arrangement', argument: undefined }]);
+    });
+});
+
+describe('a credential kept beyond the tab in this browser', () => {
+    it('writes the session where the browser keeps it beyond the tab, and nowhere the tab alone would read it', async () => {
+        const store = await credentialStore();
+
+        expect(await store.keep(deployment, credential, true)).toBe(true);
+        expect(window.localStorage.length).toBe(1);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe(credential);
+    });
+
+    it('removes it on signing out, which is the promise the screen made about the tick', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+
+        expect(await store.forget(deployment)).toBe(true);
+        expect(window.localStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBeNull();
+    });
+
+    it('renews into the place the session is already kept, a renewal being told nothing about the choice', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+        await store.keep(deployment, 'renewed');
+
+        expect(window.localStorage.length).toBe(1);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe('renewed');
+    });
+
+    it('takes the durable copy away where somebody signs in again without asking to be kept', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+        await store.keep(deployment, 'a second sign-in', false);
+
+        expect(window.localStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe('a second sign-in');
     });
 });
 
@@ -226,7 +272,7 @@ describe('a credential kept in the shell’s protected store', () => {
         const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', keep_credential: true });
         const store = await credentialStore();
 
-        await store.keep(deployment, credential);
+        await store.keep(deployment, credential, true);
 
         expect(asked.at(-1)).toEqual({
             command: 'keep_credential',
@@ -244,7 +290,12 @@ describe('a credential kept in the shell’s protected store', () => {
         // A keychain found at startup can be locked by the time it is written to, and the screen has already said the
         // password will last until sign-out — so a refused write is answered rather than left to be discovered at the
         // next start.
-        expect(await store.keep(deployment, credential)).toBe(false);
+        expect(await store.keep(deployment, credential, true)).toBe(false);
+
+        // Answered as not kept and still kept for this tab, which are two different promises: the person is told the
+        // sign-in will not outlive the browser, and is not signed out of the tab they are looking at to prove it.
+        expect(window.sessionStorage.length).toBe(1);
+        expect(await store.read(deployment)).toBe(credential);
     });
 
     it('asks the shell to delete the entry when the credential is forgotten', async () => {
@@ -293,7 +344,7 @@ describe('a credential kept in the shell’s protected store', () => {
         });
         const store = await credentialStore();
 
-        await store.keep(deployment, credential);
+        await store.keep(deployment, credential, true);
         await store.read(deployment);
 
         expect(written).toEqual([]);

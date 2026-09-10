@@ -219,9 +219,12 @@ answers `503`.** They are two different things for a client to do: the first is 
 tried again in a moment. The first is the ordinary case rather than a rare one — sessions live in this process's memory,
 so a restart is what a client meets when its scheduled renewal presents what it kept.
 
-**The lifetime is twelve hours** and it is not configurable. It is a working day, so a client reopened the same day is
-already signed in, and no longer, so a token abandoned on a machine is not a credential nobody remembers issuing. What
-bounds the case a person is actually in is renewal rather than the number.
+**The lifetime is thirty days** and it is not configurable. It is what the client's own sign-in screen states to
+somebody who asked to be kept signed in, so a shorter one here would make that screen promise something this deployment
+does not keep. What bounds the case a person is actually in is renewal rather than the number, and what bounds the
+abandoned case is that the two paragraphs below end a session well before it: ending the credential behind it ends it
+on the next request, and a restart of this process ends every session it is holding. Thirty days is therefore the most
+a session lasts rather than a length an operator can count on.
 
 **An operator revokes sessions by revoking the credential behind them.** Disabling or deleting a user credential over
 [the administrative endpoint](admin-endpoint.md#user-credentials) ends every session that credential minted, on the

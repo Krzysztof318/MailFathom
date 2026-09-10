@@ -29,6 +29,7 @@ export function NotificationRow({
     notification,
     selected,
     selecting,
+    arrived,
     now,
     onOpen,
     onSelect,
@@ -41,6 +42,13 @@ export function NotificationRow({
 
     /** Whether a selection is being held, which is what makes a plain press pick this row out rather than open it. */
     readonly selecting: boolean;
+
+    /**
+     * Whether this row arrived while the reader had the centre in front of them, which is what it opens itself for.
+     * It is false for every row of the first read: somebody opening the client is not watching a hundred things
+     * arrive, they are being shown what is already there.
+     */
+    readonly arrived: boolean;
 
     /** What the current instant is, which is what the age is measured from and what a test pins. */
     readonly now: number;
@@ -73,9 +81,9 @@ export function NotificationRow({
 
     return (
         <li
-            className={`flex items-start gap-3 border-b border-line-soft ps-4 pe-3 ${
-                selected ? 'bg-accent-soft' : notification.read ? '' : 'bg-sunken'
-            }`}
+            className={`flex items-start gap-3 overflow-hidden border-b border-line-soft ps-4 pe-3 ${
+                arrived ? 'animate-row-opening ' : ''
+            }${selected ? 'bg-accent-soft' : notification.read ? '' : 'bg-sunken'}`}
         >
             <button
                 type="button"

@@ -208,6 +208,17 @@ describe('Message', () => {
         asked = [];
     });
 
+    it('says the message is opening while the read is in flight, rather than drawing a shape it does not know', () => {
+        // An answer that never comes, which is the whole of the state under test: what stood here before was a
+        // skeleton, and a skeleton promises a shape a message whose length nobody knows yet does not have.
+        answer = () => new Promise<Answer>(() => undefined);
+
+        readingOneMessage();
+
+        expect(screen.getByRole('status').textContent).toBe('Opening the message…');
+        expect(screen.queryByText('A drawn message.')).toBeNull();
+    });
+
     it('draws the message the read answered with', async () => {
         readingOneMessage();
 

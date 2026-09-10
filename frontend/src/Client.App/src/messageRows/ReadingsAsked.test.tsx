@@ -127,7 +127,7 @@ describe('ReadingsAsked', () => {
     it('names what a reading is about the message rather than of it', () => {
         check(asking([sense]), answering());
 
-        expect(screen.getByRole('dialog', { name: 'What MailFathom made of this message' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'What MailFathom read from this message' })).toBeTruthy();
         expect(screen.getByText('Contract annex — signatures')).toBeTruthy();
     });
 

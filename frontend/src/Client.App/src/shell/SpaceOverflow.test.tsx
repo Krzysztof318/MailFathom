@@ -15,6 +15,7 @@ import { SpaceOverflow } from './SpaceOverflow';
 // this component's, and the browser suite is where that is proven.
 
 const handedTheAccount = 'The account control this sheet was handed.';
+const handedTheRefresh = 'The refresh this sheet was handed.';
 
 function renderOverflow(
     spaces: readonly Space[] = ['tasks', 'cases'],
@@ -25,7 +26,12 @@ function renderOverflow(
     render(
         <LocalizationProvider>
             <ScreenLayersContext value={result.current}>
-                <SpaceOverflow spaces={spaces} current={current} account={<button>{handedTheAccount}</button>} />
+                <SpaceOverflow
+                    spaces={spaces}
+                    current={current}
+                    account={<button>{handedTheAccount}</button>}
+                    refresh={<button>{handedTheRefresh}</button>}
+                />
             </ScreenLayersContext>
         </LocalizationProvider>,
     );

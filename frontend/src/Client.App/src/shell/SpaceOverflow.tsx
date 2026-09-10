@@ -30,6 +30,7 @@ export function SpaceOverflow({
     spaces,
     current,
     account,
+    refresh,
 }: {
     /** The spaces the bar had no place for, which this offers in the order the design project lists them. */
     readonly spaces: readonly Space[];
@@ -39,6 +40,13 @@ export function SpaceOverflow({
 
     /** The control that opens the account menu, which stands at the foot of this sheet rather than in the bar. */
     readonly account: ReactNode;
+
+    /**
+     * The control that reads again what the client is already showing. It stands here rather than in the bar for the
+     * reason everything here does: the bar has five places and the design project spends all five, so a sixth control
+     * is reached rather than squeezed in beside them.
+     */
+    readonly refresh: ReactNode;
 }) {
     const { translate } = useLocalization();
 
@@ -99,7 +107,10 @@ export function SpaceOverflow({
                         <OverflowLink key={space} space={space} current={space === current} />
                     ))}
 
-                    <div className="mt-1 border-t border-line-soft pt-2">{account}</div>
+                    <div className="mt-1 flex flex-col gap-1 border-t border-line-soft pt-2">
+                        {refresh}
+                        {account}
+                    </div>
                 </div>
             </div>
         </>

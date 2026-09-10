@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { MailDocumentBlock, MailDocumentLink, MailInlineRun } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageBlocks } from './MessageBlocks';
+import { readableRunColour } from './senderColour';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 
 // Written as attacks rather than as examples, because a message is written by a stranger: what is asserted below is
@@ -278,5 +279,46 @@ describe('MessageBlocks', () => {
         drawing([{ type: 'separator' }]);
 
         expect(screen.getByRole('separator')).toBeDefined();
+    });
+});
+
+describe('MessageBlocks, a run in a colour the sender chose', () => {
+    // The reduced view is drawn on this client's own panel rather than on the white page the sender's composer drew,
+    // so what is asserted here is that the run carries a reading for each of the two panels and that the stylesheet
+    // has something to choose between — never that a particular theme is in force, which no component may ask.
+    function colouredRun(foreground: string): HTMLElement {
+        const { container } = drawing([
+            { type: 'paragraph', content: [run('Regards', { foreground })], alignment: 'Inherited' },
+        ]);
+
+        const drawn = container.querySelector('[data-sender-colour]');
+
+        expect(drawn).not.toBeNull();
+
+        return drawn as HTMLElement;
+    }
+
+    it('carries the colour as it stands on each of the two panels, which is what the stylesheet picks between', () => {
+        const readable = readableRunColour('#333333');
+
+        expect(readable).not.toBeNull();
+
+        const drawn = colouredRun('#333333');
+
+        expect(drawn.style.getPropertyValue('--sender-colour-light')).toBe(readable?.onLight);
+        expect(drawn.style.getPropertyValue('--sender-colour-dark')).toBe(readable?.onDark);
+    });
+
+    it('lifts a colour that would be unreadable on one panel away from it, and leaves the other as written', () => {
+        const drawn = colouredRun('#333333');
+
+        expect(drawn.style.getPropertyValue('--sender-colour-dark')).not.toBe('#333333');
+        expect(drawn.style.getPropertyValue('--sender-colour-light')).toBe('#333333');
+    });
+
+    it('draws a run the service gave no colour without one of its own, so the panel colour underneath stands', () => {
+        const { container } = drawing([{ type: 'paragraph', content: [run('Regards')], alignment: 'Inherited' }]);
+
+        expect(container.querySelector('[data-sender-colour]')).toBeNull();
     });
 });

@@ -35,6 +35,35 @@ const email: MailTimelineEntry = {
     threadMessageCount: null,
 };
 
+function drawMoved(moved: {
+    readonly arrived?: boolean;
+    readonly changed?: boolean;
+    readonly onSettled?: () => void;
+}): HTMLElement {
+    render(
+        <LocalizationProvider>
+            <ul>
+                <MessageRow
+                    email={email}
+                    position={1}
+                    open={false}
+                    selected={false}
+                    focusable
+                    arrived={moved.arrived ?? false}
+                    changed={moved.changed ?? false}
+                    onSettled={moved.onSettled}
+                    onOpen={() => undefined}
+                    onPoint={() => undefined}
+                    onPointerEnter={() => undefined}
+                    onElement={() => undefined}
+                />
+            </ul>
+        </LocalizationProvider>,
+    );
+
+    return screen.getByRole('option');
+}
+
 function drawRow(
     note?: string,
     unread = false,
@@ -465,5 +494,128 @@ describe('MessageRow, under a finger carried across it', () => {
         });
 
         expect(pressed).not.toHaveBeenCalled();
+    });
+});
+
+// The standing rule for every list in this client: the skeleton is drawn once, when the list holds nothing, and every
+// change after it reaches the rows it touched. A row is where that lands, and what it draws is the one thing about it
+// that moved.
+// The end of an element's own animation, dispatched under the name React is actually listening for: it binds the
+// vendor-prefixed name wherever the environment declares no `AnimationEvent` constructor, which jsdom does not, and the
+// standard one everywhere else. The branch is React's own rather than this client's, and a browser takes the first arm.
+function animationEnded(element: Element): void {
+    const named = 'AnimationEvent' in window ? 'animationend' : 'webkitAnimationEnd';
+
+    element.dispatchEvent(new Event(named, { bubbles: true }));
+}
+
+describe('MessageRow, a row that moved', () => {
+    it('lands into its place where it arrived in a list the reader was already looking at', () => {
+        expect(drawMoved({ arrived: true }).className).toContain('animate-row-landing');
+    });
+
+    it('is washed and marked where the deployment said this message changed', () => {
+        expect(drawMoved({ changed: true }).className).toContain('animate-row-changed');
+    });
+
+    it('draws the arrival alone where a row both arrived and was named as changed, having no version to change from', () => {
+        const row = drawMoved({ arrived: true, changed: true });
+
+        expect(row.className).toContain('animate-row-landing');
+        expect(row.className).not.toContain('animate-row-changed');
+    });
+
+    it('says it has settled once its own animation has run, so the list stops holding it as a row that moved', () => {
+        const settled = vi.fn();
+        const row = drawMoved({ arrived: true, onSettled: settled });
+
+        animationEnded(row);
+
+        expect(settled).toHaveBeenCalledOnce();
+    });
+
+    it('says nothing of an animation that ran inside it, which is not the row having moved', () => {
+        const settled = vi.fn();
+        const row = drawMoved({ arrived: true, onSettled: settled });
+        const within = row.querySelector('span');
+
+        expect(within).not.toBeNull();
+
+        animationEnded(within as Element);
+
+        expect(settled).not.toHaveBeenCalled();
+    });
+
+    it('draws neither where nothing about the row moved, which is every row of a list that was just read', () => {
+        const row = drawMoved({});
+
+        expect(row.className).not.toContain('animate-row-landing');
+        expect(row.className).not.toContain('animate-row-changed');
+    });
+});
+
+// The mark the design draws on the tile, which opens what MailFathom read from the message. It is drawn out of the
+// accessibility tree deliberately — a row is an `option` of a listbox and holds no focusable descendant — so it is
+// found by the name it shows a pointer rather than by a role.
+function markedRow({
+    onReadings,
+    onPoint = vi.fn(),
+}: {
+    onReadings?: (() => void) | undefined;
+    onPoint?: (event: unknown) => void;
+}): void {
+    render(
+        <LocalizationProvider>
+            <ul>
+                <MessageRow
+                    email={email}
+                    position={1}
+                    open={false}
+                    selected={false}
+                    focusable
+                    onReadings={onReadings}
+                    onOpen={() => undefined}
+                    onPoint={onPoint}
+                    onPointerEnter={() => undefined}
+                    onElement={() => undefined}
+                />
+            </ul>
+        </LocalizationProvider>,
+    );
+}
+
+describe('MessageRow, the mark that opens what was read', () => {
+    it('opens the readings of the message it is drawn on', () => {
+        const asked = vi.fn();
+
+        markedRow({ onReadings: asked });
+        fireEvent.click(screen.getByTitle('What MailFathom made of it'));
+
+        expect(asked).toHaveBeenCalledOnce();
+    });
+
+    it('is drawn on no row whose message carries nothing that was read from it', () => {
+        markedRow({});
+
+        expect(screen.queryByTitle('What MailFathom made of it')).toBeNull();
+    });
+
+    it('leaves the row unselected, a press on the mark being about the mark rather than about the message', () => {
+        const pointed = vi.fn();
+
+        markedRow({ onReadings: () => undefined, onPoint: pointed });
+
+        const mark = screen.getByTitle('What MailFathom made of it');
+
+        fireEvent.pointerDown(mark, { pointerType: 'mouse' });
+        fireEvent.pointerUp(mark, { pointerType: 'mouse' });
+
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('announces nothing of its own, the row menu being the path that carries this surface a name', () => {
+        markedRow({ onReadings: () => undefined });
+
+        expect(screen.getByTitle('What MailFathom made of it').getAttribute('aria-hidden')).toBe('true');
     });
 });

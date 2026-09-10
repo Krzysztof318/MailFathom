@@ -353,6 +353,69 @@
     --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
     --ease-panel: cubic-bezier(0.3, 0.7, 0.1, 1);
 
+    /* What one tile of a list does when it is the only thing that changed, which is the design project's own pair and
+       the standing rule this client holds every list to: a list is drawn as a skeleton once, when it has nothing, and
+       every later change reaches the rows it actually touched rather than the whole column. A row that arrived opens
+       into its own height, and a row whose message changed is washed in the accent and marked down its leading edge
+       for long enough to be found before it settles back.
+
+       The design draws a third — a row leaving, closing the same way it opened — and no surface in this client removes
+       a tile today: mail leaves a folder by being read again and a notification leaves the centre by ageing out of it,
+       and neither is a row this client is holding while it goes. It joins the two below with the first surface that
+       genuinely takes one away. */
+    --animate-row-opening: row-opening 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-row-landing: row-landing 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-row-changed: row-changed 1700ms ease-out both;
+
+    @keyframes row-opening {
+        from {
+            opacity: 0;
+            max-height: 0;
+            transform: translateY(-7px);
+        }
+
+        to {
+            opacity: 1;
+            max-height: 16.25rem;
+            transform: none;
+        }
+    }
+
+    /* The same arrival where the row cannot make room for itself, which is the windowed list of mail: its rows are one
+       fixed height each and the scroller's arithmetic is written from that height, so a row opening from nothing would
+       take every row under it away from where the window says it is for half a second. What is left is the travel and
+       the fade, which is the part of the design's animation that says *this one is new*; the part that says *there is
+       now one more* is already true before it starts, because the window made the room. */
+    @keyframes row-landing {
+        from {
+            opacity: 0;
+            transform: translateY(-7px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    /* The wash holds for the first half and then goes, which is what makes it findable rather than decorative: a reader
+       who looked away for a second still meets a row that is marked when they look back. Both shadows are inset, so a
+       row keeps its own place in the column and nothing under the cursor moves. */
+    @keyframes row-changed {
+        0%,
+        55% {
+            box-shadow:
+                inset 3px 0 0 var(--color-accent),
+                inset 0 0 0 40px var(--color-accent-soft);
+        }
+
+        100% {
+            box-shadow:
+                inset 3px 0 0 transparent,
+                inset 0 0 0 40px transparent;
+        }
+    }
+
     --animate-toast-arriving: toast-arriving 240ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
     --animate-toast-leaving: toast-leaving ease forwards;
     --animate-toast-lifetime: toast-lifetime linear both;
@@ -609,6 +672,21 @@
     blockquote {
         --color-muted: var(--color-text-soft);
         --color-warning: var(--color-warning-text);
+    }
+
+    /* A colour a sender wrote was picked against the white page their composer drew, and says nothing about the panel
+       the reduced view actually draws it on — so an ordinary `#333333` signature reads on the light theme and is very
+       nearly invisible on the dark one, which is a run of a message nobody can read rather than a shade somebody
+       dislikes. `messageBody/senderColour.ts` answers with the colour as it stands on each of the two panels, lifted
+       away from that panel until it clears 4.5:1 and keeping the hue the sender chose. Which of the two is painted is
+       decided here for the reason every other theme difference is: no component asks which theme is in force, so the
+       run carries both answers and the theme picks between them. */
+    [data-sender-colour] {
+        color: var(--sender-colour-light);
+    }
+
+    :root[data-theme='dark'] [data-sender-colour] {
+        color: var(--sender-colour-dark);
     }
 
     /* What a control measures under a finger, decided once here for the same reason the ring above is: a floor met by

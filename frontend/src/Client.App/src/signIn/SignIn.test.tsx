@@ -15,7 +15,7 @@ import { LocalizationProvider } from '../localization/Localization';
 import type { CredentialNotice } from './CredentialNotices';
 import { SignIn } from './SignIn';
 import { longestCredentialPart } from './credentialEntry';
-import type { CredentialLifetime } from './credentialStore';
+import type { KeptBeyondTheTab } from './credentialStore';
 import type { KeptSession } from './keptSession';
 
 // Everything below reaches the transport this screen takes from its caller, so nothing here patches a global or stands
@@ -85,7 +85,7 @@ const configuredDeployment: AdoptedDeployment = { deployment: knownDeployment, o
 
 /** What the screen reported and what it started, so a test sees an attempt being called off rather than only ignored. */
 interface Rendered {
-    readonly presented: { deployment: DeploymentAddress; session: KeptSession }[];
+    readonly presented: { deployment: DeploymentAddress; session: KeptSession; keptBeyondTheTab: boolean }[];
     readonly attempts: AbortSignal[];
     readonly pointedAway: boolean[];
 }
@@ -96,11 +96,11 @@ interface Rendered {
 function renderScreen(
     send: MailFathomTransport,
     adopted: AdoptedDeployment | null = null,
-    lifetime: CredentialLifetime = 'untilTheTabCloses',
+    beyondTheTab: KeptBeyondTheTab = 'inThisBrowser',
     notices: readonly CredentialNotice[] = [],
     clearTextPermitted: boolean | null = null,
 ): Rendered {
-    const presented: { deployment: DeploymentAddress; session: KeptSession }[] = [];
+    const presented: { deployment: DeploymentAddress; session: KeptSession; keptBeyondTheTab: boolean }[] = [];
     const attempts: AbortSignal[] = [];
     const pointedAway: boolean[] = [];
 
@@ -109,15 +109,15 @@ function renderScreen(
             <SignIn
                 adopted={adopted}
                 clearTextPermitted={clearTextPermitted}
-                lifetime={lifetime}
+                beyondTheTab={beyondTheTab}
                 notices={notices}
                 send={(abandoned) => {
                     attempts.push(abandoned);
 
                     return send;
                 }}
-                onSignedIn={(reached, session) => {
-                    presented.push({ deployment: reached, session });
+                onSignedIn={(reached, session, keptBeyondTheTab) => {
+                    presented.push({ deployment: reached, session, keptBeyondTheTab });
                 }}
                 onPointSomewhereElse={() => {
                     pointedAway.push(true);
@@ -358,7 +358,11 @@ describe('SignIn', () => {
 
         await vi.waitFor(() => {
             expect(presented).toEqual([
-                { deployment: { baseAddress: 'http://mail.example.test' }, session: mintedSession },
+                {
+                    deployment: { baseAddress: 'http://mail.example.test' },
+                    session: mintedSession,
+                    keptBeyondTheTab: false,
+                },
             ]);
         });
 
@@ -425,7 +429,11 @@ describe('SignIn', () => {
 
         await vi.waitFor(() => {
             expect(presented).toEqual([
-                { deployment: { baseAddress: 'https://mail.example.test:8443' }, session: mintedSession },
+                {
+                    deployment: { baseAddress: 'https://mail.example.test:8443' },
+                    session: mintedSession,
+                    keptBeyondTheTab: false,
+                },
             ]);
         });
     });
@@ -518,7 +526,7 @@ describe('SignIn', () => {
     });
 
     it('says why it is asking again when the deployment stopped accepting what was kept', () => {
-        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['credentialNoLongerAccepted']);
+        renderScreen(signedIn, servingDeployment, 'inTheDeviceStore', ['credentialNoLongerAccepted']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'This deployment has stopped accepting the sign-in that was kept. Sign in again.',
@@ -526,7 +534,7 @@ describe('SignIn', () => {
     });
 
     it('says the sign-in is still on the machine when signing out could not remove it', () => {
-        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['sessionNotRemoved']);
+        renderScreen(signedIn, servingDeployment, 'inTheDeviceStore', ['sessionNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
@@ -534,7 +542,7 @@ describe('SignIn', () => {
     });
 
     it('says both things at once when the credential was refused and the password could not be removed', () => {
-        renderScreen(signedIn, servingDeployment, 'untilSignedOut', [
+        renderScreen(signedIn, servingDeployment, 'inTheDeviceStore', [
             'credentialNoLongerAccepted',
             'sessionNotRemoved',
         ]);
@@ -585,14 +593,44 @@ describe('SignIn', () => {
         expect(document.body.textContent).not.toContain('dXNlcjpvcGVuIHNlc2FtZQ==');
     });
 
-    it('says the sign-in lasts only as long as the tab where nothing may be kept beyond it', () => {
+    // Unticked is the state the screen opens in, and what it says is what will happen if nobody touches it. The other
+    // half of the same control is below: ticking it changes the sentence to what will be kept and for how long.
+    it('says the sign-in lasts only as long as the tab until somebody asks for more', () => {
         renderScreen(signedIn, servingDeployment);
+
+        expect(screen.getByRole('checkbox', { name: 'Keep me signed in' })).toHaveProperty('checked', false);
+        expect(
+            screen.getByText(
+                'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',
+            ),
+        ).toBeDefined();
+    });
+
+    it('says the browser stays signed in once somebody asks for it, and carries the answer into the sign-in', async () => {
+        const { presented } = renderScreen(signedIn, servingDeployment);
+
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Keep me signed in' }));
 
         expect(
             screen.getByText(
-                'Your password is not stored anywhere. This sign-in is kept until you close this tab, and you will be asked for your password again — anything that reaches this page can read what a browser keeps.',
+                'This browser stays signed in for 30 days, in every tab. Applies to password sign-in only — and anything that reaches this page can read what a browser keeps.',
             ),
         ).toBeDefined();
+
+        typeCredential();
+        submit();
+
+        await vi.waitFor(() => {
+            expect(presented.map((attempt) => attempt.keptBeyondTheTab)).toEqual([true]);
+        });
+    });
+
+    // Ticking a box a store cannot honour keeps nothing, so the screen does not draw one — and where it somehow were
+    // drawn, the answer carried into the sign-in is still what the store can actually do.
+    it('offers nothing to tick where the store has nowhere to keep a session beyond the tab', () => {
+        renderScreen(signedIn, servingDeployment, 'nowhereStorageUnreachable');
+
+        expect(screen.queryByRole('checkbox', { name: 'Keep me signed in' })).toBeNull();
     });
 
     // ADR 0027's amendment: a head whose protected storage is there and unreachable keeps nothing, and the sentence
@@ -600,15 +638,15 @@ describe('SignIn', () => {
     // device that offers a keychain that their device offers none.
     it.each([
         [
-            'notKeptStorageUnreachable' as const,
+            'nowhereStorageUnreachable' as const,
             'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a credential anywhere less safe.',
         ],
         [
-            'notKeptKeyInvalidated' as const,
+            'nowhereKeyInvalidated' as const,
             'Your password is not stored anywhere, and this sign-in will not be kept either, so you will be asked for your password again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
         ],
-    ])('says nothing will be kept, and why, where the store reports %s', (lifetime, sentence) => {
-        renderScreen(signedIn, servingDeployment, lifetime);
+    ])('says nothing will be kept, and why, where the store reports %s', (beyondTheTab, sentence) => {
+        renderScreen(signedIn, servingDeployment, beyondTheTab);
 
         expect(screen.getByText(sentence)).toBeDefined();
     });
@@ -728,7 +766,7 @@ describe('SignIn', () => {
     });
 
     it('signs in over a configured clear-text permission without anybody having to declare it again', async () => {
-        const { presented } = renderScreen(signedIn, null, 'untilTheTabCloses', [], true);
+        const { presented } = renderScreen(signedIn, null, 'inThisBrowser', [], true);
 
         typeAddress('mail.example.test');
         typeCredential();
