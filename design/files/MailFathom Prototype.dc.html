@@ -44,6 +44,9 @@
   @keyframes mfspin { to { transform: rotate(360deg) } }
   @keyframes mftbar { from { transform: scaleX(1) } to { transform: scaleX(0) } }
   @keyframes mfshim { from { background-position: 130% 0 } to { background-position: -130% 0 } }
+  @keyframes mfrowin { from { opacity: 0; max-height: 0; transform: translateY(-7px) } to { opacity: 1; max-height: 260px; transform: none } }
+  @keyframes mfrowout { from { opacity: 1; max-height: 260px; transform: none } to { opacity: 0; max-height: 0; transform: translateX(-22px) } }
+  @keyframes mfrowedit { 0% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 40px var(--accent-soft) } 55% { box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 40px var(--accent-soft) } 100% { box-shadow: inset 3px 0 0 transparent, inset 0 0 0 40px transparent } }
 </style>
 </helmet>
 <div ref="{{ rootRef }}" data-theme="{{ themeAttr }}" style="{{ rootStyle }}">
@@ -52,6 +55,7 @@
     <sc-if value="{{ notMobile }}" hint-placeholder-val="{{ true }}">
       <img src="./mailfathom-logo.png" alt="MailFathom" style="{{ logoStyle }}" />
     </sc-if>
+    <div style="{{ railNavStyle }}">
     <div onClick="{{ goDiscover }}" style="{{ railDiscoverStyle }}" style-hover="background:var(--hover);cursor:pointer">
       <div style="{{ railIconStyle }}">explore</div>
       <div style="{{ railLabelStyle }}">{{ railLabelDiscover }}</div>
@@ -97,6 +101,7 @@
         <div style="{{ railLabelStyle }}">More</div>
       </div>
     </sc-if>
+    </div>
     <sc-if value="{{ notMobile }}" hint-placeholder-val="{{ true }}">
       <div ref="{{ userMenuRef }}" style="margin-top:auto;padding-top:10px;flex:0 0 auto;position:relative;display:flex;flex-direction:column;align-items:center;gap:8px">
         <div style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--faint);text-align:center;line-height:1.4">PROTO<br />TYPE</div>
@@ -136,6 +141,9 @@
             </div>
           </div>
         </sc-if>
+        <div onClick="{{ demoRefresh }}" title="Demo: new mail, an update and a removal" style="{{ demoBtnStyle }}" style-hover="cursor:pointer;border-color:var(--accent-line);background:var(--accent-soft);color:var(--accent-d)">
+          <span style="{{ demoIconStyle }}">refresh</span>
+        </div>
         <div onClick="{{ toggleNotifCenter }}" title="Notifications" style="{{ railBellStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">
           <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:25px;line-height:1">{{ railBellIcon }}</span>
           <sc-if value="{{ notifHasUnread }}" hint-placeholder-val="{{ true }}">
@@ -146,6 +154,55 @@
       </div>
     </sc-if>
   </div>
+
+  <sc-if value="{{ newFolderOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeNewFolder }}" style="{{ ovZ97 }}">
+      <div onClick="{{ stopProp }}" style="{{ dlgForm }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--sub)">
+          <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:19px;line-height:1;color:var(--muted)">create_new_folder</span>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:15px;font-weight:600">{{ newFolderTitle }}</div>
+            <div style="font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ newFolderAccount }}</div>
+          </div>
+          <div onClick="{{ closeNewFolder }}" style="{{ closeBtnAutoStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)"><span style="{{ closeIconStyle }}">close</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;padding:18px">
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--muted)">FOLDER NAME</span>
+            <input value="{{ nfName }}" onChange="{{ onNfName }}" placeholder="e.g. Contracts 2027" style="{{ fieldStyle }}" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:10px;letter-spacing:0.08em;color:var(--muted)">REMOTE PATH</span>
+            <input value="{{ nfPath }}" onChange="{{ onNfPath }}" placeholder="{{ nfPathPlaceholder }}" style="{{ nfPathFieldStyle }}" />
+            <span style="font-size:11.5px;color:var(--muted);line-height:1.45;text-wrap:pretty">{{ nfPathHint }}</span>
+          </label>
+        </div>
+        <div style="display:flex;gap:9px;justify-content:flex-end;padding:0 18px 18px">
+          <div onClick="{{ closeNewFolder }}" style="{{ nfCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+          <div onClick="{{ createFolder }}" style="{{ nfCreateStyle }}" style-hover="{{ nfCreateHover }}">{{ nfSaveLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ delFolderOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ ovAsk98 }}">
+      <div style="{{ dlgAsk }}">
+        <div style="font-size:16px;font-weight:600">Delete folder “{{ delFolderName }}”?</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty">{{ delFolderText }}</div>
+        <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:2px">
+          <div onClick="{{ closeDeleteFolder }}" style="{{ nfCancelStyle }}" style-hover="cursor:pointer;background:var(--hover)">Cancel</div>
+          <div onClick="{{ confirmDeleteFolder }}" style="{{ dangerBtnStyle }}" style-hover="cursor:pointer;opacity:0.9">Delete folder</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ demoRefresh }}" title="Demo refresh" style="{{ demoFabStyle }}" style-hover="cursor:pointer">
+      <span style="{{ demoIconStyle }}">refresh</span>
+    </div>
+  </sc-if>
 
   <sc-if value="{{ isDiscover }}" hint-placeholder-val="{{ true }}">
     <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0">
@@ -487,6 +544,35 @@
         </div>
       </div>
     </sc-if>
+    <sc-if value="{{ aiSumOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeAiSum }}" style="{{ ovZ97 }}">
+        <div onClick="{{ stopProp }}" style="{{ dlgAi }}">
+          <div style="{{ aiSumHeadStyle }}">
+            <span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:20px;line-height:1;color:var(--accent-d)">auto_awesome</span>
+            <span style="flex:1;min-width:0;font-size:15px;font-weight:600">What MailFathom read from this message</span>
+            <span onClick="{{ closeAiSum }}" style="width:28px;height:28px;flex:0 0 28px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:18px" style-hover="cursor:pointer;background:var(--hover)">close</span>
+          </div>
+          <div style="{{ aiSumBodyStyle }}">
+            <div style="font-size:12.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Every reading below comes from this message alone, and each one shows the fragment it rests on.</div>
+            <div style="font-size:14.5px;font-weight:600;line-height:1.45;text-wrap:pretty">{{ aiSumSubject }}</div>
+            <sc-for list="{{ aiSumCards }}" as="ac" hint-placeholder-count="3">
+              <div style="{{ ac.cardStyle }}">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="flex:1;min-width:0;font-family:'Instrument Sans',system-ui,sans-serif;font-size:10.5px;letter-spacing:0.06em;color:var(--muted)">{{ ac.heading }}</span>
+                  <span style="font-size:10.5px;color:var(--accent-d);background:var(--accent-soft);border-radius:5px;padding:2px 7px;white-space:nowrap">{{ ac.model }}</span>
+                </div>
+                <div style="font-size:14px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ ac.claim }}</div>
+                <div style="font-size:12.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ ac.why }}</div>
+                <div style="{{ ac.quoteStyle }}">{{ ac.quote }}</div>
+                <sc-if value="{{ ac.showSrc }}" hint-placeholder-val="{{ false }}">
+                  <div onClick="{{ ac.openSrc }}" style="align-self:flex-start;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-d);border-radius:7px;padding:5px 8px;margin-left:-8px" style-hover="cursor:pointer;background:var(--hover)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:15px;line-height:1">open_in_new</span>{{ ac.srcLabel }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
     <sc-if value="{{ moveOpen }}" hint-placeholder-val="{{ false }}">
       <div onClick="{{ closeMove }}" style="{{ ovZ96 }}">
         <div style="{{ dlgList }}">
@@ -565,10 +651,13 @@
               </sc-if>
               <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
                 <sc-for list="{{ g.folders }}" as="mb" hint-placeholder-count="3">
-                  <div onClick="{{ mb.pick }}" title="{{ mb.title }}" style="{{ mb.style }}" style-hover="cursor:pointer;background:var(--hover)">
+                  <div onClick="{{ mb.pick }}" onContextMenu="{{ mb.ctxOpen }}" onTouchStart="{{ mb.pressDown }}" onTouchEnd="{{ mb.pressUp }}" onTouchMove="{{ mb.pressUp }}" title="{{ mb.title }}" style="{{ mb.style }}" style-hover="cursor:pointer;background:var(--hover)">
                     <span style="{{ mb.iconStyle }}">{{ mb.icon }}</span>
                     <sc-if value="{{ mb.expanded }}" hint-placeholder-val="{{ true }}">
                       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ mb.label }}</span>
+                      <sc-if value="{{ mb.hasKids }}" hint-placeholder-val="{{ false }}">
+                        <span onClick="{{ mb.toggleKids }}" title="{{ mb.twistyTitle }}" style="{{ mb.twistyStyle }}" style-hover="cursor:pointer;background:var(--hover);color:var(--text)">{{ mb.twisty }}</span>
+                      </sc-if>
                       <span style="{{ mb.countStyle }}">{{ mb.count }}</span>
                     </sc-if>
                   </div>
@@ -588,6 +677,9 @@
             </sc-for>
           </div>
         </div>
+      </sc-if>
+      <sc-if value="{{ showSideResizer }}" hint-placeholder-val="{{ false }}">
+        <div onMouseDown="{{ startSideResize }}" onDoubleClick="{{ resetSideResize }}" title="Drag to widen the folder pane" style="flex:0 0 5px;cursor:col-resize;background:var(--line);position:relative;z-index:5" style-hover="background:var(--accent)"></div>
       </sc-if>
 
       <sc-if value="{{ showThreadList }}" hint-placeholder-val="{{ true }}">
@@ -665,7 +757,7 @@
                 <div style="{{ t.swipeBgStyle }}"><span style="{{ t.swipeIconStyle }}">{{ t.swipeIcon }}</span><span style="{{ t.swipeTextStyle }}">{{ t.swipeLabel }}</span></div>
               </sc-if>
               <div onClick="{{ t.select }}" onContextMenu="{{ t.longPress }}" onTouchStart="{{ t.touchStart }}" onTouchEnd="{{ t.touchEnd }}" onTouchMove="{{ t.touchMove }}" style="{{ t.rowStyle }}" style-hover="cursor:pointer;background:var(--hover)">
-                <div style="display:flex;align-items:center;gap:9px;min-width:0"><sc-if value="{{ t.selected }}" hint-placeholder-val="{{ false }}"><span style="align-self:center;width:17px;height:17px;flex:0 0 17px;border-radius:50%;background:var(--accent);color:var(--onaccent);display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:13px;line-height:1">check</span></sc-if><sc-if value="{{ t.hasAvatar }}" hint-placeholder-val="{{ false }}"><span title="{{ t.from }}" style="{{ t.avatarImgStyle }}"></span></sc-if><sc-if value="{{ t.noAvatar }}" hint-placeholder-val="{{ true }}"><span title="{{ t.from }}" style="{{ t.avatarStyle }}">{{ t.initials }}</span></sc-if><span style="{{ t.fromStyle }}">{{ t.from }}</span><span style="{{ t.orgStyle }}">{{ t.org }}</span><span style="margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:7px"><sc-if value="{{ t.flagged }}" hint-placeholder-val="{{ false }}"><span title="Flagged" style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:15px;line-height:1;color:var(--warn)">flag</span></sc-if><sc-if value="{{ t.isUnread }}" hint-placeholder-val="{{ false }}"><span title="Unread" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span></sc-if><sc-if value="{{ t.multi }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:var(--text2);background:var(--rail);border:1px solid var(--line2);border-radius:9px;padding:1px 6px">{{ t.count }}</span></sc-if><span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint)">{{ t.time }}</span></span></div>
+                <div style="display:flex;align-items:center;gap:9px;min-width:0"><sc-if value="{{ t.selected }}" hint-placeholder-val="{{ false }}"><span style="align-self:center;width:17px;height:17px;flex:0 0 17px;border-radius:50%;background:var(--accent);color:var(--onaccent);display:flex;align-items:center;justify-content:center;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:13px;line-height:1">check</span></sc-if><sc-if value="{{ t.hasAvatar }}" hint-placeholder-val="{{ false }}"><span title="{{ t.from }}" style="{{ t.avatarImgStyle }}"></span></sc-if><sc-if value="{{ t.noAvatar }}" hint-placeholder-val="{{ true }}"><span title="{{ t.from }}" style="{{ t.avatarStyle }}">{{ t.initials }}</span></sc-if><span style="{{ t.fromStyle }}">{{ t.from }}</span><span style="{{ t.orgStyle }}">{{ t.org }}</span><span style="margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:7px"><sc-if value="{{ t.flagged }}" hint-placeholder-val="{{ false }}"><span title="Flagged" style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:15px;line-height:1;color:var(--warn)">flag</span></sc-if><sc-if value="{{ t.isUnread }}" hint-placeholder-val="{{ false }}"><span title="Unread" style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span></sc-if><sc-if value="{{ t.multi }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:var(--text2);background:var(--rail);border:1px solid var(--line2);border-radius:9px;padding:1px 6px">{{ t.count }}</span></sc-if><span onClick="{{ t.openAiSum }}" title="AI summary" style="{{ t.aiBtnStyle }}" style-hover="cursor:pointer;background:var(--accent-soft);color:var(--accent-d)">auto_awesome</span><span style="font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;color:var(--faint)">{{ t.time }}</span></span></div>
                 <div style="{{ t.subjStyle }}">{{ t.subject }}</div>
                 <sc-if value="{{ t.showMoved }}" hint-placeholder-val="{{ false }}">
                   <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)"><span style="font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:13px;line-height:1">folder</span>{{ t.movedTo }}</div>
@@ -4078,6 +4170,57 @@ const INCOMING = [
   { kind: "case", title: "New document in a case", body: "Addendum no. 3 (version 4) attached to the Contoso 2027 case.", src: "Cases · Contoso renegotiation", go: { screen: "cases" } },
 ];
 
+/* Demo refresh — one click plays a small, realistic inbox event: a mail lands, an existing
+   thread gets a reply, and one message is withdrawn. Only the affected tiles animate; the
+   list itself is never reloaded. */
+const DEMO_BATCHES = [
+  {
+    mail: { from: "Marta Wilk", org: "Nordwind", time: "now", subject: "Framework agreement — annex for signature",
+      ai: "Awaiting our comments · deadline 15.09",
+      meta: "Marta Wilk <m.wilk@nordwind.example> · today, now · thread: 1 message",
+      state: [ { label: "AGREED", value: "Annex scope: support hours" }, { label: "OPEN QUESTION", value: "Penalties for exceeding response time" }, { label: "DEADLINE", value: "Comments by 15.09" } ],
+      body: [ { text: "Attached is the annex to the framework agreement in the version after our call. The change concerns support hours (8–18 instead of 9–17) and the reporting procedure." },
+        { text: "Please send comments by 15 September — after that date we send the document for signature." } ],
+      attachments: [ { type: "PDF", name: "Annex_framework_agreement.pdf", size: "184 kB" } ] },
+    notif: "Annex after the call — comments expected by 15.09.",
+    edit: { id: "finanse", patch: { time: "now", subject: "Invoice 08/2026 — correction", ai: "Corrected amount €1,388 · new due date 05.09",
+      meta: "invoices@company.example · today, now · thread: 2 messages" } },
+    editNotif: { title: "Finance: invoice correction", body: "Corrected 08/2026 — €1,388 net, payment by 05.09.", thread: "finanse" },
+    fallbackRemove: "jacek",
+    removeNote: "The sender withdrew a message — the thread has left the list",
+  },
+  {
+    mail: { from: "Tomasz Zieliński", org: "Fabrikam", time: "now", subject: "Delivery 12.11 — confirmation needed",
+      ai: "Reply expected today · date confirmation",
+      meta: "t.zielinski@fabrikam.example · today, now · thread: 1 message",
+      state: [ { label: "AGREED", value: "Delivery window 12.11, morning" }, { label: "OPEN QUESTION", value: "Who receives on our side" }, { label: "COMMITMENT", value: "Confirmation today" } ],
+      body: [ { text: "We confirm the delivery on 12.11 in the morning window. We need the name of the person receiving and a contact number for the driver." },
+        { text: "Without confirmation today the slot goes to the next order in the queue." } ],
+      attachments: [] },
+    notif: "Fabrikam confirms 12.11 — asks for the receiving person today.",
+    edit: { id: "marta", patch: { time: "now", subject: "Re: CPI calculation 2027 — cap accepted", ai: "Finance accepts a 5% cap · ready for the annex",
+      meta: "m.nowak@company.example · today, now · thread: 5 messages" } },
+    editNotif: { title: "Marta Nowak replied", body: "Finance accepts a 5% cap on indexation.", thread: "marta" },
+    fallbackRemove: "jacek",
+    removeNote: "The sender withdrew a message — the thread has left the list",
+  },
+  {
+    mail: { from: "Karolina Bąk", org: "Contoso", time: "now", subject: "Signatory for the addendum — details",
+      ai: "Data complete · nothing to do on our side",
+      meta: "k.bak@contoso.example · today, now · thread: 1 message",
+      state: [ { label: "AGREED", value: "Signatory: Anna Kowalska, board member" }, { label: "OPEN QUESTION", value: "None" }, { label: "COMMITMENT", value: "eSign link tomorrow" } ],
+      body: [ { text: "Passing on the signatory details for addendum no. 3: Anna Kowalska, board member, acting under the entry in the register." },
+        { text: "The eSign link goes out tomorrow morning — nothing more is needed from your side." } ],
+      attachments: [] },
+    notif: "Contoso passed the signatory details for addendum no. 3.",
+    edit: { id: "contoso", patch: { time: "now", subject: "Contract addendum — CPI cap agreed", ai: "Cap 5% accepted · ready for signature",
+      meta: "Anna Kowalska <a.kowalska@contoso.example> · today, now · thread: 7 messages" } },
+    editNotif: { title: "Anna Kowalska replied", body: "Contoso accepts a 5% cap — the addendum goes to signature.", thread: "contoso" },
+    fallbackRemove: "jacek",
+    removeNote: "The sender withdrew a message — the thread has left the list",
+  },
+];
+
 class Component extends DCLogic {
   state = { workMode: "classic", tabs: [{ key: "thread:contoso", kind: "thread", id: "contoso" }], activeTab: "thread:contoso", screen: "discover", phase: "idle", query: "", planKey: null, ready: {}, ev: null, threadId: "contoso", fromCite: null, cameFrom: false, mailAnswer: false, mailPane: "list", themeOverride: null, stateOpen: false, vw: typeof window !== "undefined" ? window.innerWidth : 1440, listW: 340, remMap: { t1: [15], t3: [1440, 60] }, remUnit: "min" };
   timers = [];
@@ -4493,9 +4636,130 @@ class Component extends DCLogic {
   };
 
   accountMenu = (key, label) => [
-    { icon: "create_new_folder", label: "New folder", run: () => this.addFolder(key, label) },
+    { icon: "create_new_folder", label: "New folder", run: () => this.openNewFolder(key, label) },
     { icon: "mark_email_read", label: "Mark all as read", run: () => this.notify("All read in " + label, false) },
   ];
+
+  folderMenu = (key, accLabel, path, canNest, custom) => {
+    const label = path.split("/").pop();
+    const items = [];
+    if (canNest) items.push({ icon: "create_new_folder", label: "New folder inside", run: () => this.openNewFolder(key, accLabel, path) });
+    items.push({ icon: "mark_email_read", label: "Mark all as read", run: () => this.notify("All read in " + label, false) });
+    if (custom) items.push({ icon: "edit", label: "Edit folder", run: () => this.openEditFolder(key, accLabel, path) });
+    if (custom) items.push({ icon: "delete", label: "Delete folder", danger: true, run: () => this.askDeleteFolder(key, accLabel, path) });
+    return items;
+  };
+
+  /* Creating a folder asks for both the display name and the path on the server — the two are
+     kept in sync until the path is edited by hand. Folders nest three levels deep at most. */
+  MAX_DEPTH = 3;
+
+  nfSlug = (v) => (v || "").trim().replace(/^\/+|\/+$/g, "");
+
+  remoteBase = (parent) => (parent ? parent.replace(/^Inbox/, "INBOX") + "/" : "INBOX/");
+
+  openNewFolder = (key, label, parent) => this.setState({
+    newFolder: { key: key, label: label, parent: parent || "", base: this.remoteBase(parent), mode: "create" },
+    nfName: "", nfPath: "", nfPathTouched: false, moveFor: null,
+  });
+
+  openEditFolder = (key, label, path) => {
+    const parent = path.split("/").slice(0, -1).join("/");
+    const name = path.split("/").pop();
+    const remote = (this.state.folderPaths || {})[key + "·" + path] || this.remoteBase(parent) + name;
+    this.setState({
+      newFolder: { key: key, label: label, parent: parent, base: this.remoteBase(parent), mode: "edit", path: path },
+      nfName: name, nfPath: remote, nfPathTouched: true, moveFor: null,
+    });
+  };
+
+  saveFolder = () => (this.state.newFolder && this.state.newFolder.mode === "edit" ? this.applyFolderEdit() : this.createFolder());
+
+  applyFolderEdit = () => {
+    const nf = this.state.newFolder;
+    const name = (this.state.nfName || "").trim().replace(/\//g, " ");
+    if (!nf || !name) return;
+    const remote = this.nfSlug(this.state.nfPath) || (nf.base || "INBOX/") + name;
+    const oldPath = nf.path;
+    const newPath = (nf.parent ? nf.parent + "/" : "") + name;
+    this.setState(s => {
+      const ex = Object.assign({}, s.extraFolders || {});
+      ex[nf.key] = (ex[nf.key] || []).map(p => (p === oldPath ? newPath : p.indexOf(oldPath + "/") === 0 ? newPath + p.slice(oldPath.length) : p));
+      const pref = nf.key + "·" + oldPath;
+      const remap = (src) => {
+        const out = {};
+        Object.keys(src).forEach(k => {
+          if (k === pref) out[nf.key + "·" + newPath] = src[k];
+          else if (k.indexOf(pref + "/") === 0) out[nf.key + "·" + newPath + k.slice(pref.length)] = src[k];
+          else out[k] = src[k];
+        });
+        return out;
+      };
+      const paths = remap(s.folderPaths || {});
+      paths[nf.key + "·" + newPath] = remote;
+      const active = s.folderKey === pref;
+      return { extraFolders: ex, folderPaths: paths, folderOpen: remap(s.folderOpen || {}), newFolder: null,
+        folderKey: active ? nf.key + "·" + newPath : s.folderKey, folderLabel: active ? name : s.folderLabel };
+    });
+    this.notify(remote + " · " + nf.label, { kind: "success", title: "Folder “" + name + "” updated" });
+  };
+
+  closeNewFolder = () => this.setState({ newFolder: null });
+
+  onNfName = (e) => {
+    const v = e.target.value;
+    this.setState(s => {
+      const base = (s.newFolder && s.newFolder.base) || "INBOX/";
+      return { nfName: v, nfPath: s.nfPathTouched ? s.nfPath : (this.nfSlug(v) ? base + this.nfSlug(v) : "") };
+    });
+  };
+
+  onNfPath = (e) => this.setState({ nfPath: e.target.value, nfPathTouched: true });
+
+  createFolder = () => {
+    const nf = this.state.newFolder;
+    const name = (this.state.nfName || "").trim().replace(/\//g, " ");
+    if (!nf || !name) return;
+    const remote = this.nfSlug(this.state.nfPath) || (nf.base || "INBOX/") + name;
+    this.setState(s => {
+      const ex = Object.assign({}, s.extraFolders || {});
+      const list = (ex[nf.key] || []).slice();
+      const under = nf.parent ? nf.parent + "/" : "";
+      let label = name, n = 1;
+      while (list.indexOf(under + label) >= 0) { n++; label = name + " " + n; }
+      list.push(under + label);
+      ex[nf.key] = list;
+      const paths = Object.assign({}, s.folderPaths || {});
+      paths[nf.key + "·" + under + label] = remote;
+      /* Reveal the new folder: open every ancestor on the way down to it. */
+      const fo = Object.assign({}, s.folderOpen || {});
+      nf.parent.split("/").forEach((seg, i, arr) => { fo[nf.key + "·" + arr.slice(0, i + 1).join("/")] = true; });
+      return { extraFolders: ex, folderPaths: paths, folderOpen: fo, newFolder: null, accOpen: Object.assign({}, s.accOpen, { [nf.key]: true }) };
+    });
+    this.notify(remote + " · " + nf.label, { kind: "success", title: "Folder “" + name + "” created" });
+  };
+
+  askDeleteFolder = (key, accLabel, path) => this.setState({ delFolder: { key: key, label: accLabel, path: path } });
+
+  closeDeleteFolder = () => this.setState({ delFolder: null });
+
+  confirmDeleteFolder = () => {
+    const df = this.state.delFolder;
+    if (!df) return;
+    const name = df.path.split("/").pop();
+    this.setState(s => {
+      const ex = Object.assign({}, s.extraFolders || {});
+      const gone = (ex[df.key] || []).filter(p => p === df.path || p.indexOf(df.path + "/") === 0);
+      ex[df.key] = (ex[df.key] || []).filter(p => gone.indexOf(p) < 0);
+      const paths = Object.assign({}, s.folderPaths || {});
+      const fo = Object.assign({}, s.folderOpen || {});
+      gone.forEach(p => { delete paths[df.key + "·" + p]; delete fo[df.key + "·" + p]; });
+      const wasOpen = gone.indexOf((s.folderKey || "").split("·")[1]) >= 0;
+      return { extraFolders: ex, folderPaths: paths, folderOpen: fo, delFolder: null,
+        folderKey: wasOpen ? "acc1·Inbox" : s.folderKey, folderLabel: wasOpen ? "Inbox" : s.folderLabel };
+    });
+    this.notify("Removed from " + df.label, { kind: "success", title: "Folder “" + name + "” deleted" });
+  };
 
   addFolder = (key, label) => {
     this.setState(s => {
@@ -4548,6 +4812,56 @@ class Component extends DCLogic {
     }, 420);
   };
 
+  /* AI summary — the per-message reading, always shown next to the fragment it rests on. */
+  openAiSum = (id) => this.setState({ aiSum: id, ctxMenu: null });
+  closeAiSum = () => this.setState({ aiSum: null });
+
+  mdPlain = (s) => String(s || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*\|.*$/gm, " ")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s{0,3}>\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  aiSumCards = (th) => {
+    const HEAD = { AGREED: "WHAT IS SETTLED", "OPEN QUESTION": "WHAT IS STILL OPEN", COMMITMENT: "WHAT IS THE COMMITMENT", DEADLINE: "WHAT THE DEADLINE IS" };
+    const WHY = {
+      AGREED: "The message puts this forward as settled, and nothing later in it walks the point back.",
+      "OPEN QUESTION": "The message raises this and never answers it, so it stays open on our side.",
+      COMMITMENT: "The message names both the action and the side that owes it.",
+      DEADLINE: "The message gives the date outright rather than leaving it to be worked out.",
+    };
+    const msgs = (th.body || []).map(b => this.mdPlain(b.md || b.text));
+    const last = Math.max(0, msgs.length - 1);
+    const cards = [];
+    (th.state || []).forEach((s, i) => {
+      if (!s.value || s.value === "None") return;
+      const src = (STATE_SRC[th.id] || [])[i];
+      cards.push({
+        heading: HEAD[s.label] || s.label, claim: s.value, why: WHY[s.label] || "",
+        idx: typeof src === "number" ? Math.min(src, last) : last,
+      });
+    });
+    /* Three readings at most — the modal is a summary, not a second copy of the thread. */
+    if (th.ai && cards.length < 3) cards.push({ heading: "WHAT THIS IS ABOUT", claim: th.ai, why: "This is the reading the message list shows — it comes from the subject and the opening of the message.", idx: 0 });
+    return cards.slice(0, 3).map(c => ({
+      heading: c.heading, claim: c.claim, why: "Why: " + c.why,
+      model: "Model — mailfathom-email-enrichment",
+      quote: msgs[c.idx] || msgs.join(" ") || th.subject,
+      showSrc: msgs.length > 1,
+      srcLabel: "Open message " + (c.idx + 1) + " in the thread",
+      openSrc: () => {
+        this.setState({ aiSum: null, threadId: th.id, mailPane: "thread", threadOpen: true });
+        this.revealMessage(th.id, c.idx);
+      },
+    }));
+  };
+
   openMailMenu = (id, cx, cy) => {
     const th = THREADS.find(t => t.id === id) || {};
     const flagged = !!(this.state.flags || {})[id];
@@ -4556,6 +4870,7 @@ class Component extends DCLogic {
       ctxMenu: {
         x: p.x, y: p.y, kind: "mail", id: id, title: th.subject || "Message",
         items: [
+          { icon: "auto_awesome", label: "AI summary", run: () => this.openAiSum(id) },
           { icon: "check_box", label: "Select messages", run: () => this.toggleSelect(id) },
           { icon: "auto_awesome", label: "Ask the agent", run: () => this.goAgentWith("thread “" + (th.subject || "mail") + "”") },
           { icon: "reply", label: "Reply", run: () => { this.setState({ threadId: id, mailPane: "thread", threadOpen: true }); this.startReply("reply"); } },
@@ -4949,13 +5264,72 @@ class Component extends DCLogic {
   pushNotif = (it) => {
     const id = "in" + (this._nSeq = (this._nSeq || 0) + 1);
     const n = Object.assign({}, it, { id: id, unread: true, mins: 0 });
-    this.setState(s => ({ notifs: [n].concat(s.notifs || NOTIFS) }));
+    this.setState(s => ({ notifs: [n].concat(s.notifs || NOTIFS), notifAnim: Object.assign({}, s.notifAnim, { [id]: "in" }) }));
+    const clr = setTimeout(() => this.setState(s => {
+      const m = Object.assign({}, s.notifAnim); delete m[id]; return { notifAnim: m };
+    }), 700);
+    this.timers.push(clr);
     const kind = (NKIND[it.kind] || NKIND.system).toast;
     let tid;
     tid = this.notify(it.body, {
       kind: kind, title: it.title, actionLabel: "Show",
       onAction: () => { this.dismissToast(tid); this.openNotif(n); },
     });
+    return n;
+  };
+
+  /* Row-level animation flags. Only the touched tile animates — the list is never re-rendered
+     as a whole, so scroll position and every other row stay exactly where they were. */
+  setRowAnim = (id, kind, ms) => {
+    this.setState(s => ({ rowAnim: Object.assign({}, s.rowAnim, { [id]: kind }) }));
+    const t = setTimeout(() => this.setState(s => {
+      const m = Object.assign({}, s.rowAnim); delete m[id]; return { rowAnim: m };
+    }), ms);
+    this.timers.push(t);
+  };
+
+  markUnread = (id) => this.setState(s => ({ unread: Object.assign({}, s.unread || DEFAULT_UNREAD, { [id]: true }) }));
+
+  demoRefresh = () => {
+    if (this.state.demoBusy) return;
+    const step = (this._demoStep = (this._demoStep || 0));
+    this._demoStep = step + 1;
+    const b = DEMO_BATCHES[step % DEMO_BATCHES.length];
+    const prev = this._demoLastId;
+    this.setState({ demoBusy: true });
+
+    /* 1 · a new message lands at the top of the list and in the notification centre */
+    const id = "demo" + (step + 1);
+    THREADS.unshift(Object.assign({ id: id }, b.mail));
+    this._demoLastId = id;
+    this.markUnread(id);
+    this.setRowAnim(id, "in", 720);
+    this.pushNotif({ kind: "mail", title: b.mail.from + " — new message", body: b.notif,
+      src: "Mail · " + (b.mail.org || "Inbox"), go: { screen: "mail", thread: id } });
+
+    /* 2 · a thread already on the list gets a reply — the same tile updates in place */
+    const t2 = setTimeout(() => {
+      const th = THREADS.find(x => x.id === b.edit.id);
+      if (th && (this.state.deleted || []).indexOf(th.id) < 0) {
+        Object.assign(th, b.edit.patch);
+        this.markUnread(th.id);
+        this.setRowAnim(th.id, "edit", 1700);
+        this.pushNotif({ kind: "mail", title: b.editNotif.title, body: b.editNotif.body,
+          src: "Mail · " + (th.org || "Inbox"), go: { screen: "mail", thread: b.editNotif.thread } });
+      }
+    }, 1000);
+
+    /* 3 · one message is withdrawn — its tile collapses and leaves the list */
+    const t3 = setTimeout(() => {
+      const done = (this.state.deleted || []);
+      const gone = prev && done.indexOf(prev) < 0 ? prev : (done.indexOf(b.fallbackRemove) < 0 ? b.fallbackRemove : null);
+      if (!gone) { this.setState({ demoBusy: false }); return; }
+      this.setRowAnim(gone, "out", 480);
+      this.notify(b.removeNote, false);
+      const t4 = setTimeout(() => this.setState(s => ({ deleted: (s.deleted || []).concat([gone]), demoBusy: false })), 440);
+      this.timers.push(t4);
+    }, 2050);
+    this.timers.push(t2, t3);
   };
 
   simulateNotif = () => {
@@ -5228,6 +5602,23 @@ class Component extends DCLogic {
     window.addEventListener("mouseup", up);
   };
 
+  beginSideResize = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = Math.max(210, Math.min(420, this.state.sideW || 210));
+    const move = (ev) => this.setState({ sideW: Math.max(210, Math.min(420, startW + (ev.clientX - startX))) });
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
   beginResize = (e) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -5282,6 +5673,7 @@ class Component extends DCLogic {
 
   renderVals() {
     const st = this.state;
+    const aiSumThread = st.aiSum ? THREADS.find(t => t.id === st.aiSum) : null;
     const hidMap = st.hidden || {};
     const hid = (k, id) => (hidMap[k] || []).indexOf(id) >= 0;
     const selMap = st.selBy || {};
@@ -5375,6 +5767,8 @@ class Component extends DCLogic {
     /* The demo starts with the five newest threads unread — opening a thread clears it. */
     const unreadMap = st.unread || DEFAULT_UNREAD;
     const movedMap = st.moved || {};
+    const rowAnim = st.rowAnim || {};
+    const notifAnim = st.notifAnim || {};
     const actTargets = sel.length ? sel : [st.threadId];
     const flagOn = actTargets.every(id => !!flags[id]);
     const wantTabs = (st.workMode || "tabs") === "tabs";
@@ -5585,7 +5979,7 @@ class Component extends DCLogic {
       { icon: "archive", label: "Archive" },
       { icon: "delete", label: "Trash" },
     ].map(mb => ({ icon: mb.icon, label: mb.label, count: (counts || {})[mb.label] || "" }));
-    const sideW = drawer ? 0 : sideCollapsed ? 58 : 210;
+    const sideW = drawer ? 0 : sideCollapsed ? 58 : Math.max(210, Math.min(420, st.sideW || 210));
     const listW = Math.max(232, Math.min(st.listW, w - railW - sideW - (narrow ? 300 : 420)));
     const composeTabActive = tabsMode && st.activeTab === "compose" && !!st.compose;
     const docInPane = tabsMode && (st.activeTab || "").indexOf("doc:") === 0 && !!st.doc;
@@ -5793,7 +6187,11 @@ class Component extends DCLogic {
       logoStyle: (tablet ? "width:30px;height:30px" : "width:40px;height:40px") + ";border-radius:10px;display:block;flex:0 0 auto",
       railStyle: isMobile
         ? "flex:0 0 70px;display:flex;flex-direction:row;align-items:stretch;justify-content:space-between;gap:3px;background:var(--rail);border-top:1px solid var(--line);padding:6px 6px 8px 6px;touch-action:none"
-        : "width:" + railW + "px;flex:0 0 " + railW + "px;display:flex;flex-direction:column;align-items:center;gap:" + (narrow ? 10 : 14) + "px;overflow-y:auto;overflow-x:hidden;background:var(--rail);border-right:1px solid var(--line);padding:16px 0",
+        : "width:" + railW + "px;flex:0 0 " + railW + "px;display:flex;flex-direction:column;align-items:center;gap:" + (narrow ? 10 : 14) + "px;overflow:hidden;background:var(--rail);border-right:1px solid var(--line);padding:16px 0",
+      /* The nav scrolls on short viewports; the bottom cluster (demo, bell, avatar) stays pinned. */
+      railNavStyle: isMobile
+        ? "flex:1;min-width:0;display:flex;flex-direction:row;align-items:stretch;justify-content:space-between;gap:3px"
+        : "flex:1 1 auto;width:100%;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;align-items:center;gap:" + (narrow ? 10 : 14) + "px",
       railCasesStyle: (isMobile ? "display:none;" : railBase + (st.screen === "cases" ? activeStyle : idleColor)),
       goCases: () => this.goScreen("cases", { casePane: "list" }),
       isCases: st.screen === "cases" && !emptyApp,
@@ -6311,7 +6709,10 @@ class Component extends DCLogic {
         ? "position:fixed;top:0;bottom:0;left:0;width:262px;z-index:80;display:flex;flex-direction:column;gap:4px;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:16px 14px;box-shadow:0 0 40px var(--sh-3)"
         : sideCollapsed
         ? "width:58px;flex:0 0 58px;display:flex;flex-direction:column;gap:4px;background:var(--sub);border-right:1px solid var(--line);padding:12px 9px"
-        : "width:210px;flex:0 0 210px;display:flex;flex-direction:column;gap:4px;background:var(--sub);border-right:1px solid var(--line);padding:16px 14px",
+        : "width:" + sideW + "px;flex:0 0 " + sideW + "px;display:flex;flex-direction:column;gap:4px;background:var(--sub);border-right:1px solid var(--line);padding:16px 14px",
+      showSideResizer: !drawer && !sideCollapsed && !isMobile,
+      startSideResize: this.beginSideResize,
+      resetSideResize: () => this.setState({ sideW: 210 }),
       sideTopStyle: sideCollapsed
         ? "display:flex;align-items:center;justify-content:center;height:30px;border-radius:7px;margin-bottom:4px"
         : "display:flex;align-items:center;gap:8px;padding:4px 11px 8px 11px;border-radius:7px",
@@ -6333,19 +6734,41 @@ class Component extends DCLogic {
           wrapStyle: sideCollapsed ? "display:flex;flex-direction:column;gap:3px;padding-bottom:7px" : "display:flex;flex-direction:column;gap:2px;padding-bottom:9px",
           headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:5px 9px;border-radius:6px",
           dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
-          folders: g.folders.concat(((st.extraFolders || {})[g.key] || []).map(n => ({ icon: "folder", label: n, count: "" }))).map(mb0 => {
-            const fk = g.key + "·" + mb0.label;
-            const mb = Object.assign({}, mb0, { active: (st.folderKey || "acc1·Inbox") === fk });
+          folders: (() => {
+            const extra = (st.extraFolders || {})[g.key] || [];
+            const fOpen = st.folderOpen || {};
+            const kidsOf = (p) => extra.filter(x => x.indexOf(p + "/") === 0 && x.indexOf("/", p.length + 1) < 0);
+            const rows = [];
+            const walk = (path, icon, count, depth, custom) => {
+              const kids = kidsOf(path);
+              const open = !!fOpen[g.key + "·" + path];
+              rows.push({ path, icon, count, depth, custom, kids: kids.length, open });
+              if (kids.length && open) kids.forEach(k => walk(k, "folder", "", depth + 1, true));
+            };
+            g.folders.forEach(f => walk(f.label, f.icon, f.count, 0, false));
+            extra.filter(x => x.indexOf("/") < 0 && !g.folders.some(f => f.label === x)).forEach(x => walk(x, "folder", "", 0, true));
+            return sideCollapsed ? rows.filter(r => r.depth === 0) : rows;
+          })().map(node => {
+            const label = node.path.split("/").pop();
+            const fk = g.key + "·" + node.path;
+            const active = (st.folderKey || "acc1·Inbox") === fk;
+            const canNest = node.path.split("/").length < this.MAX_DEPTH;
+            const fpress = g.key === "all" ? null : this.pressFor("folder", fk, label, this.folderMenu(g.key, g.label, node.path, canNest, node.custom));
             return {
-            icon: mb.icon, label: mb.label, count: mb.count, expanded: !sideCollapsed,
-            title: g.title + " — " + mb.label + (mb.count ? " · " + mb.count : ""),
-            pick: () => this.pickFolder(fk, mb.label),
+            ctxOpen: fpress ? fpress.ctx : noop, pressDown: fpress ? fpress.down : noop, pressUp: fpress ? fpress.up : noop,
+            icon: node.icon, label: label, count: node.count, expanded: !sideCollapsed,
+            title: g.title + " — " + node.path.split("/").join(" / ") + (node.count ? " · " + node.count : ""),
+            pick: () => this.pickFolder(fk, label),
+            twisty: node.open ? "expand_more" : "chevron_right",
+            hasKids: node.kids > 0 && !sideCollapsed,
+            twistyTitle: node.open ? "Collapse subfolders" : "Show subfolders",
+            twistyStyle: "flex:0 0 18px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:5px;font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:16px;line-height:1;color:var(--faint)",
+            toggleKids: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.setState(s2 => ({ folderOpen: Object.assign({}, s2.folderOpen, { [fk]: !((s2.folderOpen || {})[fk]) }) })); },
             style: (sideCollapsed
               ? "display:flex;align-items:center;justify-content:center;height:34px;border-radius:8px;font-size:14px;"
-              : "display:flex;align-items:center;gap:10px;font-size:14px;padding:7px 11px;border-radius:7px;") +
-              (mb.active ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : ""),
-            iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" + (sideCollapsed ? "font-size:23px;width:24px;" : "font-size:18px;width:20px;") + (mb.active ? "" : "color:var(--muted);"),
-            countStyle: mb.active ? "font-size:13px" : "font-size:13px;color:var(--faint)",
+              : "display:flex;align-items:center;gap:10px;font-size:14px;padding:7px 11px 7px " + (11 + node.depth * 15) + "px;border-radius:7px;") +
+              (active ? "background:var(--accent-soft);color:var(--accent-d);font-weight:600;" : ""),
+            iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;line-height:1;text-align:center;" + (sideCollapsed ? "font-size:23px;width:24px;" : "font-size:18px;width:20px;flex:0 0 20px;") + (active ? "" : "color:var(--muted);"),            countStyle: active ? "font-size:13px" : "font-size:13px;color:var(--faint)",
           };
           }),
         };
@@ -7063,6 +7486,18 @@ class Component extends DCLogic {
         { icon: "mark_email_unread", label: "Unread" },
         { icon: "drive_file_move", label: "Move" },
       ].map(a => ({ icon: a.icon, title: a.label, label: tbFull ? a.label : "", run: mailAct[a.icon], style: tbFull ? selBtn : tbIcon + ";flex:0 0 auto;color:var(--accent-d)" })),
+      aiSumOpen: !!aiSumThread,
+      aiSumSubject: aiSumThread ? aiSumThread.subject : "",
+      aiSumCards: aiSumThread ? this.aiSumCards(aiSumThread).map(c => Object.assign({}, c, {
+        cardStyle: "display:flex;flex-direction:column;gap:8px;background:var(--rail);border:1px solid var(--line2);border-radius:12px;padding:" + (isMobile ? "14px 14px" : "13px 15px"),
+        quoteStyle: "max-height:" + (isMobile ? 168 : 150) + "px;overflow:auto;font-size:12.5px;line-height:1.6;color:var(--text2);background:var(--panel);border-left:3px solid var(--line);border-radius:0 8px 8px 0;padding:10px 12px;text-wrap:pretty",
+      })) : [],
+      closeAiSum: this.closeAiSum,
+      dlgAi: isMobile
+        ? "box-sizing:border-box;width:100%;height:100%;display:flex;flex-direction:column;background:var(--panel);overflow:hidden"
+        : "width:620px;max-width:100%;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 22px 52px var(--shadow);overflow:hidden",
+      aiSumHeadStyle: "display:flex;align-items:center;gap:10px;flex:0 0 auto;padding:" + (isMobile ? "16px 14px 13px" : "15px 16px 13px") + ";border-bottom:1px solid var(--line2)",
+      aiSumBodyStyle: "flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:13px;padding:" + (isMobile ? "14px 14px 24px" : "15px 16px 18px"),
       moveOpen: !!(st.moveFor && st.moveFor.length),
       moveTitle: st.moveFor ? "Move " + this.countWord(st.moveFor.length) : "",
       closeMove: this.closeMove,
@@ -7080,7 +7515,7 @@ class Component extends DCLogic {
         wrapStyle: "display:flex;flex-direction:column;gap:1px;padding-bottom:6px",
         headStyle: "display:flex;align-items:center;gap:8px;font-family:'Instrument Sans',system-ui,sans-serif;font-size:11px;letter-spacing:0.04em;color:var(--muted);padding:8px 9px 5px",
         dotStyle: "width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:" + g.dot,
-        newFolder: () => this.addFolder(g.key, g.label),
+        newFolder: () => this.openNewFolder(g.key, g.label),
         newFolderStyle: "display:flex;align-items:center;gap:11px;padding:" + (isMobile ? "11px 14px" : "8px 13px") + ";border-radius:9px;font-size:13px;color:var(--accent-d)",
         folders: g.folders.concat(((st.extraFolders || {})[g.key] || []).map(n => ({ icon: "folder", label: n }))).map(mf => ({
           icon: mf.icon, label: mf.label, pick: () => this.moveThreads(mf.label, g.label),
@@ -7090,6 +7525,43 @@ class Component extends DCLogic {
       undoOp: this.undoOp,
       hideToast: this.hideToast,
       railBellIcon: notifUnreadCount ? "notifications_active" : "notifications",
+      newFolderOpen: !!st.newFolder,
+      newFolderTitle: st.newFolder && st.newFolder.mode === "edit" ? "Edit folder" : "New folder",
+      nfSaveLabel: st.newFolder && st.newFolder.mode === "edit" ? "Save changes" : "Create folder",
+      createFolder: this.saveFolder,
+      delFolderOpen: !!st.delFolder,
+      delFolderName: st.delFolder ? st.delFolder.path.split("/").pop() : "",
+      delFolderText: st.delFolder
+        ? "The folder" + (((st.extraFolders || {})[st.delFolder.key] || []).some(p => p.indexOf(st.delFolder.path + "/") === 0) ? " and everything nested inside it" : "") +
+          " will be removed from " + st.delFolder.label + ". Messages it holds go back to Inbox."
+        : "",
+      closeDeleteFolder: this.closeDeleteFolder,
+      confirmDeleteFolder: this.confirmDeleteFolder,
+      dangerBtnStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--onaccent);background:var(--err);border:1px solid var(--err);border-radius:9px;padding:9px 14px",
+      newFolderAccount: st.newFolder ? (st.newFolder.label + (st.newFolder.parent ? " — inside “" + st.newFolder.parent + "”" : "")) : "",
+      nfPathPlaceholder: (st.newFolder && st.newFolder.base ? st.newFolder.base : "INBOX/") + "Contracts 2027",
+      closeNewFolder: this.closeNewFolder,
+      nfName: st.nfName || "",
+      nfPath: st.nfPath || "",
+      onNfName: this.onNfName,
+      onNfPath: this.onNfPath,
+      nfPathFieldStyle: "font-family:'Instrument Sans',ui-monospace,monospace;font-size:13px;letter-spacing:0.01em;color:var(--text);background:var(--sub);border:1px solid var(--line);border-radius:9px;padding:10px 11px;outline:none",
+      nfPathHint: "Path on the mail server. The parent folder is created if it does not exist yet.",
+      nfCancelStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 14px",
+      nfCreateStyle: "display:flex;align-items:center;font-size:13px;font-weight:600;border-radius:9px;padding:9px 14px;" +
+        ((st.nfName || "").trim()
+          ? "color:var(--onaccent);background:var(--accent);border:1px solid var(--accent);"
+          : "color:var(--faint);background:var(--rail);border:1px solid var(--line);"),
+      nfCreateHover: (st.nfName || "").trim() ? "cursor:pointer;opacity:0.9" : "cursor:not-allowed",
+      demoRefresh: this.demoRefresh,
+      demoIconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:" + (tablet ? 18 : 20) + "px;line-height:1;display:block" +
+        (st.demoBusy ? ";animation:mfspin 900ms linear infinite" : ""),
+      demoBtnStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 30 : 34) + "px;height:" + (tablet ? 30 : 34) + "px;display:flex;align-items:center;justify-content:center;border-radius:12px;border:1px dashed " +
+        (st.demoBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--border2);background:var(--panel);color:var(--muted);") +
+        "transition:background 140ms ease,color 140ms ease,border-color 140ms ease",
+      demoFabStyle: "position:fixed;left:12px;bottom:82px;z-index:70;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px dashed " +
+        (st.demoBusy ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--border2);background:var(--panel);color:var(--muted);") +
+        "box-shadow:0 2px 8px var(--sh-2)",
       railBellStyle: "position:relative;flex:0 0 auto;width:" + (tablet ? 40 : 46) + "px;height:" + (tablet ? 40 : 46) + "px;display:flex;align-items:center;justify-content:center;border-radius:14px;border:1px solid " +
         (st.notifCenter ? "var(--accent-line);background:var(--accent-soft);color:var(--accent-d);" : "var(--line);background:var(--panel);color:var(--text2);box-shadow:0 1px 2px var(--sh-1);"),
       notifBadgeStyle: "position:absolute;top:-6px;right:-6px;min-width:21px;height:21px;box-sizing:border-box;padding:0 5px;display:flex;align-items:center;justify-content:center;border-radius:11px;background:var(--err);color:#fff;font-size:11.5px;font-weight:700;border:2px solid var(--rail)",
@@ -7150,7 +7622,8 @@ class Component extends DCLogic {
           titleStyle: "flex:1;min-width:0;font-size:14px;line-height:1.35;text-wrap:pretty;font-weight:" + (unread ? "600" : "500") + ";color:" + (unread ? "var(--text)" : "var(--text2)"),
           iconWrapStyle: "flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:" + K.soft,
           iconStyle: "font-family:'Material Symbols Rounded';font-variation-settings:'wght' 400;font-size:19px;line-height:1;color:" + K.c,
-          style: "display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line2);" + (unread ? "background:var(--sub);" : "") + selMark("notifs", n.id),
+          style: "display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line2);" + (unread ? "background:var(--sub);" : "") + selMark("notifs", n.id) +
+            (notifAnim[n.id] === "in" ? "overflow:hidden;animation:mfrowin 480ms cubic-bezier(.22,1,.36,1) both;" : ""),
         };
       }),
       toastWrapStyle: "position:fixed;z-index:97;top:" + (isMobile ? 12 : 18) + "px;" + (isMobile ? "left:12px;right:12px;" : "right:18px;width:min(400px,calc(100vw - 36px));") + "display:flex;flex-direction:column;gap:10px;pointer-events:none",
@@ -7287,7 +7760,9 @@ class Component extends DCLogic {
         isUnread: !!unreadMap[t.id],
         movedTo: movedMap[t.id] || "",
         showMoved: !!movedMap[t.id],
-        swipeWrapStyle: "position:relative;overflow:hidden",
+        swipeWrapStyle: "position:relative;overflow:hidden" +
+          (rowAnim[t.id] === "in" ? ";animation:mfrowin 480ms cubic-bezier(.22,1,.36,1) both"
+            : rowAnim[t.id] === "out" ? ";animation:mfrowout 440ms cubic-bezier(.4,0,.2,1) both;pointer-events:none" : ""),
         swiping: isMobile && st.swipeId === t.id && Math.abs(st.swipeDx || 0) > 8,
         swipeBgStyle: "position:absolute;inset:0;display:flex;align-items:center;" +
           ((st.swipeDx || 0) < 0
@@ -7306,6 +7781,8 @@ class Component extends DCLogic {
         subjStyle: isMobile ? "font-size:14px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" : "font-size:14px",
         orgStyle: isMobile || tablet ? "display:none" : "font-size:12px;color:var(--muted);white-space:nowrap",
         showAi: aiHints && !!t.ai,
+        openAiSum: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.openAiSum(t.id); },
+        aiBtnStyle: "width:" + (touch ? 32 : 24) + "px;height:" + (touch ? 32 : 24) + "px;flex:0 0 " + (touch ? 32 : 24) + "px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);font-family:'Material Symbols Rounded';font-variation-settings:'wght' 300;font-size:" + (touch ? 19 : 16) + "px;line-height:1",
         selected: sel.indexOf(t.id) >= 0,
         select: (e) => this.pickThread(t.id, e),
         longPress: (e) => { if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); } this.armCtx(false); this.openMailMenu(t.id, e.clientX, e.clientY); },
@@ -7319,7 +7796,8 @@ class Component extends DCLogic {
         rowStyle: rowStyleFor(!isMobile && t.id === st.threadId && !selectionOn, sel.indexOf(t.id) >= 0) +
           (isMobile && st.swipeId === t.id
             ? "transform:translateX(" + (st.swipeDx || 0) + "px);"
-            : "transform:translateX(0);transition:transform 160ms ease,background 120ms ease;"),
+            : "transform:translateX(0);transition:transform 160ms ease,background 120ms ease;") +
+          (rowAnim[t.id] === "edit" ? "animation:mfrowedit 1700ms ease-out both;" : ""),
         count: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10),
         multi: parseInt(((t.meta || "").match(/thread: (\d+)/) || [])[1] || "1", 10) > 1,
       })),
