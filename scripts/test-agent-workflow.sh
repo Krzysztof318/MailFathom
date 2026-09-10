@@ -7244,9 +7244,15 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
   assert_contains 'MAILFATHOM_PULL_POLICY=missing' "$compose_directory/.env"
 
   assert_file_content 'the mailbox password' "$compose_directory/secrets/mailfathom/imap-primary-password"
-  assert_contains '"Host": "imap.fastmail.com"' "$compose_directory/config/10-mailfathom.json"
+
+  # The mailbox is a declaration for a user's record rather than a section of the file the deployment reads: a
+  # configuration still declaring one does not start. So the answers land in mailbox.json, carrying the same reference,
+  # and a run that started nothing hands the operator the command that records it.
+  assert_contains '"Host": "imap.fastmail.com"' "$compose_directory/mailbox.json"
   assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"' \
-    "$compose_directory/config/10-mailfathom.json"
+    "$compose_directory/mailbox.json"
+  assert_excludes '"Accounts"' "$compose_directory/config/10-mailfathom.json"
+  assert_contains 'mfctl user account add --from-file' "$output_file"
 
   local expected_modes='700 secrets
 711 secrets/mailfathom
@@ -7254,7 +7260,8 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
 444 secrets/postgres-superuser-password
 444 secrets/mailfathom-database-password
 444 secrets/mailfathom/imap-primary-password
-644 config/10-mailfathom.json'
+644 config/10-mailfathom.json
+600 mailbox.json'
   local actual_modes
 
   actual_modes="$(
@@ -7262,7 +7269,7 @@ quick_start_prepares_the_deployment_the_documentation_describes() {
     stat --format '%a %n' \
       secrets secrets/mailfathom config \
       secrets/postgres-superuser-password secrets/mailfathom-database-password \
-      secrets/mailfathom/imap-primary-password config/10-mailfathom.json
+      secrets/mailfathom/imap-primary-password config/10-mailfathom.json mailbox.json
   )"
 
   if [[ "$actual_modes" != "$expected_modes" ]]; then
@@ -7423,7 +7430,7 @@ quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment() {
 # tracked file — and on loopback, like every other port this deployment publishes.
 quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   local checkout_root compose_directory
-  local off_root
+  local keyless_root
   local output_file="$test_directory/quick-start-admin-log"
 
   checkout_root="$(stage_quick_start_checkout 'quick-start-admin')"
@@ -7436,23 +7443,14 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
     "$compose_directory/config/10-mailfathom.json"
   assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
 
-  # Off where nothing needs it, which is what keeps the published port the marker of a deliberate answer rather than of
-  # a run having happened. That is a run asking for the one credential the administrative endpoint mints: an MCP
-  # endpoint serving without a key needs none.
-  off_root="$(stage_quick_start_checkout 'quick-start-admin-off')"
-  run_quick_start "$off_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
+  # Served and published even where no MCP key is minted, because the MCP key is not the only thing recorded through
+  # it: the user this deployment serves and the mailbox it reads are, and a deployment without the endpoint could never
+  # be given either.
+  keyless_root="$(stage_quick_start_checkout 'quick-start-admin-keyless')"
+  run_quick_start "$keyless_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
 
-  assert_excludes 'AdminEndpoint' "$off_root/deploy/compose/config/10-mailfathom.json"
-
-  # assert_excludes reads a file with grep, and a file that is not there excludes everything — so the claim below is
-  # about a published port only while the file it reads exists. Assert that first rather than resting on the TLS
-  # policy happening to write one.
-  if [[ ! -s "$off_root/deploy/compose/compose.override.yaml" ]]; then
-    printf 'No override was written, so nothing establishes that the administrative port is unpublished.\n' >&2
-    return 1
-  fi
-
-  assert_excludes '8090' "$off_root/deploy/compose/compose.override.yaml"
+  assert_contains '"AdminEndpoint"' "$keyless_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains '"127.0.0.1:8090:8090"' "$keyless_root/deploy/compose/compose.override.yaml"
 }
 
 # The quick start prepares the client, and this is what holds it to both halves of that. The bundle travels inside the
@@ -7530,7 +7528,7 @@ quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs() {
 # switching that endpoint off while a key is wanted describes a deployment nothing can ever be provisioned for. The
 # default arrives at the combination without anybody choosing it and is corrected; an operator who asked for it by name
 # is refused, because correcting a stated answer is the worse failure.
-quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted() {
+quick_start_serves_the_administrative_endpoint_every_deployment_is_recorded_through() {
   local derived_root unauthenticated_root refused_root
   local derived_log="$test_directory/quick-start-admin-derived-log"
   local refused_log="$test_directory/quick-start-admin-refused-log"
@@ -7542,23 +7540,24 @@ quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_m
   assert_contains '"127.0.0.1:8090:8090"' "$derived_root/deploy/compose/compose.override.yaml"
   assert_contains 'mfctl credential create --method api-key' "$derived_log"
 
-  # And left alone where nothing has to be minted, which is what makes the derivation above a decision rather than a
-  # value every run happens to carry.
+  # `none` is still served, only without a key of its own: what it decides is whether the endpoint takes a
+  # credential, never whether the deployment has one.
   unauthenticated_root="$(stage_quick_start_checkout 'quick-start-admin-unauthenticated')"
-  run_quick_start "$unauthenticated_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
+  run_quick_start "$unauthenticated_root" --provider yahoo --admin-endpoint none > /dev/null 2>&1
 
-  assert_excludes 'AdminEndpoint' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains '"AdminEndpoint"' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
+  assert_excludes 'admin-workstation-key' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
 
+  # And `off` is not an answer at all: a deployment prepared without the endpoint is one nobody could ever record a
+  # user or a mailbox into.
   refused_root="$(stage_quick_start_checkout 'quick-start-admin-refused')"
 
   if run_quick_start "$refused_root" --provider yahoo --admin-endpoint off > "$refused_log" 2>&1; then
-    printf 'A deployment whose credentials could never be minted was prepared instead of refused.\n' >&2
+    printf 'A deployment nobody could record a user into was prepared instead of refused.\n' >&2
     return 1
   fi
 
-  assert_contains '--mcp-authentication none' "$refused_log"
-
-  assert_contains '--admin-endpoint off cannot be' "$refused_log"
+  assert_contains 'takes api-key or none, not off' "$refused_log"
 
   if [[ -e "$refused_root/deploy/compose/config/10-mailfathom.json" ]]; then
     printf 'The refusal left a configuration file behind.\n' >&2
@@ -10320,7 +10319,7 @@ run_test quick_start_refuses_to_overwrite_a_prepared_deployment
 run_test quick_start_refuses_a_mailbox_that_accepts_no_password
 run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
 run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
-run_test quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted
+run_test quick_start_serves_the_administrative_endpoint_every_deployment_is_recorded_through
 run_test quick_start_prepares_the_client_it_can_serve
 run_test quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs
 run_test quick_start_refuses_a_value_that_would_write_broken_configuration
