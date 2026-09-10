@@ -27,8 +27,18 @@ public readonly record struct ClientSignalKind
     /// <summary>Gets the kind raised when a synchronization run committed mail.</summary>
     public static ClientSignalKind MailArrived { get; } = new("mail.arrived");
 
-    /// <summary>Gets the kind raised when flags moved, mail was moved or deleted remotely, or a pending change settled.</summary>
+    /// <summary>Gets the kind raised when mail was moved or deleted remotely, keywords moved, or a pending change settled.</summary>
     public static ClientSignalKind MailChanged { get; } = new("mail.changed");
+
+    /// <summary>Gets the kind raised when nothing about mail moved except the <c>\Seen</c> or <c>\Flagged</c> flag of one or more messages.</summary>
+    /// <remarks>
+    /// The one kind that states a value rather than naming somewhere to look again, which is what lets a star or a read
+    /// mark land on a screen without a read behind it. It is the only change cheap enough to state: a flag is two
+    /// booleans beside an identifier the client already holds, applying the same one twice is the same state, and a
+    /// flag never moves a message between folders or in or out of a filtered view — so no reader has to decide whether
+    /// a row still belongs where it is drawn. A change that moved anything else says <see cref="MailChanged" />.
+    /// </remarks>
+    public static ClientSignalKind MailFlagsChanged { get; } = new("mail.flags.changed");
 
     /// <summary>Gets the kind raised when the folder set itself moved.</summary>
     public static ClientSignalKind FoldersChanged { get; } = new("folders.changed");
@@ -45,6 +55,7 @@ public readonly record struct ClientSignalKind
     [
         MailArrived,
         MailChanged,
+        MailFlagsChanged,
         FoldersChanged,
         NotificationRaised,
         AccountState,

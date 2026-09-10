@@ -904,6 +904,15 @@ describe('FolderTree, in a folded column', () => {
     it.each<{ signal: ClientSignal; named: string }>([
         { signal: { kind: 'folders.changed', account: 'work' }, named: 'the mapping moving' },
         { signal: { kind: 'mail.changed', account: 'work', folder: 'INBOX', emails: ['m-1'] }, named: 'mail changing' },
+        {
+            signal: {
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'm-1', isSeen: true, isFlagged: null }],
+            },
+            named: 'a message being marked read',
+        },
     ])('reads the tree again on $named', async ({ signal }) => {
         const deployment = deploymentSaying();
         let reads = 0;
@@ -927,6 +936,36 @@ describe('FolderTree, in a folded column', () => {
 
         await drawn();
         expect(reads).toBe(2);
+    });
+
+    it('reads nothing again for a star, which moves no count this tree draws', async () => {
+        const deployment = deploymentSaying();
+        let reads = 0;
+
+        renderTree(
+            () => {
+                reads += 1;
+
+                return Promise.resolve({ status: 200, headers: {}, body: JSON.stringify(tree) });
+            },
+            true,
+            undefined,
+            deployment.changes,
+        );
+
+        await drawn();
+
+        act(() => {
+            deployment.say({
+                kind: 'mail.flags.changed',
+                account: 'work',
+                folder: 'INBOX',
+                flags: [{ email: 'm-1', isSeen: null, isFlagged: true }],
+            });
+        });
+
+        await drawn();
+        expect(reads).toBe(1);
     });
 
     it('reads nothing again for a signal about something the tree does not draw', async () => {

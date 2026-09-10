@@ -110,6 +110,65 @@ public sealed class ClientSignalTests
         Assert.Null(signal.SecondLine);
     }
 
+    /// <summary>A flag change states where each named email's two flags stand, which is what a row is redrawn from.</summary>
+    [Fact]
+    public void MailFlagsChanged_ForOneEmail_StatesWhereBothFlagsStand()
+    {
+        // Arrange
+        var email = StoredEmailId.Create(Guid.CreateVersion7());
+
+        // Act
+        var signal = ClientSignal.MailFlagsChanged(
+            Account,
+            Inbox,
+            [new SignalledEmailFlags(email, IsSeen: true, IsFlagged: false)]);
+
+        // Assert
+        Assert.Equal(ClientSignalKind.MailFlagsChanged, signal.Kind);
+        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(Inbox, signal.Folder);
+        Assert.Equal([new SignalledEmailFlags(email, IsSeen: true, IsFlagged: false)], signal.Flags);
+        Assert.Empty(signal.Emails);
+    }
+
+    /// <summary>A statement about neither flag says nothing a client could apply, so composing one is refused.</summary>
+    [Fact]
+    public void MailFlagsChanged_StatingNeitherFlag_IsRefused()
+    {
+        // Arrange
+        var email = StoredEmailId.Create(Guid.CreateVersion7());
+
+        // Act and assert
+        Assert.Throws<ArgumentException>(() => ClientSignal.MailFlagsChanged(
+            Account,
+            Inbox,
+            [new SignalledEmailFlags(email, IsSeen: null, IsFlagged: null)]));
+    }
+
+    /// <summary>A change of nothing is no change, so an empty statement is refused rather than delivered.</summary>
+    [Fact]
+    public void MailFlagsChanged_WithoutAnyEmail_IsRefused() =>
+        Assert.Throws<ArgumentException>(() => ClientSignal.MailFlagsChanged(Account, Inbox, []));
+
+    /// <summary>A window stating more emails than a signal names keeps the bound, exactly as a change naming rows does.</summary>
+    [Fact]
+    public void MailFlagsChanged_WithMoreEmailsThanItNames_KeepsTheBound()
+    {
+        // Arrange
+        var flags = Enumerable
+            .Range(0, ClientSignal.MostNamedEmails + 25)
+            .Select(_ => new SignalledEmailFlags(
+                StoredEmailId.Create(Guid.CreateVersion7()),
+                IsSeen: true,
+                IsFlagged: null));
+
+        // Act
+        var signal = ClientSignal.MailFlagsChanged(Account, Inbox, flags);
+
+        // Assert
+        Assert.Equal(ClientSignal.MostNamedEmails, signal.Flags.Count);
+    }
+
     /// <summary>Every kind publishes a name of its own, which is what a client keys its handler by.</summary>
     [Fact]
     public void All_HoldsEveryKindUnderADistinctPublishedName()
@@ -119,11 +178,18 @@ public sealed class ClientSignalTests
 
         // Assert
         Assert.Equal(
-            ["account.state", "folders.changed", "mail.arrived", "mail.changed", "notification.raised"],
+            [
+                "account.state",
+                "folders.changed",
+                "mail.arrived",
+                "mail.changed",
+                "mail.flags.changed",
+                "notification.raised",
+            ],
             [.. names.Order(StringComparer.Ordinal)]);
     }
 
-    /// <summary>A kind nobody named is not one of the five, so a value that reached a channel by accident says so.</summary>
+    /// <summary>A kind nobody named is not one of the six, so a value that reached a channel by accident says so.</summary>
     [Fact]
     public void IsSpecified_ForTheStructDefault_ReportsThatNoKindWasNamed() =>
         Assert.False(default(ClientSignalKind).IsSpecified);

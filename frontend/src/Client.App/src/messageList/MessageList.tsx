@@ -43,6 +43,7 @@ import {
     arrivalNoticed,
     changeNoticed,
     cursorAfter,
+    flagsNoticed,
     heldRows,
     nothingHeld,
     positionOfRow,
@@ -341,6 +342,13 @@ export function MessageList({
                 if (signal.kind === 'mail.changed' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld((current) => changeNoticed(current, signal.emails));
                     setChangedRows((rows) => rowsAlsoMoved(rows, new Set(signal.emails)));
+                }
+
+                // A flag is applied to the rows in place rather than dropping the page they are on, which is the one
+                // change cheap enough to state: nothing about it can move a row out of this window or into it.
+                if (signal.kind === 'mail.flags.changed' && scopeReaches(scope, signal.account, signal.folder)) {
+                    setHeld((current) => flagsNoticed(current, signal.flags));
+                    setChangedRows((rows) => rowsAlsoMoved(rows, new Set(signal.flags.map((stated) => stated.email))));
                 }
             }),
         [signalledChanges, scope],

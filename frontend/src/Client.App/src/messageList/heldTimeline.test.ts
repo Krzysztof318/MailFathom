@@ -10,6 +10,7 @@ import {
     changeNoticed,
     cursorAfter,
     cursorBefore,
+    flagsNoticed,
     heldRows,
     nothingHeld,
     pagesKeptEitherSide,
@@ -300,5 +301,43 @@ describe('changeNoticed', () => {
 
     it('keeps the list the length it was', () => {
         expect(rowCountOf(changeNoticed(readForward(3), ['message-5']))).toBe(rowCountOf(readForward(3)));
+    });
+});
+
+describe('flagsNoticed', () => {
+    it('redraws the named rows where they are held, dropping no page', () => {
+        const held = flagsNoticed(readForward(3), [{ email: 'message-5', isSeen: false, isFlagged: true }]);
+
+        expect(held.slots.every((slot) => slot.emails !== null)).toBe(true);
+        expect(rowAt(held, 5)).toMatchObject({ id: 'message-5', unread: true, flagged: true });
+    });
+
+    it('leaves a flag the statement is silent about where it was', () => {
+        const starred = flagsNoticed(readForward(1), [{ email: 'message-1', isSeen: null, isFlagged: true }]);
+        const read = flagsNoticed(starred, [{ email: 'message-1', isSeen: true, isFlagged: null }]);
+
+        expect(rowAt(read, 1)).toMatchObject({ unread: false, flagged: true });
+    });
+
+    it('leaves the same rows behind when the same statement arrives twice', () => {
+        const flags = [{ email: 'message-2', isSeen: false, isFlagged: true }];
+        const once = flagsNoticed(readForward(2), flags);
+
+        expect(heldRows(flagsNoticed(once, flags))).toStrictEqual(heldRows(once));
+    });
+
+    it('leaves the list the object it was where it holds none of the rows named', () => {
+        const held = readForward(3);
+
+        expect(flagsNoticed(held, [{ email: 'message-999', isSeen: true, isFlagged: null }])).toBe(held);
+        expect(flagsNoticed(held, [])).toBe(held);
+    });
+
+    it('leaves every other row alone, and every page holding none of them the object it was', () => {
+        const before = readForward(2);
+        const held = flagsNoticed(before, [{ email: 'message-3', isSeen: false, isFlagged: null }]);
+
+        expect(rowAt(held, 4)).toStrictEqual(rowAt(before, 4));
+        expect(held.slots[1]).toBe(before.slots[1]);
     });
 });
