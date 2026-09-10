@@ -321,6 +321,19 @@ export const pl: Catalogue = {
     'act.deleteQuestion.other': 'Usunąć {count} wiadomości?',
     'act.deleteConsequence': 'Każdą z nich przenosimy do kosza konta, na którym się znajduje.',
     'act.deleteConfirm': 'Przenieś do kosza',
+    'act.purgeQuestion.one': 'Usunąć {count} wiadomość na zawsze?',
+    'act.purgeQuestion.few': 'Usunąć {count} wiadomości na zawsze?',
+    'act.purgeQuestion.many': 'Usunąć {count} wiadomości na zawsze?',
+    'act.purgeQuestion.other': 'Usunąć {count} wiadomości na zawsze?',
+    'act.purgeConsequence.one': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomość razem z załącznikami.',
+    'act.purgeConsequence.few': 'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+    'act.purgeConsequence.many':
+        'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+    'act.purgeConsequence.other':
+        'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
+    'act.purgeReversal': 'Tego nie da się cofnąć.',
+    'act.purgeConfirm': 'Usuń na zawsze',
+    'act.deletedPermanently': 'Usunięto na zawsze',
     'act.moveTitle': 'Przenieś do innego katalogu',
     'act.moveClose': 'Zamknij',
 
@@ -634,6 +647,8 @@ export const pl: Catalogue = {
         'To poświadczenie nie może zmieniać flag na Twoim serwerze poczty, więc otwarcie wiadomości pozostawia ją tam nieprzeczytaną, nie oferujemy flagowania ani oznaczania jako nieprzeczytanej, a klient pokazuje to, co serwer zgłosił ostatnio. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.fileMail':
         'To poświadczenie nie może przenosić poczty do innego katalogu w tym wdrożeniu, więc nie oferujemy archiwizowania, usuwania ani przenoszenia. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.deleteMail':
+        'To poświadczenie nie może usuwać poczty z Twojego serwera pocztowego, więc wiadomość, która jest już w koszu, można tam tylko zostawić. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
 
     'grant.composeMail':
         'To poświadczenie nie może zapisywać szkiców w tym wdrożeniu, więc nie oferujemy pisania wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',

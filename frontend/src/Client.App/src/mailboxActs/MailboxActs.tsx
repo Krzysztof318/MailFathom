@@ -5,6 +5,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
     changeMailFlags,
+    deleteMail,
     mostMessagesPerMutation,
     moveMail,
     readMailFolders,
@@ -18,7 +19,13 @@ import {
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useToasts } from '../toasts/useToasts';
-import { destinationsFor, filingFor, refusalFor, type MoveDestination } from './mailboxDestinations';
+import {
+    deletesPermanently,
+    destinationsFor,
+    filingFor,
+    refusalFor,
+    type MoveDestination,
+} from './mailboxDestinations';
 import {
     changesAFlag,
     MailboxActsContext,
@@ -36,7 +43,9 @@ import {
 // **Every act reports what it came to**, in the toast surface rather than on the control that was pressed, and the
 // three that file a message elsewhere offer the way back as that toast's single action. Taking one back is the reverse
 // move rather than a withdrawal of the first: a change already on its way to a mail server cannot be unsaid, and
-// pretending otherwise would leave the mailbox and the screen disagreeing.
+// pretending otherwise would leave the mailbox and the screen disagreeing. The one act that offers no way back is the
+// delete that destroys the mail, which is what *delete* means for a message already in the trash — there is no message
+// left to move back, which is why the question in front of it says so before it is performed.
 //
 // **What each act may do at all is answered before it is offered**, which is `mailboxDestinations.ts`. An account with
 // no archive folder is a control that says so rather than one that fails once it has been pressed.
@@ -130,6 +139,7 @@ export function MailboxActsProvider({
     online,
     flags,
     moves,
+    deletes,
     children,
 }: {
     /** Who is asking and where, or `null` where there is nobody to act for. */
@@ -142,6 +152,9 @@ export function MailboxActsProvider({
 
     /** Whether this credential may file mail in another folder, which is a grant of its own. */
     readonly moves: boolean;
+
+    /** Whether this credential may delete mail from the mail server, which is the grant with no way back. */
+    readonly deletes: boolean;
 
     readonly children: ReactNode;
 }) {
@@ -159,8 +172,10 @@ export function MailboxActsProvider({
     const held = kept.session === session ? kept : heldForNobody;
 
     // The folders, because three of the acts are folder moves and none of them can name a destination without
-    // them. Read only where the credential may file mail at all: without that grant those three acts are refused before
-    // a destination is looked for, so asking would be a request every session pays for and no screen reads.
+    // them. Read where the credential may file mail or delete it: without either grant those three acts are refused
+    // before a destination is looked for, so asking would be a request every session pays for and no screen reads.
+    // Deleting needs them for a second reason — which folder an account calls its trash is what says whether *delete*
+    // files a message or destroys it.
     //
     // It is a read of its own rather than the tree's, which the mailbox column performs for what it draws: the two
     // answer the same route and neither is derived from the other, so a shared read would be one more thing to own than
@@ -173,7 +188,7 @@ export function MailboxActsProvider({
     // folders the three acts that file a message are refused as `foldersUnknown`, which is a sentence nobody can act on
     // unless the client offers them the second attempt.
     useEffect(() => {
-        if (session === null || !online || !moves) {
+        if (session === null || !online || !(moves || deletes)) {
             return;
         }
 
@@ -211,10 +226,15 @@ export function MailboxActsProvider({
         return () => {
             listening = false;
         };
-    }, [session, transport, online, moves, attempts, toasts, translate]);
+    }, [session, transport, online, moves, deletes, attempts, toasts, translate]);
 
     function refusalOf(act: MailboxAct, messages: readonly ActedMessage[]) {
-        return refusalFor(act, messages, held.directory, { flags, moves });
+        return refusalFor(act, messages, held.directory, { flags, moves, deletes });
+    }
+
+    /** Whether asking to delete these messages destroys them, which is true where every one is already in the trash. */
+    function destroys(messages: readonly ActedMessage[]): boolean {
+        return deletesPermanently(held.directory, messages);
     }
 
     /** Writes down what was asked for, so the rows say so from the press rather than from the next read of the folder. */
@@ -255,7 +275,28 @@ export function MailboxActsProvider({
         act: MailboxAct,
         messages: readonly ActedMessage[],
         destination: MoveDestination | undefined,
+        destroying: boolean,
     ): Promise<readonly Submitted[]> {
+        // A delete in the trash files nothing, so it names no destination and takes the route of its own rather than
+        // the move route with the folder the message is already in.
+        if (destroying) {
+            const batches: Promise<Submitted>[] = [];
+
+            for (let from = 0; from < messages.length; from += mostMessagesPerMutation) {
+                const batch = messages.slice(from, from + mostMessagesPerMutation);
+
+                batches.push(
+                    deleteMail(
+                        asking,
+                        transport,
+                        batch.map((message) => message.storedEmailId),
+                    ).then((answer) => ({ messages: batch, answer })),
+                );
+            }
+
+            return Promise.all(batches);
+        }
+
         const changesFlags = changesAFlag(act);
         const filing = changesFlags ? [] : filingFor(act, messages, held.directory, destination?.alias ?? null);
         const filed = new Set(filing.map((one) => one.storedEmailId));
@@ -302,24 +343,30 @@ export function MailboxActsProvider({
         refused: readonly string[],
         destination: MoveDestination | undefined,
         failure: ClientFailureReason | null,
+        destroyed: boolean,
     ): void {
         if (recorded.length > 0) {
             // The way back is the toast's single action, which is the design project's own: the three acts that change
-            // a flag offer none, because a flag is what the control that set it takes off again.
-            const wayBack = changesAFlag(act)
-                ? {}
-                : {
-                      action: {
-                          label: translate('act.undo'),
-                          take: () => {
-                              takeBack(recorded);
+            // a flag offer none, because a flag is what the control that set it takes off again — and neither does a
+            // delete that destroyed the mail, because there is no message left to move back and offering the control
+            // would be a promise this client could not keep. The question in front of that act said so already.
+            const wayBack =
+                changesAFlag(act) || destroyed
+                    ? {}
+                    : {
+                          action: {
+                              label: translate('act.undo'),
+                              take: () => {
+                                  takeBack(recorded);
+                              },
                           },
-                      },
-                  };
+                      };
 
             toasts.raise({
                 kind: 'neutral',
-                title: translate(actReported[act], { folder: destination?.name ?? '' }),
+                title: destroyed
+                    ? translate('act.deletedPermanently')
+                    : translate(actReported[act], { folder: destination?.name ?? '' }),
                 body: counted(recorded.length),
                 ...wayBack,
             });
@@ -400,9 +447,14 @@ export function MailboxActsProvider({
             return;
         }
 
+        // Read before anything is submitted, so the act reported afterwards is the act that went out: the folders could
+        // be re-read while the batch is in flight, and a message that left the trash in between must not turn a delete
+        // somebody was told was permanent into one reported as a move.
+        const destroying = act === 'delete' && destroys(messages);
+
         remember(act, messages);
 
-        void submitted(session, act, messages, destination).then((answered) => {
+        void submitted(session, act, messages, destination, destroying).then((answered) => {
             // A batch that was written down stands whatever the batch beside it came to: two hundred messages the
             // deployment holds are two hundred messages it holds, and forgetting them because the next batch never
             // reached it would leave every one of those rows saying nothing while the mailbox says otherwise.
@@ -410,17 +462,18 @@ export function MailboxActsProvider({
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
 
             forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
-            report(act, recorded, refusedBy(answered, written), destination, failureAmong(answered));
+            report(act, recorded, refusedBy(answered, written), destination, failureAmong(answered), destroying);
         });
     }
 
     const acts: MailboxActs =
-        session === null || !(flags || moves)
+        session === null || !(flags || moves || deletes)
             ? nothingActed
             : {
                   asked: held.asked,
                   refusalOf,
                   destinationsOf: (messages) => destinationsFor(held.directory, messages),
+                  deletesPermanently: destroys,
                   perform,
               };
 

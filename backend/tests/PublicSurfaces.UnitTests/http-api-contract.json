@@ -1244,6 +1244,80 @@
         ],
         "type": "object"
       },
+      "ClientMailDeleteRequest": {
+        "properties": {
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId"
+        ],
+        "type": "object"
+      },
+      "ClientMailDeleteResultResponse": {
+        "properties": {
+          "change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailRecordedChangeResponse"
+              }
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "outcome",
+          "change"
+        ],
+        "type": "object"
+      },
+      "ClientMailDeletesRequest": {
+        "properties": {
+          "deletes": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailDeleteRequest"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "deletes"
+        ],
+        "type": "object"
+      },
+      "ClientMailDeletesResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailDeleteResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
       "ClientMailEnrichmentResponse": {
         "properties": {
           "derivedAt": {
@@ -11957,6 +12031,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/deletes": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailDeletesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailDeletesResponse"
                 }
               }
             },

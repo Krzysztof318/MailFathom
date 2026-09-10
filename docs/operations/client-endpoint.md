@@ -79,6 +79,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/mutations/flags/withdrawals` | `mailfathom.mail.flags.write` |
 | `POST /api/client/mutations/moves` | `mailfathom.mail.move` |
 | `POST /api/client/mutations/moves/withdrawals` | `mailfathom.mail.move` |
+| `POST /api/client/mutations/deletes` | `mailfathom.mail.delete` |
 | `GET /api/client/record` | `mailfathom.mail.read` |
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
@@ -1399,13 +1400,15 @@ flag.
 
 ### The mutation routes
 
-These five are how a person changes the mailbox itself: marking mail read or unread, starring it, relabelling it, and
-filing it into another folder — and asking where each of those changes has got to, or taking one back.
+These six are how a person changes the mailbox itself: marking mail read or unread, starring it, relabelling it,
+filing it into another folder, and deleting it off the server — and asking where each of those changes has got to, or
+taking one back.
 
 | Route | What it does |
 | --- | --- |
 | `POST /api/client/mutations/flags` | Writes down one batch of flag and tag changes, one result per message |
 | `POST /api/client/mutations/moves` | Writes down one batch of folder moves, one result per message |
+| `POST /api/client/mutations/deletes` | Writes down one batch of deletes, one result per message |
 | `GET /api/client/mutations?record=…&record=…` | Reports where each of the caller's own changes stands |
 | `POST /api/client/mutations/flags/withdrawals` | Takes back flag and tag changes nothing has been asked of a server for |
 | `POST /api/client/mutations/moves/withdrawals` | Takes back moves nothing has been asked of a server for |
@@ -1495,6 +1498,30 @@ read would move it out of sight rather than be a capability of its own.
 **Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
 flag misdescribes mail the user can still find; a move puts the mail somewhere else, and on a server without `MOVE` it
 is a copy followed by a delete — which is why the two are granted separately and why the record exists at all.
+
+**A delete names a message and nothing else**, because there is no destination to name: it asks the account's pass to
+expunge that occurrence from the server, and what becomes of the local copy is the account's configured disposition
+rather than anything a caller writes.
+
+```http
+POST /api/client/mutations/deletes
+Content-Type: application/json
+
+{ "deletes": [{ "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90" }] }
+```
+
+Each result carries `recorded`, `message-not-found`, or `account-no-longer-configured`. There is no
+`destination-not-found` here for the same reason there is no destination, and a message already gone is reported as one
+that is not there rather than as a delete that succeeded twice.
+
+**Deleting mail is its own grant again, and it has no withdrawal route.** `mailfathom.mail.move` does not reach it and
+`mailfathom.mail.delete` does: a move the user did not want is undone by moving the mail back, while this is the act
+that means the mail stops existing on the server, so a deployment that lets a client file mail has not thereby let it
+destroy any. Nothing takes one back either — a withdrawal exists so a change nothing has been asked of a server for can
+be stopped, and this is the one change a client is expected to confirm before it is written down rather than to undo
+after. Which folder the message is in decides nothing on this surface: the rule that MailFathom's own client offers
+this only for mail already in the trash is that client's sentence to its reader, and the grant is the whole of what
+this route enforces.
 
 **A move either completes or leaves the message where it was, and a half-finished one is reported rather than
 guessed at.** The read route's `outcomeUnknown` is that report: a placement command went out and its answer never came

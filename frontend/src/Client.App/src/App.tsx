@@ -253,6 +253,10 @@ export function App({
     const writesFlags = deploymentSession !== null && offers(deploymentSession, 'writeMailFlags');
     const filesMail = deploymentSession !== null && offers(deploymentSession, 'fileMail');
 
+    // The third of them, and the one with no way back: filing a message in the trash is reversible and deleting it from
+    // the mail server is not, so a deployment decides the two separately and a credential may hold either alone.
+    const deletesMail = deploymentSession !== null && offers(deploymentSession, 'deleteMail');
+
     // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
     // several components below this, and what it replaces is a region this frame composes. It is the opening alone —
     // the message itself is the composer's, so nothing here can read half a message off the frame.
@@ -663,6 +667,7 @@ export function App({
                                         online={connection.online}
                                         flags={writesFlags}
                                         moves={filesMail}
+                                        deletes={deletesMail}
                                     >
                                         {/* Above the frame rather than inside the mail space, because what is being written outlives moving
             between the spaces, and because the three controls that ask for it are each several components below here.

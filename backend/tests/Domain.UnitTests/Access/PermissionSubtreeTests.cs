@@ -131,7 +131,7 @@ public sealed class PermissionSubtreeTests
     [InlineData("mailfathom.post.*")]
     [InlineData("mailfathom.mail.read.*")]
     [InlineData("nothing.*")]
-    [InlineData("mailfathom.*.delete")]
+    [InlineData("mailfathom.*.expunge")]
     public void CoveredPermissions_APrefixNothingIsPublishedBeneath_ReachesNothing(string written)
     {
         // Arrange

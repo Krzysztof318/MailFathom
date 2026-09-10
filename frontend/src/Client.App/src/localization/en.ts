@@ -319,6 +319,21 @@ export const en = {
     'act.deleteQuestion.other': 'Delete {count} messages?',
     'act.deleteConsequence': 'Each one is filed in the trash folder of the account it is in.',
     'act.deleteConfirm': 'Move to the trash',
+    'act.purgeQuestion.one': 'Delete {count} message permanently?',
+    'act.purgeQuestion.few': 'Delete {count} messages permanently?',
+    'act.purgeQuestion.many': 'Delete {count} messages permanently?',
+    'act.purgeQuestion.other': 'Delete {count} messages permanently?',
+    'act.purgeConsequence.one':
+        'Already in the trash — deleting now removes {count} message together with attachments.',
+    'act.purgeConsequence.few':
+        'Already in the trash — deleting now removes {count} messages together with attachments.',
+    'act.purgeConsequence.many':
+        'Already in the trash — deleting now removes {count} messages together with attachments.',
+    'act.purgeConsequence.other':
+        'Already in the trash — deleting now removes {count} messages together with attachments.',
+    'act.purgeReversal': 'This cannot be undone.',
+    'act.purgeConfirm': 'Delete permanently',
+    'act.deletedPermanently': 'Permanently deleted',
     'act.moveTitle': 'File in another folder',
     'act.moveClose': 'Close',
 
@@ -630,6 +645,8 @@ export const en = {
         'This credential may not change a flag on your mail server, so opening a message leaves it unread there, flagging and marking unread are not offered, and this client shows what the server last reported. Whoever runs the deployment can grant that.',
     'grant.fileMail':
         'This credential may not file mail in another folder on this deployment, so archiving, deleting and moving are not offered. Whoever runs the deployment can grant that.',
+    'grant.deleteMail':
+        'This credential may not delete mail from your mail server, so a message already in the trash can only be left there. Whoever runs the deployment can grant that.',
 
     'grant.composeMail':
         'This credential may not write a draft on this deployment, so writing a message is not offered. Whoever runs the deployment can grant that.',

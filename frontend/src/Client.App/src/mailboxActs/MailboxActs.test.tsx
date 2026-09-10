@@ -25,6 +25,7 @@ const session: ClientSession = { baseAddress: 'https://mail.example.invalid', au
 
 const invoice: ActedMessage = { storedEmailId: 'message-1', account: 'work', folder: 'work-inbox' };
 const receipt: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-inbox' };
+const discarded: ActedMessage = { storedEmailId: 'message-3', account: 'work', folder: 'work-trash' };
 
 const folders = JSON.stringify({
     synchronizationEnabled: true,
@@ -58,6 +59,16 @@ const folders = JSON.stringify({
                     lastSynchronizedAt: null,
                     behind: false,
                 },
+                {
+                    alias: 'work-trash',
+                    role: 'Trash',
+                    path: ['Trash'],
+                    storedEmailCount: 0,
+                    unreadEmailCount: 0,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: null,
+                    behind: false,
+                },
             ],
         },
     ],
@@ -84,15 +95,18 @@ function deploymentAnswering(outcomes: Readonly<Record<string, MailMutationOutco
             const asked = JSON.parse(request.body ?? '{}') as {
                 changes?: { storedEmailId: string }[];
                 moves?: { storedEmailId: string }[];
+                deletes?: { storedEmailId: string }[];
             };
 
             return Promise.resolve({
                 status,
                 body: JSON.stringify({
-                    results: [...(asked.changes ?? []), ...(asked.moves ?? [])].map(({ storedEmailId }) => ({
-                        storedEmailId,
-                        outcome: outcomes[storedEmailId] ?? 'recorded',
-                    })),
+                    results: [...(asked.changes ?? []), ...(asked.moves ?? []), ...(asked.deletes ?? [])].map(
+                        ({ storedEmailId }) => ({
+                            storedEmailId,
+                            outcome: outcomes[storedEmailId] ?? 'recorded',
+                        }),
+                    ),
                 }),
                 headers: {},
             });
@@ -102,7 +116,7 @@ function deploymentAnswering(outcomes: Readonly<Record<string, MailMutationOutco
 
 function acting(
     deployment: Deployment,
-    { flags = true, moves = true }: { flags?: boolean; moves?: boolean } = {},
+    { flags = true, moves = true, deletes = true }: { flags?: boolean; moves?: boolean; deletes?: boolean } = {},
 ): { readonly held: () => MailboxActs } {
     function Surrounded({ children }: { readonly children: ReactNode }) {
         return (
@@ -114,6 +128,7 @@ function acting(
                         online
                         flags={flags}
                         moves={moves}
+                        deletes={deletes}
                     >
                         {children}
                     </MailboxActsProvider>
@@ -210,6 +225,59 @@ describe('MailboxActsProvider', () => {
             },
         });
         expect(screen.getByText('2 messages')).toBeDefined();
+    });
+
+    it('files a delete in the trash folder while the message is somewhere else, and offers the way back', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().refusalOf('delete', [invoice])).toBeNull();
+        });
+
+        perform(held, 'delete', [invoice]);
+
+        await screen.findByText('Moved to the trash');
+
+        expect(submitted(deployment)[0]).toStrictEqual({
+            path: 'https://mail.example.invalid/api/client/mutations/moves',
+            body: { moves: [{ storedEmailId: 'message-1', destinationFolder: 'work-trash' }] },
+        });
+        expect(screen.getByRole('button', { name: 'Undo' })).toBeDefined();
+    });
+
+    it('deletes a message already in the trash from the mail server, naming no folder and offering no way back', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().deletesPermanently([discarded])).toBe(true);
+        });
+
+        perform(held, 'delete', [discarded]);
+
+        await screen.findByText('Permanently deleted');
+
+        expect(submitted(deployment)[0]).toStrictEqual({
+            path: 'https://mail.example.invalid/api/client/mutations/deletes',
+            body: { deletes: [{ storedEmailId: 'message-3' }] },
+        });
+        expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    });
+
+    it('files a selection reaching outside the trash rather than destroying the part of it already there', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().refusalOf('delete', [invoice])).toBeNull();
+        });
+
+        perform(held, 'delete', [discarded, invoice]);
+
+        await screen.findByText('Moved to the trash');
+
+        expect(submitted(deployment)[0]?.path).toBe('https://mail.example.invalid/api/client/mutations/moves');
     });
 
     it('takes an archive back by filing each message where it was, rather than by unsaying the first record', async () => {
@@ -411,11 +479,22 @@ describe('MailboxActsProvider', () => {
         });
     });
 
-    it('reads no folders for a credential that may not file mail, an act it refuses needing no destination', () => {
+    it('reads no folders for a credential that may neither file mail nor delete it, both acts being refused', () => {
         const deployment = deploymentAnswering();
 
-        acting(deployment, { moves: false });
+        acting(deployment, { moves: false, deletes: false });
 
         expect(deployment.requests).toStrictEqual([]);
+    });
+
+    it('reads the folders for a credential that may only delete, which is what says where the trash is', async () => {
+        const deployment = deploymentAnswering();
+        const { held } = acting(deployment, { moves: false });
+
+        await waitFor(() => {
+            expect(held().refusalOf('delete', [discarded])).toBeNull();
+        });
+
+        expect(held().refusalOf('delete', [invoice])).toBe('notOffered');
     });
 });

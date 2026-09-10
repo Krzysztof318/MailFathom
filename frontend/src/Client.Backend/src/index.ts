@@ -130,6 +130,8 @@ export {
 } from './mailMessage';
 export {
     changeMailFlags,
+    deleteMail,
+    mailDeleteMutationsRoute,
     mailFlagMutationsRoute,
     mailMoveMutationsRoute,
     mailMutationRecordsRoute,

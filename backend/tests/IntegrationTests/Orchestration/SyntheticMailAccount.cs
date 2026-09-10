@@ -95,6 +95,7 @@ internal sealed class SyntheticMailAccount(
         "ask-mail-elsewhere",
         "audit-trail-inbox",
         "authored-delete",
+        "authored-delete-reads",
         "concurrent-idempotency",
         "content-inventory",
         "content-inventory-uid-space",
