@@ -611,11 +611,19 @@ offer to go deeper on any one of them instead of expanding all six.
    formatting pass. **Both halves rewrite working-tree files by design.** Never run `dotnet format` or `pnpm format`
    by hand; both of their modes already run where they belong.
 
-   Before a commit, stage the task files and run the full gate — it rejects remaining untracked files, so a new file
-   cannot slip past diff validation:
+   That loop is also the gate before a commit, so stage the task files and run it again. It refuses a branch that no
+   longer contains the base it will merge into, which is the one question the pull request's own checks never ask:
 
    ```bash
    git add <task-files>
+   bash scripts/verify-fast.sh
+   ```
+
+   The full gate is the pipeline's — every verdict it produces arrives again on the pull request — so run it locally
+   only where its answer is the one being waited on. It rejects remaining untracked files, so a newly added file
+   cannot slip past its diff validation:
+
+   ```bash
    bash scripts/verify-full.sh
    ```
 

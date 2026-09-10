@@ -61,24 +61,10 @@ if ((${#untracked_files[@]} > 0)); then
   exit 1
 fi
 
-if ! base_remote="$(resolve_base_remote)"; then
-  base_remote_resolution_hint >&2
-  exit 1
-fi
-
-# The explicit destination refspec is what makes the next check meaningful. A bare
-# `git fetch <remote> main` only writes FETCH_HEAD, so a repository whose
-# remote.<remote>.fetch is missing or remapped would keep a stale
-# refs/remotes/<remote>/main and pass the base check against it.
-if ! git fetch --quiet "$base_remote" "+refs/heads/main:refs/remotes/$base_remote/main"; then
-  printf 'verify-full.sh cannot fetch %s main. Restore access to the remote instead of verifying against a stale base.\n' \
-    "$base_remote" >&2
-  exit 1
-fi
-
-if ! git merge-base --is-ancestor "$base_remote/main" HEAD; then
-  printf 'HEAD does not contain the current %s/main. Rebase the branch onto the fetched base before verifying.\n' \
-    "$base_remote" >&2
+# The fetch and the ancestor test behind this are `scripts/resolve-base-remote.sh`'s, because the
+# fast loop asks the same question and a base check that existed twice would be a base check that
+# could disagree with itself.
+if ! base_remote="$(require_base_is_contained 'verify-full.sh')"; then
   exit 1
 fi
 
