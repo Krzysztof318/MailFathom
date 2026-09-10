@@ -1669,14 +1669,14 @@ nothing resolves anybody by. A client reading the record alone would still have 
 why this is a route of its own rather than a key in that document.
 
 **The read says whether the write would be accepted, so the client never has to find out by trying.** `changeable` is
-false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and false for somebody whose mail
-accounts a configuration source still declares. It does not say which of the two: a client draws the same read-only
+false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and false for the sole user whose
+mail accounts this deployment's own `MailSynchronization:Accounts` supplies. It does not say which of the two: a client draws the same read-only
 field either way, and naming the grant a credential lacks would report a deployment's own entries back to a page
 holding a token.
 
-**A person a configuration source declares is refused, and told what to correct.** A start writes every declared
-user's name back from the declaration, so a change made here would stand until the next restart and then revert. What
-comes back names the entry to change instead.
+**The person that section supplies is refused, and told who to ask.** Their record is the operator's rather than
+theirs — the deployment states their mailboxes and MailFathom keeps the row — so the name on it is the operator's to
+set. What comes back names whoever administers the deployment.
 
 **The name is bound exactly as the envelope binds it.** Blank is refused, so is anything past 128 characters, and so is
 a name somebody else on this deployment already carries — each naming what to correct. Surrounding white space is

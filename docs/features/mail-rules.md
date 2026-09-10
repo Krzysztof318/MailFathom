@@ -66,11 +66,11 @@ matches it.
   that declined to match. It follows that a scoped rule cannot end another account's pass whatever `StopWhenMatched`
   says.
 
-An account is named exactly as `MailSynchronization:Accounts:<n>:AccountId` declares it, and the comparison is
-case-sensitive, because two identifiers differing only in case are two accounts there. A deployment that declares its
-users has no entries in that section at all — declaring any user refuses a non-empty one — and its mailboxes are
-named by the same key of the user's own entry, `Accounts:<n>:MailAccounts:<m>:AccountId`; everything below holds of
-either declaration. **An account nobody declared is
+An account is named exactly as `MailSynchronization:Accounts:<n>:AccountId` states it, and the comparison is
+case-sensitive, because two identifiers differing only in case are two accounts there. A deployment whose users all read
+their own records has no entries in that section at all — a start refuses a non-empty one nobody reads — and its
+mailboxes are named by the same key within each user's record, `MailAccounts:<m>:AccountId`; everything below holds of
+either. **An account nobody states is
 refused when the configuration is read**, naming the rule and the identifier: a rule scoped to a mistyped account would
 otherwise reach no mail and say nothing about why.
 
@@ -242,8 +242,8 @@ element whose value it cannot read — which would leave a rule quietly doing le
 **A rule that declares no action is not a defect.** It selects mail and changes nothing, which is what a rule ending the
 pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
 
-A destination is a **folder alias** — one an account declares under `MailSynchronization:Accounts:<n>:Folders`, or
-under `Accounts:<n>:MailAccounts:<m>:Folders` where a user declares the mailbox — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
+A destination is a **folder alias** — one an account states under `MailSynchronization:Accounts:<n>:Folders`, or
+under `MailAccounts:<m>:Folders` within the record whose mailbox it is — and never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
 working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
 including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
 [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
@@ -380,7 +380,7 @@ states the three answers.
 ### What an account permits a rule to do
 
 Each account states, under `MailSynchronization:Accounts:<n>:RuleActions` — or under
-`Accounts:<n>:MailAccounts:<m>:RuleActions` where a user declares the mailbox — which changes a rule may make to its
+`MailAccounts:<m>:RuleActions` within the record whose mailbox it is — which changes a rule may make to its
 mailbox:
 
 | Key | Default | What it permits |

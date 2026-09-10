@@ -167,15 +167,15 @@ internal static class UserRecordEndpoints
     /// <param name="roster">The roster administration.</param>
     /// <param name="sessions">Holds the client sessions this process minted, or nothing where this deployment serves no client endpoint.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody or a configuration source declares the user.</returns>
+    /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody or the deployment's own mail section supplies the user.</returns>
     /// <remarks>
     /// A user this deployment does not hold is reported as nothing erased rather than as a refusal, because the
     /// caller asked for a state and the deployment is in it. That is a claim about the status code and not about the
     /// body: the answer carries whether a row was there, so a caller granted the erasure learns which identifiers this
     /// deployment holds. Nothing here withholds that — the sibling relabel reports the same fact through its own status
-    /// code — and nothing needs to, the erasure being the one permission that could act on the answer anyway. A user
-    /// a file declares is the one erasure that is refused instead, because a start writes them back and the refusal
-    /// names the declaration to remove first.
+    /// code — and nothing needs to, the erasure being the one permission that could act on the answer anyway. The user
+    /// the deployment's own mail section supplies is the one erasure that is refused instead, because a start records a
+    /// user for that section again and the refusal names the section to clear first.
     /// </remarks>
     internal static async Task<Results<Ok<UserErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid userId,

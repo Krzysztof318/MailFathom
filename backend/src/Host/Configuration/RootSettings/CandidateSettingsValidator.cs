@@ -64,7 +64,7 @@ internal sealed class CandidateSettingsValidator(
     {
         try
         {
-            return [.. ComposedSettings.FindRefusals(candidate, timeProvider).SelectMany(refusal => refusal.Errors)];
+            return [.. ComposedSettings.FindRefusals(candidate).SelectMany(refusal => refusal.Errors)];
         }
         catch (InvalidOperationException refusal)
         {

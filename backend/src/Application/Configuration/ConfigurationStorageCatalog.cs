@@ -30,9 +30,11 @@ public static class ConfigurationStorageCatalog
 {
     /// <summary>The paths that are persisted somewhere other than the root document, and where each one goes.</summary>
     /// <remarks>
-    /// The user-account collection is the top-level <c>Accounts</c>, which is not <c>MailSynchronization:Accounts</c>:
-    /// one document per user rather than one settings row per mailbox. Everything nested beneath a path listed here
-    /// travels with it, so a route is a section rather than a single key.
+    /// The top-level <c>Accounts</c> is the collection a deployment once declared its users in, which is not
+    /// <c>MailSynchronization:Accounts</c>. Nothing binds it any more, and it is routed here rather than dropped so
+    /// that a write naming one of its paths is refused with the commands that record a user instead of being persisted
+    /// into a document nothing reads. Everything nested beneath a path listed here travels with it, so a route is a
+    /// section rather than a single key.
     /// </remarks>
     private static readonly (string Path, ConfigurationStorageRoute Route)[] SpecialRoutes =
     [

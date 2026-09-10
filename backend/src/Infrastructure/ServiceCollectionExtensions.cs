@@ -535,9 +535,9 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailUserDirectory, PersistedMailUserDirectory>();
-        // The envelope a declared user is given, beside the read that establishes who is already there. Scoped for the
-        // same reason and used from the same startup step: a declaration reaches this exactly once per start, and never
-        // while a request is being served.
+        // The envelope a user is given, beside the read that establishes who is already there. Scoped for the
+        // same reason and used from the same startup step: a start reaches this at most once, and never while a
+        // request is being served.
         services.AddScoped<IMailUserProvisioning, PersistedMailUserProvisioning>();
         // The credentials a user is admitted by, of every method. Scoped because it reads and writes through the
         // request's own context, and separate from the directory above because that answers which users exist and this

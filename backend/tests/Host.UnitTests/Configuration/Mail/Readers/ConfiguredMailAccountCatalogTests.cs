@@ -84,7 +84,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         Assert.Equal(["alpha", "beta", "zeta"], served.Select(account => account.Id.Value));
     }
 
-    /// <summary>The deployment's own section is refused beside declared users, so a user's declaration is the only source here.</summary>
+    /// <summary>The deployment's own section is refused once nobody reads it, so a user's own record is the only source here.</summary>
     [Fact]
     public void ServedAccounts_ADeploymentWhoseOwnSectionIsEmpty_PublishesNothingUnderTheDeploymentUser()
     {
@@ -129,7 +129,7 @@ public sealed class ConfiguredMailAccountCatalogTests
         MailUserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        new(user, displayName, MailUserAccountSource.UserDeclaration, mailAccounts);
+        new(user, displayName, MailUserAccountSource.UserDocument, mailAccounts);
 
     private static MailSynchronizationAccountOptions Mailbox(string accountId, string displayName) => new()
     {

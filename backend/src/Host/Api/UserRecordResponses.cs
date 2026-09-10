@@ -26,13 +26,13 @@ internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse>
 /// <param name="Id">The identifier the user was minted under, which every other act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether this user's mail accounts come from their own record rather than from a configuration source.</param>
-/// <param name="Served">Whether the running process is serving them, which is <see langword="false" /> for one no source declares.</param>
-/// <param name="DeclaredInConfiguration">Whether a configuration source names this user, so a start puts their label back and writes their row again after an erasure.</param>
+/// <param name="Served">Whether the running process is serving them, which every user it holds is.</param>
+/// <param name="DeclaredInConfiguration">Whether the deployment's own mail section supplies this user's mailboxes, so a start writes their row again after an erasure.</param>
 /// <remarks>
 /// The last three are reported apart because they answer different questions and an operator acts on each differently.
-/// A user whose record is not yet their own is one whose mail accounts are changed in a file rather than in their
-/// record; a user the process is not serving is one whose mail is neither read nor refreshed; a user a configuration
-/// source declares is one whose label a start rewrites and whose erasure a start undoes.
+/// A user whose record is not yet their own is one whose mail accounts are changed in the deployment's own section
+/// rather than in their record; a user the process is not serving is one whose mail is neither read nor refreshed;
+/// a user that section supplies is one whose erasure a start undoes.
 /// </remarks>
 internal sealed record UserRosterEntryResponse(
     Guid Id,

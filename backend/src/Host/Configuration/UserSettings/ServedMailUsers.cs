@@ -35,6 +35,14 @@ namespace MailFathom.Host.Configuration.UserSettings;
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "This process-lifetime singleton never requests SemaphoreSlim.AvailableWaitHandle, so the semaphore owns no operating-system handle to release.")]
 internal sealed class ServedMailUsers : IDeploymentMailUserSource
 {
+    /// <summary>The greatest number of users one deployment may serve.</summary>
+    /// <remarks>
+    /// It bounds the roster a deployment records rather than a list anybody writes, so it is generous against any
+    /// deployment serving people and far below the point at which a start would spend meaningful time reading them.
+    /// Meeting it means rows were recorded by something other than an administrator, which is worth stopping for.
+    /// </remarks>
+    public const int MaximumUsers = 256;
+
     private readonly Lock mutex = new();
     private readonly Dictionary<MailUserId, long> publishedDocumentVersions = [];
     private readonly SemaphoreSlim rosterPublication = new(1, 1);

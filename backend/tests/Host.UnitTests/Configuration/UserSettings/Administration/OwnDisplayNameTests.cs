@@ -154,9 +154,9 @@ public sealed class OwnDisplayNameTests
             .RelabelAsync(SyntheticMailUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
     }
 
-    /// <summary>A start writes every declared user's name back from the declaration, so a change accepted here would revert at the next restart.</summary>
+    /// <summary>A person the deployment's own configuration supplies is administered rather than self-served, so their name is not theirs to set.</summary>
     [Fact]
-    public async Task ChangeAsync_APersonAConfigurationSourceDeclares_IsRefusedNamingTheDeclarationToCorrect()
+    public async Task ChangeAsync_APersonAConfigurationSourceDeclares_IsRefusedNamingWhoToAsk()
     {
         // Arrange
         var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
@@ -167,7 +167,7 @@ public sealed class OwnDisplayNameTests
         var change = await harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("Accounts", change.RefusalMessage!, StringComparison.Ordinal);
+        Assert.Contains("the name on it is theirs to set", change.RefusalMessage!, StringComparison.Ordinal);
         await harness.Provisioning.DidNotReceive()
             .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -299,8 +299,8 @@ public sealed class OwnDisplayNameTests
                 .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
                 .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName, DocumentWrittenAtRuntime: true));
 
-        /// <summary>States that a configuration source still declares that person's mail accounts.</summary>
-        internal void Declared() => this.Serving(MailUserAccountSource.UserDeclaration);
+        /// <summary>States that a configuration source still supplies that person's mail accounts.</summary>
+        internal void Declared() => this.Serving(MailUserAccountSource.DeploymentSection);
 
         private void Serving(MailUserAccountSource source) =>
             this.ServedUsers.Resolved([new(SyntheticMailUser.Deployment, "recorded", source, [])]);

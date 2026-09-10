@@ -521,9 +521,9 @@ public sealed class PersistedSettingsAdministrationTests
 
     /// <summary>
     /// The other half of what the writer refuses on: a setting the storage catalog routes somewhere other than the
-    /// root document. The top-level <c>Accounts</c> section is one user document per user rather than a settings
-    /// row, so adopting it could only ever be refused — and the catalog is built to grow, which is why the preview
-    /// asks it rather than restating the rule.
+    /// root document. The top-level <c>Accounts</c> section is the collection a deployment once declared its users in
+    /// and nothing binds it, so adopting it could only ever be refused — and the catalog is built to grow, which is
+    /// why the preview asks it rather than restating the rule.
     /// </summary>
     [Fact]
     public void ReadAdoptable_ASettingTheCatalogPersistsOutsideTheRootDocument_IsNotOffered()

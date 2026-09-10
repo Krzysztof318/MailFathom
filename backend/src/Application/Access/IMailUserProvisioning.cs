@@ -6,13 +6,13 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access;
 
-/// <summary>Gives a user the row the mail graph hangs on, and keeps the label on it the one they are declared under.</summary>
+/// <summary>Gives a user the row the mail graph hangs on, and keeps the label on it the one they were recorded under.</summary>
 /// <remarks>
 /// <para>
-/// The envelope is all this writes. A user a file declares is served from that declaration, so nothing here copies
-/// the declaration into their document: the row exists because <c>mailbox_accounts.UserId</c> is a foreign key and the
-/// integrity of the mail graph is relational, and the document column stays the empty object it was provisioned with
-/// until an administrative write fills it.
+/// The envelope is all this writes. The sole user the deployment's own mail section supplies is served from that
+/// section, so nothing here copies it into their document: the row exists because <c>mailbox_accounts.UserId</c> is a
+/// foreign key and the integrity of the mail graph is relational, and the document column stays the empty object it was
+/// provisioned with until an administrative write fills it.
 /// </para>
 /// <para>
 /// Both operations are idempotent, because a start runs them on every restart against a roster that ordinarily has not

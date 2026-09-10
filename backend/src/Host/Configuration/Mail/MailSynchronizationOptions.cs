@@ -487,13 +487,13 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
-    /// <summary>Gets every mailbox this deployment declares, from both of the two places one may be declared.</summary>
+    /// <summary>Gets every mailbox this deployment holds, from both of the two places one may be declared.</summary>
     /// <remarks>
-    /// A deployment declaring served users is refused a non-empty <see cref="Accounts" />, so exactly one of the two
-    /// halves is ever populated — and a per-account reader walking only the first answers nothing at all on such a
-    /// deployment, which reads as a mailbox configured with no folders, no trusted senders, and no contact collection
-    /// rather than as a reader that never looked. Every reader of the whole set therefore asks here, so *which
-    /// mailboxes exist* is one answer rather than one per reader.
+    /// A deployment serving users from their own records is refused a non-empty <see cref="Accounts" />, so exactly one
+    /// of the two halves is ever populated — and a per-account reader walking only the first answers nothing at all on
+    /// such a deployment, which reads as a mailbox configured with no folders, no trusted senders, and no contact
+    /// collection rather than as a reader that never looked. Every reader of the whole set therefore asks here, so
+    /// *which mailboxes exist* is one answer rather than one per reader.
     /// </remarks>
     internal IEnumerable<MailSynchronizationAccountOptions> DeclaredAccounts =>
         this.DeclaredAccountsByOwner.SelectMany(static owned => owned);
@@ -690,13 +690,13 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         }
 
         // Whether anything is declared at all is deliberately not asked here. This section is one of two places a
-        // mailbox is declared — the other being each user's own section of the top-level Accounts collection — and a
-        // deployment that moved its mailboxes under their users has emptied this one on purpose. The rule is stated
-        // once, over the effective set, in DeclaredUsers.
+        // mailbox is declared — the other being each user's own record — and a deployment that recorded its mailboxes
+        // against their users has emptied this one on purpose. The rule is stated once, over the roster this start
+        // would serve, in ServedMailUsersStartupGate.
         //
         // Every account this section declares belongs to the one user such a deployment serves, which is why the whole
-        // section is one naming space here. A second user declaring an account of the same name is not a collision
-        // and never reaches this, because their accounts are in their own section rather than in this list.
+        // section is one naming space here. A second user's account of the same name is not a collision and never
+        // reaches this, because their accounts are in their own record rather than in this list.
         foreach (var result in MailAccountNamingSpace.FindCollisions(this.Accounts, nameof(this.Accounts)))
         {
             yield return result;
@@ -724,7 +724,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// The roster is searched first because a committed record publishes the user's document without touching a file
     /// that still declares accounts beside it. A later start refuses that stale deployment section, but the running
     /// process must follow the commit now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
-    /// that <c>DeclaredUsers</c> states.
+    /// that <c>ServedMailUsersStartupGate</c> holds over the roster.
     /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
@@ -764,6 +764,40 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         {
             return null;
         }
+    }
+
+    /// <summary>Reports whether this deployment asked for its mailboxes to be refreshed at all.</summary>
+    /// <param name="configuration">The configuration to read.</param>
+    /// <returns><see langword="true" /> when the synchronization switch is on.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Read straight from configuration rather than off a bound snapshot, because the startup gate asks it before any
+    /// snapshot is resolved: whether a deployment has work to do is judged against the roster, and the roster is what
+    /// that gate is establishing.
+    /// </remarks>
+    internal static bool IsEnabledIn(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return configuration.GetValue($"{SectionName}:{nameof(Enabled)}", defaultValue: false);
+    }
+
+    /// <summary>Gets the mail accounts this section declares, which belong to whichever sole user the deployment holds.</summary>
+    /// <param name="configuration">The configuration to read.</param>
+    /// <returns>The declarations, empty when the section declares none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Read here rather than off the roster, because a user served from this section carries no accounts of their own:
+    /// the declarations stay in the reloadable snapshot so a reload can reach them, which leaves this the one place a
+    /// rule about the whole deployment's mailboxes can see them before that snapshot exists.
+    /// </remarks>
+    internal static List<MailSynchronizationAccountOptions> AccountsDeclaredIn(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return configuration.GetSection($"{SectionName}:{nameof(Accounts)}")
+            .Get<List<MailSynchronizationAccountOptions>>()
+            ?? [];
     }
 }
 

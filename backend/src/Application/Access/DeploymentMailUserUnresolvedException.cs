@@ -17,8 +17,8 @@ namespace MailFathom.Application.Access;
 /// <para>
 /// The messages name the count, the label an operator wrote, and the remedy, and nothing else. A user identity is a
 /// generated identifier naming a person inside this deployment, so no message here carries one; a label is the
-/// operator's own text for a row of their own file, in the same class as an account alias, and naming it is what makes
-/// a refusal actionable.
+/// operator's own text for a person this deployment holds, in the same class as an account alias, and naming it is
+/// what makes a refusal actionable.
 /// </para>
 /// </remarks>
 public sealed class DeploymentMailUserUnresolvedException : MailFathomException
@@ -41,9 +41,9 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// </remarks>
     public static DeploymentMailUserUnresolvedException NothingToSynchronize() => new(
         "MailSynchronization:Enabled is on and no user this deployment serves has a mail account: neither "
-        + "MailSynchronization:Accounts, nor any user of the top-level Accounts collection, nor any user's own "
-        + "record declares one. Declare the mailbox this deployment exists to synchronize — with "
-        + "'mfctl user account add', or in the files — or switch synchronization off.");
+        + "MailSynchronization:Accounts nor any user's own record declares one. Declare the mailbox this deployment "
+        + "exists to synchronize — with 'mfctl user account add', or in that section — or switch synchronization "
+        + "off.");
 
     /// <summary>Reports mail accounts left in the deployment's own section that no user this start serves reads.</summary>
     /// <param name="accountCount">How many accounts the section still declares.</param>
@@ -74,46 +74,8 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     public static DeploymentMailUserUnresolvedException SeveralUsers() => new(
         "This deployment holds more than one user record while its mail accounts are declared in "
         + "MailSynchronization:Accounts, which names no user, so a configured account cannot be attributed to one of "
-        + "them. Declare each user in the top-level Accounts collection, with the mail accounts they own, so every "
-        + "mailbox says whose it is.");
-
-    /// <summary>Reports a declaration that would give a user the deployment already holds a different identifier.</summary>
-    /// <param name="displayName">The label both the declaration and the stored row carry.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
-    public static DeploymentMailUserUnresolvedException UserIdentifierChanged(string displayName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-
-        return new(
-            $"The user labelled '{displayName}' is declared under an identifier this deployment does not hold them "
-            + "under. That identifier is what every mail account, every stored message, and every job of theirs hangs "
-            + "on, so starting under a new one would leave all of it belonging to nobody. Restore the identifier the "
-            + "deployment holds, or declare the new one under a label of its own if it is meant to be a second person.");
-    }
-
-    /// <summary>Reports a label a declaration moves onto one user while another user the deployment holds still carries it.</summary>
-    /// <param name="displayName">The label both users would carry.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
-    /// <remarks>
-    /// Separate from <see cref="UserIdentifierChanged" /> because the two are different mistakes: there a user the
-    /// deployment holds is declared under an identifier that is not theirs, here two users it holds are both meant to
-    /// carry one label at the moment the relabel runs. The second is reachable by a file whose end state is perfectly
-    /// legal — two users exchanging labels — which is why the message says how to reach that state rather than only
-    /// what is wrong with the file.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException UserLabelHeldByAnother(string displayName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-
-        return new(
-            $"The label '{displayName}' is declared for one user while another user this deployment holds still "
-            + "carries it, and a label names one user. Free the label first — relabel the user holding it and start "
-            + "once — and declare it for its new user afterwards; two users exchanging labels is two starts rather "
-            + "than one. Removing them from the file frees nothing: a user this deployment holds keeps their record "
-            + "and their label whether or not a file declares them.");
-    }
+        + "them. Record each mailbox against the user who owns it with 'mfctl user account add' and clear that "
+        + "section, so every mailbox says whose it is.");
 
     /// <summary>Reports a deployment holding more user records than it may serve.</summary>
     /// <param name="maximumUsers">The greatest number of users one deployment serves.</param>
@@ -126,32 +88,6 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
         return new(
             $"This deployment holds more than the {maximumUsers} user records one deployment serves. A roster that "
             + "long was generated rather than provisioned: check what wrote the settings_accounts table.");
-    }
-
-    /// <summary>Reports a start that would leave the deployment holding more user records than it may serve.</summary>
-    /// <param name="maximumUsers">The greatest number of users one deployment serves.</param>
-    /// <param name="heldUsers">The user records the deployment already holds.</param>
-    /// <param name="newUsers">The declared users it holds no record for, each of which this start would provision.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumUsers" /> is not positive.</exception>
-    /// <remarks>
-    /// Separate from <see cref="TooManyUsers" />, which reports a table that was already past the bound before this
-    /// start read it. Here the file and the table are each within it and only their sum is not, which an operator acts
-    /// on by removing user records rather than by finding what wrote them — and refusing before the writes is what
-    /// keeps this start from producing the roster the next start would refuse permanently.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException RosterWouldExceedTheBound(
-        int maximumUsers,
-        int heldUsers,
-        int newUsers)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumUsers);
-
-        return new(
-            $"This deployment holds {heldUsers} user records and declares {newUsers} users it holds none for, "
-            + $"which would leave it past the {maximumUsers} user records one deployment serves. Nothing was "
-            + "written: a user the file no longer declares keeps their record, so remove the records this "
-            + "deployment no longer serves before declaring more users.");
     }
 
     /// <summary>Reports several users on a deployment whose surfaces cannot say which of them an act is for.</summary>
@@ -188,14 +124,14 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
         + "routes — which name the user they act on — for everything an administrator does across the roster.");
 
     /// <summary>Reports a user whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
-    /// <param name="displayName">The label the user is declared under.</param>
-    /// <param name="refusals">The sentences naming each setting that must change, each already carrying its configuration path.</param>
+    /// <param name="displayName">The label the user is recorded under.</param>
+    /// <param name="refusals">The sentences naming each setting that must change, each already carrying its path within the record.</param>
     /// <returns>The failure to raise.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusals" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Separate from the deployment section's own secret refusal because a user's mailboxes are declared somewhere
-    /// that section cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
+    /// Separate from the deployment section's own secret refusal because a user's mailboxes are in a record that
+    /// section cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
     /// refusals carry no material and no length, exactly as the ones raised over the deployment's own section do.
     /// </remarks>
     public static DeploymentMailUserUnresolvedException UserMailAccountsUnusable(
@@ -217,8 +153,8 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sharedNames" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="sharedNames" /> names nothing.</exception>
     /// <remarks>
-    /// The deployment-wide naming rule the declarations are already held to, asked again of the roster a start would
-    /// actually serve — which is the only place a collision written into two users' records while a process ran can
+    /// The deployment-wide naming rule, asked over the roster a start would actually serve — which is the only place
+    /// a collision written into two users' records while a process ran can
     /// be seen. Neither user is named: the answer is about a name two people share, and which two they are is read
     /// from the roster rather than from a line that would outlive the collision.
     /// </remarks>
@@ -237,7 +173,8 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
             + "A mail account belongs to its user, but this release resolves an account's settings by its identifier "
             + "alone, so a name two users share would reach whichever of the two the lookup met first. Give each of "
             + "them a name no other user uses, with 'mfctl user account remove' and 'mfctl user account add' for a "
-            + "user whose record is their own, and in the declaration for one a file supplies.");
+            + "user whose record is their own, and in MailSynchronization:Accounts for the sole user that section "
+            + "belongs to.");
     }
 
     /// <summary>Reports a user whose own record could not be read as the settings it is meant to hold.</summary>

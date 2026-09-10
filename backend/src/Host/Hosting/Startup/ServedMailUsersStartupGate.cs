@@ -12,20 +12,22 @@ using MailFathom.Infrastructure.Persistence.Users;
 
 namespace MailFathom.Host.Hosting.Startup;
 
-/// <summary>Reconciles the users this deployment declares against the rows it holds, and settles who it serves.</summary>
+/// <summary>Reads the users this deployment holds, and settles who it serves and from where.</summary>
 /// <remarks>
 /// <para>
-/// A deployment may keep its whole configuration outside the database, users included. What the database still holds
-/// per user is the relational envelope — the identifier, the label, the version, the instants — because
-/// <c>mailbox_accounts.UserId</c> is a foreign key and the integrity of the mail graph is relational rather than a
-/// predicate over a document. So this gate gives every declared user that row and nothing inside it: their mail
-/// accounts go on being read from the effective configuration for as long as a declaration supplies them.
+/// A user is a row rather than a declaration. What the row holds is the relational envelope — the identifier, the
+/// label, the version, the instants — because <c>mailbox_accounts.UserId</c> is a foreign key and the integrity of the
+/// mail graph is relational rather than a predicate over a document, and the content beside it is the user's own
+/// record. The one user a deployment can still have without ever recording anything is the sole user
+/// <c>MailSynchronization:Accounts</c> belongs to, which is the row this gate provisions where the deployment holds
+/// none at all.
 /// </para>
 /// <para>
-/// Which source reaches a user is decided per user, and nothing here moves anybody. A user whose row carries the runtime-written marker is served
-/// from their own document, permanently and for that user alone, and every other user goes on being read from the
-/// file beside them. What this gate does about it is report which of the two each user is, because a section somebody
-/// goes on editing for a user that no longer reads it is exactly the mistake nothing else would surface.
+/// Which source reaches a user is decided per user, and nothing here moves anybody. A user whose row carries the
+/// runtime-written marker is served from their own document, permanently and for that user alone, and the sole user of
+/// a deployment that never recorded one goes on being read from its own mail section. What this gate does about it is
+/// report which of the two each user is, because a section somebody goes on editing for a user that no longer reads it
+/// is exactly the mistake nothing else would surface.
 /// </para>
 /// <para>
 /// It runs behind the schema gate, because it reads and writes a table that migration creates, and ahead of the
@@ -38,7 +40,7 @@ namespace MailFathom.Host.Hosting.Startup;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class ServedMailUsersStartupGate : IHostedService
 {
-    /// <summary>The label the user of a deployment that declares none is recorded under.</summary>
+    /// <summary>The label the sole user of a deployment that recorded none is written under.</summary>
     /// <remarks>
     /// The same label the migration that provisions that user writes, so a deployment upgraded through it and one
     /// whose row this gate had to create read identically. It is only ever used where the deployment holds no user at
@@ -55,7 +57,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Initializes a new served-user startup gate.</summary>
     /// <param name="scopeFactory">Creates the scope the user directory and the provisioning are resolved from.</param>
-    /// <param name="configuration">The configuration the user declarations are read from.</param>
+    /// <param name="configuration">The configuration the deployment's own mail section is read from.</param>
     /// <param name="servedUsers">The holder this gate publishes the roster into.</param>
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="admission">The reading that decides whether this deployment's endpoints could tell one user's caller from another's.</param>
@@ -84,46 +86,28 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     }
 
     /// <inheritdoc />
-    /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when the roster and the declarations cannot be reconciled into a set of users this deployment may serve.</exception>
+    /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when the roster this deployment holds is not a set of users it may serve.</exception>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         await using var scope = this.scopeFactory.CreateAsyncScope();
 
-        var declared = DeclaredUsers.ReadFrom(this.configuration);
         var directory = scope.ServiceProvider.GetRequiredService<IMailUserDirectory>();
 
         // One more than a deployment may hold, so that "more than the roster admits" is observable rather than
         // silently truncated into a roster this gate would then serve.
-        var held = await directory.ReadUsersAsync(DeclaredUsers.MaximumDeclaredUsers + 1, cancellationToken);
+        var held = await directory.ReadUsersAsync(ServedMailUsers.MaximumUsers + 1, cancellationToken);
 
-        if (held.Count > DeclaredUsers.MaximumDeclaredUsers)
+        if (held.Count > ServedMailUsers.MaximumUsers)
         {
-            throw DeploymentMailUserUnresolvedException.TooManyUsers(DeclaredUsers.MaximumDeclaredUsers);
+            throw DeploymentMailUserUnresolvedException.TooManyUsers(ServedMailUsers.MaximumUsers);
         }
 
-        // The bound is judged again against the roster this start would leave, because provisioning is what grows the
-        // table: a deployment holding users the file no longer declares keeps every one of them, so a file within the
-        // bound and a table within the bound can still sum past it. Refusing here rather than after the writes is what
-        // keeps this start from producing a roster every later start refuses over rows this one wrote.
-        var newUsers = declared.Count(declaration =>
-            held.All(record => record.User != IdentifierOf(declaration)));
-
-        if (held.Count + newUsers > DeclaredUsers.MaximumDeclaredUsers)
-        {
-            throw DeploymentMailUserUnresolvedException.RosterWouldExceedTheBound(
-                DeclaredUsers.MaximumDeclaredUsers,
-                held.Count,
-                newUsers);
-        }
-
-        var declaredUsers = declared.Count == 0
-            ? await this.ServeTheSoleUserAsync(scope, held, cancellationToken)
-            : await this.ServeDeclaredUsersAsync(scope, declared, held, cancellationToken);
+        var sectionUsers = await this.ServeTheSoleUserAsync(scope, held, cancellationToken);
 
         IReadOnlyList<ServedMailUser> served =
         [
-            .. declaredUsers,
-            .. await this.ServeUsersOfTheirOwnRecordAsync(scope, declaredUsers, held, cancellationToken),
+            .. sectionUsers,
+            .. await this.ServeUsersOfTheirOwnRecordAsync(scope, sectionUsers, held, cancellationToken),
         ];
 
         this.RefuseSeveralUsersOnAUserFacingSurface(served);
@@ -138,7 +122,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
         this.servedUsers.Resolved(served);
 
-        this.Report(served, held);
+        this.Report(served);
 
         this.startupGates.MarkCompleted(HostStartupGate.ServedMailUsers);
     }
@@ -146,7 +130,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>Serves the user of the deployment's own mail section, which a deployment declaring none keeps.</summary>
+    /// <summary>Serves the user the deployment's own mail section belongs to, which is the sole user of a deployment that recorded none.</summary>
     /// <returns>That user, or nothing where every user this deployment holds reads their own record instead.</returns>
     /// <remarks>
     /// <para>
@@ -228,10 +212,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Serves every user whose record was written at runtime and whom nothing above has served already.</summary>
     /// <remarks>
-    /// A user an administrator provisioned is declared in no file, so nothing else on this path reaches them and a
-    /// deployment would hold a row it never served. They are served last, after the users a file names, because the
-    /// roster's order is the operator's own reading of their configuration and a user outside it has no place in
-    /// that order to take.
+    /// No configuration source reaches a user an administrator recorded, so nothing else on this path serves them and
+    /// a deployment would hold a row it never served. They are served after the user the deployment's own mail section
+    /// belongs to, because that section is the one part of the roster a file still decides and a user outside it has
+    /// no place in that order to take.
     /// </remarks>
     private async Task<IReadOnlyList<ServedMailUser>> ServeUsersOfTheirOwnRecordAsync(
         AsyncServiceScope scope,
@@ -260,105 +244,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         record.DisplayName,
         MailUserAccountSource.DeploymentSection,
         MailAccounts: []);
-
-    /// <summary>Gives every declared user their row, and serves each of them from the source their own row names.</summary>
-    private async Task<IReadOnlyList<ServedMailUser>> ServeDeclaredUsersAsync(
-        AsyncServiceScope scope,
-        IReadOnlyList<DeclaredUserOptions> declared,
-        IReadOnlyList<MailUserRecord> held,
-        CancellationToken cancellationToken)
-    {
-        var provisioning = scope.ServiceProvider.GetRequiredService<IMailUserProvisioning>();
-        var served = new List<(int Index, ServedMailUser User)>(declared.Count);
-
-        // The roster this start has actually reached rather than the snapshot it opened with. Every write below is
-        // applied to it, because the label check reads it: a file that renames one user and gives their old label to
-        // another would otherwise be refused for a label nobody carries any more, and the refusal would clear itself on
-        // the next start — which is the proof that the file was legal all along.
-        var roster = held.ToList();
-
-        // The users the deployment already holds are reconciled first, so every relabel this start commits is in the
-        // roster before a new user's label is judged against it. Otherwise a file that declares the new user above
-        // the rename — one user taking the label another is being renamed out of — would be refused on the order its
-        // entries happen to be written in, while the same two entries the other way round start cleanly. Ordering is
-        // stable, so within each of the two groups the file's own order is what is walked, and a swap between two held
-        // users stays refused because both are in the first group and the loser still carries the label when it is
-        // checked. The entry's own index travels with it, because the roster is published in the order the file
-        // declares rather than in the order it was reconciled in.
-        var reconciliationOrder = declared.Index()
-            .OrderBy(entry => held.Any(record => record.User == IdentifierOf(entry.Item)) ? 0 : 1);
-
-        foreach (var (index, declaration) in reconciliationOrder)
-        {
-            // Every declaration has already been proven to carry one, by the composed rules a start refuses before its
-            // container exists, so the identifier is read rather than judged again here.
-            var user = IdentifierOf(declaration);
-            var label = declaration.DisplayName.Trim();
-            var record = roster.FirstOrDefault(candidate => candidate.User == user);
-
-            // A label another user is already recorded under is what the unique index refuses, whichever of the two
-            // writes below would meet it. Refusing here is what turns a constraint violation into a sentence, and which
-            // sentence it is depends on whether this user has a row at all: without one the declaration is the same
-            // person written down twice under a new identifier, and their mail would stay on the row nothing serves;
-            // with one it is a label moving onto a user while its holder still carries it.
-            if (roster.Any(candidate =>
-                candidate.User != user && StringComparer.Ordinal.Equals(candidate.DisplayName, label)))
-            {
-                throw record is null
-                    ? DeploymentMailUserUnresolvedException.UserIdentifierChanged(label)
-                    : DeploymentMailUserUnresolvedException.UserLabelHeldByAnother(label);
-            }
-
-            if (record is null)
-            {
-                // False is the label having been taken between the roster being read and this insert reaching the
-                // table, which no reading of a snapshot could have refused earlier.
-                if (!await provisioning.ProvisionAsync(user, label, cancellationToken))
-                {
-                    throw DeploymentMailUserUnresolvedException.UserLabelHeldByAnother(label);
-                }
-
-                roster.Add(new MailUserRecord(user, label, DocumentWrittenAtRuntime: false));
-                served.Add((index, new ServedMailUser(
-                    user,
-                    label,
-                    MailUserAccountSource.UserDeclaration,
-                    declaration.MailAccounts,
-                    SensitiveContent: declaration.SensitiveContent)));
-
-                continue;
-            }
-
-            if (!StringComparer.Ordinal.Equals(record.DisplayName, label))
-            {
-                // False is the label having been taken between the roster being read and this statement reaching the
-                // table, which no reading of a snapshot could have refused earlier — the same race the insert above
-                // answers, and the same refusal, because a start whose file renames a user onto a label somebody
-                // else now holds is a start that cannot say who is who.
-                if (!await provisioning.RelabelAsync(user, label, cancellationToken))
-                {
-                    throw DeploymentMailUserUnresolvedException.UserLabelHeldByAnother(label);
-                }
-
-                roster[roster.IndexOf(record)] = record with { DisplayName = label };
-            }
-
-            served.Add((index, record.DocumentWrittenAtRuntime
-                ? await this.ServeFromTheOwnDocumentAsync(scope, record with { DisplayName = label }, cancellationToken)
-                : new ServedMailUser(
-                    user,
-                    label,
-                    MailUserAccountSource.UserDeclaration,
-                    declaration.MailAccounts,
-                    SensitiveContent: declaration.SensitiveContent)));
-        }
-
-        return [.. served.OrderBy(entry => entry.Index).Select(entry => entry.User)];
-    }
-
-    /// <summary>Reads the identifier a declaration carries, which the composed rules have already proven it has.</summary>
-    private static MailUserId IdentifierOf(DeclaredUserOptions declaration) =>
-        MailUserId.Create(DeclaredUsers.TryReadIdentifier(declaration.Id)!.Value);
 
     /// <summary>Serves one user from the document their row holds, which is what a committed record made the source.</summary>
     /// <remarks>
@@ -418,20 +303,14 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     {
         var validator = scope.ServiceProvider.GetRequiredService<SecretConfigurationValidator>();
 
-        foreach (var (index, user) in served.Index())
+        foreach (var user in served.Where(user => user.Source != MailUserAccountSource.DeploymentSection))
         {
-            if (user.Source == MailUserAccountSource.DeploymentSection)
-            {
-                continue;
-            }
-
-            // The path an operator would edit, which is not the same place for the two sources: a declared user is a
-            // numbered entry of the file's own collection, and an adopted one has no configuration path at all.
-            var path = user.Source == MailUserAccountSource.UserDeclaration
-                ? $"{DeclaredUserOptions.SectionName}:{index}"
-                : "document";
-
-            var errors = await validator.FindUserMailAccountErrorsAsync(path, user.MailAccounts, cancellationToken);
+            // A user read from their own record has no configuration path an operator could edit, so the refusal names
+            // the document their mailboxes live in rather than a key nobody wrote.
+            var errors = await validator.FindUserMailAccountErrorsAsync(
+                "document",
+                user.MailAccounts,
+                cancellationToken);
 
             if (errors.Count > 0)
             {
@@ -466,12 +345,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
 
     /// <summary>Refuses a roster in which one mail-account name would reach two users.</summary>
     /// <remarks>
-    /// The deployment-wide rule <c>DeclaredUsers</c> states over a file, asked here over the roster this start would
-    /// actually serve. It has to be asked in both places and neither is redundant: the file's own reading is what names
-    /// the entry an operator corrects, and this one is what sees a record. A write into one user's record is judged
-    /// against the roster this process settled, so two writes into two record-served users in one process run — each
-    /// judged against a snapshot the other had not moved — can name the same account, and the start that composes them
-    /// is where the two are first in one place.
+    /// The deployment-wide bound, asked over the roster this start would actually serve. A write into one user's record
+    /// is judged against the roster this process settled, so two writes into two record-served users in one process
+    /// run — each judged against a snapshot the other had not moved — can name the same account, and the start that
+    /// composes them is where the two are first in one place.
     /// <para>
     /// A user served from the deployment's own section carries no accounts on their roster entry, so this reads that
     /// section for them. Without it the one collision the write-time check cannot see — a record naming an account
@@ -484,7 +361,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// </remarks>
     private void RefuseMailAccountNamesTwoUsersShare(IReadOnlyList<ServedMailUser> served)
     {
-        var deploymentAccounts = DeclaredUsers.DeploymentMailAccountsIn(this.configuration);
+        var deploymentAccounts = MailSynchronizationOptions.AccountsDeclaredIn(this.configuration);
 
         var shared = served
             .SelectMany(user => NamesOf(AccountsOf(user, deploymentAccounts))
@@ -510,11 +387,10 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// synchronized under the file's settings instead, which is the opposite of what a record being their own means.
     /// </para>
     /// <para>
-    /// The file's own reading cannot see this. <c>DeclaredUsers</c> refuses that section beside declared users, and
-    /// here there are none: the users are records, which only the roster holds. So this is the reading that closes
-    /// the invariant <c>MailSynchronizationOptions.FindConfiguredAccount</c> states about itself — the section and the
-    /// roster never both answer — and it holds whether or not synchronization is switched on, because the lookup in
-    /// front of every per-account read does not ask.
+    /// No reading of the files can see this, because the users are records and only the roster holds them. So this is
+    /// the reading that closes the invariant <c>MailSynchronizationOptions.FindConfiguredAccount</c> states about
+    /// itself — the section and the roster never both answer — and it holds whether or not synchronization is switched
+    /// on, because the lookup in front of every per-account read does not ask.
     /// </para>
     /// </remarks>
     private void RefuseADeploymentSectionNobodyReads(IReadOnlyList<ServedMailUser> served)
@@ -524,7 +400,7 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             return;
         }
 
-        var deploymentAccounts = DeclaredUsers.DeploymentMailAccountsIn(this.configuration);
+        var deploymentAccounts = MailSynchronizationOptions.AccountsDeclaredIn(this.configuration);
 
         if (deploymentAccounts.Count > 0)
         {
@@ -536,18 +412,18 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <remarks>
     /// The deployment's own rule, held here rather than against the files because a user's mailboxes are a record as
     /// well as a section: a deployment whose only mailbox was declared through <c>mfctl user account add</c> or by the
-    /// user themselves has an empty <c>MailSynchronization:Accounts</c> and an empty top-level collection, and reading
-    /// the files alone would refuse to start it. The roster is the first place every source is in one place, which is
-    /// what makes this the only reading that can tell a worker with no work from one whose work is in the database.
+    /// user themselves has an empty <c>MailSynchronization:Accounts</c>, and reading the file alone would refuse to
+    /// start it. The roster is the first place both sources are in one place, which is what makes this the only
+    /// reading that can tell a worker with no work from one whose work is in the database.
     /// </remarks>
     private void RefuseNothingToSynchronize(IReadOnlyList<ServedMailUser> served)
     {
-        if (!DeclaredUsers.SynchronizationIsOn(this.configuration))
+        if (!MailSynchronizationOptions.IsEnabledIn(this.configuration))
         {
             return;
         }
 
-        var deploymentAccounts = DeclaredUsers.DeploymentMailAccountsIn(this.configuration);
+        var deploymentAccounts = MailSynchronizationOptions.AccountsDeclaredIn(this.configuration);
 
         if (served.All(user => AccountsOf(user, deploymentAccounts).Count == 0))
         {
@@ -573,8 +449,12 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
             .OfType<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Reports which users are served, where each is read from, and which held users are not served at all.</summary>
-    private void Report(IReadOnlyList<ServedMailUser> served, IReadOnlyList<MailUserRecord> held)
+    /// <summary>Reports which users are served and where each of them is read from.</summary>
+    /// <remarks>
+    /// Every user the deployment holds is served: the one its own mail section belongs to, and every user whose record
+    /// is their own. So this reports where each is read from rather than who was left out — nothing can be.
+    /// </remarks>
+    private void Report(IReadOnlyList<ServedMailUser> served)
     {
         var configuredUserCount = served.Count(user => user.ReadFromConfiguration);
 
@@ -584,11 +464,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         {
             this.LogUserReadFromTheirDocument(user.DisplayName);
         }
-
-        foreach (var record in held.Where(record => served.All(user => user.User != record.User)))
-        {
-            this.LogUserNotServed(record.DisplayName);
-        }
     }
 
     /// <remarks>The record names no user. The identity is a generated identifier for a person this deployment serves, and what an operator needs from this line is how the roster came out rather than who is on it.</remarks>
@@ -597,17 +472,12 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
         Message = "This deployment serves {ServedUserCount} users: {ConfiguredUserCount} read from configuration and {OwnDocumentUserCount} from their own document.")]
     private partial void LogUsersResolved(int servedUserCount, int configuredUserCount, int ownDocumentUserCount);
 
-    /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the user whose declared section has stopped being applied. Every part of that section is named, because the scanning block still binds and is still judged for a user read from their own document and then decides nothing, so a line naming only the mail accounts would leave an operator who switched a scanner on there with no sentence explaining why nothing changed.</remarks>
+    /// <remarks>The label is the operator's own text for a person this deployment holds, which is what makes the line actionable: it names the user no configuration source reaches. Both halves of what a record supplies are named, because an operator who switched a scanner on in the deployment's section would otherwise have no sentence explaining why nothing changed for that user.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The user labelled {UserDisplayName} is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.")]
     private partial void LogUserReadFromTheirDocument(string userDisplayName);
 
-    /// <remarks>A warning rather than information, because a user the deployment holds and no longer serves keeps every message of theirs and synchronizes none of it, which is a state an operator meant either to reach or to notice.</remarks>
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "The user labelled {UserDisplayName} is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.")]
-    private partial void LogUserNotServed(string userDisplayName);
 
     /// <remarks>Reached only where the deployment holds no user row at all, which the release's own migration ordinarily provisions.</remarks>
     [LoggerMessage(

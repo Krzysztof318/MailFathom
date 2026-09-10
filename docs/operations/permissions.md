@@ -188,7 +188,7 @@ reads the roster and acts for the sole user it finds, which is one `mailfathom.a
 permission the act itself is published under. Passing `--user` skips that lookup and nothing else — the named user is
 sent as written, and the deployment refuses one it holds no record for.
 
-Skipping the lookup is not the same as making the command need one permission. Six of them read something else
+Skipping the lookup is not the same as making the command need one permission. Five of them read something else
 unconditionally, whether or not `--user` was passed, so each needs `mailfathom.admin.read` beside its own name in every
 invocation:
 
@@ -198,7 +198,6 @@ invocation:
 | `mfctl user edit` | the record the editing session opens, and the version what you saved is committed against |
 | `mfctl user account add`, `mfctl user account remove` | the record the change is composed over, and the version it is composed at |
 | `mfctl user remove` | the roster, so the confirmation names the person being erased |
-| `mfctl user rename` | the roster, so a label a declaration will rewrite at the next start is reported as one that lasts until then |
 
 `mfctl credential delete` reads the credential listing too, to name what it is about to delete, and is the one command
 that goes on without it: a caller refused that read is told which credential it holds no name for and deletes it

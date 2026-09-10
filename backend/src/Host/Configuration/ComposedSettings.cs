@@ -33,22 +33,27 @@ namespace MailFathom.Host.Configuration;
 /// </remarks>
 internal static class ComposedSettings
 {
+    /// <summary>The top-level collection a deployment used to declare its users in, which nothing binds any more.</summary>
+    /// <remarks>
+    /// Named here rather than on an options type because no options type reads it: what the name is for is recognizing
+    /// a file written against the release before this one, so the section is spelled where the refusal is stated.
+    /// </remarks>
+    private const string WithdrawnUserCollectionSection = "Accounts";
+
     /// <summary>Finds every refusal these settings carry, in the order a start would meet them.</summary>
     /// <param name="configuration">The configuration to judge.</param>
-    /// <param name="timeProvider">Supplies the date the declared synchronization bounds are read against.</param>
     /// <returns>One refusal per section that would stop a start, empty when none would.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when a section will not bind at all and no earlier group had already answered with a refusal, which is the only case in which nothing better than the binder's own sentence is held.</exception>
-    public static IReadOnlyList<SettingsRefusal> FindRefusals(IConfiguration configuration, TimeProvider timeProvider)
+    public static IReadOnlyList<SettingsRefusal> FindRefusals(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(timeProvider);
 
         // The order is the composition root's rather than this file's: the users are established before
         // `AddMailRules`, which runs before `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An
         // operator whose candidate carries a mistake in two of them is shown the same one first by a write and by a
         // start, which is what the summary promises and the only thing that makes the promise worth anything.
-        List<SettingsRefusal> refusals = [.. FindUserDeclarationRefusals(configuration, timeProvider)];
+        List<SettingsRefusal> refusals = [.. FindWithdrawnUserCollectionRefusals(configuration)];
 
         // A group that will not bind at all raises rather than returning, and a start meeting an earlier refusal never
         // reaches it — so what is already held is what a start would have reported, and discarding it for the binder's
@@ -70,30 +75,29 @@ internal static class ComposedSettings
         return refusals;
     }
 
-    /// <summary>Finds what the users this deployment declares would be refused for.</summary>
+    /// <summary>Finds whether a configuration still declares the users this deployment now records.</summary>
     /// <param name="configuration">The configuration to judge.</param>
-    /// <param name="timeProvider">Supplies the date the declared synchronization bounds are read against.</param>
-    /// <returns>The refusal, or nothing when every declared user could be one this deployment serves.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the collection will not bind at all.</exception>
+    /// <returns>The refusal, or nothing when no configuration source carries the withdrawn collection.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// First among the groups, because who this deployment serves decides what every other section is read for. It is
-    /// composed rather than bound for the reason the surfaces are: the collection is an array at the root of the
-    /// configuration, and what it decides — how many users exist, and whose each declared mailbox is — is settled
-    /// while the host is being built rather than by an options snapshot resolved later.
+    /// First among the groups, because who this deployment serves decides what every other section is read for. The
+    /// collection it names is gone rather than deprecated: a user is a row this deployment records, so a file still
+    /// carrying one is a file whose mailboxes, scanning posture, and labels reach nobody. Starting on it silently is
+    /// what this refuses, because the alternative is a deployment that serves one user while its operator reads a file
+    /// describing several.
     /// </remarks>
-    public static IReadOnlyList<SettingsRefusal> FindUserDeclarationRefusals(
-        IConfiguration configuration,
-        TimeProvider timeProvider)
+    public static IReadOnlyList<SettingsRefusal> FindWithdrawnUserCollectionRefusals(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(timeProvider);
 
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-
-        return Refusal<DeclaredUserOptions>(
-            DeclaredUserOptions.SectionName,
-            DeclaredUsers.FindConfigurationErrors(configuration, today));
+        return Refusal<ServedMailUsers>(
+            WithdrawnUserCollectionSection,
+            configuration.GetSection(WithdrawnUserCollectionSection).GetChildren().Any()
+                ?
+                [
+                    $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the section from your configuration.",
+                ]
+                : []);
     }
 
     /// <summary>Finds what the declared AI endpoints and the ceilings around them would be refused for.</summary>
