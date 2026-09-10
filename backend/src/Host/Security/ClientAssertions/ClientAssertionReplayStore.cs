@@ -2,13 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Collections.Concurrent;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Infrastructure.Secrets;
 
 namespace MailFathom.Host.Security.ClientAssertions;
 
-/// <summary>Remembers the assertions this process has already served, so none of them is served twice.</summary>
+/// <summary>Remembers the assertions this deployment has already served, so none of them is served twice.</summary>
 /// <remarks>
 /// <para>
 /// A valid signature is not by itself a reason to serve a request: an assertion travels over the wire like any other
@@ -17,34 +17,59 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// cannot do.
 /// </para>
 /// <para>
-/// In memory and per process, deliberately. What it protects against is a captured assertion being replayed within its
-/// own lifetime, which is a window of minutes, and a restart ends every such window it was holding. Making it durable or
-/// shared would put a write on the path of every authenticated request to defend a replay that has to arrive at a second
-/// instance inside the same minutes — a trade a deployment behind a load balancer can take by binding a client to one
-/// instance, and one this is not going to make on its behalf.
+/// <b>The record is the deployment's rather than this process's.</b> It was in memory and per process once, on the
+/// reading that a replay has to arrive inside a window of minutes and that a restart ends every such window — which was
+/// right at one replica and stopped being right at two. An identifier spendable once per replica is not spendable once:
+/// the replica that refuses a replay is not the replica the next presentation reaches, so raising <c>replicaCount</c>
+/// would have turned a closed window into an open one without anything saying so. The trade that reading named — binding
+/// a client to one instance — is refused by
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>,
+/// because affinity is honoured by the client and the client here is whoever captured the assertion.
 /// </para>
 /// <para>
-/// The store is bounded by what it accepts rather than by a cap. Only an assertion whose signature already verified is
-/// remembered, so nothing an unauthenticated caller sends reaches it; an entry lives no longer than the permitted
-/// assertion lifetime; and how fast a verified client can add entries is exactly what the surface's rate limit already
-/// bounds. A cap with an eviction policy would be worse than none: evicting an entry that has not expired is precisely
-/// the replay this exists to refuse.
+/// What it costs is one insert on a path that has already verified a signature and is about to serve a request that
+/// reaches the database anyway, and the write is refused or accepted by PostgreSQL itself rather than by a check this
+/// process makes between two statements — so two replicas presenting one identifier at the same instant leave one
+/// served and one refused.
+/// </para>
+/// <para>
+/// The cost was measured rather than assumed, because the reasoning the in-memory form rested on was that a durable one
+/// is not worth a write per authenticated request. Against PostgreSQL 17 over a loopback connection, one client: a bare
+/// round trip averages under half a millisecond and the spend averages a little over one, so the statement adds
+/// something under a millisecond to a request that presents an assertion, and a hundred thousand rows already in the
+/// table move that by nothing measurable — the insert reaches one index entry whatever the table holds. The removal
+/// costs single-digit milliseconds through the expiry index where a few thousand of a hundred thousand rows have
+/// expired, and tens of milliseconds where nearly all of them have and PostgreSQL scans instead; both are bounded by
+/// the same fact, which is that the table only ever holds the last few minutes of a deployment's authenticated traffic.
+/// </para>
+/// <para>
+/// The table is bounded by what it accepts and by the removal rather than by a cap. Only an assertion whose signature
+/// already verified is remembered, so nothing an unauthenticated caller sends reaches it, and a record is dropped by
+/// the first sweep past the point its assertion stops being accepted — which is what keeps the table proportional to
+/// recent authenticated traffic rather than to a deployment's history of it. The surface's rate limit is not part of
+/// that bound on the MCP surface and must not be read as one: authentication runs ahead of the limiter there, so a
+/// client presenting freshly signed assertions above its permitted rate writes a record per request and is refused
+/// afterwards. A cap with an eviction policy would be worse than none: evicting a record whose assertion is still
+/// being accepted is precisely the replay this exists to refuse.
 /// </para>
 /// </remarks>
 internal sealed class ClientAssertionReplayStore
 {
-    private readonly ConcurrentDictionary<string, DateTimeOffset> spentIdentifiers = new(StringComparer.Ordinal);
+    private readonly IClientAssertionSpendStore spentAssertions;
     private readonly TimeProvider timeProvider;
 
     private long nextSweepTicks;
 
     /// <summary>Initializes a new replay store.</summary>
-    /// <param name="timeProvider">The clock an entry's expiry and the sweep interval are judged against.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider" /> is <see langword="null" />.</exception>
-    public ClientAssertionReplayStore(TimeProvider timeProvider)
+    /// <param name="spentAssertions">Where the deployment records the assertions it has served.</param>
+    /// <param name="timeProvider">The clock the sweep interval is judged against.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    public ClientAssertionReplayStore(IClientAssertionSpendStore spentAssertions, TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(spentAssertions);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        this.spentAssertions = spentAssertions;
         this.timeProvider = timeProvider;
         this.nextSweepTicks = (timeProvider.GetUtcNow() + ClientAssertion.MaximumLifetime).UtcTicks;
     }
@@ -52,7 +77,8 @@ internal sealed class ClientAssertionReplayStore
     /// <summary>Records one assertion as served, refusing an identifier that has already been.</summary>
     /// <param name="keyName">The public key that verified the assertion, which scopes the identifier to that client.</param>
     /// <param name="identifier">The assertion's own replay identifier.</param>
-    /// <param name="expiresAt">When the assertion stops being accepted, which is when this entry stops being needed.</param>
+    /// <param name="expiresAt">When the assertion stops being accepted, which is when the record stops being needed.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns><see langword="true" /> when the assertion may be served; <see langword="false" /> when it has been served before.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identifier" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -62,18 +88,25 @@ internal sealed class ClientAssertionReplayStore
     /// with another through this store.
     /// </para>
     /// <para>
-    /// An identifier is refused for as long as its entry exists, which may briefly outlive the assertion that carried
-    /// it. That is the safe direction and never refuses anything legitimate: an assertion repeating an identifier past
-    /// its own expiry is already refused for the expiry, and one repeating it inside its lifetime is the replay.
+    /// An identifier is refused for as long as its record exists, which outlives the assertion that carried it: the
+    /// record is dropped by the first sweep after the assertion stops being verifiable, so it may survive that instant
+    /// by up to one permitted lifetime. That is the safe direction and never refuses anything legitimate: an assertion
+    /// repeating an identifier past the point validation still accepts it is already refused for the expiry, and one
+    /// repeating it before that point is the replay.
     /// </para>
     /// </remarks>
-    public bool TrySpend(SecretName keyName, string identifier, DateTimeOffset expiresAt) =>
-        this.TrySpend(keyName.Value ?? string.Empty, identifier, expiresAt);
+    public Task<bool> TrySpendAsync(
+        SecretName keyName,
+        string identifier,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken) =>
+        this.TrySpendAsync(keyName.Value ?? string.Empty, identifier, expiresAt, cancellationToken);
 
     /// <summary>Spends one assertion identifier against the credential that verified it.</summary>
     /// <param name="credentialKey">What identifies the verifying credential, which scopes the identifier to it.</param>
     /// <param name="identifier">The assertion's own identifier.</param>
-    /// <param name="expiresAt">When the assertion stops being accepted, which is when this entry stops being needed.</param>
+    /// <param name="expiresAt">When the assertion stops being accepted, which is when the record stops being needed.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns><see langword="true" /> when the assertion may be served; <see langword="false" /> when it has been served before.</returns>
     /// <exception cref="ArgumentNullException">Thrown when either string is <see langword="null" />.</exception>
     /// <remarks>
@@ -83,23 +116,44 @@ internal sealed class ClientAssertionReplayStore
     /// vocabularies cannot collide — a fingerprint is 43 base64url characters and a configured name is not — and if one
     /// ever did, what it would cost is one client refusing another's identifier rather than admitting it.
     /// </remarks>
-    public bool TrySpend(string credentialKey, string identifier, DateTimeOffset expiresAt)
+    public async Task<bool> TrySpendAsync(
+        string credentialKey,
+        string identifier,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentialKey);
         ArgumentNullException.ThrowIfNull(identifier);
 
-        this.SweepExpiredEntries();
+        await this.SweepExpiredRecordsAsync(cancellationToken);
 
-        return this.spentIdentifiers.TryAdd($"{credentialKey}\0{identifier}", expiresAt);
+        return await this.spentAssertions.TrySpendAsync(credentialKey, identifier, expiresAt, cancellationToken);
     }
 
-    /// <summary>Removes the entries whose assertions have expired, at most once per permitted lifetime.</summary>
+    /// <summary>Removes the records whose assertions have expired, at most once per permitted lifetime.</summary>
     /// <remarks>
-    /// On the authentication path rather than on a timer, because a store nothing is writing to needs no sweeping and a
+    /// On the authentication path rather than on a timer, because a table nothing is writing to needs no sweeping and a
     /// background timer would keep a process awake to prove it. The interval is claimed with one atomic exchange, so
-    /// concurrent requests produce one sweep rather than one each.
+    /// concurrent requests produce one sweep rather than one each — and it stays a process's own interval above one
+    /// replica, where the cost of two replicas each issuing a bounded delete once every few minutes is smaller than
+    /// anything that would have to coordinate them.
+    /// <para>
+    /// A removal that fails takes the request that triggered it with it, which is deliberate rather than an oversight:
+    /// the spend about to follow reaches the same database over the same pool, so a removal that could not run is a
+    /// database this request was not going to be served by either, and swallowing the failure would hide it from the
+    /// operator while changing nothing about the outcome. The interval is claimed before the statement runs, so a
+    /// failure costs one deferred removal rather than a retry on the next request.
+    /// </para>
+    /// <para>
+    /// What counts as expired here is what validation counts as expired, which is later than the assertion's own
+    /// <c>exp</c>: <see cref="ClientAssertionValidation.PermittedClockSkew" /> is tolerated on either side of it, so an
+    /// assertion is still accepted for that long afterwards. Removing a record at its <c>exp</c> would therefore drop
+    /// the record of an assertion still being accepted, and the next presentation of that captured assertion would find
+    /// no row and be served — the one failure this store exists to refuse. So the instant handed down is the one past
+    /// which nothing can be presented any more rather than the one the assertion nominally expires at.
+    /// </para>
     /// </remarks>
-    private void SweepExpiredEntries()
+    private async Task SweepExpiredRecordsAsync(CancellationToken cancellationToken)
     {
         var now = this.timeProvider.GetUtcNow();
         var due = Interlocked.Read(ref this.nextSweepTicks);
@@ -117,12 +171,8 @@ internal sealed class ClientAssertionReplayStore
             return;
         }
 
-        foreach (var entry in this.spentIdentifiers)
-        {
-            if (entry.Value <= now)
-            {
-                this.spentIdentifiers.TryRemove(entry);
-            }
-        }
+        await this.spentAssertions.RemoveExpiredAsync(
+            now - ClientAssertionValidation.PermittedClockSkew,
+            cancellationToken);
     }
 }

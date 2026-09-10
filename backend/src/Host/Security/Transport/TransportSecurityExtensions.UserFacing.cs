@@ -117,9 +117,10 @@ internal static partial class TransportSecurityExtensions
 
         if (acceptsPublicKey)
         {
-            // The replay store is one for the process, as it is on the configured axis: an identifier spent on either
-            // surface is spent, which is the safe direction and costs a client nothing, since one is minted per request.
-            // The authenticator is scoped rather than shared, because the credential store it reads through is.
+            // The replay store is one for the deployment, as it is on the configured axis: an identifier spent on
+            // either surface, and on any replica, is spent, which is the safe direction and costs a client nothing,
+            // since one is minted per request. The authenticator is scoped rather than shared, because the credential
+            // store it reads through is.
             services.TryAddSingleton<ClientAssertionReplayStore>();
             services.TryAddScoped<UserClientAssertionAuthenticator>();
             authentication.AddScheme<UserClientAssertionAuthenticationSchemeOptions, UserClientAssertionAuthenticationHandler>(

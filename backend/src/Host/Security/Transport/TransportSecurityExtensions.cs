@@ -104,9 +104,10 @@ internal static partial class TransportSecurityExtensions
         if (publicKeys.Count > 0)
         {
             // Added once however many surfaces accept an assertion, for the reason the API key authenticator is: the
-            // verifier holds no surface state, and the replay store is deliberately one for the process — an identifier
-            // spent on either surface is spent, which is the safe direction and costs a client nothing, since an
-            // identifier is minted fresh per request.
+            // verifier holds no surface state, and the replay store is one for the deployment — an identifier spent on
+            // either surface, and on any replica, is spent, which is the safe direction and costs a client nothing,
+            // since an identifier is minted fresh per request. The store is a singleton because what it holds of its
+            // own is the sweep interval; what it records lives in the database the port beneath it writes.
             services.TryAddSingleton<ClientAssertionReplayStore>();
             services.TryAddSingleton<ClientAssertionAuthenticator>();
             authentication.AddScheme<ClientAssertionAuthenticationSchemeOptions, ClientAssertionAuthenticationHandler>(
