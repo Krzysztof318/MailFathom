@@ -20,6 +20,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/list-branch-changes.sh"
 # shellcheck source=scripts/resolve-changed-stacks.sh
 source "$(dirname "${BASH_SOURCE[0]}")/resolve-changed-stacks.sh"
+# shellcheck source=scripts/resolve-changed-unit-suites.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-changed-unit-suites.sh"
 # shellcheck source=scripts/verification-record.sh
 source "$(dirname "${BASH_SOURCE[0]}")/verification-record.sh"
 
@@ -31,6 +33,29 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   printf 'verify-fast.sh must not run on %s. Switch to the branch that carries the change.\n' \
     "$current_branch" >&2
   exit 1
+fi
+
+# The base is asked here rather than only in the full gate, because this loop is what a change is
+# actually held to locally: the full gate's steps are all asserted again by `CI` on the pull request,
+# and this question is not one of them. It is asked before the record is consulted for the reason the
+# full gate gives about its own digest — whether the branch still contains `main` is a fact about the
+# branch rather than about the tree, so no record can stand in for it — and before anything expensive
+# runs, so a branch that has to be rebased learns that in a second rather than after a build.
+#
+# A checkout whose remotes name no MailFathom at all is the one case that carries on regardless, and
+# it is a different case from a branch that fell behind: there is no base to be behind, so there is
+# nothing to refuse against and nothing a refusal would teach that the hint does not. That is the
+# fork whose second remote has not been added yet, and blocking it would stop a contributor from
+# building and testing while they fix exactly what the hint names. The full gate still refuses it.
+base_remote=''
+
+if resolve_base_remote > /dev/null; then
+  if ! base_remote="$(require_base_is_contained 'verify-fast.sh')"; then
+    exit 1
+  fi
+else
+  base_remote_resolution_hint
+  printf 'The fast loop carries on without that answer; scripts/verify-full.sh and the pull request will not.\n'
 fi
 
 verification_digest="$(resolve_verification_digest)"
@@ -111,7 +136,32 @@ fi
 if [[ -n "$run_service_stack" ]]; then
   dotnet restore backend/MailFathom.slnx --locked-mode
   dotnet build backend/MailFathom.slnx --configuration Release --no-restore
-  dotnet test --solution backend/MailFathom.slnx --configuration Release --no-build
+
+  # The solution is built whole and tested narrow, which is where the two costs actually sit: on the
+  # owner's machine an incremental Release build is seconds and the whole suite is about eighty,
+  # fifteen thousand tests of which a change reads a handful of projects' worth. Narrowing the build
+  # instead would buy the seconds and give up the analyzer verdict `EnforceCodeStyleInBuild` and
+  # `TreatWarningsAsErrors` produce over every project, which is the half of this step that answers
+  # for the files the change did not open.
+  #
+  # `scripts/resolve-changed-unit-suites.sh` decides which suites, and refuses to narrow at all for a
+  # change that reaches a shared build input — the whole solution then runs exactly as it did before.
+  if changed_unit_suites="$(resolve_changed_unit_suites "${touched_paths[@]}")"; then
+    mapfile -t unit_suites <<< "$changed_unit_suites"
+
+    # Said rather than left to be inferred, because a run that tested a quarter of the suite and
+    # printed nothing about it reads as a run that tested all of it. The pipeline runs every suite on
+    # the pull request, so this is an earlier verdict withheld rather than a verdict lost.
+    printf '%d of the %d unit suites can have been broken by this change and run here; the rest are left to the pipeline:\n' \
+      "${#unit_suites[@]}" "$(count_unit_suites)"
+    printf '  %s\n' "${unit_suites[@]}"
+
+    for unit_suite in "${unit_suites[@]}"; do
+      dotnet test --project "$unit_suite" --configuration Release --no-build
+    done
+  else
+    dotnet test --solution backend/MailFathom.slnx --configuration Release --no-build
+  fi
 
   if ((${#changed_service_csharp_files[@]} > 0)); then
     dotnet format backend/MailFathom.slnx --no-restore --include "${changed_service_csharp_files[@]}"
@@ -146,8 +196,20 @@ fi
 # A change no build reads — documentation, a skill, a deployment asset — runs neither flow and says
 # so, because a gate that prints nothing and exits zero reads as a gate that was not run.
 if [[ -z "$run_service_stack" && -z "$run_client_stack" ]]; then
-  printf 'This change reaches neither stack, so no solution was restored, built, or tested. Run scripts/verify-full.sh for what the whole-tree contracts have to say about it.\n'
+  printf 'This change reaches neither stack, so no solution was restored, built, or tested. The whole-tree contracts are what answers for it, and they run on the pull request; scripts/verify-full.sh is how to have that answer now.\n'
 fi
+
+# Whitespace errors in a file no formatter reads — a page, a workflow, a Helm template — are checked
+# here rather than only in the full gate, because this loop is the gate a change is held to locally
+# and nothing in the pipeline asks the question at all. It costs milliseconds and reads the diff
+# rather than the tree. The committed range needs the base, so it is asked only where the base
+# resolved; the other two are about this working tree and are always asked.
+if [[ -n "$base_remote" ]]; then
+  git diff --check "$base_remote/main..HEAD"
+fi
+
+git diff --cached --check
+git diff --check
 
 # Records nothing when that pass rewrote a file, because the build and the tests above ran against
 # content this working tree no longer holds.

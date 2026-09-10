@@ -7,13 +7,14 @@ Closes #
 
 ## How it was verified
 
-<!-- `scripts/verify-full.sh` output, which tests were added, and anything checked by hand. Say what
-     you could not verify and why. -->
+<!-- `scripts/verify-fast.sh` output, which tests were added, and anything checked by hand. Say what
+     you could not verify and why, and name `scripts/verify-full.sh` only if you actually ran it —
+     the checks on this pull request are where its verdicts arrive otherwise. -->
 
 ## Checklist
 
-- [ ] `bash scripts/verify-full.sh` passes on this branch, rebased onto current `main`.
-- [ ] Behavior changes are covered by unit tests, and the coverage gate passes.
+- [ ] `bash scripts/verify-fast.sh` passes on this branch, rebased onto current `main`. The full gate is the pipeline's: run it locally only where its answer was the one being waited on.
+- [ ] Behavior changes are covered by unit tests, and the coverage gate passes on this pull request.
 - [ ] Affected documentation is updated in this change set.
 - [ ] `bash scripts/review-obligations.sh` was run, and every row it reported is answered — by a test, by a page, or by why nothing is owed there.
 - [ ] `CHANGELOG.md` is untouched — it is written by the release pull request alone.

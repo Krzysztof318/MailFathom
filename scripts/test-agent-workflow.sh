@@ -95,7 +95,31 @@ printf '%s\n' \
   'if [[ -n "${FAKE_WORKFLOW_FAIL:-}" ]]; then exit 23; fi' \
   > "$repository_root/scripts/test-agent-workflow.sh"
 chmod +x "$repository_root/scripts/test-agent-workflow.sh"
-git -C "$repository_root" add .gitignore backend/MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
+# The fast loop runs the unit suites a change reaches rather than the solution's whole suite, so the
+# fixture carries the two shapes that decision reads: a suite that names the project the branch's C#
+# file belongs to, and one that names nothing. Both are committed on `main` rather than on the
+# fixture branch, because a project file the branch itself added would be a changed path and would
+# select its own suite, which is a different contract from the one these state.
+mkdir -p "$repository_root/backend/tests/Sample.UnitTests" "$repository_root/backend/tests/Other.UnitTests"
+printf '<Project />\n' > "$repository_root/backend/src/Sample.csproj"
+printf '%s\n' \
+  '<Project>' \
+  '  <ItemGroup>' \
+  '    <ProjectReference Include="..\..\src\Sample.csproj" />' \
+  '  </ItemGroup>' \
+  '</Project>' \
+  > "$repository_root/backend/tests/Sample.UnitTests/Sample.UnitTests.csproj"
+printf '%s\n' \
+  '<Project>' \
+  '  <ItemGroup>' \
+  '    <PackageReference Include="xunit.v3.mtp-v2" />' \
+  '  </ItemGroup>' \
+  '</Project>' \
+  > "$repository_root/backend/tests/Other.UnitTests/Other.UnitTests.csproj"
+git -C "$repository_root" add .gitignore backend/MailFathom.slnx backend/src/Sample.csproj \
+  backend/tests/Other.UnitTests/Other.UnitTests.csproj \
+  backend/tests/Sample.UnitTests/Sample.UnitTests.csproj \
+  scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
 
 git clone --quiet "$repository_root" "$remote_repository_root"
@@ -343,7 +367,12 @@ verify_full_runs_no_stack_flow_for_a_change_no_build_reads() {
 #
 # The whole log is asserted rather than a line of it, and that is what states the client's cost: a
 # branch that changed no file under `frontend/` reaches nothing of that stack at all, so the run this
-# contract describes is byte-for-byte what it was before the client stack existed.
+# contract describes names no path under it.
+#
+# The test step names one project rather than the solution, which is the other half of what this log
+# states: the solution is built whole, because the build is where the analyzers report on every
+# project, and only the suites the change reaches are run. `Other.UnitTests` names nothing the branch
+# touched and is absent for that reason rather than by an exclusion.
 verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
@@ -353,8 +382,139 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --project backend/tests/Sample.UnitTests/Sample.UnitTests.csproj --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
+}
+
+# A run that tested a quarter of the suite and said nothing about it reads as a run that tested all
+# of it, which is the failure a narrowing gate has and a whole one does not. So the count and the
+# projects are printed, and the sentence says where the rest of the verdict comes from.
+verify_fast_names_the_suites_it_left_to_the_pipeline() {
+  local narrowed_output="$test_directory/verify-fast-narrowed-output"
+
+  (
+    cd "$repository_root"
+    VERIFY_FORCE=1 "$scripts_directory/verify-fast.sh"
+  ) > "$narrowed_output" 2>&1
+
+  assert_contains '1 of the 2 unit suites can have been broken by this change and run here; the rest are left to the pipeline:' \
+    "$narrowed_output"
+  assert_contains '  backend/tests/Sample.UnitTests/Sample.UnitTests.csproj' "$narrowed_output"
+
+  if grep -Fq 'Other.UnitTests' "$narrowed_output"; then
+    printf 'verify-fast.sh named a suite the change does not reach\n' >&2
+    return 1
+  fi
+}
+
+# The narrowing stops where the change stops being about one project. A package pin, a shared build
+# property, or the solution file can move the verdict on a project nothing in the change touched, so
+# no selection is honest there and the whole solution runs — exactly as it did before the fast loop
+# narrowed anything.
+verify_fast_runs_every_suite_when_a_shared_build_input_changed() {
+  : > "$invocation_log"
+  printf '<Project />\n' > "$repository_root/backend/Directory.Packages.props"
+  git -C "$repository_root" add backend/Directory.Packages.props
+
+  (
+    cd "$repository_root"
+    VERIFY_FORCE=1 "$scripts_directory/verify-fast.sh"
+  ) > /dev/null 2>&1
+
+  git -C "$repository_root" rm --quiet --force --cached backend/Directory.Packages.props
+  rm -f "$repository_root/backend/Directory.Packages.props"
+
+  assert_contains 'test --solution backend/MailFathom.slnx --configuration Release --no-build' \
+    "$invocation_log"
+}
+
+# The base check is the fast loop's now as well as the full gate's, and it is the one question `CI`
+# never asks: a pull request behind `main` is not a failed pull request, and the ruleset that
+# requires a branch to be current before it merges is where that belongs in the pipeline. Locally it
+# is asked at the point a rebase is cheapest, which is before anything has been built.
+verify_fast_stops_when_head_is_behind_origin_main() {
+  local behind_output="$test_directory/verify-fast-behind-origin-main-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$remote_repository_root" commit --quiet --allow-empty -m 'remote main moved ahead'
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > "$behind_output" 2>&1 || script_status=$?
+
+  git -C "$remote_repository_root" reset --quiet --hard HEAD~1
+  git -C "$repository_root" fetch --quiet --force origin main
+
+  if ((script_status == 0)); then
+    printf 'verify-fast.sh accepted a branch behind origin/main\n' >&2
+    return 1
+  fi
+
+  assert_contains 'HEAD does not contain the current origin/main.' "$behind_output"
+  assert_file_content '' "$invocation_log"
+}
+
+verify_fast_stops_when_the_remote_is_unreachable() {
+  local unreachable_output="$test_directory/verify-fast-unreachable-remote-output"
+  local script_status=0
+
+  : > "$invocation_log"
+  git -C "$repository_root" remote set-url origin "$test_directory/missing-remote/Krzysztof318/MailFathom"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > "$unreachable_output" 2>&1 || script_status=$?
+
+  git -C "$repository_root" remote set-url origin "$remote_repository_root"
+
+  if ((script_status == 0)); then
+    printf 'verify-fast.sh continued despite an unreachable remote\n' >&2
+    return 1
+  fi
+
+  assert_contains 'verify-fast.sh cannot fetch origin main.' "$unreachable_output"
+  assert_file_content '' "$invocation_log"
+}
+
+# A whitespace error in a file no formatter reads — a page, a workflow, a Helm template — is checked
+# by neither stack's flow and by nothing in the pipeline, so the loop that is the local gate asks it.
+# The staged case stands for all three here: the committed and unstaged ones are the same call over a
+# different range and the full gate already states each of them separately.
+verify_fast_refuses_a_whitespace_error() {
+  local whitespace_output="$test_directory/verify-fast-whitespace-output"
+
+  printf 'clean\n\n' > "$repository_root/tracked.txt"
+  git -C "$repository_root" add tracked.txt
+
+  if (
+    cd "$repository_root"
+    VERIFY_FORCE=1 "$scripts_directory/verify-fast.sh"
+  ) > "$whitespace_output" 2>&1; then
+    printf 'verify-fast.sh ignored staged whitespace errors\n' >&2
+    git -C "$repository_root" restore --staged --worktree tracked.txt
+    return 1
+  fi
+
+  git -C "$repository_root" restore --staged tracked.txt
+  git -C "$repository_root" restore tracked.txt
+
+  assert_contains 'new blank line at EOF.' "$whitespace_output"
+}
+
+# The fetch writes the tracking ref rather than only FETCH_HEAD, which is what makes the ancestor
+# test above read the base as it is now instead of as it was when somebody last fetched by hand.
+verify_fast_fetches_the_remote_base_before_verifying() {
+  git -C "$repository_root" update-ref -d refs/remotes/origin/main
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > /dev/null 2>&1
+
+  [[ "$(git -C "$repository_root" rev-parse refs/remotes/origin/main)" == "$(git -C "$remote_repository_root" rev-parse main)" ]]
 }
 
 # The other half of the same decision. A branch that reaches both stacks runs both flows, and each
@@ -373,7 +533,7 @@ verify_fast_runs_the_client_flow_for_a_change_under_frontend() {
 
   remove_client_change
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --project backend/tests/Sample.UnitTests/Sample.UnitTests.csproj --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
   assert_file_content \
     $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run test\n--dir frontend run format' \
@@ -1070,7 +1230,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --project backend/tests/Sample.UnitTests/Sample.UnitTests.csproj --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -1099,7 +1259,7 @@ verify_fast_skips_formatting_when_no_csharp_file_changed() {
   fi
 
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --project backend/tests/Sample.UnitTests/Sample.UnitTests.csproj --configuration Release --no-build' \
     "$invocation_log"
 }
 
@@ -1348,9 +1508,11 @@ verify_full_refuses_a_checkout_with_no_upstream_remote() {
   assert_file_content '' "$workflow_invocation_log"
 }
 
-# The fast loop only decides which files to format, so a fork with no upstream costs a narrower
-# scope rather than a refusal. It must still run: a contributor fixing their remotes cannot be
-# blocked from building and testing meanwhile.
+# The fast loop refuses a branch behind its base, and this is the one case that is not that: a
+# checkout whose remotes name no MailFathom has no base to be behind, so there is nothing to hold it
+# to and nothing a refusal would teach that the hint does not already say. It must still run — a
+# contributor fixing their remotes cannot be blocked from building and testing meanwhile — and the
+# full gate above still refuses the same checkout, which is where that answer is owed.
 verify_fast_runs_in_a_fork_with_no_upstream_remote() {
   local fork_root="$test_directory/fork-verify-fast"
 
@@ -9595,6 +9757,12 @@ None'
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
+run_test verify_fast_names_the_suites_it_left_to_the_pipeline
+run_test verify_fast_runs_every_suite_when_a_shared_build_input_changed
+run_test verify_fast_stops_when_head_is_behind_origin_main
+run_test verify_fast_stops_when_the_remote_is_unreachable
+run_test verify_fast_refuses_a_whitespace_error
+run_test verify_fast_fetches_the_remote_base_before_verifying
 run_test verify_fast_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
 run_test verify_full_runs_no_stack_flow_for_a_change_no_build_reads

@@ -35,16 +35,18 @@ want. `scripts/test-agent-workflow.sh` asserts the folder list, so a folder poin
 
 ## Commands
 
-For the normal implementation loop, run:
-
-```bash
-bash scripts/verify-fast.sh
-```
-
-Before committing, run the complete local gate:
+For the implementation loop, and again as the gate before a commit, run:
 
 ```bash
 git add <task-files>
+bash scripts/verify-fast.sh
+```
+
+The complete gate is the pipeline's. `CI` asserts every verdict it produces on
+the pull request, so run it locally where its answer is the one being waited on
+rather than as a step of every change:
+
+```bash
 bash scripts/verify-full.sh
 ```
 

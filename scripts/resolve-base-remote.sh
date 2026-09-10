@@ -88,3 +88,41 @@ base_remote_resolution_hint() {
   printf '  git remote add upstream https://github.com/%s.git\n' "$CANONICAL_REPOSITORY"
   printf '  git fetch upstream main\n'
 }
+
+# Prints the base remote once the branch has been proved to contain its current `main`, and returns
+# non-zero with the reason on stderr otherwise. Both gates ask this, and both ask it before anything
+# else costs anything: a run against a base the branch no longer contains proves nothing about the
+# tree a merge would produce, and a rebase is cheapest at the moment the drift appears rather than
+# after the work is pushed.
+#
+# The explicit destination refspec is what makes the ancestor test below meaningful. A bare
+# `git fetch <remote> main` only writes FETCH_HEAD, so a repository whose `remote.<remote>.fetch` is
+# missing or remapped would keep a stale `refs/remotes/<remote>/main` and pass against it.
+#
+# Nothing in the pipeline asks this. A pull request whose branch fell behind `main` is not a pull
+# request that failed, and failing one for it would turn every merge into a red check on every branch
+# open beside it; the `main` ruleset already requires a branch to be current before it merges, which
+# is the one place the question belongs there.
+require_base_is_contained() {
+  local gate_name="$1"
+  local base_remote
+
+  if ! base_remote="$(resolve_base_remote)"; then
+    base_remote_resolution_hint >&2
+    return 1
+  fi
+
+  if ! git fetch --quiet "$base_remote" "+refs/heads/main:refs/remotes/$base_remote/main"; then
+    printf '%s cannot fetch %s main. Restore access to the remote instead of verifying against a stale base.\n' \
+      "$gate_name" "$base_remote" >&2
+    return 1
+  fi
+
+  if ! git merge-base --is-ancestor "$base_remote/main" HEAD; then
+    printf 'HEAD does not contain the current %s/main. Rebase the branch onto the fetched base before verifying.\n' \
+      "$base_remote" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$base_remote"
+}

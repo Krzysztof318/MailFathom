@@ -135,14 +135,22 @@ It does that in whichever of the two stacks your change reaches, decided from th
 
 Do not invoke `dotnet format` by hand. Both of its modes already run where they belong — the loop repairs the files you changed, the full gate verifies them — and a hand-run pass over the whole solution costs minutes to report what the build has already told you: a style rule with no automatic fix fails the Release build above, naming its file and line.
 
-Before you commit, stage your files and run the full gate:
+That same loop is the gate before you commit, so stage your files and run it again:
 
 ```bash
 git add <your files>
+bash scripts/verify-fast.sh
+```
+
+It fetches `origin main` — or your `upstream`, whichever remote points at MailFathom — and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. Nothing in the pipeline asks that question, which is why the loop does. In the server stack it runs the unit suites your change can have broken rather than the solution's whole suite, and it prints which ones those were and how many there are, because the rest is the pull request's answer rather than one you have.
+
+The full gate is available and is not a step of every change:
+
+```bash
 bash scripts/verify-full.sh
 ```
 
-The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. In the server stack it builds, runs the complete unit-test and coverage gate, and verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files. In the client stack it restores the pnpm workspace in locked mode, lints it, type-checks it, verifies its formatting rather than repairing it, and builds the static bundle. Beside all of that it runs the workflow contract suite where your change can have moved something it asserts, and it checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+Every verdict it produces arrives again on your pull request, from the same coverage target, the same contract suite, and the same client flow — on a runner per job rather than on your machine. What running it buys is that answer earlier, which is worth it when it is the one you are waiting on: a coverage figure, the whole solution's formatting after you touched an `.editorconfig` or a shared build file, a client bundle that has to build. It also rejects remaining untracked files, so a newly added file cannot slip past diff validation.
 
 Neither script proves the same tree twice. Each records a digest of what it verified under `artifacts/verify/`, which is ignored and never staged, and a run handed a tree it has already passed over prints the earlier run and stops in under a second. So run the gate rather than working out whether the last run still counts: a failing run records nothing, a fast loop whose formatting pass rewrote a file records nothing, and `VERIFY_FORCE=1` runs everything regardless.
 

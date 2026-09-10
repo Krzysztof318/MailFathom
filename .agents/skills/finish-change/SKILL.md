@@ -26,14 +26,21 @@ where it came from.
 3. Invoke `$check-docs-licenses`. Fix every `fail` and repeat the gate until all three verdicts pass
    or are `n/a`. Its changelog verdict is `n/a` for ordinary work: `CHANGELOG.md` is written by the
    release pull request alone, so a diff that edits it here is a defect rather than diligence.
-4. Run `scripts/verify-full.sh`. Fix failures and rerun the complete script; partial results do not
+4. Run `scripts/verify-fast.sh`. Fix failures and rerun the complete script; partial results do not
    replace a successful one, and a run that failed records nothing, so the rerun is a real run. An
    *unchanged* tree is the one case that answers in under a second, because the script records what
-   it verified and a second run over identical content would reprove it rather than prove it. Repair
-   a formatting failure through
-   `scripts/verify-fast.sh`, which rewrites the changed files, rather than through a hand-run
-   `dotnet format` over the whole solution; a diagnostic no rewrite fixes is a build error there and
-   names its own file and line.
+   it verified and a second run over identical content would reprove it rather than prove it. A
+   formatting failure is repaired by this same script, which rewrites the changed files, rather than
+   by a hand-run `dotnet format` over the whole solution; a diagnostic no rewrite fixes is a build
+   error and names its own file and line.
+
+   This is the gate, and `scripts/verify-full.sh` is not part of it. `CI` asserts every verdict that
+   script produces — the coverage target, the workflow contract suite, the client's bundle and the
+   browser suite behind it, and the whole solution's formatting — on the pull request this step is
+   about to open, on a runner per job. Run it here only where its answer is the one being waited on,
+   and say so in the report when you did. Say nothing when you did not: the pull request's checks are
+   where that evidence arrives, and presenting the fast loop as the full gate is the one way this step
+   can lie.
 5. Inspect status and the full diff for secrets, generated artifacts, unrelated edits, architecture
    violations, and missing tests or documentation. `scripts/review-obligations.sh` is what answers the
    last of those without reading the whole tree: it names the tests and pages the change obliges and

@@ -14,18 +14,61 @@ Inspect the current workspace without changing Git state:
 bash scripts/inspect-workspace.sh
 ```
 
-Use the fast loop while implementing:
+Use the fast loop while implementing, and again as the gate the change is held
+to before it is committed:
 
 ```bash
 bash scripts/verify-fast.sh
 ```
 
-The fast loop restores, builds Release, runs the unit tests, and then formats the
-C# files the branch changed: everything committed since `origin/main`, staged,
-modified, or newly added. It is the only workflow script that rewrites source
-files, and every `dotnet format` pass it runs is a repairing one. Each file is
-formatted against `backend/MailFathom.slnx`, which is the solution that holds it,
-and formatting is skipped where the branch touched no C#.
+It refuses a branch that does not contain the base it will merge into, before it
+spends anything: it resolves the base remote, fetches `main` with an explicit
+destination refspec, and names the rebase when the branch has fallen behind.
+[The base is asked twice locally and never in the pipeline](#the-base-is-asked-twice-locally-and-never-in-the-pipeline)
+is why that check is here rather than only in the full gate, and why no workflow
+has one.
+
+Then it restores, builds Release, runs the unit suites the change can have
+broken, and formats the C# files the branch changed: everything committed since
+`origin/main`, staged, modified, or newly added. It is the only workflow script
+that rewrites source files, and every `dotnet format` pass it runs is a repairing
+one. Each file is formatted against `backend/MailFathom.slnx`, which is the
+solution that holds it, and formatting is skipped where the branch touched no C#.
+It ends on the same whitespace checks the full gate makes, over the staged and
+unstaged diffs and — where the base resolved — over the branch's committed range,
+because a whitespace error in a page, a workflow, or a Helm template is read by
+neither stack's formatter and by nothing in the pipeline.
+
+The solution is built whole and tested narrow, and the two halves of that are
+measured rather than assumed. On the owner's machine an incremental Release build
+of the whole solution is about eight seconds and the whole suite is about eighty,
+fifteen thousand tests of which a change reads a handful of projects' worth — so
+the suite is where the cost is. Narrowing the build instead would buy the seconds
+and give up the analyzer verdict `EnforceCodeStyleInBuild` and
+`TreatWarningsAsErrors` produce over every project, which is the half of that step
+answering for the files the change did not open.
+
+Which suites run is
+[`scripts/resolve-changed-unit-suites.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/resolve-changed-unit-suites.sh)'s
+answer, read out of what each test project names in its own `Include`
+attributes — a `ProjectReference` to the project under test, or a `Compile`
+linking one of its files in, which is how `AppHost.UnitTests` reaches its subject
+while holding no project reference at all. A unit-test project is one whose name
+ends `.UnitTests`, the same rule `backend/Directory.Build.props` sets
+`IsUnitTestProject` by, which is what keeps `Benchmarks` and `IntegrationTests`
+out of the selection exactly as a solution-wide `dotnet test` keeps them out of
+its own run.
+
+The relation is direct rather than transitive, and that is what the narrowing
+costs: a change to `Domain` runs `Domain.UnitTests` and not the
+`Application.UnitTests` that exercises the same types one layer up. A change
+reaching a path under `backend/` that no test project names — a package pin, a
+shared build property, the solution file — is not narrowed at all and runs the
+whole solution, because each of those can move the verdict on a project nothing
+in the change touched. The run prints how many suites it ran of how many there
+are and names them, so a run that tested a quarter of the suite never reads as a
+run that tested all of it; `CI` runs every suite on the pull request, which is
+where the rest of that verdict arrives.
 
 Which of the two stacks it does any of that in follows from the changed paths
 rather than from whoever started it;
@@ -130,12 +173,22 @@ design_ is the rule, including why the report is read before any image and why a
 invocation produces at most four pairs. None of the three gates anything, and
 nothing they write enters the tree.
 
-Run the complete gate before committing:
+Run the complete gate where its answer is wanted before a push, rather than as a
+step of every change:
 
 ```bash
 git add <task-files>
 bash scripts/verify-full.sh
 ```
+
+`CI` asserts every verdict this script produces, on the pull request, from the
+same coverage target, the same contract suite, and the same client flow — and it
+does so on a runner per job rather than on the one machine the work is being
+written on. So what running it locally buys is the answer *earlier*, which is
+worth paying for when it is the answer being waited on: a coverage figure, the
+whole solution's formatting after a shared style input moved, a client bundle
+that has to build. It is not worth paying for on every change, and
+`$finish-change` no longer asks for it.
 
 The full gate rejects remaining untracked files, fetches `origin main` and
 requires the branch to contain that freshly fetched base, and then runs the flow
@@ -319,17 +372,53 @@ Three things follow that are worth knowing before they are discovered.
   [Building and testing the client](local-development.md#building-and-testing-the-client)
   carries what those commands are.
 - **A change no build reads runs no solution.** Documentation, a skill, a
-  deployment asset, a board rule: the full gate answers such a change with the
-  contract suite and the whitespace checks, and that is the complete answer rather
-  than a narrowed one, because nothing a build could have reported can be broken by
-  a file no build reads. The loop says so rather than exiting silently, since a gate
-  that prints nothing reads as a gate that was not run.
+  deployment asset, a board rule: the whitespace checks are what either gate has to
+  say about such a change, and the contract suite is what the full gate adds and
+  the pull request runs regardless — and between them that is the complete answer
+  rather than a narrowed one, because nothing a build could have reported can be
+  broken by a file no build reads. Both gates say so rather than exiting silently,
+  since a gate that prints nothing reads as a gate that was not run.
 
 Each stack formats through its own tool, and the split into a repairing and a
 verifying half is the same on both sides: the fast loop repairs and the full gate
 verifies. `dotnet format` reaches the service solution alone, over the C# files
 the branch changed, and Prettier reaches the pnpm workspace; neither is ever
 invoked by hand, because both already run where they belong.
+
+### The base is asked twice locally and never in the pipeline
+
+Both gates fetch the base branch and refuse a branch that does not contain it,
+through one implementation in
+[`scripts/resolve-base-remote.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/resolve-base-remote.sh):
+a base check that existed twice is a base check that can disagree with itself.
+The explicit destination refspec is what makes the ancestor test mean anything —
+a bare `git fetch <remote> main` writes only `FETCH_HEAD`, so a repository whose
+`remote.<remote>.fetch` is missing or remapped would keep a stale tracking ref
+and pass against it.
+
+The fast loop asks it because it is the gate a change is held to locally, and
+because this is the one question the pipeline does not ask for it. Every other
+verdict the full gate produces arrives again on the pull request; this one never
+does, and it is cheapest to answer at the moment the drift appears rather than
+after the work is pushed.
+
+**No workflow gains this check, and adding one is the mistake this paragraph
+exists to prevent.** A pull request whose branch has fallen behind `main` is not
+a pull request that failed: `main` moves whenever anything merges, so a
+freshness check in `CI` would turn every merge into a red check on every branch
+open beside it, none of which says anything about the change under review. The
+`main` ruleset already requires a branch to be current with `main` before it
+merges, and that is the whole of where the question belongs in the pipeline —
+answered once, at the point it decides something, rather than continuously
+against a base nobody is being asked to rebase onto yet.
+
+One checkout carries on regardless, in the fast loop only: one whose remotes name
+no MailFathom at all. There is no base for it to be behind, so there is nothing
+to refuse against and nothing a refusal would teach that
+`base_remote_resolution_hint` does not already print — and that checkout is the
+fork whose second remote has not been added yet, which must still be able to
+build and test while the contributor fixes exactly what the hint names. The full
+gate refuses it, which is where that answer is owed.
 
 ### A gate does not prove the same tree twice
 
@@ -368,7 +457,7 @@ Four things bound what a record claims.
   where a shared style input triggered it — because the loop never formatted that
   scope.
 - **The base is deliberately not in the digest.** Whether the branch still
-  contains the current `origin/main` is asked afresh on every full-gate run,
+  contains the current `origin/main` is asked afresh on every run of either gate,
   before any record is consulted, so a record cannot stand in for it. Folding the
   base in would retire every record each time somebody else merged, while proving
   nothing about this branch's own content. The whitespace checks read the base
@@ -2458,11 +2547,11 @@ is settled and an issue for the work that is not.
   Check out the branch that carries the change and rerun; the scripts never
   change branches themselves.
 - `HEAD does not contain the current origin/main` means `main` moved after the
-  branch was cut. Rebase onto the fetched base, resolve any conflicts, and rerun
-  the complete gate; earlier passing results describe a base that no longer
+  branch was cut. Both gates refuse it. Rebase onto the fetched base, resolve any
+  conflicts, and rerun; earlier passing results describe a base that no longer
   exists.
-- `verify-full.sh cannot fetch origin main` means the remote is unreachable or
-  the credentials failed. Restore access and rerun. Do not work around it by
+- `cannot fetch origin main`, from either gate, means the remote is unreachable
+  or the credentials failed. Restore access and rerun. Do not work around it by
   verifying against the local remote-tracking ref.
 - `Untracked files must be staged or removed before full verification` means
   the focused task files have not all entered the index. Stage only those task
@@ -2485,9 +2574,11 @@ is settled and an issue for the work that is not.
 ## Completion evidence
 
 A change is not complete until `check-docs-licenses` returns `pass` or `n/a` for
-all three categories, `verify-full.sh` succeeds from a fresh run, the complete diff
+all three categories, `verify-fast.sh` succeeds from a fresh run, the complete diff
 has been inspected for secrets, generated files, unrelated edits, and boundary
-violations, and the published pull request body references its issue.
+violations, and the published pull request body references its issue. The rest of
+the evidence is the pull request's own checks, which is where the coverage target,
+the contract suite, and the client's bundle and browser suite report.
 
 `gh pr edit` fails against this repository with a Projects-classic GraphQL error
 and silently drops the edit, so correct a missing issue reference through
