@@ -324,21 +324,38 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             if (!schedulingToken.IsCancellationRequested)
             {
-                await this.DeliverOutstandingMailAsync(workUnitToken);
-                await this.EraseExpiredDerivedRecordsAsync(runSettings, workUnitToken);
-                await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
-                await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
-                await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
-                await this.ReadAttachmentsOfCutMailAsync(runSettings, workUnitToken);
-                await this.DeriveMarksOfCutMailAsync(runSettings, workUnitToken);
-                await this.DeriveStatesOfChangedThreadsAsync(runSettings, workUnitToken);
-                await this.ReportRunToItsUserAsync(
-                    runSettings,
-                    scheduledFolders.Length,
-                    failedFolderCount,
-                    arrivedEmailCount,
-                    credentialRefused,
-                    workUnitToken);
+                Func<CancellationToken, Task>[] stagesAfterTheFolders =
+                [
+                    this.DeliverOutstandingMailAsync,
+                    token => this.EraseExpiredDerivedRecordsAsync(runSettings, token),
+                    token => this.ClassifyRequestedMailAsync(runSettings, token),
+                    token => this.EvaluateMailRulesAsync(runSettings, token),
+                    token => this.CutPassagesOfEvaluatedMailAsync(runSettings, token),
+                    token => this.ReadAttachmentsOfCutMailAsync(runSettings, token),
+                    token => this.DeriveMarksOfCutMailAsync(runSettings, token),
+                    token => this.DeriveStatesOfChangedThreadsAsync(runSettings, token),
+                    token => this.ReportRunToItsUserAsync(
+                        runSettings,
+                        scheduledFolders.Length,
+                        failedFolderCount,
+                        arrivedEmailCount,
+                        credentialRefused,
+                        token),
+                ];
+
+                foreach (var stage in stagesAfterTheFolders)
+                {
+                    // The boundary between two stages is where a change authored since this run began is carried, so a
+                    // delete or an archive somebody asked for waits out the stage under way rather than the whole run.
+                    // The stages are a list rather than a sequence of calls for that reason alone: a boundary a stage
+                    // added later did not get would be a latency nobody sees until somebody measures it again.
+                    convergenceFailed |= await this.ConvergeAuthoredChangeAsync(
+                        runSettings,
+                        schedulingToken,
+                        workUnitToken);
+
+                    await stage(workUnitToken);
+                }
             }
         }
         finally
@@ -426,6 +443,34 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             return true;
         }
+    }
+
+    /// <summary>Converges a change authored since this run began, at the boundary between two of the run's stages.</summary>
+    /// <returns><see langword="true" /> when a pass ran and at least one change failed, which puts the account into backoff.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gated on a raise rather than run at every boundary, because the boundaries are reached several times a run and an
+    /// account nobody changed anything on must cost neither a query nor a mailbox session for them. The raise is what
+    /// says a record was written since this run started reading, so taking it here is the whole of the condition, and
+    /// taking it is also what keeps the wait after this run from bringing a run forward for what this pass has carried.
+    /// </para>
+    /// <para>
+    /// It is withheld once the host stops scheduling, for the reason the pass at the top of the run is: convergence opens
+    /// the account's write connection, and the drain exists to let work already in flight finish rather than to start a
+    /// mailbox session inside it. The change stays recorded and the next run carries it.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> ConvergeAuthoredChangeAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken schedulingToken,
+        CancellationToken workUnitToken)
+    {
+        if (schedulingToken.IsCancellationRequested || !this.runSignal.TakeRaise(this.account.Id))
+        {
+            return false;
+        }
+
+        return await this.ConvergeOutstandingMutationsAsync(runSettings, workUnitToken);
     }
 
     /// <summary>Delivers whatever this account has been asked to send and has not seen leave.</summary>

@@ -573,8 +573,18 @@ is the next one whether or not anything ends the wait early. The raise carries n
 records rather than the raise, and it is one per account rather than one per change, so a hundred messages filed at
 once bring a single run forward. It is a hint and not a queue entry: never awaited, never retried, and one lost delays
 a change to the interval rather than dropping it. One arriving while the account is mid-run is the ordinary case rather
-than a corner, since the record is usually written while a run is under way, so it is kept and spent by the wait that
-follows — which is what carries the change into the next run instead of the one after that.
+than a corner, since the record is usually written while a run is under way, so it is kept until something answers it.
+
+**A run under way answers it at its next stage boundary.** A run converges before it reads its folders and again between
+each of the passes that follow them — the delivery, the retention sweep, the classification, the rules, the cut, the
+attachment reading, the two derivations, and the report — so a change recorded while any one of those is running is
+carried at the boundary after it rather than waiting out the stages left. That matters because those stages are where a
+run spends its time: the folders of a settled account take a couple of seconds and the derivations behind them take tens
+of seconds each, so a delete waiting for the run to end was waiting on work that has nothing to do with it. A boundary
+costs nothing when nothing was authored, since the raise is what it reads and no raise means no record query, no write
+session, and no IMAP command. Whichever answers the raise spends it, so a run brought forward is never a run brought
+forward for a change already carried: a raise taken at a boundary leaves the wait after that run unbrought, and one
+landing past the last boundary is taken by that wait and carried by the run it brings forward.
 
 The record answers three questions with one row.
 
