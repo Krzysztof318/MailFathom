@@ -1266,6 +1266,32 @@ internal sealed class AdminApiClient
             cancellationToken,
             absenceMessage: NoSuchUser);
 
+    /// <summary>Commits one user's record as an editing session saved it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="userId">The user whose record is written.</param>
+    /// <param name="request">The record and the version the buffer was opened over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<UserRecordWriteAnswer> SaveUserRecordAsync(
+        string token,
+        Guid userId,
+        UserRecordSaveRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.UserRecordPath(userId),
+            token,
+            CliJsonContext.Default.UserRecordWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.UserRecordSaveRequest),
+            NoSuchUser);
+    }
+
     /// <summary>Declares one more mail account in a user's record.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="userId">The user the mailbox belongs to.</param>

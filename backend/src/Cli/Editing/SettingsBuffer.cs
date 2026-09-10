@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.Cli.Credentials;
 
-namespace MailFathom.Cli.Commands.Configuration;
+namespace MailFathom.Cli.Editing;
 
 /// <summary>The file an editing session opens, and what changed underneath one that was refused.</summary>
 /// <remarks>

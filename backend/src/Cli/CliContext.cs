@@ -4,10 +4,10 @@
 
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
-using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Credentials.SecretStores;
 using MailFathom.Cli.Diagnostics;
+using MailFathom.Cli.Editing;
 using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli;

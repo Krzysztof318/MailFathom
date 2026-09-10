@@ -2,8 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Editing;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 
@@ -51,6 +51,34 @@ internal sealed class CliCommandHarness : IDisposable
     /// the operator would have typed, and drives the two endings apart by answering with the one it means.
     /// </remarks>
     internal Func<string, string, EditingSession>? Editor { get; set; }
+
+    /// <summary>Stands in for the operator, saving the document they would have typed into the buffer.</summary>
+    /// <param name="saved">What the buffer holds when the editor exits.</param>
+    internal void EditsTheBufferInto(string saved) =>
+        this.OpensTheBufferWith((_, path) =>
+        {
+            File.WriteAllText(path, saved);
+
+            return true;
+        });
+
+    /// <summary>Names an editor for the shell and states what the session does to the buffer.</summary>
+    /// <param name="session">What the operator does, answering whether the editor reported success.</param>
+    /// <remarks>
+    /// Both halves, because a command reads the variable before it opens anything: a session scripted without one never
+    /// reaches the editor at all, and the refusal it meets instead is the subject of a test of its own.
+    /// </remarks>
+    internal void OpensTheBufferWith(Func<string, string, bool> session) =>
+        this.OpensTheBufferWith((editor, path) =>
+            session(editor, path) ? EditingSession.Finished : EditingSession.Failed);
+
+    /// <summary>Names an editor for the shell and states what became of the session it opens.</summary>
+    /// <param name="session">What became of the editing session.</param>
+    internal void OpensTheBufferWith(Func<string, string, EditingSession> session)
+    {
+        this.Variables[OperatorEditor.VisualVariable] = "vi";
+        this.Editor = session;
+    }
 
     /// <summary>Runs one invocation against a deployment, with the credential a signed-in operator would hold.</summary>
     /// <param name="deployment">The deployment the command meets instead of a server.</param>

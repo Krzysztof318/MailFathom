@@ -94,6 +94,7 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(UserProvisioned))]
 [JsonSerializable(typeof(UserErasure))]
 [JsonSerializable(typeof(UserRecord))]
+[JsonSerializable(typeof(UserRecordSaveRequest))]
 [JsonSerializable(typeof(UserMailAccountRequest))]
 [JsonSerializable(typeof(UserMailAccountRemovalRequest))]
 [JsonSerializable(typeof(UserAdoptionRequest))]
