@@ -171,7 +171,8 @@ public sealed class BudgetedChatClientTests
     /// <summary>
     /// A synchronous owner cannot charge the period, so releasing a run that spent tokens that way is refused rather
     /// than dropping that spend silently — every construction site awaits disposal, and this is what reports the one
-    /// that stops.
+    /// that stops. The refusal leaves what the run spent uncharged rather than lost, which is why the awaited release
+    /// after it still writes the whole of it.
     /// </summary>
     [Fact]
     public async Task Dispose_ARunWhoseTokensNothingHasCharged_IsRefused()
@@ -183,9 +184,16 @@ public sealed class BudgetedChatClientTests
 
         await client.GetResponseAsync(Conversation, options: null, TestContext.Current.CancellationToken);
 
-        // Act, Assert
-        Assert.Throws<NotSupportedException>(client.Dispose);
+        // Act
+        var refusal = Record.Exception(client.Dispose);
+
+        // Assert
+        Assert.IsType<NotSupportedException>(refusal);
         await spendLedger.DidNotReceive().RecordSpendAsync(Arg.Any<ChatTokenUsage>(), Arg.Any<CancellationToken>());
+
+        // The refusal leaves the spend uncharged rather than lost, so the awaited release still writes it.
+        await client.DisposeAsync();
+        await spendLedger.Received(1).RecordSpendAsync(new ChatTokenUsage(90, 30), CancellationToken.None);
     }
 
     /// <summary>A run that charged the period is released synchronously without complaint, which is the path disposal itself takes.</summary>
