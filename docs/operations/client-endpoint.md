@@ -2281,10 +2281,12 @@ closed without being told which.
 own identifier the moment it is admitted, and every statement is published to one group; nothing here reads a group name
 a caller supplied, because nothing here takes one.
 
-**What crosses is what changed, never what it changed to.** A signal is an instruction to look again: it names a count,
-an account alias, a folder alias, a stored identity, and the two server flags of one, and no subject, address, body
-fragment, filename, or attachment name reaches it at any size. The one exception is a raised notification's own headline
-and second line, which are the record's already-derived text and reach a client entitled to read that record over
+**What crosses is what changed, never what it changed to, with two named exceptions.** A signal is an instruction to
+look again: it names a count, an account alias, a folder alias, a stored identity, and the two server flags of one, and
+no subject, address, body fragment, filename, or attachment name reaches it at any size. The first exception is the
+flags `mail.flags.changed` carries, which say where each of those two stands rather than that one moved, for the reason
+the paragraph below the table gives. The second is a raised notification's own headline and second line, which are the
+record's already-derived text and reach a client entitled to read that record over
 [the notification routes](#the-notification-routes). Six things are said:
 
 | Signal | What it says |
