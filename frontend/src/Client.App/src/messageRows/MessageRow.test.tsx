@@ -35,7 +35,11 @@ const email: MailTimelineEntry = {
     threadMessageCount: null,
 };
 
-function drawMoved(moved: { readonly arrived?: boolean; readonly changed?: boolean }): HTMLElement {
+function drawMoved(moved: {
+    readonly arrived?: boolean;
+    readonly changed?: boolean;
+    readonly onSettled?: () => void;
+}): HTMLElement {
     render(
         <LocalizationProvider>
             <ul>
@@ -47,6 +51,7 @@ function drawMoved(moved: { readonly arrived?: boolean; readonly changed?: boole
                     focusable
                     arrived={moved.arrived ?? false}
                     changed={moved.changed ?? false}
+                    onSettled={moved.onSettled}
                     onOpen={() => undefined}
                     onPoint={() => undefined}
                     onPointerEnter={() => undefined}
@@ -495,6 +500,15 @@ describe('MessageRow, under a finger carried across it', () => {
 // The standing rule for every list in this client: the skeleton is drawn once, when the list holds nothing, and every
 // change after it reaches the rows it touched. A row is where that lands, and what it draws is the one thing about it
 // that moved.
+// The end of an element's own animation, dispatched under the name React is actually listening for: it binds the
+// vendor-prefixed name wherever the environment declares no `AnimationEvent` constructor, which jsdom does not, and the
+// standard one everywhere else. The branch is React's own rather than this client's, and a browser takes the first arm.
+function animationEnded(element: Element): void {
+    const named = 'AnimationEvent' in window ? 'animationend' : 'webkitAnimationEnd';
+
+    element.dispatchEvent(new Event(named, { bubbles: true }));
+}
+
 describe('MessageRow, a row that moved', () => {
     it('lands into its place where it arrived in a list the reader was already looking at', () => {
         expect(drawMoved({ arrived: true }).className).toContain('animate-row-landing');
@@ -509,6 +523,27 @@ describe('MessageRow, a row that moved', () => {
 
         expect(row.className).toContain('animate-row-landing');
         expect(row.className).not.toContain('animate-row-changed');
+    });
+
+    it('says it has settled once its own animation has run, so the list stops holding it as a row that moved', () => {
+        const settled = vi.fn();
+        const row = drawMoved({ arrived: true, onSettled: settled });
+
+        animationEnded(row);
+
+        expect(settled).toHaveBeenCalledOnce();
+    });
+
+    it('says nothing of an animation that ran inside it, which is not the row having moved', () => {
+        const settled = vi.fn();
+        const row = drawMoved({ arrived: true, onSettled: settled });
+        const within = row.querySelector('span');
+
+        expect(within).not.toBeNull();
+
+        animationEnded(within as Element);
+
+        expect(settled).not.toHaveBeenCalled();
     });
 
     it('draws neither where nothing about the row moved, which is every row of a list that was just read', () => {

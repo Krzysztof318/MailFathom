@@ -83,6 +83,7 @@ export function MessageRow({
     onAnswer,
     onArchive,
     onPointerEnter,
+    onSettled,
     onElement,
 }: {
     readonly email: MailTimelineEntry;
@@ -144,6 +145,17 @@ export function MessageRow({
     readonly onArchive?: (() => void) | undefined;
 
     readonly onPointerEnter: () => void;
+
+    /**
+     * That the row has finished saying it moved, so the list stops holding it as a row that did.
+     *
+     * A windowed list unmounts a row scrolled out of the window and mounts it again on the way back, and a row still
+     * held as arrived would land a second time each time that happened — which is the animation running for something
+     * that did not just happen. So the row reports the end of its own animation rather than the list timing it, and
+     * the duration stays in the stylesheet where every other one is.
+     */
+    readonly onSettled?: (() => void) | undefined;
+
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
@@ -187,6 +199,13 @@ export function MessageRow({
             aria-setsize={-1}
             aria-current={open ? 'true' : undefined}
             tabIndex={focusable ? 0 : -1}
+            onAnimationEnd={(event) => {
+                // The row's own animation and not one inside it: `animationend` bubbles, so a symbol animating within
+                // the row would otherwise report the row as having finished moving before it had.
+                if (event.target === event.currentTarget) {
+                    onSettled?.();
+                }
+            }}
             onContextMenu={press.onContextMenu}
             onPointerDown={(event) => {
                 press.onPointerDown(event);

@@ -12,6 +12,23 @@ export const mostRowsRemembered = 10_000;
 /** No rows at all, held as one object so a list that noticed nothing renders nothing again. */
 export const noRows: ReadonlySet<string> = new Set();
 
+/**
+ * The rows still saying they moved, once this one has finished saying it.
+ *
+ * The same set back where it held nothing about that row, so a row settling changes nothing for the rows beside it.
+ */
+export function rowSettled(rows: ReadonlySet<string>, id: string): ReadonlySet<string> {
+    if (!rows.has(id)) {
+        return rows;
+    }
+
+    const left = new Set(rows);
+
+    left.delete(id);
+
+    return left.size === 0 ? noRows : left;
+}
+
 /** What a page's arrival amounts to: which of its rows are new to the reader, and what they have now been shown. */
 export interface RowsNoticed {
     readonly arrived: ReadonlySet<string>;

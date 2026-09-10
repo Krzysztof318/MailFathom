@@ -56,7 +56,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
-import { noRows, rowsNoticed } from './movedRows';
+import { noRows, rowSettled, rowsNoticed } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -841,6 +841,10 @@ export function MessageList({
                                     focusable={row === focusedRow}
                                     arrived={arrivedRows.has(email.id)}
                                     changed={changedRows.has(email.id)}
+                                    onSettled={() => {
+                                        setArrivedRows((rows) => rowSettled(rows, email.id));
+                                        setChangedRows((rows) => rowSettled(rows, email.id));
+                                    }}
                                     note={readingOn(email)}
                                     onReadings={checkingReadings(email)}
                                     onOpen={() => {

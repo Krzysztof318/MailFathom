@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { mostRowsRemembered, rowsNoticed } from './movedRows';
+import { mostRowsRemembered, noRows, rowSettled, rowsNoticed } from './movedRows';
 
 describe('rowsNoticed', () => {
     it('reports nothing as having arrived in a list that had drawn nothing, because that list appeared', () => {
@@ -53,5 +53,23 @@ describe('rowsNoticed', () => {
 
         expect(second.shown.has('row-0')).toBe(true);
         expect(second.shown.has('row-1')).toBe(false);
+    });
+});
+
+describe('rowSettled', () => {
+    it('leaves the rows that have not finished moving where they were', () => {
+        const left = rowSettled(new Set(['one', 'two']), 'one');
+
+        expect([...left]).toEqual(['two']);
+    });
+
+    it('answers with the same set where the row it is told about was not moving, so nothing beside it is redrawn', () => {
+        const rows = new Set(['one']);
+
+        expect(rowSettled(rows, 'two')).toBe(rows);
+    });
+
+    it('answers with the one empty set once the last row has settled, so a list that noticed nothing draws nothing', () => {
+        expect(rowSettled(new Set(['one']), 'one')).toBe(noRows);
     });
 });
