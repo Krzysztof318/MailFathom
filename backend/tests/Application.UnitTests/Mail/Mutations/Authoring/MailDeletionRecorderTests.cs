@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -200,9 +201,27 @@ public sealed class MailDeletionRecorderTests
         Assert.Equal(MailboxMutation.Delete, Assert.Single(this.records.OpenedRequests).Mutation);
     }
 
+    /// <summary>A delete waits on the convergence pass exactly as a move does, so it must not sit there until the interval is out.</summary>
+    [Fact]
+    public async Task RecordAsync_ADelete_BringsTheAccountsNextSynchronizationRunForward()
+    {
+        // Arrange
+        var runSignal = new MailAccountRunSignal();
+        var recorder = this.Recorder(TargetIn(Trash), runSignal: runSignal);
+
+        // Act
+        await recorder.RecordAsync(LocalEmail, Requester, TestContext.Current.CancellationToken);
+
+        // Assert
+        using var waiting = runSignal.Register(Account.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(waiting.Token.IsCancellationRequested);
+    }
+
     private MailDeletionRecorder Recorder(
         AuthoredMailboxTarget? target,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        MailAccountRunSignal? runSignal = null)
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDelete);
@@ -231,7 +250,8 @@ public sealed class MailDeletionRecorderTests
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider(RecordedAt)));
+                new FakeTimeProvider(RecordedAt)),
+            runSignal ?? new MailAccountRunSignal());
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)

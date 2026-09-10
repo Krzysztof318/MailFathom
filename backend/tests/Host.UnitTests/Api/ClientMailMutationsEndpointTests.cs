@@ -621,7 +621,8 @@ public sealed class ClientMailMutationsEndpointTests
             targets,
             dispositions,
             this.records,
-            CommitPolicy());
+            CommitPolicy(),
+            new MailAccountRunSignal());
     }
 
     /// <summary>Builds a destination resolver that reaches nothing, because no test here gets as far as resolving a folder.</summary>

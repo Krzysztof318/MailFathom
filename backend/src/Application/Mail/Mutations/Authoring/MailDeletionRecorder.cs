@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -46,6 +47,7 @@ public sealed class MailDeletionRecorder
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailboxMutationRecordStore records;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly MailAccountRunSignal runSignal;
 
     /// <summary>Initializes the use case over the grant it asks first, the email it is about, and the record it writes.</summary>
     /// <param name="authorization">Answers which principal reached this use case.</param>
@@ -54,6 +56,7 @@ public sealed class MailDeletionRecorder
     /// <param name="deleteDispositions">Answers what the account keeps locally of mail the server has let go of.</param>
     /// <param name="records">Opens the durable record the delete is carried by.</param>
     /// <param name="commitPolicy">Commits the record, retrying an optimistic conflict.</param>
+    /// <param name="runSignal">Brings the account's next synchronization run forward, which is what carries the delete to the mail server.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public MailDeletionRecorder(
         AccessAuthorization authorization,
@@ -61,7 +64,8 @@ public sealed class MailDeletionRecorder
         IAuthoredMailboxTargetReader targets,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailboxMutationRecordStore records,
-        OptimisticConcurrencyRetryPolicy commitPolicy)
+        OptimisticConcurrencyRetryPolicy commitPolicy,
+        MailAccountRunSignal runSignal)
     {
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -69,6 +73,7 @@ public sealed class MailDeletionRecorder
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(runSignal);
 
         this.authorization = authorization;
         this.scopeResolver = scopeResolver;
@@ -76,6 +81,7 @@ public sealed class MailDeletionRecorder
         this.deleteDispositions = deleteDispositions;
         this.records = records;
         this.commitPolicy = commitPolicy;
+        this.runSignal = runSignal;
     }
 
     /// <summary>Writes down one delete, against the email a caller named.</summary>
@@ -124,6 +130,11 @@ public sealed class MailDeletionRecorder
         var record = await this.commitPolicy.CommitAsync(
             (session, attemptCancellationToken) => this.records.OpenAsync(session, request, attemptCancellationToken),
             cancellationToken);
+
+        // Raised once the record is durable, for the reason MailFlagChangeRecorder gives: the run reads the records
+        // rather than the raise. A delete waits on the convergence pass exactly as a move does, so it waits on the
+        // same raise.
+        this.runSignal.BringForward(target.Occurrence.AccountId);
 
         return AuthoredMailDeletionResult.Recorded(record.Id, record.Lifecycle);
     }
