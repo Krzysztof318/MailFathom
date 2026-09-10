@@ -3918,13 +3918,12 @@ export_fathom_review_board_environment() {
 }
 
 run_fathom_review_board() {
-  local verdict="$1"
-  local closing_issues="$2"
-  local current_status="$3"
-  local output_file="$4"
+  local closing_issues="$1"
+  local current_status="$2"
+  local output_file="$3"
   # The ordinary case is a configured board; the contract about an unconfigured one names the empty
   # token itself.
-  local board_token="${5-classic-token-that-is-not-real}"
+  local board_token="${4-classic-token-that-is-not-real}"
   local step_script="$test_directory/fathom-review-board.sh"
 
   extract_fathom_review_step 'board' "$step_script"
@@ -3933,8 +3932,6 @@ run_fathom_review_board() {
   set +e
   (
     export_fathom_review_board_environment "$board_token"
-    export VERDICT="$verdict"
-    export APPROVED_STATUS='Ready to merge'
     export CHANGES_REQUESTED_STATUS='Changes requested'
     export PRESERVED_STATUSES='Done,Blocked'
     bash "$step_script"
@@ -3964,20 +3961,29 @@ run_fathom_review_announcement() {
   set -e
 }
 
-fathom_review_moves_an_approved_pull_request_to_ready_to_merge() {
-  local output_file="$test_directory/fathom-review-board-approved-output"
+# An approval is half of what `Ready to merge` claims and this workflow holds the other half of
+# nothing: it reads the diff, and the pipeline it cannot see is still running as often as not. So the
+# job runs for the withheld verdict alone, and `Apply pull request rules` decides the approved one
+# once the checks agree. The gate is the job's condition rather than a branch inside the step, which
+# is why this is read from the workflow rather than from a run.
+fathom_review_records_no_approval_on_the_board() {
+  local condition
 
-  run_fathom_review_board 'approved' '12' 'In progress' "$output_file"
+  condition="$(
+    sed -n "/^  board:/,/^    runs-on:/p" \
+      "$source_repository_root/.github/workflows/fathom-review.yml" \
+      | sed -n 's/^    if: //p'
+  )"
 
-  ((board_status == 0))
-  assert_contains 'option=option-ready' "$board_mutations_file"
-  assert_contains 'Issue 12 moved from In progress to Ready to merge' "$output_file"
+  assert_contains "verdict == 'changes_requested'" <(printf '%s\n' "$condition")
+  [[ "$condition" != *'Ready to merge'* ]]
+  ! grep -q 'APPROVED_STATUS' "$source_repository_root/.github/workflows/fathom-review.yml"
 }
 
 fathom_review_records_findings_as_changes_requested() {
   local output_file="$test_directory/fathom-review-board-changes-output"
 
-  run_fathom_review_board 'changes_requested' '12' 'In progress' "$output_file"
+  run_fathom_review_board '12' 'In progress' "$output_file"
 
   ((board_status == 0))
   assert_contains 'option=option-changes' "$board_mutations_file"
@@ -3990,7 +3996,7 @@ fathom_review_records_findings_as_changes_requested() {
 fathom_review_leaves_a_finished_item_alone() {
   local output_file="$test_directory/fathom-review-board-done-output"
 
-  run_fathom_review_board 'approved' '12' 'Done' "$output_file"
+  run_fathom_review_board '12' 'Done' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4000,7 +4006,7 @@ fathom_review_leaves_a_finished_item_alone() {
 fathom_review_leaves_a_blocked_item_alone() {
   local output_file="$test_directory/fathom-review-board-blocked-output"
 
-  run_fathom_review_board 'changes_requested' '12' 'Blocked' "$output_file"
+  run_fathom_review_board '12' 'Blocked' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4013,7 +4019,7 @@ fathom_review_leaves_a_blocked_item_alone() {
 fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
   local output_file="$test_directory/fathom-review-board-unlinked-output"
 
-  run_fathom_review_board 'approved' '' 'Todo' "$output_file"
+  run_fathom_review_board '' 'Todo' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4072,7 +4078,7 @@ fathom_review_announces_over_every_other_status() {
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
 
-  run_fathom_review_board 'approved' '12' 'In progress' "$output_file" ''
+  run_fathom_review_board '12' 'In progress' "$output_file" ''
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -4152,16 +4158,48 @@ board_status_stops_writing_when_its_window_is_gone() {
 # than a workflow of its own. What these assert is the rule and the authority it declares with it:
 # the caller passes both through unread, so a rule that forgot to bound itself would move an item
 # from anywhere.
+# One check that passed, as `read-pull-request-state.sh` projects a check run and a commit status.
+# Every fixture below starts from this and changes the one thing its rule is about.
+board_state_green_checks='[
+  {"workflow": "CI", "name": "Required CI", "status": "COMPLETED", "conclusion": "SUCCESS"},
+  {"workflow": "", "name": "license/cla", "status": "COMPLETED", "conclusion": "SUCCESS"}
+]'
+
+# The state a rule reads, written as a fixture rather than fetched. Every condition in that script is
+# a question about these fields alone, which is what lets a board rule be tested without a token and
+# without a pull request to reproduce it on. `approval` is `none`, `current`, or `stale`, the last
+# being an approval GitHub kept against a head that has since been pushed over.
+write_pull_request_state() {
+  local state_file="$1"
+  local mergeable="$2"
+  local approval="$3"
+  local checks="$4"
+  local draft="${5:-false}"
+
+  jq -n --arg mergeable "$mergeable" --arg approval "$approval" \
+    --argjson checks "$checks" --argjson draft "$draft" \
+    '{number: 1, mergeable: $mergeable, isDraft: $draft, state: "OPEN", labels: [],
+      headRefOid: "head-commit",
+      reviews: (if $approval == "none" then []
+                else [{author: "fathom-reviewer[bot]", state: "APPROVED",
+                       commit: (if $approval == "current" then "head-commit" else "older-commit" end)}]
+                end),
+      checks: $checks}' \
+    > "$state_file"
+}
+
 run_select_board_status() {
   local mergeable="$1"
   local output_file="$2"
+  local approval="${3:-none}"
+  local checks="${4:-[]}"
+  local draft="${5:-false}"
+  local state_file="$test_directory/select-board-status-pull-request.json"
 
-  jq -n --arg mergeable "$mergeable" \
-    '{number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN", labels: []}' \
-    > "$test_directory/select-board-status-pull-request.json"
+  write_pull_request_state "$state_file" "$mergeable" "$approval" "$checks" "$draft"
 
   bash "$source_repository_root/.github/pull-request/select-board-status.sh" \
-    "$test_directory/select-board-status-pull-request.json" > "$output_file" 2>&1
+    "$state_file" > "$output_file" 2>&1
 }
 
 select_board_status_earns_conflicts_from_ready_to_merge_alone() {
@@ -4174,7 +4212,8 @@ select_board_status_earns_conflicts_from_ready_to_merge_alone() {
 
 # `UNKNOWN` is the answer GitHub gives while it is still computing one, which is the state every open
 # pull request is in for the seconds after a merge — exactly when this pipeline runs. Reading it as a
-# conflict would move an item on every merge.
+# conflict would move an item on every merge, and it is not an answer `Ready to merge` may be claimed
+# from either, which is why the approved fixture is asked the same question.
 select_board_status_earns_nothing_until_github_has_decided() {
   local output_file
   local mergeable
@@ -4186,6 +4225,142 @@ select_board_status_earns_nothing_until_github_has_decided() {
 
     assert_file_content '' "$output_file"
   done
+
+  output_file="$test_directory/select-board-status-approved-UNKNOWN"
+
+  run_select_board_status 'UNKNOWN' "$output_file" 'current' "$board_state_green_checks"
+
+  assert_file_content '' "$output_file"
+}
+
+# The rule this pipeline exists for. Both halves are asked here because neither workflow holds both:
+# the reviewer reads the diff and cannot see the pipeline, and the pipeline says nothing about
+# whether the change is any good.
+select_board_status_earns_ready_to_merge_when_the_review_and_the_checks_agree() {
+  local output_file="$test_directory/select-board-status-ready"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$board_state_green_checks"
+
+  assert_file_content $'Ready to merge\t\tDone,Blocked' "$output_file"
+}
+
+# An approval belongs to the commit it was written on. A push that carries one forward without a
+# re-review is a verdict about code nobody read, and `Ready to merge` claims otherwise.
+select_board_status_earns_nothing_from_an_approval_of_an_older_head() {
+  local output_file="$test_directory/select-board-status-stale-approval"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'stale' "$board_state_green_checks"
+
+  assert_file_content '' "$output_file"
+}
+
+# A check still running is an answer that has not arrived, and the column claims there is nothing
+# left to wait for. The pipeline that finishes next raises the event that asks again.
+select_board_status_earns_nothing_while_a_check_is_still_running() {
+  local output_file="$test_directory/select-board-status-pending-check"
+  local checks
+
+  checks="$(jq -c '.[0].status = "IN_PROGRESS" | .[0].conclusion = ""' <<< "$board_state_green_checks")"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks"
+
+  assert_file_content '' "$output_file"
+}
+
+# A red pipeline is owed an answer whatever the review said, so this rule describes any item it finds
+# rather than naming a required status — and it is asked before the approval, so an approved change
+# that broke afterwards leaves the merge column.
+select_board_status_earns_changes_requested_from_a_failed_check() {
+  local output_file
+  local checks
+  local conclusion
+
+  for conclusion in FAILURE TIMED_OUT ACTION_REQUIRED STARTUP_FAILURE; do
+    output_file="$test_directory/select-board-status-${conclusion}"
+    checks="$(jq -c --arg conclusion "$conclusion" '.[0].conclusion = $conclusion' <<< "$board_state_green_checks")"
+
+    run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks"
+
+    assert_file_content $'Changes requested\t\tDone,Blocked' "$output_file"
+  done
+}
+
+# Neither of those is a pipeline the merge waits on. `CodeQL` is not a required check on `main`, and
+# this workflow's own checks publish a label and a board write rather than anything about whether the
+# change builds — a rule that read them would be deciding partly from its own run.
+select_board_status_reads_neither_codeql_nor_its_own_checks() {
+  local output_file="$test_directory/select-board-status-ignored-checks"
+  local checks
+
+  checks="$(
+    jq -c '. + [{"workflow": "CodeQL", "name": "Analyze C#", "status": "COMPLETED", "conclusion": "FAILURE"},
+                {"workflow": "", "name": "CodeQL", "status": "COMPLETED", "conclusion": "FAILURE"},
+                {"workflow": "Apply pull request rules",
+                 "name": "Apply the board statuses the open pull requests earn",
+                 "status": "IN_PROGRESS", "conclusion": ""}]' \
+      <<< "$board_state_green_checks"
+  )"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks"
+
+  assert_file_content $'Ready to merge\t\tDone,Blocked' "$output_file"
+}
+
+# A draft is work being written rather than a change asking for anything, and its checks are red as
+# often as not while it is.
+select_board_status_earns_nothing_on_a_draft() {
+  local output_file="$test_directory/select-board-status-draft"
+  local checks
+
+  checks="$(jq -c '.[0].conclusion = "FAILURE"' <<< "$board_state_green_checks")"
+
+  run_select_board_status 'MERGEABLE' "$output_file" 'current' "$checks" 'true'
+
+  assert_file_content '' "$output_file"
+}
+
+# The `workflow_run` list has no `workflows-ignore`, so what a pull request runs and what this
+# workflow listens to are two lists that have to be held together by hand. This is that hold: a new
+# workflow triggered by a pull request either decides the board or is named here as one that does
+# not, rather than being forgotten into a pull request that never reaches `Ready to merge`.
+#
+# `CodeQL` is excluded because merging does not wait on it, and `Apply pull request rules` because a
+# workflow listening for its own conclusion chains until GitHub's three-level limit stops it.
+pull_request_rules_listen_to_every_workflow_a_pull_request_runs() {
+  local workflow
+  local name
+  local listened
+  local ignored=$'CodeQL\nApply pull request rules'
+
+  listened="$(
+    sed -n '/^  workflow_run:/,/^concurrency:/p' \
+      "$source_repository_root/.github/workflows/apply-pull-request-rules.yml" \
+      | sed -n '/^    workflows:/,/^[a-z]/p' \
+      | sed -n 's/^      - \(.*\)$/\1/p'
+  )"
+
+  for workflow in "$source_repository_root"/.github/workflows/*.yml; do
+    grep -qE '^  pull_request(_target)?:' "$workflow" || continue
+
+    name="$(sed -n 's/^name: *//p' "$workflow" | head -n 1)"
+
+    grep -qxF "$name" <<< "$ignored" && continue
+    grep -qxF "$name" <<< "$listened" && continue
+
+    printf 'The board rules do not listen for %s, which runs on a pull request.\n' "$name" >&2
+    return 1
+  done
+
+  # The other direction: a name that no longer matches a workflow is a trigger that fires for
+  # nothing, and `workflow_run` reports neither.
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+
+    grep -qxF "name: $name" "$source_repository_root"/.github/workflows/*.yml && continue
+
+    printf 'The board rules listen for %s, which is not a workflow here.\n' "$name" >&2
+    return 1
+  done <<< "$listened"
 }
 
 # The sweep itself, extracted from the workflow and run against a fake `gh` the way the reviewer's
@@ -4214,7 +4389,10 @@ done
 
 arguments="$*"
 
-if [[ "$arguments" == *'pullRequests(states: OPEN'* ]]; then
+# `statusCheckRollup` rather than the enclosing selection, because `collect-closing-issues.sh` asks
+# for `pullRequest(number:` as well and answering it from here would hand it a pull request with no
+# closing references at all.
+if [[ "$arguments" == *'statusCheckRollup'* ]]; then
   # A countdown of `UNKNOWN` answers before the settled one, which is what GitHub does after a merge:
   # it computes mergeability when asked and reports `UNKNOWN` until it has. A fake that answered at
   # once would pass whether or not the step waited at all.
@@ -4227,13 +4405,44 @@ if [[ "$arguments" == *'pullRequests(states: OPEN'* ]]; then
     mergeable="$(cat "$FAKE_BOARD_DIRECTORY/mergeable")"
   fi
 
-  response="$(
+  # The whole shape the collecting script projects from, so that what these contracts exercise is the
+  # projection GitHub's own answer goes through rather than a hand-written stand-in for it. Two parts
+  # of that shape are the point: a review arrives from GraphQL without the `[bot]` suffix a person
+  # sees, and a check run names its workflow through the suite it belongs to rather than beside its
+  # own name. A caller states a check as the flat pair the rules read, and this puts it back into the
+  # shape the API answers in.
+  pull_request="$(
     jq -nc --arg mergeable "$mergeable" \
-      --argjson total "$(cat "$FAKE_BOARD_DIRECTORY/open-pull-requests" 2>/dev/null || printf '1')" \
-      '{data: {repository: {pullRequests: {totalCount: $total, nodes: [
-         {number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN",
-          labels: {nodes: []}}]}}}}'
+      --argjson reviewed "$(cat "$FAKE_BOARD_DIRECTORY/reviewed" 2>/dev/null || printf 'false')" \
+      --argjson checks "$(cat "$FAKE_BOARD_DIRECTORY/checks.json" 2>/dev/null || printf '[]')" \
+      '{number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN", baseRefName: "main",
+        headRefOid: "head-commit", labels: {nodes: []},
+        latestReviews: {nodes: (if $reviewed
+                                then [{author: {__typename: "Bot", login: "fathom-reviewer"},
+                                       state: "APPROVED", commit: {oid: "head-commit"}}]
+                                else [] end)},
+        commits: {nodes: [{commit: {statusCheckRollup:
+          {contexts: {totalCount: ($checks | length),
+                      nodes: ($checks | map({__typename: "CheckRun", name: .name,
+                                             status: .status, conclusion: .conclusion,
+                                             checkSuite: {workflowRun:
+                                               {workflow: {name: .workflow}}}}))}}}}]}}'
   )"
+
+  if [[ "$arguments" != *'pullRequests(states: OPEN'* ]]; then
+    response="$(jq -nc --argjson pull_request "$pull_request" \
+      '{data: {repository: {pullRequest: $pull_request}}}')"
+  else
+    response="$(
+      jq -nc --argjson pull_request "$pull_request" \
+        --argjson total "$(cat "$FAKE_BOARD_DIRECTORY/open-pull-requests" 2>/dev/null || printf '1')" \
+        '{data: {repository: {pullRequests: {totalCount: $total, nodes: [$pull_request]}}}}'
+    )"
+  fi
+elif [[ "$arguments" == *'/commits/'*'/pulls'* ]]; then
+  # Which pull request a concluded pipeline was about, answered from its head the way the step asks
+  # it — including the case where nothing open has that head, which is a pipeline that ran on `main`.
+  response="$(cat "$FAKE_BOARD_DIRECTORY/commit-pull-requests.json" 2>/dev/null || printf '[]')"
 elif [[ "$arguments" == *'closingIssuesReferences'* ]]; then
   response="$(cat "$FAKE_BOARD_DIRECTORY/closing-issues.json")"
 elif [[ "$arguments" == *'updateProjectV2ItemFieldValue'* ]]; then
@@ -4272,6 +4481,9 @@ run_pull_request_rules_board() {
   printf '%s' "$mergeable" > "$board_directory/mergeable"
   printf '%s' "$unknown_answers" > "$board_directory/mergeability-countdown"
   printf '%s' "${open_pull_requests:-1}" > "$board_directory/open-pull-requests"
+  printf '%s' "${reviewed:-false}" > "$board_directory/reviewed"
+  printf '%s' "${checks_json:-[]}" > "$board_directory/checks.json"
+  printf '%s' "${commit_pull_requests:-[]}" > "$board_directory/commit-pull-requests.json"
 
   set +e
   (
@@ -4283,6 +4495,9 @@ run_pull_request_rules_board() {
     export BOARD_NUMBER='4'
     export STATUS_FIELD='Status'
     export BASE_BRANCH='main'
+    export WORKFLOW_RUN_HEAD_SHA="${workflow_run_head_sha:-}"
+    export READ_STATE_SCRIPT="$source_repository_root/.github/pull-request/read-pull-request-state.sh"
+    export GITHUB_API_SCRIPT="$source_repository_root/.github/pull-request/call-github-api.sh"
     export SELECT_BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/select-board-status.sh"
     export CLOSING_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-closing-issues.sh"
     export BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/write-board-status.sh"
@@ -4339,6 +4554,39 @@ pull_request_rules_report_the_pull_requests_the_ceiling_cut() {
 
   ((board_status == 0))
   assert_contains '80 pull requests are open against main and this run read the 1' "$output_file"
+}
+
+# A pipeline concluding decides one pull request rather than every open one, and which one is read
+# from the head it ran on. `workflow_run.pull_requests` is empty for a run started by
+# `pull_request_target` — the trigger `Fathom review` holds — so the head is what the step asks
+# about, and this is the path that answers it.
+pull_request_rules_decide_the_pull_request_a_concluded_pipeline_ran_on() {
+  local output_file="$test_directory/pull-request-rules-workflow-run-output"
+  local workflow_run_head_sha='head-commit'
+  local commit_pull_requests='[{"number": 1, "state": "open"}]'
+  local reviewed='true'
+  local checks_json='[{"workflow": "CI", "name": "Required CI", "status": "COMPLETED", "conclusion": "SUCCESS"}]'
+
+  run_pull_request_rules_board 'MERGEABLE' 'In review' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'Deciding pull request 1' "$output_file"
+  assert_contains 'option=option-ready' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from In review to Ready to merge' "$output_file"
+}
+
+# A pipeline that ran on `main` itself, or on a head whose pull request has since closed, decides
+# nothing here: the push to `main` is what moves the board after a merge and it has its own run.
+pull_request_rules_decide_nothing_for_a_head_no_open_pull_request_has() {
+  local output_file="$test_directory/pull-request-rules-headless-output"
+  local workflow_run_head_sha='commit-on-main'
+  local commit_pull_requests='[]'
+
+  run_pull_request_rules_board 'MERGEABLE' 'In review' '0' "$output_file"
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'No open pull request has commit-on-main as its head' "$output_file"
 }
 
 # What the window did not cover is named rather than guessed at, because the pull request GitHub
@@ -9910,7 +10158,7 @@ run_test fathom_review_publishes_the_coverage_gap_under_an_approval
 run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
 run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential
-run_test fathom_review_moves_an_approved_pull_request_to_ready_to_merge
+run_test fathom_review_records_no_approval_on_the_board
 run_test fathom_review_records_findings_as_changes_requested
 run_test fathom_review_leaves_a_finished_item_alone
 run_test fathom_review_leaves_a_blocked_item_alone
@@ -9924,8 +10172,17 @@ run_test board_status_leaves_an_item_outside_the_required_statuses
 run_test board_status_stops_writing_when_its_window_is_gone
 run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
 run_test select_board_status_earns_nothing_until_github_has_decided
+run_test select_board_status_earns_ready_to_merge_when_the_review_and_the_checks_agree
+run_test select_board_status_earns_nothing_from_an_approval_of_an_older_head
+run_test select_board_status_earns_nothing_while_a_check_is_still_running
+run_test select_board_status_earns_changes_requested_from_a_failed_check
+run_test select_board_status_reads_neither_codeql_nor_its_own_checks
+run_test select_board_status_earns_nothing_on_a_draft
+run_test pull_request_rules_listen_to_every_workflow_a_pull_request_runs
 run_test pull_request_rules_move_a_pull_request_that_stopped_merging
 run_test pull_request_rules_move_nothing_for_a_pull_request_that_still_merges
+run_test pull_request_rules_decide_the_pull_request_a_concluded_pipeline_ran_on
+run_test pull_request_rules_decide_nothing_for_a_head_no_open_pull_request_has
 run_test pull_request_rules_wait_for_github_to_decide_mergeability
 run_test pull_request_rules_report_the_pull_requests_the_ceiling_cut
 run_test pull_request_rules_report_a_pull_request_github_never_decided

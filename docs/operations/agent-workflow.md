@@ -1001,26 +1001,75 @@ and the read-only token on a fork is what bounds what a script from there can do
 
 ### The board status the state earns
 
-A board status follows from whether a pull request still merges, and *that* changes when
-something else merges into `main` rather than through any event on the pull request itself.
-GitHub raises nothing on the branch it happened to, so this job is triggered by the push to
-`main` and reads every open pull request from the other side. It never runs on a
+A board status follows from three things a pull request cannot announce for itself: whether
+it still merges, which changes when something *else* merges into `main`; whether the
+reviewer approved the head in front of us; and what its pipelines concluded. GitHub raises
+nothing on the branch a merge happened to, so this job is triggered by the push to `main`
+and reads every open pull request from the other side, and it is triggered again whenever a
+pipeline concludes, for the one pull request that run belongs to. It never runs on a
 `pull_request` event, where it would answer nothing and lengthen the wait `Fathom review`
 performs on this workflow's run.
 
-One rule exists today, in `.github/pull-request/select-board-status.sh`: a pull request that
-no longer merges moves the issues it closes from `Ready to merge` to `Conflicts`.
-`Ready to merge` says the change is waiting on nothing but the owner pressing the button,
-and a conflict is precisely the discovery that it is not. From `Ready to merge` and from
-nowhere else — an item still being written, already blocked, or already done says nothing
-about whether a conflict is news, and a rule that moved those would report the same conflict
-on every push to `main` for as long as it went unresolved.
+The trigger for the second of those is `workflow_run` rather than `check_suite`, and that is
+not a preference: GitHub does not raise `check_suite` for a suite GitHub Actions created,
+which is every pipeline here. The workflows are named one at a time because there is no
+`workflows-ignore`, and naming them is also what keeps this workflow off its own list — a
+run that triggered itself would conclude, raise the event again, and chain until GitHub's
+three-level limit stopped it. `CodeQL` is left off for a different reason, the one the rules
+below leave it out for. `scripts/test-agent-workflow.sh` holds the list to exactly the
+workflows a pull request runs, in both directions, so a new pipeline cannot be forgotten
+into a pull request that then never reaches `Ready to merge`.
+
+Three rules live in `.github/pull-request/select-board-status.sh`, read top to bottom:
+
+- A pull request that **no longer merges** moves the issues it closes from `Ready to merge`
+  to `Conflicts`. `Ready to merge` says the change is waiting on nothing but the owner
+  pressing the button, and a conflict is precisely the discovery that it is not. From
+  `Ready to merge` and from nowhere else — an item still being written, already blocked, or
+  already done says nothing about whether a conflict is news, and a rule that moved those
+  would report the same conflict on every push to `main` for as long as it went unresolved.
+- A **check that failed** on the head earns `Changes requested`, whatever the review said.
+  That column says the change is waiting on the agent rather than on the owner, and a red
+  pipeline is exactly that whether the objection was written by a reader or produced by a
+  build. `FAILURE`, `TIMED_OUT`, `ACTION_REQUIRED`, and `STARTUP_FAILURE` are what count;
+  `SKIPPED` and `NEUTRAL` are the ordinary shape of a job a path filter turned off, and
+  `CANCELLED` is what a superseded run leaves behind on a head that has since been read
+  again.
+- An **approved head whose checks have all finished without failing** earns
+  `Ready to merge`, and this is the rule the pipeline exists for. `Fathom review` reads the
+  diff and cannot see the pipeline, so an approval published while `Required CI` is still
+  running says nothing about whether the change builds; both halves are asked here, where
+  both are visible. The approval has to be of the head in front of us — GitHub keeps a
+  review against the commit it was written on — and the pull request has to read
+  `MERGEABLE` rather than merely not `CONFLICTING`, because a column claiming there is
+  nothing left to wait for is claimed from an answer rather than from the absence of one.
+
+Two sets of checks are not read, and a draft earns neither of the last two rules. `CodeQL`
+is not a required check on `main`: a finding there is worth acting on and does not make the
+change unmergeable, so reading it would hold every pull request out of `Ready to merge` for
+a question the ruleset does not ask. `Apply pull request rules`'s own checks are not read
+because nothing they publish says whether the change builds — they are a label and a board
+write — and a rule that read them would be deciding partly from its own run. And a draft is
+work being written rather than a change asking for anything, its checks red as often as not
+while it is.
+
+The conflict rule is asked before that, and deliberately: it is true of an item already in
+`Ready to merge`, which is a pull request that had been ready and has since stopped merging.
+Converting one back to draft does not make the conflict less true, and the rebase is owed
+either way, so a draft still leaves that column when its branch stops merging.
+
+None of this is a gate, and reading it as one would be the mistake to make here. A pull
+request from a fork supplies the workflow files its own checks run from, so what those checks
+conclude is the fork's to decide; what stops that mattering is that merging is guarded by the
+`main` ruleset and by a person, and `Ready to merge` is a column the owner reads rather than
+permission to merge.
 
 A rule states the statuses it may act on and the statuses it refuses to overwrite, and the
 job passes both to `write-board-status.sh` unread. Those are the two directions of one
-question, and which one a rule uses says what it means: a review's verdict describes any
-item it finds and names the two statuses it must not erase, while a rule about an approved
-change is only true of an approved item and names the one status it is entitled to move.
+question, and which one a rule uses says what it means: the two rules about a review and a
+pipeline describe any item they find and name the two statuses they must not erase, while
+the rule about an approved change that stopped merging is only true of an approved item and
+names the one status it is entitled to move.
 
 The waiting is the part with no shorter form. GitHub computes mergeability when it is asked
 and not before, so every open pull request reads `UNKNOWN` for the first seconds after a
@@ -1028,16 +1077,20 @@ merge — which is exactly when this runs. The job polls within a bounded window
 a notice, every pull request it never got an answer for; the next push to `main` decides
 those. Reading `UNKNOWN` as a conflict would instead move an item on every merge.
 
-Two ceilings bound the sweep and both report what they cut: how many open pull requests one
-run reads, ordered by when each was last updated, and how many issues one pull request's
-closing references are followed. A pull request or an issue nobody was told about is a board
-item silently left behind, which is the same reason the reviewer's own ceilings report.
+Three ceilings bound the work and each reports what it cut: how many open pull requests one
+sweep reads, ordered by when each was last updated, how many checks on a head are read, and
+how many issues one pull request's closing references are followed. A pull request, a check,
+or an issue nobody was told about is a board item silently left behind or decided from half
+the answer, which is the same reason the reviewer's own ceilings report.
 
-Nothing here is refused on a fork's pull request, unlike the labelling above: the sweep runs
-on a push to this repository with this repository's own token, and it reads a fork's pull
-request exactly as it reads any other. What it does need is `BOARD_PROJECT_TOKEN`, the same
-classic token carrying the `project` scope that `Fathom review`'s two writes need, and
-without it the job says so and ends green.
+Nothing here is refused on a fork's pull request, unlike the labelling above: both triggers
+fire in this repository with this repository's own token, and each reads a fork's pull
+request exactly as it reads any other. That is also why a concluded pipeline is traced back
+to its pull request through the head it ran on rather than through
+`workflow_run.pull_requests`, which a run started by `pull_request_target` — the trigger
+`Fathom review` and `Contributor licence` hold — carries empty. What the job does need is
+`BOARD_PROJECT_TOKEN`, the same classic token carrying the `project` scope that
+`Fathom review`'s writes need, and without it the job says so and ends green.
 
 ### The licence a contribution earns
 
@@ -2207,37 +2260,49 @@ the column says whatever the last event left there for that whole time — usual
 in the review depends on that write, which is why it runs in parallel: a project
 API failure must not delay or skip a review.
 
-The last write is the verdict: `Changes requested` where the review withheld
-approval, `Ready to merge` where it gave it. That is the verdict rather than the
-presence of findings, and the two stopped being the same question once a review
-carrying only P3 findings began publishing them under an approval. A run that publishes no verdict
-writes nothing and leaves `In review` standing, where a reader sees that a review
-was asked for and produced nothing.
+The last write is the one verdict this workflow is entitled to: `Changes
+requested`, where the review withheld approval. That is the verdict rather than
+the presence of findings, and the two stopped being the same question once a
+review carrying only P3 findings began publishing them under an approval. A run
+that publishes no verdict writes nothing and leaves `In review` standing, where a
+reader sees that a review was asked for and produced nothing.
 
-Both writes are one script, `write-board-status.sh`, and so is the conflict rule
-in `Apply pull request rules`. The walk is identical — collect what the pull
+**An approval writes nothing here**, and that is deliberate. `Ready to merge` says
+the change is waiting on nothing but the owner pressing the button, and this
+workflow reads the diff rather than the pipeline — an approval is published while
+`Required CI` is still running as often as not, and a pipeline can go red minutes
+after one. Both halves of that claim are asked in
+[The board status the state earns](#the-board-status-the-state-earns), where the
+approval and the checks are visible at once, so an approving run leaves the item in
+`In review` and `Apply pull request rules` moves it when the pipelines agree. A
+withheld approval needs no such second opinion: a reader's objection is owed an
+answer whatever the pipeline concluded.
+
+Both writes are one script, `write-board-status.sh`, and so are the rules in
+`Apply pull request rules`. The walk is identical — collect what the pull
 request closes, resolve the field and the option by name, find the item on this
 board, mutate it — and the callers differ only in the value they write and in the
 statuses they may write it over. That authority is two arguments rather than one,
 because it is one question asked in two directions: the statuses a write refuses
-to overwrite, and the statuses it may act on and no others. Both reviews name the
-same preserved pair and no required list, because a verdict describes whatever
-item it finds; the conflict rule names one required status and no preserved list,
-because it is only true of an item that is currently approved.
+to overwrite, and the statuses it may act on and no others. The review's two
+writes name the same preserved pair and no required list, because a verdict
+describes whatever item it finds; the conflict rule names one required status and
+no preserved list, because it is only true of an item that is currently approved.
 
 It exists because that half of the field had no writer at all. The board's
-built-in `Code changes requested` and `Code review approved` workflows fire on a
-review's *state*, and the two states they read are produced by nobody here:
-`REQUEST_CHANGES` is refused for the reason the section above gives, and GitHub
-does not let the author of a pull request approve or request changes on their own
-— which is every pull request in this repository. So the column that says whether
-a change is waiting on the owner's merge or on the agent answering its findings
-was decided by a run whose conclusion reached the board through no mechanism.
+built-in `Code changes requested` workflow fires on a review's *state*, and the
+state it reads is produced by nobody here: `REQUEST_CHANGES` is refused for the
+reason the section above gives, and GitHub does not let the author of a pull
+request request changes on their own — which is every pull request in this
+repository. So the column that says a change is waiting on the agent answering its
+findings was decided by a run whose conclusion reached the board through no
+mechanism.
 
-The verdict is a job output rather than a second reading of the pull request. The
-submission step states it in the one branch that posted a review, so a run that
-ended for any of the other reasons it returns on moves nothing, and a verdict
-that exists always names a review a reader can go and look at. The closing
+The verdict is a job condition rather than a second reading of the pull request.
+The submission step states it in the one branch that posted a review, so a run
+that ended for any of the other reasons it returns on moves nothing, an approving
+run is left to the pipeline rules, and a write that happens always names a review
+a reader can go and look at. The closing
 issues come from `collect-closing-issues.sh`, the same script the collection step
 and `Apply pull request rules` run, so which issues a merge closes is one answer
 GitHub gives rather than three derivations of it that drift.
@@ -2265,9 +2330,11 @@ warning: every issue this project opens is placed there by a built-in workflow,
 so one that is missing has something wrong with it rather than nothing.
 
 `scripts/test-agent-workflow.sh` runs both steps against a fake `gh` the way it
-runs the gate, the settle loop, and the submission: it asserts which option each
-verdict writes, that the announcement writes `In review`, that both leave `Done`
-and `Blocked` alone, and that a run without the token writes nothing.
+runs the gate, the settle loop, and the submission: it asserts that the withheld
+verdict writes `Changes requested`, that the announcement writes `In review`, that
+both leave `Done` and `Blocked` alone, and that a run without the token writes
+nothing. That an approval writes nothing is asserted against the workflow itself,
+since it is the job's condition rather than a branch inside a step.
 
 ### Who publishes it
 
