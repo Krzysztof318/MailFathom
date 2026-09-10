@@ -1098,10 +1098,12 @@ permission to merge.
 
 A rule states the statuses it may act on and the statuses it refuses to overwrite, and the
 job passes both to `write-board-status.sh` unread. Those are the two directions of one
-question, and which one a rule uses says what it means: the two rules about a review and a
-pipeline describe any item they find and name the two statuses they must not erase, while
-the rule about an approved change that stopped merging is only true of an approved item and
-names the one status it is entitled to move.
+question, and which one a rule uses says what it means: the rules about a review and a
+pipeline — both routes to `Changes requested`, and an approved head earning `Ready to merge`
+or `Conflicts` — describe any item they find and name the two statuses they must not erase,
+while the rule about a conflict nothing has a verdict about, a draft or a head no review has
+answered, is only true of an item that had been ready and names the one status it is
+entitled to move.
 
 The waiting is the part with no shorter form. GitHub computes mergeability when it is asked
 and not before, so every open pull request reads `UNKNOWN` for the first seconds after a
@@ -2331,15 +2333,16 @@ board, mutate it — and the callers differ only in the value they write and in 
 statuses they may write it over. That authority is two arguments rather than one,
 because it is one question asked in two directions: the statuses a write refuses
 to overwrite, and the statuses it may act on and no others. The announcement and
-the two verdict rules name the same preserved pair and no required list, because
-each describes whatever item it finds; the conflict rule names one required status
-and no preserved list, because it is only true of an item that is currently
-approved. The closing issues come from `collect-closing-issues.sh`, the same
+the verdict rules — both routes to `Changes requested`, and an approved head's
+`Ready to merge` or `Conflicts` — name the same preserved pair and no required
+list, because each describes whatever item it finds; the conflict rule for a draft
+or a head no review has answered names one required status and no preserved list,
+because it is only true of an item that had been ready. The closing issues come from `collect-closing-issues.sh`, the same
 script the collection step and `Apply pull request rules` run, so which issues a
 merge closes is one answer GitHub gives rather than three derivations of it that
 drift.
 
-Two statuses are never written over, by the announcement or by either verdict.
+Two statuses are never written over, by the announcement or by any verdict.
 `Done` is the merge and the close, so a verdict arriving after one must not drag a
 finished item back into review, and a review starting on one must not either.
 `Blocked` is the one status a hand writes, and it says the issue waits on

@@ -4294,7 +4294,7 @@ select_board_status_earns_nothing_while_a_check_is_still_running() {
   checks="$(jq -c '.[0].status = "IN_PROGRESS" | .[0].conclusion = ""' <<< "$board_state_green_checks")"
 
   for mergeable in MERGEABLE CONFLICTING; do
-    for approval in current commented; do
+    for approval in none current commented; do
       output_file="$test_directory/select-board-status-pending-check-${mergeable}-${approval}"
 
       run_select_board_status "$mergeable" "$output_file" "$approval" "$checks"

@@ -5,9 +5,9 @@
 
 # Write one `Status` value on the roadmap board, on every issue merging a pull request will close.
 #
-# Three callers share this walk today: `Fathom review` announcing that a review is running and
-# recording a withheld approval, and `Apply pull request rules` writing whichever status a pull
-# request's state earns — a conflict, a failed pipeline, or an approval the checks agree with.
+# Two callers share this walk today: `Fathom review` announcing that a review is running, and
+# `Apply pull request rules` writing whichever status a pull request's state earns — a failed
+# pipeline, a withheld approval, an approval the checks agree with, or a conflict.
 # They differ in which value they write and in which statuses they may write it over;
 # everything else is the same — collect what the pull request closes, resolve the field and its
 # option by name, find the item on *this* board, and mutate it. That is why the walk lives here
@@ -20,10 +20,10 @@
 # - The preserved list is what a write refuses to overwrite. `Done` is the merge and the close and
 #   `Blocked` is the one status a hand writes, and neither is a statement a review gets to erase
 #   from either end of itself.
-# - The required list is what a write may act on and nothing else. A rule that says *an approved
-#   change stopped merging* is only true of an item that is currently approved, so it names the one
-#   status it is entitled to move and leaves every other item alone rather than enumerating the
-#   statuses it would otherwise trample.
+# - The required list is what a write may act on and nothing else. A rule that says *a change which
+#   had been ready stopped merging* is only true of an item that is currently `Ready to merge`, so it
+#   names the one status it is entitled to move and leaves every other item alone rather than
+#   enumerating the statuses it would otherwise trample.
 #
 # Failures are graded the way the workflows they run in are: neither gates anything, so a red run
 # over a board a hand can correct is noise. A missing field or a renamed option is loud, because it
