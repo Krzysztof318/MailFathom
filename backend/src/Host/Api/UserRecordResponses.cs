@@ -30,9 +30,9 @@ internal sealed record UserRosterResponse(IReadOnlyList<UserRosterEntryResponse>
 /// <param name="DeclaredInConfiguration">Whether a configuration source names this user, so a start puts their label back and writes their row again after an erasure.</param>
 /// <remarks>
 /// The last three are reported apart because they answer different questions and an operator acts on each differently.
-/// A user whose record is not yet their own is one an adoption still has something to move; a user the process is
-/// not serving is one whose mail is neither read nor refreshed; a user a configuration source declares is one whose
-/// label a start rewrites and whose erasure a start undoes.
+/// A user whose record is not yet their own is one whose mail accounts are changed in a file rather than in their
+/// record; a user the process is not serving is one whose mail is neither read nor refreshed; a user a configuration
+/// source declares is one whose label a start rewrites and whose erasure a start undoes.
 /// </remarks>
 internal sealed record UserRosterEntryResponse(
     Guid Id,
@@ -83,7 +83,7 @@ internal sealed record UserErasureResponse(bool Erased, bool WasServed);
 /// <param name="DisplayName">The label the user is recorded under.</param>
 /// <param name="Version">The version the record was read at, which the commit that follows is accepted against.</param>
 /// <param name="Source">The published name of where this user's mail accounts are read from.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write but an adoption refused.</param>
+/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is what makes every write into the record refused.</param>
 /// <param name="Document">The record, with every secret-bearing value replaced by the redaction marker.</param>
 internal sealed record UserRecordResponse(
     Guid User,
@@ -127,10 +127,6 @@ internal sealed record UserMailAccountRequest(long Version, string? Account);
 /// <param name="AccountId">The identifier the account was declared under.</param>
 internal sealed record UserMailAccountRemovalRequest(long Version, string? AccountId);
 
-/// <summary>The version an adoption was previewed over.</summary>
-/// <param name="Version">The version the preview reported.</param>
-internal sealed record UserAdoptionRequest(long Version);
-
 /// <summary>Material an administrator asks this deployment to store for one user.</summary>
 /// <param name="Name">The stable declared name used for rotation and audit.</param>
 /// <param name="Material">The material to seal, carried only in this request.</param>
@@ -148,85 +144,6 @@ internal sealed record StoredSecretProvisionedResponse(string SecretReference)
 {
     /// <inheritdoc />
     public override string ToString() => nameof(StoredSecretProvisionedResponse);
-}
-
-/// <summary>What adopting one user would move into their record.</summary>
-/// <param name="User">The user asked about.</param>
-/// <param name="DisplayName">The label the user is recorded under.</param>
-/// <param name="Version">The version the record stands at, which the adoption is accepted against.</param>
-/// <param name="Source">The published name of where this user's mail accounts are read from today.</param>
-/// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is whether there is an adoption to perform at all.</param>
-/// <param name="ConfigurationPath">The configuration path that stops deciding them once the adoption commits, and nothing where no source supplies them.</param>
-/// <param name="MailAccounts">The mail accounts the adoption would move, empty where the source supplies none.</param>
-/// <param name="Classification">The classification posture the adoption would commit beside them, empty where the deployment states none.</param>
-/// <param name="SensitiveContent">The scanning block the adoption would commit beside them, empty where their declaration states none.</param>
-/// <remarks>The flag is published beside the source name rather than left to be derived from it, because whether there is anything to adopt is the question a caller acts on and reading it out of a name would make an enumeration member's spelling part of the contract.</remarks>
-internal sealed record UserAdoptionPreviewResponse(
-    Guid User,
-    string DisplayName,
-    long Version,
-    string Source,
-    bool ReadFromConfiguration,
-    string? ConfigurationPath,
-    IReadOnlyList<UserAdoptableMailAccountResponse> MailAccounts,
-    IReadOnlyList<UserAdoptableRecordSettingResponse> Classification,
-    IReadOnlyList<UserAdoptableRecordSettingResponse> SensitiveContent)
-{
-    /// <summary>Describes an adoption preview.</summary>
-    /// <param name="preview">The preview as the administration read it.</param>
-    /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="preview" /> is <see langword="null" />.</exception>
-    internal static UserAdoptionPreviewResponse For(UserAdoptionPreview preview)
-    {
-        ArgumentNullException.ThrowIfNull(preview);
-
-        return new UserAdoptionPreviewResponse(
-            preview.User.Value,
-            preview.DisplayName,
-            preview.Version,
-            preview.Source.ToString(),
-            preview.HasSomethingToAdopt,
-            preview.ConfigurationPath,
-            [.. preview.MailAccounts.Select(UserAdoptableMailAccountResponse.For)],
-            [.. preview.Classification.Select(UserAdoptableRecordSettingResponse.For)],
-            [.. preview.SensitiveContent.Select(UserAdoptableRecordSettingResponse.For)]);
-    }
-}
-
-/// <summary>One mail account an adoption would move into a user's record.</summary>
-/// <param name="AccountId">The identifier the account is declared under.</param>
-/// <param name="DisplayName">The name the account is published under.</param>
-/// <remarks>Neither a mail server, a port, a user name, nor anything derived from a credential is here: the preview exists so an operator can confirm which mailboxes are about to move, and the identifier and the label are what they recognize them by.</remarks>
-internal sealed record UserAdoptableMailAccountResponse(string AccountId, string DisplayName)
-{
-    /// <summary>Describes one adoptable account.</summary>
-    /// <param name="account">The account as the preview reported it.</param>
-    /// <returns>The response entry.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="account" /> is <see langword="null" />.</exception>
-    internal static UserAdoptableMailAccountResponse For(UserAdoptableMailAccount account)
-    {
-        ArgumentNullException.ThrowIfNull(account);
-
-        return new UserAdoptableMailAccountResponse(account.AccountId, account.DisplayName);
-    }
-}
-
-/// <summary>One setting an adoption would commit into a user's record beside their mailboxes.</summary>
-/// <param name="Path">The path the setting is written at in the record, rooted at its own block.</param>
-/// <param name="Value">The value it takes, which is what the deployment's section states today.</param>
-/// <remarks>Nothing under the deployment's scanner block is here, so this reports what would be decided about the user's mail without disclosing where the daemon is or what reaches it.</remarks>
-internal sealed record UserAdoptableRecordSettingResponse(string Path, string Value)
-{
-    /// <summary>Describes one adoptable posture setting.</summary>
-    /// <param name="setting">The setting as the preview reported it.</param>
-    /// <returns>The response entry.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="setting" /> is <see langword="null" />.</exception>
-    internal static UserAdoptableRecordSettingResponse For(UserAdoptableRecordSetting setting)
-    {
-        ArgumentNullException.ThrowIfNull(setting);
-
-        return new UserAdoptableRecordSettingResponse(setting.Path, setting.Value);
-    }
 }
 
 /// <summary>What one write to a user's record did.</summary>

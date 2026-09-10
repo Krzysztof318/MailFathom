@@ -29,7 +29,7 @@ internal static class FakeUserRecordDeployment
     /// <param name="users">The users the roster reports, in the order it serves them.</param>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler Holding(params Guid[] users) =>
-        Answering(users, readFromConfiguration: false, WriteCommitted, adoptable: [], records: [EmptyRecord]);
+        Answering(users, readFromConfiguration: false, WriteCommitted, records: [EmptyRecord]);
 
     /// <summary>Builds a deployment whose one user's record is the document stated.</summary>
     /// <param name="user">The user the roster reports.</param>
@@ -40,14 +40,13 @@ internal static class FakeUserRecordDeployment
     /// over the first, and the reading that reports what moved meets the next.
     /// </remarks>
     internal static FakeHttpMessageHandler HoldingRecords(Guid user, params string[] records) =>
-        Answering([user], readFromConfiguration: false, WriteCommitted, adoptable: [], records);
+        Answering([user], readFromConfiguration: false, WriteCommitted, records);
 
     /// <summary>Builds a deployment one of whose users is still supplied by a configuration source.</summary>
     /// <param name="user">The user the configuration supplies.</param>
-    /// <param name="mailAccounts">The mail accounts an adoption would move.</param>
     /// <returns>The deployment.</returns>
-    internal static FakeHttpMessageHandler SupplyingFromConfiguration(Guid user, params string[] mailAccounts) =>
-        Answering([user], readFromConfiguration: true, WriteCommitted, mailAccounts, records: [EmptyRecord]);
+    internal static FakeHttpMessageHandler SupplyingFromConfiguration(Guid user) =>
+        Answering([user], readFromConfiguration: true, WriteCommitted, records: [EmptyRecord]);
 
     /// <summary>Builds a deployment that refuses every write to a record, with the code and the sentence it names.</summary>
     /// <param name="user">The user the roster reports.</param>
@@ -66,13 +65,12 @@ internal static class FakeUserRecordDeployment
             string.Create(
                 CultureInfo.InvariantCulture,
                 $$"""{"committed":false,"version":{{RecordVersion}},"code":{{code}},"messages":["{{message}}"]}"""),
-            adoptable: [],
             records.Length == 0 ? [EmptyRecord] : records);
 
     /// <summary>Builds a deployment holding no user at all.</summary>
     /// <returns>The deployment.</returns>
     internal static FakeHttpMessageHandler HoldingNobody() =>
-        Answering([], readFromConfiguration: false, WriteCommitted, adoptable: [], records: [EmptyRecord]);
+        Answering([], readFromConfiguration: false, WriteCommitted, records: [EmptyRecord]);
 
     /// <summary>Reports the requests the command sent to one path under one method.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>
@@ -104,7 +102,6 @@ internal static class FakeUserRecordDeployment
         IReadOnlyList<Guid> users,
         bool readFromConfiguration,
         string writeAnswer,
-        IReadOnlyList<string> adoptable,
         string[] records)
     {
         var reads = 0;
@@ -114,7 +111,7 @@ internal static class FakeUserRecordDeployment
         string NextRecord() => records[Math.Min(reads++, records.Length - 1)];
 
         return new((request, _) => Task.FromResult(
-            Answer(request, users, readFromConfiguration, writeAnswer, adoptable, NextRecord)));
+            Answer(request, users, readFromConfiguration, writeAnswer, NextRecord)));
     }
 
     private static HttpResponseMessage Answer(
@@ -122,7 +119,6 @@ internal static class FakeUserRecordDeployment
         IReadOnlyList<Guid> users,
         bool readFromConfiguration,
         string writeAnswer,
-        IReadOnlyList<string> adoptable,
         Func<string> nextRecord)
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
@@ -147,13 +143,6 @@ internal static class FakeUserRecordDeployment
         {
             // Acceptance is the whole answer, so the deployment sends no body and the command has nothing to read.
             return FakeAdminEndpoint.Json(HttpStatusCode.NoContent, string.Empty);
-        }
-
-        if (path.EndsWith("/record/adoption", StringComparison.Ordinal))
-        {
-            return request.Method == HttpMethod.Get
-                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, AdoptionPreview(users, readFromConfiguration, adoptable))
-                : FakeAdminEndpoint.Json(HttpStatusCode.OK, writeAnswer);
         }
 
         if (path.Contains("/record/mail-accounts", StringComparison.Ordinal))
@@ -185,19 +174,6 @@ internal static class FakeUserRecordDeployment
           {"user":"{{(users.Count > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Count > 0 ? users[0] : Guid.Empty):D}}",
           "version":{{RecordVersion}},"source":"{{(readFromConfiguration ? "DeploymentSection" : "UserDocument")}}",
           "readFromConfiguration":{{Flag(readFromConfiguration)}},"document":{{JsonSerializer.Serialize(document)}}}
-          """);
-
-    private static string AdoptionPreview(
-        IReadOnlyList<Guid> users,
-        bool readFromConfiguration,
-        IReadOnlyList<string> adoptable) => string.Create(
-        CultureInfo.InvariantCulture,
-        $$"""
-          {"user":"{{(users.Count > 0 ? users[0] : Guid.Empty):D}}","displayName":"user-{{(users.Count > 0 ? users[0] : Guid.Empty):D}}",
-          "version":{{RecordVersion}},"source":"{{(readFromConfiguration ? "DeploymentSection" : "UserDocument")}}",
-          "readFromConfiguration":{{Flag(readFromConfiguration)}},
-          "configurationPath":{{(readFromConfiguration ? "\"MailSynchronization:Accounts\"" : "null")}},
-          "mailAccounts":[{{string.Join(',', adoptable.Select(accountId => $$"""{"accountId":"{{accountId}}","displayName":"{{accountId}} at work"}"""))}}]}
           """);
 
     private static string Flag(bool value) => value ? "true" : "false";

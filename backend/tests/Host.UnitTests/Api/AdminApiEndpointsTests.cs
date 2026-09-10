@@ -150,8 +150,7 @@ public sealed class AdminApiEndpointsTests
         // credential are separate acts an operator audits separately.
         // The users appear twice at the roster path, which is the listing and the recording, once at the user's own
         // path for the erasure, once at the label's path for the rename, twice at their record's path for the reading
-        // and the saving, twice at the adoption path for the preview and the act, and once at the secret path for a
-        // sealed write — the same reason the configuration adoption has both.
+        // and the saving, and once at the secret path for a sealed write.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -209,8 +208,6 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserDisplayNameRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserRecordRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserAdoptionRoute}",
-                $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserAdoptionRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserMailAccountRemovalRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{UserRecordEndpoints.UserSecretsRoute}",
@@ -307,8 +304,6 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{UserRecordEndpoints.UserRecordRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserMailAccountsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserMailAccountRemovalRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
-                $"GET {prefix}{UserRecordEndpoints.UserAdoptionRoute} -> {MailFathomPermission.AdminRead.Name}",
-                $"POST {prefix}{UserRecordEndpoints.UserAdoptionRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"POST {prefix}{UserRecordEndpoints.UserSecretsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{UserCredentialEndpoints.UserCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
@@ -397,7 +392,6 @@ public sealed class AdminApiEndpointsTests
     [InlineData("POST", UserRecordEndpoints.UserRecordRoute)]
     [InlineData("POST", UserRecordEndpoints.UserMailAccountsRoute)]
     [InlineData("POST", UserRecordEndpoints.UserMailAccountRemovalRoute)]
-    [InlineData("POST", UserRecordEndpoints.UserAdoptionRoute)]
     public void MapAdminApi_AUserRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
     {
         // Arrange

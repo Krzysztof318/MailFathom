@@ -1641,9 +1641,9 @@ add`](admin-endpoint.md#users-and-their-records) instead, which is bounded by no
 routes out.
 
 **A user whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
-refused, naming the administrative `mfctl user adopt` that moves them into the record first, because committing it
-would leave two answers to which mailboxes this deployment reads and the files would win at the next restart. Nothing on
-this surface can perform that move: which decisions leave a deployment's own files is the operator's, not the user's.
+refused, naming the declaration as where those mailboxes are changed, because committing it would leave two answers to
+which mailboxes this deployment reads and the files would win at the next restart. Nothing on this surface changes
+that: which decisions a deployment's own files make is the operator's, not the user's.
 
 **An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
 without a restart. The coordinator drains work already in flight against the immutable document version it began with,
@@ -1676,7 +1676,7 @@ holding a token.
 
 **A person a configuration source declares is refused, and told what to correct.** A start writes every declared
 user's name back from the declaration, so a change made here would stand until the next restart and then revert. What
-comes back names the entry to change instead, or `mfctl user adopt` to move the accounts into the person's own record.
+comes back names the entry to change instead.
 
 **The name is bound exactly as the envelope binds it.** Blank is refused, so is anything past 128 characters, and so is
 a name somebody else on this deployment already carries — each naming what to correct. Surrounding white space is

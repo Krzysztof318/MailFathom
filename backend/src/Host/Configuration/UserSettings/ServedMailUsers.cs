@@ -145,9 +145,9 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <returns>The user and their declaration, or <see langword="null" /> when no user of this roster holds one under that identifier.</returns>
     /// <remarks>
     /// It answers only about the users whose declarations this record holds — a user declared in their own section
-    /// of the file, and one who has taken their record over. An account of the deployment's own section is not here,
-    /// because that section is the reloadable mail snapshot's. The lookup that calls this checks a published user
-    /// document first so an adoption takes effect before the stale deployment section is removed for the next start.
+    /// of the file, and one whose accounts their own record holds. An account of the deployment's own section is not
+    /// here, because that section is the reloadable mail snapshot's. The lookup that calls this checks a published user
+    /// document first, so a record takes effect before the declaration it outranks is removed for the next start.
     /// </remarks>
     public (MailUserId User, MailSynchronizationAccountOptions Account)? FindAccount(MailAccountId accountId) =>
         this.Users

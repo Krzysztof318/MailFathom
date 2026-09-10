@@ -189,9 +189,9 @@ internal sealed partial class RootSettingsWriter(
         // A user's record is the one store with an answer better than "configure it elsewhere", and which answer it
         // is depends on where that user is read from — which this writer cannot know, because a change names a path
         // rather than a user. So the sentence names both halves: the declaration to edit while the user is still
-        // read from a configuration source, and the user commands that change the record once one has been adopted.
+        // read from a configuration source, and the user commands that change a record the user already owns.
         return target.Route == ConfigurationStorageRoute.UserAccounts
-            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. A user still read from a configuration source is changed in the declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at the next restart; a user who has been adopted is changed with 'mfctl user account add' and 'mfctl user account remove', or with 'mfctl user edit' for their whole record at once."
+            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. A user still read from a configuration source is changed in the declaration that supplies them — the user's own section of the top-level Accounts collection — and served from it at the next restart; a user read from their own record is changed with 'mfctl user account add' and 'mfctl user account remove', or with 'mfctl user edit' for their whole record at once."
             : $"MailFathom persists {path} in the {target.Route.Name} store, which this build does not write. Configure it where that store is provisioned from.";
     }
 

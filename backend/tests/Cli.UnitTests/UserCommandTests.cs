@@ -11,8 +11,8 @@ using Xunit;
 namespace MailFathom.Cli.UnitTests;
 
 /// <summary>
-/// Covers the commands that record a user, list them, maintain their mailboxes, adopt them out of configuration, and
-/// erase them. What these hold is the part of each act that lives in the command rather than in the deployment: the
+/// Covers the commands that record a user, list them, maintain their mailboxes, and erase them. What these hold is
+/// the part of each act that lives in the command rather than in the deployment: the
 /// version a write is composed over, the confirmation the two destructive acts ask for, and what a refusal tells an
 /// operator to do next.
 /// </summary>
@@ -185,7 +185,7 @@ public sealed class UserCommandTests : IDisposable
 
     /// <summary>The listing is where the two states that decide what to do next are read.</summary>
     [Fact]
-    public async Task List_AUserServedFromConfiguration_SaysTheAdoptionIsWhatMovesThem()
+    public async Task List_AUserServedFromConfiguration_SaysAConfigurationSourceIsWhereTheyAreChanged()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
@@ -197,7 +197,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("mfctl user adopt", StringComparison.Ordinal));
+            line => line.Contains("a configuration source, which is where they are changed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public sealed class UserCommandTests : IDisposable
         // Assert
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("mfctl user adopt", StringComparison.Ordinal));
+            line => line.Contains("Change them where they are declared", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -357,9 +357,9 @@ public sealed class UserCommandTests : IDisposable
             line => line.Contains("declares no mail account", StringComparison.Ordinal));
     }
 
-    /// <summary>The one refusal a command can repair names the repair, which is the adoption that moves the user out of the files.</summary>
+    /// <summary>The one refusal a command can repair names the repair, which is the configuration source the mailboxes are declared in.</summary>
     [Fact]
-    public async Task AccountAdd_AUserAConfigurationSourceSupplies_NamesTheAdoptionAsTheRepair()
+    public async Task AccountAdd_AUserAConfigurationSourceSupplies_NamesTheConfigurationSourceAsTheRepair()
     {
         // Arrange
         using var deployment = FakeUserRecordDeployment.RefusingTheWrite(
@@ -384,7 +384,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("mfctl user adopt", StringComparison.Ordinal));
+            line => line.Contains("Change this user's mail accounts where the configuration source declares them", StringComparison.Ordinal));
     }
 
     /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>
@@ -410,77 +410,6 @@ public sealed class UserCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
             line => line.Contains("was not touched", StringComparison.Ordinal));
-    }
-
-    /// <summary>A user already reading their own record has nothing to move, and saying so is not a refusal.</summary>
-    [Fact]
-    public async Task Adopt_AUserAlreadyReadingTheirOwnRecord_SaysThereIsNothingToAdopt()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.Holding(User);
-
-        // Act
-        var exitCode = await this.RunAsync(deployment, "user", "adopt", "--yes", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserAdoptionPath(User)));
-        Assert.Contains(
-            this.harness.Console.Lines,
-            line => line.Contains("nothing to adopt", StringComparison.Ordinal));
-    }
-
-    /// <summary>The preview names the mailboxes and the path behind them, which is the moment to notice it covers more than was meant.</summary>
-    [Fact]
-    public async Task Adopt_AUserAConfigurationSourceSupplies_PreviewsTheMailboxesAndThePathBehindThem()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "primary", "archive");
-
-        // Act
-        var exitCode = await this.RunAsync(deployment, "user", "adopt", "--yes", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.harness.Console.Lines, line => line.Contains("primary", StringComparison.Ordinal));
-        Assert.Contains(
-            this.harness.Console.Lines,
-            line => line.Contains("MailSynchronization:Accounts", StringComparison.Ordinal));
-    }
-
-    /// <summary>The adoption is composed over the version the preview reported, which is what the deployment accepts it against.</summary>
-    [Fact]
-    public async Task Adopt_AUserAConfigurationSourceSupplies_ComposesTheAdoptionOverThePreviewedVersion()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "primary");
-
-        // Act
-        await this.RunAsync(deployment, "user", "adopt", "--yes", "--endpoint", Endpoint);
-
-        // Assert
-        var adoption = Assert.Single(
-            deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserAdoptionPath(User)));
-
-        Assert.Equal(FakeUserRecordDeployment.RecordVersion, ReadVersion(adoption.ContentAsUtf8String()));
-    }
-
-    /// <summary>Nobody is at the terminal, so an unconfirmed adoption is refused with the flag that states the agreement in the command.</summary>
-    [Fact]
-    public async Task Adopt_NoAgreementStatedAndNobodyAtTheTerminal_AdoptsNothing()
-    {
-        // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "primary");
-
-        // Act
-        var exitCode = await this.RunAsync(deployment, "user", "adopt", "--endpoint", Endpoint);
-
-        // Assert
-        Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserAdoptionPath(User)));
-        Assert.Contains(
-            this.harness.Console.Errors,
-            line => line.Contains("Nothing was adopted", StringComparison.Ordinal));
     }
 
     /// <summary>An identifier copied out of the wrong listing looks the same either way, so the confirmation names the person.</summary>
@@ -749,7 +678,7 @@ public sealed class UserCommandTests : IDisposable
     public async Task Edit_ARecordAConfigurationSourceSupplies_RefusesWithoutOpeningTheEditor()
     {
         // Arrange
-        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User, "work");
+        using var deployment = FakeUserRecordDeployment.SupplyingFromConfiguration(User);
 
         var openedTheEditor = false;
         this.harness.OpensTheBufferWith((_, _) =>
@@ -768,7 +697,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Empty(deployment.UserRequestsTo(HttpMethod.Post, AdminEndpointRoutes.UserRecordPath(User)));
         Assert.Contains(
             this.harness.Console.Errors,
-            line => line.Contains("mfctl user adopt", StringComparison.Ordinal));
+            line => line.Contains("Change them where they are declared", StringComparison.Ordinal));
     }
 
     public void Dispose()

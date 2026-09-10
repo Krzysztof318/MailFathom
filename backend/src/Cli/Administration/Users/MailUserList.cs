@@ -24,9 +24,9 @@ internal sealed record MailUserList(
 /// <param name="DeclaredInConfiguration">Whether a configuration source names them, so a start puts their label back and writes their row again after an erasure.</param>
 /// <remarks>
 /// The label is here because an identifier is what a command needs and a person is what an operator is thinking about;
-/// the three flags are here because each is a different thing to act on — the first says an adoption still has
-/// something to move, the second says whether this user's mail is read now, and the third says the deployment's own
-/// files are where this user is changed and removed.
+/// the three flags are here because each is a different thing to act on — the first says whether a change to their
+/// mail accounts is written into their record or into a file, the second says whether this user's mail is read now,
+/// and the third says the deployment's own files are where this user is changed and removed.
 /// </remarks>
 internal sealed record MailUserRosterEntry(
     [property: JsonPropertyName("id")] Guid Id,

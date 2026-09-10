@@ -19,6 +19,6 @@ internal enum MailUserAccountSource
     /// <summary>The user's own section of the top-level <c>Accounts</c> collection, which is where a file declaring several users puts each one's mailboxes.</summary>
     UserDeclaration = 1,
 
-    /// <summary>The user's own document, which is the source from the moment an adoption writes it and permanently afterwards.</summary>
+    /// <summary>The user's own document, which is the source from the moment a committed record writes it and permanently afterwards.</summary>
     UserDocument = 2,
 }

@@ -21,7 +21,7 @@ namespace MailFathom.Infrastructure.Persistence.Users;
 /// what a committed document makes true — so a marker left behind by a write would leave the next start reading that
 /// user's mail accounts out of a configuration section they have stopped being supplied by. Whether the *first* such
 /// write is one an operator meant is not this port's question: a user a configuration source still supplies is
-/// refused before the candidate is composed, and adoption is what moves them.
+/// refused before the candidate is composed, and that declaration is where their mailboxes are changed.
 /// </para>
 /// </remarks>
 public interface IUserSettingsDocumentWriter

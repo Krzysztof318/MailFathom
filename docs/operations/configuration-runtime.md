@@ -27,7 +27,7 @@ The users this deployment serves, each with the mail accounts they own. It is a 
 `MailSynchronization:Accounts`, which is the deployment's own mailbox section and belongs to whichever sole user a
 deployment declaring no user holds. [The users a deployment
 serves](configuration-sources.md#the-users-a-deployment-serves) is the page: what the identifier is, how to generate
-one, what a start reports, and what an adoption costs.
+one, and what a start reports.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -50,8 +50,8 @@ the administrative endpoint is enabled.
 A declared user states nothing here beyond their mailboxes. How their mail is classified as spam is theirs to decide,
 but while a configuration source still reaches them it is read from the deployment's
 [`SpamClassification`](configuration-ai.md#spamclassification) section; the block that lets them decide it for
-themselves is [in their own record](configuration-sources.md#one-users-own-classification-posture), which an adoption
-writes.
+themselves is [in their own record](configuration-sources.md#one-users-own-classification-posture), which only a
+user no configuration source declares is read from.
 
 ## `Secrets`
 

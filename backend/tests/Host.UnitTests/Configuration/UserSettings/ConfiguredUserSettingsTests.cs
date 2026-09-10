@@ -10,10 +10,10 @@ using Xunit;
 namespace MailFathom.Host.UnitTests.Configuration.UserSettings;
 
 /// <summary>
-/// Covers where one user's configured mailboxes are read from and what adopting them would write. The two sections are
-/// not interchangeable — the deployment's own names no user and belongs to whichever sole user such a deployment
-/// holds, while a declared user's is a numbered entry of the user collection — and what an adoption moves is what the
-/// files say now rather than what the roster copied at the start.
+/// Covers where one user's configured mailboxes are read from. The two sections are not interchangeable — the
+/// deployment's own names no user and belongs to whichever sole user such a deployment holds, while a declared user's
+/// is a numbered entry of the user collection — and what is read is what the files say now rather than what the roster
+/// copied at the start.
 /// </summary>
 public sealed class ConfiguredUserSettingsTests
 {
@@ -63,7 +63,7 @@ public sealed class ConfiguredUserSettingsTests
     /// <summary>
     /// A source may number its entries with a gap, and the binder records no key: it appends one element per child, so
     /// the position a user bound at and the key an operator wrote come apart. Addressing by the position then reads a
-    /// section nobody wrote, which is an adoption committing an empty record over mailboxes the file declares.
+    /// section nobody wrote, which is one user's declared mailboxes reading as somebody else's.
     /// </summary>
     [Fact]
     public void DeclaredFor_ACollectionNumberedWithAGap_ReadsTheEntryTheKeyNamesRatherThanThePosition()
@@ -90,14 +90,15 @@ public sealed class ConfiguredUserSettingsTests
     }
 
     /// <summary>
-    /// A user who has adopted answers with nothing because their record is their own from now on, and a user this
-    /// process's roster does not hold answers with nothing because no file has ever named them. Neither is a failure:
-    /// both are users an ordinary write reaches.
+    /// A user whose record is their own answers with nothing because their record decides their mailboxes from now on,
+    /// and a user this process's roster does not hold answers with nothing because no file has ever named them. Neither
+    /// is a failure: both are users an ordinary write reaches.
     /// </summary>
+    /// <param name="onTheRoster">Whether the roster holds the user asked about.</param>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void SectionFor_AUserNoConfigurationSourceReaches_ReportsNothing(bool onTheRoster)
+    public void DeclaredFor_AUserNoConfigurationSourceReaches_ReadsNoMailbox(bool onTheRoster)
     {
         // Arrange
         var reading = onTheRoster
@@ -105,15 +106,15 @@ public sealed class ConfiguredUserSettingsTests
             : Reading(DeclaredUserPair(), Serving(Morgan, MailUserAccountSource.UserDeclaration));
 
         // Act
-        var section = reading.SectionFor(Alex);
+        var declared = reading.DeclaredFor(Alex);
 
         // Assert
-        Assert.Null(section);
+        Assert.Empty(declared);
     }
 
     /// <summary>A declaration the file no longer carries is a file edited between the start that reconciled the roster and this read.</summary>
     [Fact]
-    public void SectionFor_AUserTheRosterHoldsAndTheFileNoLongerDeclares_ReportsNothing()
+    public void DeclaredFor_AUserTheRosterHoldsAndTheFileNoLongerDeclares_ReadsNoMailbox()
     {
         // Arrange
         var reading = Reading(
@@ -121,224 +122,20 @@ public sealed class ConfiguredUserSettingsTests
             Serving(Alex, MailUserAccountSource.UserDeclaration));
 
         // Act
-        var section = reading.SectionFor(Alex);
+        var declared = reading.DeclaredFor(Alex);
 
         // Assert
-        Assert.Null(section);
+        Assert.Empty(declared);
     }
 
     [Fact]
-    public void SectionFor_AUserNamingNobody_IsRefused()
+    public void DeclaredFor_AUserNamingNobody_IsRefused()
     {
         // Arrange
         var reading = Reading(new Dictionary<string, string?>(), Serving(Alex, MailUserAccountSource.DeploymentSection));
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => reading.SectionFor(default));
-    }
-
-    /// <summary>
-    /// The keys are taken relative to the section and re-rooted at the record's own collection, so a deployment section
-    /// and a declared user's both land on the one property a user's record holds mailboxes under.
-    /// </summary>
-    [Fact]
-    public void AdoptionEditsFor_AUserServedFromTheDeploymentSection_RerootsEveryKeyAtTheRecordsOwnCollection()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-                ["MailSynchronization:Accounts:0:Host"] = "mail.example.test",
-            },
-            Serving(Alex, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Equal(
-            ["MailAccounts:0:AccountId=primary", "MailAccounts:0:Host=mail.example.test"],
-            edits.Select(edit => $"{edit.Path}={edit.Value}"));
-    }
-
-    /// <summary>Whichever of the two sections an operator had been writing in, the same keys come out.</summary>
-    [Fact]
-    public void AdoptionEditsFor_AUserDeclaringTheirOwnMailboxes_RerootsEveryKeyAtTheSameCollection()
-    {
-        // Arrange
-        var reading = Reading(
-            DeclaredUserPair(),
-            Serving(Alex, MailUserAccountSource.UserDeclaration),
-            Serving(Morgan, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Morgan);
-
-        // Assert
-        Assert.Equal(["MailAccounts:0:AccountId=morgan-work"], edits.Select(edit => $"{edit.Path}={edit.Value}"));
-    }
-
-    /// <summary>
-    /// A key survives a property the binder does not know about, a value written in a shape the type would have
-    /// normalized, and a setting a later release adds — which is what makes an adoption a move rather than a rewrite.
-    /// </summary>
-    [Fact]
-    public void AdoptionEditsFor_ASettingNothingBinds_CarriesItThroughAsTheOperatorWroteIt()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-                ["MailSynchronization:Accounts:0:SettingALaterReleaseAdds"] = "kept",
-            },
-            Serving(Alex, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Contains(edits, edit => edit.Path == "MailAccounts:0:SettingALaterReleaseAdds" && edit.Value == "kept");
-    }
-
-    /// <summary>A section enumerates itself under the empty key and a key whose value is null is a section rather than a setting; an edit composed from either would address nothing.</summary>
-    [Fact]
-    public void AdoptionEditsFor_ASectionCarryingSettings_StatesOneChangePerSettingAndNoneForTheSectionsThemselves()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-            },
-            Serving(Alex, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        var edit = Assert.Single(edits);
-        Assert.Equal("MailAccounts:0:AccountId", edit.Path);
-    }
-
-    /// <summary>
-    /// An adoption is a move rather than a rewrite, so the posture the deployment's section classified this user's mail
-    /// under travels into the record with their mailboxes — otherwise a handover about where somebody's settings live
-    /// would switch their spam protection off.
-    /// </summary>
-    [Fact]
-    public void AdoptionEditsFor_ADeploymentClassifyingTheirMail_CarriesThatPostureIntoTheRecord()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-                ["SpamClassification:Enabled"] = "true",
-                ["SpamClassification:ScannedFolders:0"] = "inbox",
-                ["SpamClassification:Actions:MoveToJunkFolder"] = "true",
-            },
-            Serving(Alex, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Equal(
-            [
-                "MailAccounts:0:AccountId=primary",
-                "SpamClassification:Actions:MoveToJunkFolder=true",
-                "SpamClassification:Enabled=true",
-                "SpamClassification:ScannedFolders:0=inbox",
-            ],
-            edits.Select(edit => $"{edit.Path}={edit.Value}"));
-    }
-
-    /// <summary>What the section states about the engine costs the deployment rather than the user, and a record may not hold it.</summary>
-    [Fact]
-    public void AdoptionEditsFor_ASectionStatingTheDeploymentsOwnEngineSettings_LeavesThemBehind()
-    {
-        // Arrange
-        var reading = Reading(
-            new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-                ["SpamClassification:Enabled"] = "true",
-                ["SpamClassification:ClassificationWait"] = "02:00:00",
-                ["SpamClassification:ScanConcurrency"] = "4",
-                ["SpamClassification:Scanner:Host"] = "spamd.example.test",
-            },
-            Serving(Alex, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Equal(
-            ["MailAccounts:0:AccountId=primary", "SpamClassification:Enabled=true"],
-            edits.Select(edit => $"{edit.Path}={edit.Value}"));
-    }
-
-    /// <summary>
-    /// The scanning block moves with the mailboxes for the reason the classification posture does, and with more at
-    /// stake: a handover that left it behind would stop scanning that user's mail — permanently, since no
-    /// configuration source reaches an adopted user afterwards — on the strength of an administrative act about where
-    /// their settings live, with nothing having said so.
-    /// </summary>
-    [Fact]
-    public void AdoptionEditsFor_ADeclarationScanningTheirMail_CarriesThatBlockIntoTheRecord()
-    {
-        // Arrange
-        var declared = DeclaredUserPair();
-        declared["Accounts:0:SensitiveContent:Secrets:Enabled"] = "true";
-        declared["Accounts:0:SensitiveContent:ScreenOutgoingMailFor:0"] = "Secrets";
-
-        var reading = Reading(declared, Serving(Alex, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Equal(
-            [
-                "MailAccounts:0:AccountId=alex-work",
-                "SensitiveContent:ScreenOutgoingMailFor:0=Secrets",
-                "SensitiveContent:Secrets:Enabled=true",
-            ],
-            edits.Select(edit => $"{edit.Path}={edit.Value}"));
-    }
-
-    /// <summary>The block another user declared is theirs, and an adoption that carried it would scan one person's mail on another's answer.</summary>
-    [Fact]
-    public void SensitiveContentAdoptionFor_AnotherUsersDeclaredBlock_IsNotCarried()
-    {
-        // Arrange
-        var declared = DeclaredUserPair();
-        declared["Accounts:1:SensitiveContent:Secrets:Enabled"] = "true";
-
-        var reading = Reading(declared, Serving(Alex, MailUserAccountSource.UserDeclaration));
-
-        // Act
-        var carried = reading.SensitiveContentAdoptionFor(Alex);
-
-        // Assert
-        Assert.Empty(carried);
-    }
-
-    [Fact]
-    public void AdoptionEditsFor_AUserNoConfigurationSourceReaches_StatesNoChanges()
-    {
-        // Arrange
-        var reading = Reading(
-            DeclaredUserPair(),
-            Serving(Alex, MailUserAccountSource.UserDocument));
-
-        // Act
-        var edits = reading.AdoptionEditsFor(Alex);
-
-        // Assert
-        Assert.Empty(edits);
+        Assert.Throws<ArgumentException>(() => reading.DeclaredFor(default));
     }
 
     private static Dictionary<string, string?> DeclaredUserPair() => new()

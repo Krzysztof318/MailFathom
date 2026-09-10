@@ -181,10 +181,8 @@ internal static class CliRootCommand
             RemoveUserMailAccountCommand.Create(context),
         };
 
-        // Who this deployment serves, and what it reads for each of them. "adopt" is apart from the rest for the reason
-        // "config adopt" is: it moves a decision out of the deployment's files and into its database, which nothing else
-        // in MailFathom does and which no upgrade or import will do behind an operator's back. "remove" is apart for the
-        // opposite reason — it is the one command here that destroys mail, and nothing undoes it.
+        // Who this deployment serves, and what it reads for each of them. "remove" is apart from the rest — it is the
+        // one command here that destroys mail, and nothing undoes it.
         Command userCommand = new("user", "Record the people this deployment serves, and maintain what it reads for each.")
         {
             AddUserCommand.Create(context),
@@ -192,7 +190,6 @@ internal static class CliRootCommand
             ShowUserRecordCommand.Create(context),
             EditUserRecordCommand.Create(context),
             RenameUserCommand.Create(context),
-            AdoptUserCommand.Create(context),
             RemoveUserCommand.Create(context),
             userAccountCommand,
         };

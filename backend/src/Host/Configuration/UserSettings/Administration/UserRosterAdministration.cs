@@ -19,10 +19,10 @@ namespace MailFathom.Host.Configuration.UserSettings.Administration;
 /// </para>
 /// <para>
 /// Provisioning writes the envelope and then commits the empty record, which is two statements and one act. The second
-/// is what makes the user's mail accounts their own from the start, and it is not the adoption this deployment refuses
-/// to perform behind an operator's back: nothing declares a user nobody had until this call, so there is no
-/// configuration section for the record to be quietly replacing. A user a file <em>does</em> declare stays served
-/// from it until <c>mfctl user adopt</c> moves them, which is the refusal the record administration carries.
+/// is what makes the user's mail accounts their own from the start, and it replaces nothing: nothing declares a user
+/// nobody had until this call, so there is no configuration section for the record to be quietly superseding. A user a
+/// file <em>does</em> declare stays served from it for as long as the file declares them, which is the refusal the
+/// record administration carries.
 /// </para>
 /// <para>
 /// Every operation asks for its own permission with the transport absent, as every other permission-bearing use case in
@@ -149,7 +149,7 @@ internal sealed partial class UserRosterAdministration(
                     "The user was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
             }
 
-            // An adoption commits an empty record, so the user it publishes declares no mailbox, classifies nothing,
+            // The committed record is empty, so the user it publishes declares no mailbox, classifies nothing,
             // and reads the deployment's own scanning posture until they write one.
             servedUsers.UserDocumentPublished(user, label, new UserAccountOptions(), committed);
 

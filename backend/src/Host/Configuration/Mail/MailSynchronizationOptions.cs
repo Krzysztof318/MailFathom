@@ -721,9 +721,9 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
     /// </para>
     /// <para>
-    /// The roster is searched first because an adoption publishes the user's document without rewriting the file it
-    /// superseded. A later start refuses that stale deployment section, but the running process must follow the commit
-    /// now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
+    /// The roster is searched first because a committed record publishes the user's document without touching a file
+    /// that still declares accounts beside it. A later start refuses that stale deployment section, but the running
+    /// process must follow the commit now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
     /// that <c>DeclaredUsers</c> states.
     /// </para>
     /// </remarks>
