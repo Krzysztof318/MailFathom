@@ -146,6 +146,30 @@ public sealed class ClientAssertionReplayStoreTests
     }
 
     /// <summary>
+    /// An assertion is accepted for the permitted skew past its own expiry, so a record dropped at that expiry is
+    /// dropped while the assertion carrying it is still being served. This is the boundary the test above never
+    /// reaches: the sweep lands inside that tail, and a record removed there admits the replay on the next
+    /// presentation of the same captured assertion.
+    /// </summary>
+    [Fact]
+    public async Task TrySpendAsync_ASweepInsideThePermittedSkew_StillRefusesAnIdentifierValidationWouldAccept()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(SpentAt);
+        var store = new ClientAssertionReplayStore(new InMemoryClientAssertionSpendStore(), clock);
+        var expiresAt = SpentAt + ClientAssertion.MaximumLifetime;
+
+        await SpendAsync(store, "nightly", "an-identifier", expiresAt);
+
+        // Act
+        clock.Advance(ClientAssertion.MaximumLifetime + (ClientAssertionValidation.PermittedClockSkew / 2));
+
+        // Assert
+        Assert.True(clock.GetUtcNow() < expiresAt + ClientAssertionValidation.PermittedClockSkew);
+        Assert.False(await SpendAsync(store, "nightly", "an-identifier", expiresAt));
+    }
+
+    /// <summary>
     /// The removal is asked for at most once per permitted lifetime rather than per request, which is what keeps the
     /// second statement off the authentication path: a deployment answering a request a second would otherwise issue a
     /// delete a second to drop records no client could have presented anyway.

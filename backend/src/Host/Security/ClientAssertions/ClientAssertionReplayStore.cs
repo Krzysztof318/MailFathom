@@ -85,9 +85,11 @@ internal sealed class ClientAssertionReplayStore
     /// with another through this store.
     /// </para>
     /// <para>
-    /// An identifier is refused for as long as its record exists, which may briefly outlive the assertion that carried
-    /// it. That is the safe direction and never refuses anything legitimate: an assertion repeating an identifier past
-    /// its own expiry is already refused for the expiry, and one repeating it inside its lifetime is the replay.
+    /// An identifier is refused for as long as its record exists, which outlives the assertion that carried it: the
+    /// record is dropped by the first sweep after the assertion stops being verifiable, so it may survive that instant
+    /// by up to one permitted lifetime. That is the safe direction and never refuses anything legitimate: an assertion
+    /// repeating an identifier past the point validation still accepts it is already refused for the expiry, and one
+    /// repeating it before that point is the replay.
     /// </para>
     /// </remarks>
     public Task<bool> TrySpendAsync(
@@ -139,6 +141,14 @@ internal sealed class ClientAssertionReplayStore
     /// operator while changing nothing about the outcome. The interval is claimed before the statement runs, so a
     /// failure costs one deferred removal rather than a retry on the next request.
     /// </para>
+    /// <para>
+    /// What counts as expired here is what validation counts as expired, which is later than the assertion's own
+    /// <c>exp</c>: <see cref="ClientAssertionValidation.PermittedClockSkew" /> is tolerated on either side of it, so an
+    /// assertion is still accepted for that long afterwards. Removing a record at its <c>exp</c> would therefore drop
+    /// the record of an assertion still being accepted, and the next presentation of that captured assertion would find
+    /// no row and be served — the one failure this store exists to refuse. So the instant handed down is the one past
+    /// which nothing can be presented any more rather than the one the assertion nominally expires at.
+    /// </para>
     /// </remarks>
     private async Task SweepExpiredRecordsAsync(CancellationToken cancellationToken)
     {
@@ -158,6 +168,8 @@ internal sealed class ClientAssertionReplayStore
             return;
         }
 
-        await this.spentAssertions.RemoveExpiredAsync(now, cancellationToken);
+        await this.spentAssertions.RemoveExpiredAsync(
+            now - ClientAssertionValidation.PermittedClockSkew,
+            cancellationToken);
     }
 }

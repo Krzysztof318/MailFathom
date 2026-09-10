@@ -32,11 +32,11 @@ internal sealed class InMemoryClientAssertionSpendStore : IClientAssertionSpendS
         Task.FromResult(this.spent.TryAdd((credentialKey, identifier), expiresAt));
 
     /// <inheritdoc />
-    public Task RemoveExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    public Task RemoveExpiredAsync(DateTimeOffset removableFrom, CancellationToken cancellationToken)
     {
         this.RemovalCount++;
 
-        foreach (var record in this.spent.Where(record => record.Value <= now))
+        foreach (var record in this.spent.Where(record => record.Value <= removableFrom))
         {
             this.spent.TryRemove(record);
         }

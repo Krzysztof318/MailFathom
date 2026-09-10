@@ -56,6 +56,6 @@ internal sealed class SpentClientAssertionEntity
     public string Identifier { get; set; } = string.Empty;
 
     /// <summary>Gets or sets when the assertion stops being accepted, in UTC.</summary>
-    /// <remarks>What the removal reads, and the reason the table cannot grow without bound: a row outlives no assertion, and an assertion lives at most <see cref="ClientAssertion.MaximumLifetime" />.</remarks>
+    /// <remarks>What the removal reads, and the reason the table cannot grow without bound: an assertion lives at most <see cref="ClientAssertion.MaximumLifetime" />, and a row is dropped by the first sweep after the point past which its assertion can no longer be presented — so it outlives that point by at most one more such lifetime.</remarks>
     public DateTimeOffset ExpiresAt { get; set; }
 }

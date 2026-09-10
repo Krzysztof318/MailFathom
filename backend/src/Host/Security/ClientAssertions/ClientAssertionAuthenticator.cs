@@ -309,7 +309,7 @@ internal sealed partial class ClientAssertionAuthenticator
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "A request presented an assertion signed by client public key {PublicKeyName} whose identifier this "
-            + "process has already served. The request was refused; either the client reused an identifier or an "
+            + "deployment has already served. The request was refused; either the client reused an identifier or an "
             + "assertion was captured and replayed.")]
     private partial void LogReplayedAssertionPresented(string publicKeyName);
 

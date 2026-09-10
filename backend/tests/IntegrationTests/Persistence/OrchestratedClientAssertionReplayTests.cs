@@ -40,6 +40,9 @@ public sealed class OrchestratedClientAssertionReplayTests(MailFathomOrchestrati
     /// <summary>The credential the expiry case spends against, kept apart so a failure there names its own rows.</summary>
     private const string ExpiringCredentialKey = "orchestrated-replay-tests-expiring";
 
+    /// <summary>How many replicas present one identifier at once, enough that a caller reliably loses the race.</summary>
+    private const int ContendingReplicas = 8;
+
     /// <summary>The expiry every case but the removal spends under, far enough ahead that the removal cannot reach it.</summary>
     /// <remarks>The removal is deployment-wide by construction — it drops whatever has expired, whoever spent it — so the two groups of instants are ordered rather than merely distinct, and this class is the only writer of the table.</remarks>
     private static readonly DateTimeOffset OutlivesTheSuite = new(2226, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -75,12 +78,14 @@ public sealed class OrchestratedClientAssertionReplayTests(MailFathomOrchestrati
     /// key rather than by a check either of them makes between two statements.
     /// </summary>
     /// <remarks>
-    /// The two spends are dispatched together rather than awaited one after the other, because a sequential pair
-    /// establishes only that the second caller can see what the first committed — which is the half that was never in
-    /// doubt. What decides the concurrent case is the index, and nothing a substitute could stand in for.
+    /// Every attempt is queued rather than awaited in turn, because a pair started one after the other runs the
+    /// synchronous head of the first — the scope, the resolution, the command — before the second begins, and can be
+    /// serialized by the scheduler alone. An implementation that read the table and then inserted would pass that
+    /// arrangement, which is the exact defect the composed statement exists to rule out. What decides the real case is
+    /// the index, and nothing a substitute could stand in for.
     /// </remarks>
     [Fact]
-    public async Task TrySpendAsync_TwoHostsPresentingOneIdentifierAtOnce_ServesExactlyOne()
+    public async Task TrySpendAsync_ManyHostsPresentingOneIdentifierAtOnce_ServesExactlyOne()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -90,12 +95,18 @@ public sealed class OrchestratedClientAssertionReplayTests(MailFathomOrchestrati
         var identifier = FreshIdentifier();
 
         // Act
-        var outcomes = await Task.WhenAll(
-            SpendAsync(oneHost, CredentialKey, identifier, cancellationToken),
-            SpendAsync(anotherHost, CredentialKey, identifier, cancellationToken));
+        var attempts = await ConcurrentIdempotency.RunAsync(
+            "Presenting one client assertion identifier from several replicas at once",
+            ContendingReplicas,
+            (ordinal, token) => SpendAsync(
+                ordinal % 2 == 0 ? oneHost : anotherHost,
+                CredentialKey,
+                identifier,
+                token),
+            cancellationToken);
 
         // Assert
-        Assert.Single(outcomes, served => served);
+        attempts.AssertSingleEffect(attempts.Results.Count(served => served));
     }
 
     /// <summary>

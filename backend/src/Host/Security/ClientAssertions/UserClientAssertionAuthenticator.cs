@@ -216,8 +216,8 @@ internal sealed partial class UserClientAssertionAuthenticator
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A request presented an assertion for credential {CredentialId} whose identifier this process has "
-            + "already served. The request was refused; either the client reused an identifier or an assertion was "
+        Message = "A request presented an assertion for credential {CredentialId} whose identifier this deployment "
+            + "has already served. The request was refused; either the client reused an identifier or an assertion was "
             + "captured and replayed.")]
     private partial void LogReplayedAssertionPresented(Guid credentialId);
 

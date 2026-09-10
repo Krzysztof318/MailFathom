@@ -40,7 +40,12 @@ public interface IClientAssertionSpendStore
         CancellationToken cancellationToken);
 
     /// <summary>Forgets the identifiers whose assertions can no longer be presented.</summary>
-    /// <param name="now">The instant an assertion's expiry is judged against.</param>
+    /// <param name="removableFrom">
+    /// The instant an assertion's expiry is judged against: a record is dropped once its <paramref name="removableFrom" />
+    /// has passed its recorded expiry. It is the caller's, not the clock's, because whoever verifies an assertion decides
+    /// how long past its own expiry it is still accepted — a caller tolerating clock skew subtracts that tolerance here,
+    /// since dropping the record of an assertion still being accepted is what would admit the replay.
+    /// </param>
     /// <param name="cancellationToken">Cancels the removal.</param>
     /// <returns>A task that completes when the expired records are gone.</returns>
     /// <remarks>
@@ -48,5 +53,5 @@ public interface IClientAssertionSpendStore
     /// records through an ordering on the expiry, so the work is proportional to what has expired since the last
     /// removal rather than to everything ever spent.
     /// </remarks>
-    Task RemoveExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken);
+    Task RemoveExpiredAsync(DateTimeOffset removableFrom, CancellationToken cancellationToken);
 }

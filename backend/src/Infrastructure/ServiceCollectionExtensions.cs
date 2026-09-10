@@ -386,7 +386,7 @@ public static class ServiceCollectionExtensions
             () => provider.GetRequiredService<FieldEncryptor>(),
             () => provider.GetRequiredService<DatabaseCommandTimeout>()));
         services.AddScoped<IStoredSecretStore, StoredSecretStore>();
-        // A singleton over the pool, like the two configuration statements above it, because it is two bare commands
+        // A singleton over the pool, like the two configuration statements below it, because it is two bare commands
         // with no query shape and its caller is an authentication handler rather than a unit of work: the record of a
         // served assertion belongs to the deployment whether or not the request that produced it goes on to commit
         // anything.

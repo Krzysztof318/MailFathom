@@ -61,7 +61,7 @@ internal sealed class ClientAssertionSpendStore(NpgsqlDataSource dataSource) : I
     /// </remarks>
     private const string RemoveExpiredStatement = $"""
         DELETE FROM "{SpentClientAssertionEntity.TableName}"
-        WHERE "{SpentClientAssertionEntity.ExpiresAtColumnName}" <= @now;
+        WHERE "{SpentClientAssertionEntity.ExpiresAtColumnName}" <= @removableFrom;
         """;
 
     /// <inheritdoc />
@@ -83,10 +83,10 @@ internal sealed class ClientAssertionSpendStore(NpgsqlDataSource dataSource) : I
     }
 
     /// <inheritdoc />
-    public async Task RemoveExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task RemoveExpiredAsync(DateTimeOffset removableFrom, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand(RemoveExpiredStatement);
-        command.Parameters.AddWithValue("now", now.ToUniversalTime());
+        command.Parameters.AddWithValue("removableFrom", removableFrom.ToUniversalTime());
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

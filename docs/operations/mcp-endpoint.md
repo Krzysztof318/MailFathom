@@ -338,8 +338,12 @@ credential is new. The assertion carries three claims and two header parameters:
   reach the database anyway, and nothing is asked of your routing — an assertion presented to a second instance is
   refused there, whatever sent it to that one. What that insert adds to a request was measured rather than assumed:
   under a millisecond against a PostgreSQL on the same machine, and unchanged by a hundred thousand rows already in the
-  table. Nothing accumulates either — a row outlives no assertion, so what the table holds is the last few minutes of
-  your own authenticated traffic and nothing older, removed by whichever instance reaches the interval first.
+  table. Nothing accumulates either: what the table holds is the last few minutes of your own authenticated traffic.
+  A row is dropped by the first removal after the point past which its assertion can no longer be presented, so it may
+  outlive that point by up to one more permitted lifetime; each instance issues its own removal once per that lifetime
+  rather than one being issued for the deployment; and the removal runs when an assertion is presented rather than on a
+  timer, so a deployment whose assertion traffic stops keeps the rows it held at that moment until the next assertion
+  arrives.
 
 `mfctl` mints all of this for you; see [Signing in with a key pair](admin-endpoint.md#with-a-key-pair).
 
