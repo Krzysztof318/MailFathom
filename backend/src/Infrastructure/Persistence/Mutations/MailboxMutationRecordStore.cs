@@ -43,6 +43,7 @@ internal sealed class MailboxMutationRecordStore(
     public async Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
+        DateTimeOffset? heldUntil,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -99,6 +100,7 @@ internal sealed class MailboxMutationRecordStore(
             Stage = MailboxMutationStage.Recorded,
             RequiresSourceRemoval = false,
             AttemptCount = 0,
+            HeldUntil = heldUntil,
             RecordedAt = recordedAt,
             StageChangedAt = recordedAt,
         };
@@ -230,6 +232,47 @@ internal sealed class MailboxMutationRecordStore(
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
+        IPersistenceSession session,
+        MailUserId user,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(recordIds);
+
+        if (recordIds.Count == 0)
+        {
+            return [];
+        }
+
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
+        var userValue = user.Value;
+
+        // Read exactly as a withdrawal reads, and for the same reasons: one query for the whole call, tracked so the
+        // write is part of the caller's commit, joined to the folder because rebuilding the record needs the binding,
+        // and narrowed by the user so somebody else's row is absent rather than read and then rejected.
+        var entities = await writeContext.MailboxMutations
+            .Include(mutation => mutation.MailFolder)
+            .Where(mutation => mutation.UserId == userValue && identifiers.Contains(mutation.Id))
+            .OrderBy(mutation => mutation.RecordedAt)
+            .ThenBy(mutation => mutation.Id)
+            .ToArrayAsync(cancellationToken);
+
+        foreach (var entity in entities)
+        {
+            // The stage is left where it is. Releasing says the wait is over rather than that the change is any
+            // further along, so a record already withdrawn stays withdrawn and one under way is untouched — and
+            // clearing a hold that is already clear writes nothing, which is what makes the call safe to repeat.
+            entity.HeldUntil = null;
+        }
+
+        return [.. entities.Select(entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+    }
+
+    /// <inheritdoc />
     public async Task<int> CountAttemptAsync(
         IPersistenceSession session,
         MailboxMutationRecordId recordId,
@@ -303,6 +346,10 @@ internal sealed class MailboxMutationRecordStore(
         var userValue = account.User.Value;
         var accountValue = account.Id.Value;
 
+        // Read once and compared in the query, so every row in one page is judged against one instant rather than
+        // against whatever the clock said when the provider reached it.
+        var now = timeProvider.GetUtcNow();
+
         // The binding is joined rather than copied onto the row, because it is what turns a folder key back into the
         // alias and generation an occurrence identity is made of, and the remote path a resumed attempt selects.
         var entities = await readContext.MailboxMutations
@@ -311,7 +358,12 @@ internal sealed class MailboxMutationRecordStore(
             .Where(mutation => mutation.UserId == userValue &&
                 mutation.MailboxAccountId == accountValue &&
                 mutation.Stage != MailboxMutationStage.Completed &&
-                mutation.Stage != MailboxMutationStage.Cancelled)
+                mutation.Stage != MailboxMutationStage.Cancelled &&
+
+                // A record still inside its withdrawal window is not work this pass can do, so it is left out of the
+                // page rather than read and skipped — a page spent on records nothing may touch is a page the account's
+                // real backlog does not get.
+                (mutation.HeldUntil == null || mutation.HeldUntil <= now))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .Take(limit)

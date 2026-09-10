@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 
 // What the client says back about what somebody just did, and the whole of the contract a screen reaches it through.
 // The context and its hook sit apart from the provider that fills them for the reason
@@ -12,7 +12,12 @@ import { createContext, useContext } from 'react';
 // it stands for a few seconds, and it is gone — which is why nothing here persists anything and why the surface is
 // raised from the application rather than owned by whichever screen happened to cause the outcome.
 
-/** How long a toast stands before it takes itself away, which is the design project's value. */
+/**
+ * How long a toast stands before it takes itself away, where the person has said nothing about it.
+ *
+ * It is the design project's value and the deployment's own unset answer, which is why the same number stands in on
+ * both sides: a client with no session and one whose person has never chosen behave alike.
+ */
 export const toastLifetime = 5_000;
 
 /** How long it takes to leave once it has been dismissed, which is what its own animation is given. */
@@ -42,6 +47,16 @@ export interface Toast {
     readonly title: string;
     readonly body?: string;
     readonly action?: ToastAction;
+
+    /**
+     * Called once when the card goes, whether it took itself away or somebody closed it.
+     *
+     * What it is for is the offer the card was making: a toast whose action is the way back out of something is also
+     * the whole of how long that way back is open, so its going is when the client stops holding one. It is called
+     * whether or not the action was taken — the caller knows which of the two happened and this does not — and it is
+     * not called when the surface itself goes with the tab, which is the one case nothing can be reported to anybody.
+     */
+    readonly whenGone?: () => void;
 }
 
 /** Something that is happening, which stands until it is finished or stopped rather than for a lifetime. */
@@ -83,6 +98,14 @@ export interface StandingToast {
     readonly action: ToastAction | undefined;
     readonly leaving: boolean;
     readonly stands: { readonly kind: ToastKind } | { readonly operation: Operation };
+
+    /**
+     * How long this one was raised to stand for, kept so the surface's own answers stand for as long.
+     *
+     * The surface is mounted above the frame that reads the person's preference, so it cannot ask what a toast of its
+     * own should stand for; a toast it raises in answer to one that is standing takes that one's.
+     */
+    readonly standFor: number;
 }
 
 export interface ToastSurface {
@@ -98,10 +121,46 @@ export interface ToastSurface {
     readonly raiseOperation: (operation: Operation) => OperationSettled;
 }
 
-export const ToastContext = createContext<ToastSurface | null>(null);
+/**
+ * The surface as the provider actually offers it, which takes how long each toast is to stand.
+ *
+ * How long that is belongs to the person rather than to the caller, and the person's answer arrives inside the frame —
+ * below the surface, which is mounted above everything that outlives a screen. So the value travels the only way it
+ * can: it is read from the context below at the point a screen asks for the surface, and stamped onto what it raises.
+ * A caller states what happened and nothing about how long it is read for, which is why the public contract carries
+ * neither parameter.
+ */
+export interface ToastsRaised {
+    readonly raise: (toast: Toast, standFor: number) => void;
+    readonly raiseOperation: (operation: Operation, standFor: number) => OperationSettled;
+}
+
+export const ToastContext = createContext<ToastsRaised | null>(null);
+
+/**
+ * How long a toast stands, in milliseconds, which the frame states from the person's own preference.
+ *
+ * Its default is what a client with no session draws with — the sign-in screen, and every moment before the deployment
+ * has answered — and is the same number the deployment answers a person who has chosen nothing.
+ */
+export const ToastLifetimeContext = createContext(toastLifetime);
 
 export function useToasts(): ToastSurface {
-    const surface = useContext(ToastContext);
+    const raised = useContext(ToastContext);
+    const standFor = useContext(ToastLifetimeContext);
+
+    const surface = useMemo<ToastSurface | null>(
+        () =>
+            raised === null
+                ? null
+                : {
+                      raise: (toast) => {
+                          raised.raise(toast, standFor);
+                      },
+                      raiseOperation: (operation) => raised.raiseOperation(operation, standFor),
+                  },
+        [raised, standFor],
+    );
 
     if (surface === null) {
         throw new Error('A component raised a toast outside the ToastsProvider that main.tsx mounts.');

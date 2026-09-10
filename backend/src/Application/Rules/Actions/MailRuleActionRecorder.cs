@@ -133,7 +133,7 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            var record = await this.records.OpenAsync(session, request, cancellationToken);
+            var record = await this.records.OpenAsync(session, request, heldUntil: null, cancellationToken);
 
             recorded.Add(new RecordedMailRuleAction(
                 planned.RuleName,

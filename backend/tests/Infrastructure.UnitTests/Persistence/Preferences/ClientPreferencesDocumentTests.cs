@@ -22,11 +22,11 @@ public sealed class ClientPreferencesDocumentTests
     {
         // Act
         var document = ClientPreferencesDocument.Render(
-            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true, true, false));
+            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true, true, false, 12));
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false,"notificationSeconds":12}""",
             document);
     }
 
@@ -47,7 +47,7 @@ public sealed class ClientPreferencesDocumentTests
     public void Parse_ADocumentThisBuildWrote_ReadsBackWhatWasWritten()
     {
         // Arrange
-        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true, true, false);
+        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true, true, false, 30);
 
         // Act
         var read = ClientPreferencesDocument.Parse(ClientPreferencesDocument.Render(chosen));
@@ -74,7 +74,33 @@ public sealed class ClientPreferencesDocumentTests
         var read = ClientPreferencesDocument.Parse("""{"theme":"dark"}""");
 
         // Assert
-        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false, false, true), read);
+        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false, false, true, 5), read);
+    }
+
+    /// <summary>A stored value outside the bound is a row an earlier build or a hand edit wrote, and is read as unset.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(31)]
+    public void Parse_ARowStatingANotificationTimeOutsideTheBound_AnswersItAsUnset(int stored)
+    {
+        // Act
+        var read = ClientPreferencesDocument.Parse($$"""{"notificationSeconds":{{stored}}}""");
+
+        // Assert
+        Assert.Equal(ClientPreferences.Unset.NotificationSeconds, read.NotificationSeconds);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(30)]
+    public void Parse_ARowStatingTheBoundItself_ReadsItBack(int stored)
+    {
+        // Act
+        var read = ClientPreferencesDocument.Parse($$"""{"notificationSeconds":{{stored}}}""");
+
+        // Assert
+        Assert.Equal(stored, read.NotificationSeconds);
     }
 
     /// <summary>The reduced text is what the client drew before the message view was a preference, so a row written then reads as that rather than as the sender's own markup.</summary>

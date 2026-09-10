@@ -2,8 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
+using MailFathom.Application.Preferences;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -51,9 +53,16 @@ namespace MailFathom.Host.Api;
 /// trash is a move, and a person who does it can go and fetch it; deleting expunges the remote occurrence, so
 /// <see cref="MailFathomPermission.MailDelete" /> is granted apart from
 /// <see cref="MailFathomPermission.MailMove" /> and a deployment lets a credential file mail without letting it destroy
-/// mail. It has no withdrawal route beside it for the reason the route's own remark gives, and it names no folder in
-/// either direction: what becomes of MailFathom's own copy is the account's configured disposition rather than
-/// anything a caller states or reads back.
+/// mail. It names no folder in either direction: what becomes of MailFathom's own copy is the account's configured
+/// disposition rather than anything a caller states or reads back.
+/// </para>
+/// <para>
+/// <b>Because it has no way back, a delete recorded here waits before it is attempted.</b> The record opens as every
+/// other does and is simply not taken in hand until the person's own notification time has passed, so the seconds in
+/// which the client still offers <i>undo</i> are seconds the message is still on the mail server —
+/// <see cref="DeleteWithdrawalsRoute" /> is what takes it back and <see cref="DeleteReleasesRoute" /> what ends the
+/// wait early. Neither is load-bearing: a window elapses on its own, so a client that never says anything again costs
+/// the mailbox a wait rather than a delete.
 /// </para>
 /// <para>
 /// Nothing on this surface sets <c>\Seen</c> as a consequence of anything. Marking a message read is a change a caller
@@ -86,12 +95,31 @@ internal static class ClientMailMutationsEndpoint
 
     /// <summary>The route deletes are submitted at.</summary>
     /// <remarks>
-    /// It has no withdrawal route beside it, unlike the two above. A withdrawal stops a record nothing has issued yet,
-    /// which is a way back this act deliberately does not offer: the client asks its question before the record is
-    /// opened rather than after, so what would be withdrawn is a delete somebody has already been told cannot be
-    /// undone. Adding the route would publish a second way back nothing draws.
+    /// A delete this surface records waits before anything is asked of the mail server, which the two routes below are
+    /// the two ends of. The question the client asks in front of the act stays: it is answered before anybody has seen
+    /// what happened, and what the window adds is the seconds in which they can still see it and say no.
     /// </remarks>
     internal const string DeleteMutationsRoute = $"{MutationsRoute}/deletes";
+
+    /// <summary>The route deletes are withdrawn at.</summary>
+    internal const string DeleteWithdrawalsRoute = $"{DeleteMutationsRoute}/withdrawals";
+
+    /// <summary>The route the wait in front of a delete is ended at, for a client that has stopped offering the way back.</summary>
+    /// <remarks>
+    /// It is the opposite of the withdrawal beside it and is answered the same way, with each record as it now stands.
+    /// Nothing depends on it being called: a window elapses on its own and the record is taken in hand exactly as if it
+    /// had been, so a closed tab costs the mailbox a wait rather than a delete.
+    /// </remarks>
+    internal const string DeleteReleasesRoute = $"{DeleteMutationsRoute}/releases";
+
+    /// <summary>How much longer than the person's own notification a held delete waits.</summary>
+    /// <remarks>
+    /// What it covers is a client that cannot say <c>now</c> — one whose tab was closed, whose network went, or whose
+    /// machine was put to sleep while the notification stood. Without it such a delete would reach the mail server at
+    /// the very moment the way back was still on somebody's screen; with it the mailbox waits ten seconds nobody
+    /// notices, and every client that does say <c>now</c> gives them back.
+    /// </remarks>
+    internal static readonly TimeSpan DeleteWithdrawalGrace = TimeSpan.FromSeconds(10);
 
     /// <summary>The greatest number of messages, moves, or withdrawals one request may carry in its body.</summary>
     /// <remarks>
@@ -158,6 +186,17 @@ internal static class ClientMailMutationsEndpoint
         // message in the trash is the reversible half of deleting and this is the half that is not, so an operator
         // withholds one without withholding the other.
         api.MapPost(DeleteMutationsRoute, SubmitDeletesAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailDelete);
+
+        // Both ends of the wait a recorded delete opens under, and both admitted under the grant that authored it for
+        // the reason the move withdrawal states: neither can cause a mailbox change, and the caller that may stop a
+        // delete is the caller that could have asked for it.
+        api.MapPost(DeleteWithdrawalsRoute, WithdrawDeletesAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.MailDelete);
+
+        api.MapPost(DeleteReleasesRoute, ReleaseDeletesAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
             .RequirePermission(MailFathomPermission.MailDelete);
     }
@@ -279,15 +318,26 @@ internal static class ClientMailMutationsEndpoint
     /// <summary>Writes down the deletes one batch asks for, one message at a time.</summary>
     /// <param name="request">The messages to delete from the mail server.</param>
     /// <param name="recorder">Writes one delete down.</param>
+    /// <param name="preferences">Answers how long the acting person's own notification stands, which is what the window is measured from.</param>
     /// <param name="cancellationToken">Cancels the resolutions and the writes when the client disconnects.</param>
     /// <returns><c>200</c> with one result per message, <c>400</c> when the batch itself is not one this boundary accepts, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.delete</c>.</returns>
-    /// <remarks>Nothing names a folder, in either direction: which folder a message is in decides nothing about whether this deployment writes the delete down, and the client's rule that the act is offered only in the trash is a sentence on a screen rather than a second policy here.</remarks>
+    /// <remarks>
+    /// <para>Nothing names a folder, in either direction: which folder a message is in decides nothing about whether this deployment writes the delete down, and the client's rule that the act is offered only in the trash is a sentence on a screen rather than a second policy here.</para>
+    /// <para>
+    /// The window is read once for the whole batch and applied to every record in it, so a selection somebody deleted
+    /// as one act is a selection they can take back as one. It is the person's own notification time plus
+    /// <see cref="DeleteWithdrawalGrace" />, because the way back is offered for exactly as long as that notification
+    /// stands and the grace is what covers a client that never gets to say it has gone.
+    /// </para>
+    /// </remarks>
     internal static async Task<Results<Ok<ClientMailDeletesResponse>, ProblemHttpResult>> SubmitDeletesAsync(
         [FromBody] ClientMailDeletesRequest? request,
         [FromServices] MailDeletionRecorder recorder,
+        [FromServices] OwnClientPreferences preferences,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recorder);
+        ArgumentNullException.ThrowIfNull(preferences);
 
         if (request?.Deletes is not { Count: > 0 } deletes)
         {
@@ -306,11 +356,13 @@ internal static class ClientMailMutationsEndpoint
             return UnusableRequestId();
         }
 
+        var withdrawalWindow = await WithdrawalWindowAsync(preferences, cancellationToken);
+
         var results = new List<ClientMailDeleteResultResponse>(deletes.Count);
 
         foreach (var deletion in deletes)
         {
-            results.Add(await RecordDeleteAsync(recorder, deletion, requester, cancellationToken));
+            results.Add(await RecordDeleteAsync(recorder, deletion, requester, withdrawalWindow, cancellationToken));
         }
 
         return TypedResults.Ok(new ClientMailDeletesResponse(results));
@@ -328,7 +380,7 @@ internal static class ClientMailMutationsEndpoint
     {
         ArgumentNullException.ThrowIfNull(withdrawer);
 
-        return WithdrawAsync(
+        return OverRecordsAsync(
             request,
             recordIds => withdrawer.WithdrawFlagChangesAsync(recordIds, cancellationToken));
     }
@@ -345,20 +397,56 @@ internal static class ClientMailMutationsEndpoint
     {
         ArgumentNullException.ThrowIfNull(withdrawer);
 
-        return WithdrawAsync(
+        return OverRecordsAsync(
             request,
             recordIds => withdrawer.WithdrawMovesAsync(recordIds, cancellationToken));
     }
 
-    /// <summary>Reads one withdrawal batch and hands it to whichever half of the surface the route belongs to.</summary>
-    /// <remarks>The two routes differ in the grant they carry and in the changes they cover, and in nothing this method does, so the checks are stated once rather than twice.</remarks>
-    private static async Task<Results<Ok<ClientMailChangesResponse>, ProblemHttpResult>> WithdrawAsync(
+    /// <summary>Withdraws deletes the mail server has not been told about yet.</summary>
+    /// <param name="request">The records to withdraw.</param>
+    /// <param name="withdrawer">Withdraws them.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit when the client disconnects.</param>
+    /// <returns><c>200</c> with each record as it now stands, <c>400</c> when the batch itself is not one this boundary accepts, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.delete</c>.</returns>
+    /// <remarks>This is the way back the act itself has none of, and it is why a delete recorded here waits: a record still unattempted is a message still on the mail server, and withdrawing it leaves the message there.</remarks>
+    internal static Task<Results<Ok<ClientMailChangesResponse>, ProblemHttpResult>> WithdrawDeletesAsync(
+        [FromBody] ClientMailChangeWithdrawalRequest? request,
+        [FromServices] MailboxChangeWithdrawer withdrawer,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(withdrawer);
+
+        return OverRecordsAsync(
+            request,
+            recordIds => withdrawer.WithdrawDeletesAsync(recordIds, cancellationToken));
+    }
+
+    /// <summary>Ends the wait in front of deletes whose way back is no longer on anybody's screen.</summary>
+    /// <param name="request">The records to release.</param>
+    /// <param name="releaser">Releases them.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit when the client disconnects.</param>
+    /// <returns><c>200</c> with each record as it now stands, <c>400</c> when the batch itself is not one this boundary accepts, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.delete</c>.</returns>
+    /// <remarks>Shaped like a withdrawal and read like one, because the request is the same batch of records and the answer is the same question: where each of them now stands.</remarks>
+    internal static Task<Results<Ok<ClientMailChangesResponse>, ProblemHttpResult>> ReleaseDeletesAsync(
+        [FromBody] ClientMailChangeWithdrawalRequest? request,
+        [FromServices] MailboxChangeReleaser releaser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(releaser);
+
+        return OverRecordsAsync(
+            request,
+            recordIds => releaser.ReleaseDeletesAsync(recordIds, cancellationToken));
+    }
+
+    /// <summary>Reads one batch of authored records and hands it to whichever use case the route belongs to.</summary>
+    /// <remarks>The five routes differ in the grant they carry and in what they do with the records, and in nothing this method does, so the checks are stated once rather than five times.</remarks>
+    private static async Task<Results<Ok<ClientMailChangesResponse>, ProblemHttpResult>> OverRecordsAsync(
         ClientMailChangeWithdrawalRequest? request,
-        Func<IReadOnlyList<MailboxMutationRecordId>, Task<IReadOnlyList<MailboxChangeProgress>>> withdraw)
+        Func<IReadOnlyList<MailboxMutationRecordId>, Task<IReadOnlyList<MailboxChangeProgress>>> act)
     {
         if (request?.RecordIds is not { Count: > 0 } recordIds)
         {
-            return Refusal("A withdrawal names at least one record.");
+            return Refusal("Withdrawing or releasing authored changes names at least one record.");
         }
 
         if (recordIds.Count > MaximumChangesPerRequest)
@@ -366,9 +454,9 @@ internal static class ClientMailMutationsEndpoint
             return TooMany();
         }
 
-        var withdrawn = await withdraw([.. recordIds.Select(MailboxMutationRecordId.Create)]);
+        var answered = await act([.. recordIds.Select(MailboxMutationRecordId.Create)]);
 
-        return TypedResults.Ok(ClientMailChangesResponse.For(withdrawn));
+        return TypedResults.Ok(ClientMailChangesResponse.For(answered));
     }
 
     /// <summary>Writes one message's flag and tag changes down, reporting a refusal about it as that message's result.</summary>
@@ -447,11 +535,38 @@ internal static class ClientMailMutationsEndpoint
         return ClientMailMoveResultResponse.For(move.StoredEmailId, result);
     }
 
+    /// <summary>Reads how long a delete this person authored waits before anything is asked of the mail server.</summary>
+    /// <remarks>
+    /// A preferences row nothing can read is answered with the unset notification time rather than with a refusal, and
+    /// deliberately: the person asked for mail to be deleted, and refusing that because a preference could not be read
+    /// would be a screen failing over a setting nobody had touched. What the fallback costs is the wrong window, and
+    /// the unset one is the window every client had before the preference existed.
+    /// </remarks>
+    private static async Task<TimeSpan> WithdrawalWindowAsync(
+        OwnClientPreferences preferences,
+        CancellationToken cancellationToken)
+    {
+        var seconds = ClientPreferences.Unset.NotificationSeconds;
+
+        try
+        {
+            seconds = (await preferences.ReadAsync(cancellationToken)).NotificationSeconds;
+        }
+        catch (JsonException)
+        {
+            // The read route reports this as a row to repair, which is where somebody can act on it. Here it decides
+            // only how long a window is, so it is answered rather than reported twice.
+        }
+
+        return TimeSpan.FromSeconds(seconds) + DeleteWithdrawalGrace;
+    }
+
     /// <summary>Writes one delete down, reporting the use case's own answer as that message's result.</summary>
     private static async Task<ClientMailDeleteResultResponse> RecordDeleteAsync(
         MailDeletionRecorder recorder,
         ClientMailDeleteRequest? deletion,
         MailboxMutationRequester requester,
+        TimeSpan withdrawalWindow,
         CancellationToken cancellationToken)
     {
         if (deletion is null || deletion.StoredEmailId == Guid.Empty)
@@ -464,6 +579,7 @@ internal static class ClientMailMutationsEndpoint
         var result = await recorder.RecordAsync(
             StoredEmailId.Create(deletion.StoredEmailId),
             requester,
+            withdrawalWindow,
             cancellationToken);
 
         return ClientMailDeleteResultResponse.For(deletion.StoredEmailId, result);

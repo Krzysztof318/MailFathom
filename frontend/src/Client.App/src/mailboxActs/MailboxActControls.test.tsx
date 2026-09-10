@@ -117,7 +117,10 @@ describe('MailboxActControls', () => {
     it('says an act already asked of every message it is about is on its way, rather than offering it again', () => {
         const performed = vi.fn();
 
-        drawControls({ asked: new Map([['message-1', 'archive']]), perform: performed });
+        drawControls({
+            asked: new Map([['message-1', { act: 'archive', from: invoice.folder, leaves: true }]]),
+            perform: performed,
+        });
 
         const control = screen.getByRole('button', {
             name: 'Archive — this is already on its way to your mail server.',
@@ -131,7 +134,10 @@ describe('MailboxActControls', () => {
     });
 
     it('goes on offering an act asked of only some of the messages, the rest of them not having it yet', () => {
-        drawControls({ asked: new Map([['message-1', 'archive']]) }, [invoice, receipt]);
+        drawControls({ asked: new Map([['message-1', { act: 'archive', from: invoice.folder, leaves: true }]]) }, [
+            invoice,
+            receipt,
+        ]);
 
         expect(screen.getByRole('button', { name: 'Archive' })).toBeDefined();
     });

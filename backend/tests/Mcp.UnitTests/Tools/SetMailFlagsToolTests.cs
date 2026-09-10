@@ -374,6 +374,7 @@ public sealed class SetMailFlagsToolTests
         public Task<MailboxMutationRecord> OpenAsync(
             IPersistenceSession session,
             MailboxMutationRequest request,
+            DateTimeOffset? heldUntil,
             CancellationToken cancellationToken)
         {
             this.openedRequests.Add(request);
@@ -409,6 +410,13 @@ public sealed class SetMailFlagsToolTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
+            IPersistenceSession session,
+            MailUserId user,
+            IReadOnlyList<MailboxMutationRecordId> recordIds,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<MailboxMutationRecord>> ReleaseAsync(
             IPersistenceSession session,
             MailUserId user,
             IReadOnlyList<MailboxMutationRecordId> recordIds,

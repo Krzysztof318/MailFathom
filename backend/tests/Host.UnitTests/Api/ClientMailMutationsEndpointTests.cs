@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Preferences;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -51,6 +52,8 @@ public sealed class ClientMailMutationsEndpointTests
     {
         Assert.Equal("/mutations", ClientMailMutationsEndpoint.MutationsRoute);
         Assert.Equal("/mutations/deletes", ClientMailMutationsEndpoint.DeleteMutationsRoute);
+        Assert.Equal("/mutations/deletes/withdrawals", ClientMailMutationsEndpoint.DeleteWithdrawalsRoute);
+        Assert.Equal("/mutations/deletes/releases", ClientMailMutationsEndpoint.DeleteReleasesRoute);
         Assert.Equal("/mutations/flags", ClientMailMutationsEndpoint.FlagMutationsRoute);
         Assert.Equal("/mutations/flags/withdrawals", ClientMailMutationsEndpoint.FlagWithdrawalsRoute);
         Assert.Equal("/mutations/moves", ClientMailMutationsEndpoint.MoveMutationsRoute);
@@ -341,6 +344,7 @@ public sealed class ClientMailMutationsEndpointTests
         var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
             new ClientMailDeletesRequest(RequestId: null, []),
             this.DeletionRecorder(),
+            Preferences(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -361,6 +365,7 @@ public sealed class ClientMailMutationsEndpointTests
         var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
             new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
             this.DeletionRecorder(TargetInInbox()),
+            Preferences(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -371,6 +376,32 @@ public sealed class ClientMailMutationsEndpointTests
         Assert.Equal(MailboxMutation.Delete.Name, deleted.Change?.Mutation);
     }
 
+    /// <summary>
+    /// The wait in front of a delete, which is the whole of what makes it withdrawable: the record is opened held until
+    /// the person's own notification has ended and the grace after it has passed, so nothing reaches the mail server
+    /// while the way back is still on the screen.
+    /// </summary>
+    [Fact]
+    public async Task SubmitDeletesAsync_ADeleteAPersonAuthored_HoldsTheRecordForTheirNotificationAndTheGrace()
+    {
+        // Arrange
+        this.RecordEveryRequest();
+
+        // Act
+        await ClientMailMutationsEndpoint.SubmitDeletesAsync(
+            new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
+            this.DeletionRecorder(TargetInInbox()),
+            Preferences(ClientPreferences.Unset with { NotificationSeconds = 8 }),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.records.Received(1).OpenAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailboxMutationRequest>(),
+            RecordedAt + TimeSpan.FromSeconds(8) + ClientMailMutationsEndpoint.DeleteWithdrawalGrace,
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A message the use case cannot find is that message's own result, because a batch carries on past one that has gone.</summary>
     [Fact]
     public async Task SubmitDeletesAsync_AMessageTheUseCaseCannotFind_PublishesTheUseCasesOwnAnswer()
@@ -379,6 +410,7 @@ public sealed class ClientMailMutationsEndpointTests
         var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
             new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Message)]),
             this.DeletionRecorder(),
+            Preferences(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -396,6 +428,7 @@ public sealed class ClientMailMutationsEndpointTests
         var result = await ClientMailMutationsEndpoint.SubmitDeletesAsync(
             new ClientMailDeletesRequest("call-1", [new ClientMailDeleteRequest(Guid.Empty)]),
             this.DeletionRecorder(TargetInInbox()),
+            Preferences(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -403,7 +436,7 @@ public sealed class ClientMailMutationsEndpointTests
 
         Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, deleted.Outcome);
         await this.records.DidNotReceiveWithAnyArgs()
-            .OpenAsync(default!, default!, TestContext.Current.CancellationToken);
+            .OpenAsync(default!, default!, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A withdrawal naming nothing is a request with nothing to take back.</summary>
@@ -513,7 +546,11 @@ public sealed class ClientMailMutationsEndpointTests
     /// is the record store's own contract and is covered against a real database.
     /// </remarks>
     private void RecordEveryRequest() => this.records
-        .OpenAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailboxMutationRequest>(), Arg.Any<CancellationToken>())
+        .OpenAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailboxMutationRequest>(),
+            Arg.Any<DateTimeOffset?>(),
+            Arg.Any<CancellationToken>())
         .Returns(call => Task.FromResult(new MailboxMutationRecord
         {
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7()),
@@ -622,7 +659,20 @@ public sealed class ClientMailMutationsEndpointTests
             dispositions,
             this.records,
             CommitPolicy(),
-            new MailAccountRunSignal());
+            new MailAccountRunSignal(),
+            new FakeTimeProvider(RecordedAt));
+    }
+
+    /// <summary>Builds the preferences the delete route reads the withdrawal window from.</summary>
+    /// <param name="stored">What the person set, defaulting to none, which is the unset answer every deployment starts from.</param>
+    private static OwnClientPreferences Preferences(ClientPreferences? stored = null)
+    {
+        var preferences = Substitute.For<IClientPreferencesStore>();
+        preferences.ReadAsync(Arg.Any<MailUserId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(stored));
+
+        return new OwnClientPreferences(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
+            preferences);
     }
 
     /// <summary>Builds a destination resolver that reaches nothing, because no test here gets as far as resolving a folder.</summary>

@@ -75,6 +75,49 @@ export function rowAt(held: HeldTimeline, row: number): MailTimelineEntry | null
     return null;
 }
 
+/**
+ * The list without the rows a person has taken out of this folder, which is what every reading of it is done against.
+ *
+ * Derived on each render rather than written into what is held, and that is the whole point of it. What is held is what
+ * the deployment answered; what is drawn is that, less what somebody has just asked to have filed elsewhere. Removing
+ * the rows from the held pages instead would be undone by the next read of one — the deployment goes on answering the
+ * pre-change state for as long as its own pass takes — and a refusal would have nothing to put back, whereas letting
+ * the act go from the map it is derived from brings the row back where it stood at no cost at all.
+ *
+ * A page whose rows are dropped keeps its cursors and its place, exactly as a page the list stopped holding does. What
+ * shrinks is its row count, so the list is the height of what it draws.
+ *
+ * @param held What the list knows.
+ * @param leaving Whether that message has been asked to leave the folder this row draws it in. It is asked of the row
+ * rather than of an identity, because an act takes a message out of the folder it was performed in and out of no
+ * other — the same message drawn in the folder it was filed into is a message that has arrived.
+ * @returns The list as it is drawn, and the same object where no row is leaving.
+ */
+export function withoutLeaving(
+    held: HeldTimeline,
+    leaving: (email: MailTimelineEntry) => boolean,
+): HeldTimeline {
+    const holdsLeaving = (slot: TimelineSlot): boolean => slot.emails?.some(leaving) === true;
+
+    // Answered before anything is rebuilt, so an act against mail this list is not drawing leaves the list the object it
+    // already was — which is what keeps a folder nobody acted in from re-rendering every row.
+    if (!held.slots.some(holdsLeaving)) {
+        return held;
+    }
+
+    return {
+        slots: held.slots.map((slot) => {
+            if (!holdsLeaving(slot)) {
+                return slot;
+            }
+
+            const kept = slot.emails?.filter((email) => !leaving(email)) ?? null;
+
+            return { ...slot, rowCount: kept?.length ?? slot.rowCount, emails: kept };
+        }),
+    };
+}
+
 /** Every message the list is holding, in reading order, which is what the selection is ordered against. */
 export function heldRows(held: HeldTimeline): readonly MailTimelineEntry[] {
     return held.slots.flatMap((slot) => slot.emails ?? []);

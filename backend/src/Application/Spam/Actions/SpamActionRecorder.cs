@@ -293,6 +293,7 @@ public sealed class SpamActionRecorder
                             occurrence.Occurrence,
                             requester,
                             isSeen: true),
+                        heldUntil: null,
                         attemptCancellationToken);
 
                     markedReadRecordId = seenRecord.Id;
@@ -309,6 +310,7 @@ public sealed class SpamActionRecorder
                             requester,
                             plan.Path,
                             plan.LocalDisposition),
+                        heldUntil: null,
                         attemptCancellationToken);
 
                     filedRecordId = relocationRecord.Id;

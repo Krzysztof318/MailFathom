@@ -31,12 +31,14 @@ function stored(preferences: {
     expandWholeThread?: boolean;
     aiFiltersShown?: boolean;
     embeddedHtmlMessages?: boolean;
+    notificationSeconds?: number;
 }): string {
     return JSON.stringify({
         markReadOnOpen: true,
         expandWholeThread: false,
         aiFiltersShown: true,
         embeddedHtmlMessages: false,
+        notificationSeconds: 5,
         ...preferences,
     });
 }
@@ -189,6 +191,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -236,6 +239,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: false,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -265,6 +269,7 @@ describe('useClientPreferences', () => {
                 expandWholeThread: false,
                 aiFiltersShown: true,
                 embeddedHtmlMessages: false,
+                notificationSeconds: 5,
             });
         });
     });
@@ -321,6 +326,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -389,6 +395,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
     });
 
@@ -422,6 +429,7 @@ describe('useClientPreferences', () => {
             expandWholeThread: false,
             aiFiltersShown: true,
             embeddedHtmlMessages: false,
+            notificationSeconds: 5,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
     });

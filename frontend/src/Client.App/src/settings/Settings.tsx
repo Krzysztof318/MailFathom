@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { longestNotificationSeconds, shortestNotificationSeconds } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { PersonAvatar } from '../controls/PersonAvatar';
 import { Switch } from '../controls/Switch';
@@ -260,9 +261,10 @@ function SectionName({ children }: { readonly children: string }) {
 
 // What the client is read in and how it draws a conversation, in the design project's own order: the language, then
 // the message view, then the privacy section carrying the telemetry decision. The notifications section between the
-// last two is the design project's on neither count — it draws no such row, because what it decides is whether an
-// operating system is spoken to and the project draws the client rather than the machine under it. It takes the shape
-// of the rows around it rather than one of its own, which is what keeps that from being a second house style.
+// last two is the design project's on neither count — it draws neither row, because what one decides is whether an
+// operating system is spoken to and the project draws the client rather than the machine under it, and the other is how
+// long a notification stands rather than what one looks like. Both take the shape of the rows around them rather than
+// one of their own, which is what keeps that from being a second house style.
 function Application({
     preferences,
     telemetryForwarding,
@@ -289,7 +291,11 @@ function Application({
             <SectionName>{translate('settings.mailbox')}</SectionName>
             <AiFiltersSection preferences={preferences} />
 
+            {/* One section, because both rows are about the same notifications: whether this machine raises one of its
+                own, and how long one stands wherever it is drawn. The section name is the first component's, which is
+                why the second is a sibling under it rather than a section of its own repeating the word. */}
             <SystemNotifications />
+            <NotificationDuration preferences={preferences} />
 
             <Divider />
 
@@ -311,6 +317,59 @@ function Application({
 // not the only writer: an arrival the operating system refuses turns it off from `useNotificationCentre.ts`, and a copy
 // taken at mount would still read *on* underneath somebody with this dialog open.
 //
+// How long one of the client's own notifications stands, which is also how long the way back out of a permanent delete
+// is open — the toast carrying that offer is the whole of the window, so the two are one number rather than two that
+// have to agree. The design project draws no such row either: it settles what a notification looks like rather than how
+// long somebody is given to read one, so this takes the shape of the rows around it exactly as the section below does.
+//
+// A field rather than a set of segments, because the bound is thirty whole seconds and a handful of segments over it
+// would be a choice this client invented on the deployment's behalf. It is corrected in place, like the name on the
+// profile tab and for the same reason: somebody who typed a number and moved on has said what they mean as plainly as
+// one who pressed a button. The bound is stated to the browser as well as checked, and a value outside it is refused
+// rather than brought inside — `chooseNotificationSeconds` is what a typed one reaches, and it answers as the route
+// does.
+function NotificationDuration({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
+    const { locale, translate } = useLocalization();
+    const named = useId();
+
+    return (
+        <div className="flex items-start gap-2.75 rounded-xl border border-line bg-sunken px-2.5 py-2.25">
+            <label htmlFor={named} className="flex min-w-0 flex-1 flex-col gap-0.75">
+                {translate('settings.notificationSeconds')}
+                <span className="text-xs text-muted">
+                    {translate('settings.notificationSecondsExplanation', {
+                        shortest: new Intl.NumberFormat(locale).format(shortestNotificationSeconds),
+                        longest: new Intl.NumberFormat(locale).format(longestNotificationSeconds),
+                    })}
+                </span>
+            </label>
+
+            {/* Uncontrolled and remounted by the value in force, for the reason the name field is: what somebody is
+                typing is not state this surface has any use for, and keying on the stated value is what redraws the
+                field when an answer arrives without discarding a correction that has not been sent yet. */}
+            <input
+                key={preferences.notificationSeconds}
+                id={named}
+                type="number"
+                inputMode="numeric"
+                min={shortestNotificationSeconds}
+                max={longestNotificationSeconds}
+                step={1}
+                defaultValue={preferences.notificationSeconds}
+                className="w-16 shrink-0 rounded-lg border border-line-strong bg-sunken px-2.5 py-1.5 text-base text-text outline-none focus:border-accent"
+                onBlur={(event) => {
+                    preferences.chooseNotificationSeconds(event.target.valueAsNumber);
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                        preferences.chooseNotificationSeconds(event.currentTarget.valueAsNumber);
+                    }
+                }}
+            />
+        </div>
+    );
+}
+
 // **Moving the switch on is the gesture the permission is asked from**, which is why this row asks rather than the
 // arrival that would use it: a browser refuses the prompt outright unless somebody's own action led to it, and a
 // dialog an arrival raised would land over whatever they were reading. Nothing here knows that a browser is what is

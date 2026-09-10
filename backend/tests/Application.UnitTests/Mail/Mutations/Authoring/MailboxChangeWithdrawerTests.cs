@@ -204,6 +204,63 @@ public sealed class MailboxChangeWithdrawerTests
         Assert.Equal(first.StageChangedAt, second.StageChangedAt);
     }
 
+    /// <summary>
+    /// The deleting entry point, which is the one a client reaches while the way back is still on the screen: a delete
+    /// held under a withdrawal window is cancelled before anything is asked of the mail server.
+    /// </summary>
+    [Fact]
+    public async Task WithdrawDeletesAsync_ADeleteStillHeld_CancelsItAndLeavesAFlagChangeAlone()
+    {
+        // Arrange
+        var delete = await this.OpenAsync(DeleteRequestIn(Inbox, uid: 13));
+        var flagChange = await this.OpenAsync(FlagRequestIn(Inbox, uid: 7));
+        var withdrawer = this.Withdrawer(
+            AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.MailFlagsWrite,
+                MailFathomPermission.MailDelete));
+
+        // Act
+        var withdrawn = await withdrawer.WithdrawDeletesAsync(
+            [delete.Id, flagChange.Id],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(withdrawn);
+
+        Assert.Equal(delete.Id, entry.RecordId);
+        Assert.Equal(MailboxMutationLifecycle.Cancelled, entry.Lifecycle);
+        Assert.Equal(
+            flagChange.Id,
+            Assert.Single(await this.records.ReadOutstandingAsync(Account, 10, TestContext.Current.CancellationToken))
+                .Record.Id);
+    }
+
+    /// <summary>Taking a delete back needs the deleting grant, which is the grant that authored it.</summary>
+    [Fact]
+    public async Task WithdrawDeletesAsync_ACallerHoldingOnlyTheFlagGrant_IsRefused()
+    {
+        // Arrange
+        var delete = await this.OpenAsync(DeleteRequestIn(Inbox, uid: 13));
+        var withdrawer = this.Withdrawer(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            withdrawer.WithdrawDeletesAsync([delete.Id], TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailDelete, refusal.RequiredPermission);
+        Assert.Single(await this.records.ReadOutstandingAsync(Account, 10, TestContext.Current.CancellationToken));
+    }
+
+    private static MailboxMutationRequest DeleteRequestIn(MailFolderAlias folderAlias, uint uid) =>
+        MailboxMutationRequest.Delete(
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            Account.User,
+            OccurrenceIn(folderAlias, uid),
+            Requester,
+            AuthoredDeleteEmailDisposition.RetainTombstone);
+
     private static MailboxMutationRequest FlagRequestIn(MailFolderAlias folderAlias, uint uid) =>
         MailboxMutationRequest.SetSeen(
             StoredEmailId.Create(Guid.CreateVersion7()),
@@ -230,6 +287,7 @@ public sealed class MailboxChangeWithdrawerTests
     private Task<MailboxMutationRecord> OpenAsync(MailboxMutationRequest request) => this.records.OpenAsync(
         CommittingSession(),
         request,
+        heldUntil: null,
         TestContext.Current.CancellationToken);
 
     private static IPersistenceSession CommittingSession()

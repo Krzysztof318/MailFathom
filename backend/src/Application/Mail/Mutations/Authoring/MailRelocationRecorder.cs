@@ -177,7 +177,7 @@ public sealed class MailRelocationRecorder
             localDisposition);
 
         var record = await this.commitPolicy.CommitAsync(
-            (session, attemptCancellationToken) => this.records.OpenAsync(session, request, attemptCancellationToken),
+            (session, attemptCancellationToken) => this.records.OpenAsync(session, request, heldUntil: null, attemptCancellationToken),
             cancellationToken);
 
         // Raised once the record is durable, for the reason MailFlagChangeRecorder gives: the run reads the records

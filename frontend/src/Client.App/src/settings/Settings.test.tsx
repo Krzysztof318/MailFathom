@@ -25,6 +25,7 @@ const settings: ClientPreferencesInForce = {
     expandWholeThread: false,
     aiFiltersShown: true,
     embeddedHtmlMessages: false,
+    notificationSeconds: 5,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
@@ -32,6 +33,7 @@ const settings: ClientPreferencesInForce = {
     chooseThreadExpansion: () => undefined,
     chooseMessageView: () => undefined,
     chooseAiFilters: () => undefined,
+    chooseNotificationSeconds: () => undefined,
 };
 
 const named: OwnProfileInForce = {

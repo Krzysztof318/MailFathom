@@ -15,7 +15,7 @@ import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { actsDrawn } from '../mailboxActs/drawnActs';
-import { actPending, useMailboxActs, type MailboxAct } from '../mailboxActs/useMailboxActs';
+import { actPending, useMailboxActs, type AskedAct, type MailboxAct } from '../mailboxActs/useMailboxActs';
 import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 
@@ -51,6 +51,15 @@ const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
     delete: 'act.deleting',
     move: 'act.filing',
 };
+
+// Deleting is the one act whose sentence turns on what it does rather than on its name. Sent to the trash it files the
+// message somewhere its reader can go and fetch it, and the row leaves the folder saying so; performed on a message
+// already in the trash it destroys the mail, so the row stays where it is for the seconds in which the deployment is
+// still holding the change back — and it says *that*, because a row reading `Moving to the trash…` in the trash would
+// be describing an act that is not the one about to happen.
+function actPendingWording(asked: AskedAct): MessageKey {
+    return asked.act === 'delete' && !asked.leaves ? 'act.deletingPermanently' : actPendingSaid[asked.act];
+}
 
 // What each direction of a swipe shows behind the row it is carrying, which is the design project's own: the act the
 // finger has asked for, named and drawn, against the edge it is uncovering. Filing takes its name and its symbol from
@@ -181,7 +190,7 @@ export function MessageRow({
     // A message this client has just asked to be marked unread is drawn unread from the press, for the same reason and
     // in the other direction: the two statements are one pending mutation each, and the row draws from whichever of
     // them was asked for last.
-    const unread = acting === 'markUnread' || drawnUnread(marking, email.id, email.unread);
+    const unread = acting?.act === 'markUnread' || drawnUnread(marking, email.id, email.unread);
 
     // What is showing behind the row while a finger carries it, or nothing for a row standing where the list drew it.
     // Which of the two it is is the direction alone: what the threshold decides is how firmly it is drawn rather than
@@ -381,7 +390,7 @@ export function MessageRow({
                     aria-hidden={acting === null && note === undefined ? 'true' : undefined}
                     className="h-4 overflow-hidden text-xs text-muted"
                 >
-                    {acting === null ? note : translate(actPendingSaid[acting])}
+                    {acting === null ? note : translate(actPendingWording(acting))}
                 </div>
             </div>
         </li>

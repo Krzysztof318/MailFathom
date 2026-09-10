@@ -207,6 +207,9 @@ export const pl: Catalogue = {
         'Gdy okno nie jest przed Tobą, to urządzenie mówi, ile rzeczy przyszło i jakiego rodzaju — nigdy od kogo ani w jakiej sprawie.',
     'settings.systemNotificationsRefused':
         'Ta przeglądarka ma zablokowane powiadomienia z tej strony. Zezwól na nie w jej własnych ustawieniach witryny, a przełącznik znów zadziała.',
+    'settings.notificationSeconds': 'Jak długo widać powiadomienie',
+    'settings.notificationSecondsExplanation':
+        'W pełnych sekundach, od {shortest} do {longest}. Tyle samo masz na cofnięcie trwałego usunięcia, które czeka dokładnie tak długo, jak widać jego powiadomienie.',
     'settings.mailbox': 'Skrzynka',
     'settings.aiFilters': 'Pokazuj filtry AI w drzewie katalogów',
     'settings.aiFiltersExplanation':
@@ -393,7 +396,8 @@ export const pl: Catalogue = {
         'To już jest w koszu — usunięcie teraz kasuje {count} wiadomości razem z załącznikami.',
     'act.purgeReversal': 'Tego nie da się cofnąć.',
     'act.purgeConfirm': 'Usuń na zawsze',
-    'act.deletedPermanently': 'Usunięto na zawsze',
+    'act.deletingPermanently': 'Usuwamy na zawsze…',
+    'act.deleteWithdrawn': 'Zostawiamy — nic nie usunęliśmy',
     'act.moveTitle': 'Przenieś do innego katalogu',
     'act.moveClose': 'Zamknij',
 

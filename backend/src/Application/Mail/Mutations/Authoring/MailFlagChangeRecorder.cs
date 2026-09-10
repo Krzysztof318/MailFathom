@@ -131,7 +131,7 @@ public sealed class MailFlagChangeRecorder
 
                 foreach (var request in requests)
                 {
-                    var record = await this.records.OpenAsync(session, request, attemptCancellationToken);
+                    var record = await this.records.OpenAsync(session, request, heldUntil: null, attemptCancellationToken);
 
                     if (!StatesTheSameChangeAs(record.Request, request))
                     {

@@ -133,6 +133,21 @@ internal sealed class MailboxMutationEntity
 
     public int AttemptCount { get; set; }
 
+    /// <summary>Gets or sets the instant before which no convergence pass takes this record in hand, and <see langword="null" /> where none waits.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is what makes a destructive change withdrawable after the question in front of it has been answered: the
+    /// record is durable from the moment it is written, and this says the mail server is not told until the person has
+    /// had the seconds they asked for to take it back. Nothing else waits, so the column is null on every record but a
+    /// delete the client authored.
+    /// </para>
+    /// <para>
+    /// An instant rather than a duration, so the window a record was opened under is the window it keeps: a preference
+    /// moved while a delete is waiting decides how long the next one waits rather than re-timing this one.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? HeldUntil { get; set; }
+
     public DateTimeOffset RecordedAt { get; set; }
 
     public DateTimeOffset StageChangedAt { get; set; }

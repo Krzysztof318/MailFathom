@@ -20,6 +20,7 @@ import {
     rowOfSlot,
     trimmedAround,
     wantedFor,
+    withoutLeaving,
     type HeldTimeline,
     type TimelineRead,
 } from './heldTimeline';
@@ -77,6 +78,47 @@ function readForward(pages: number): HeldTimeline {
 
     return held;
 }
+
+// An act a person performs takes the message out of the list at the press, and a refusal puts it back — which here is
+// one function answered twice rather than a state edit and its undo, because what the list draws is derived from what
+// is still being asked for. The deployment goes on answering the pre-change state for seconds afterwards, so a row
+// removed by editing the held pages would come back on the next read of the folder.
+describe('withoutLeaving', () => {
+    it('takes the rows an act is leaving with out of the list it was asked in', () => {
+        const held = readForward(2);
+
+        const shown = withoutLeaving(held, (email) => email.id === 'message-2' || email.id === 'message-5');
+
+        expect(rowCountOf(shown)).toBe(6);
+        expect(heldRows(shown).map((email) => email.id)).not.toContain('message-2');
+        expect(rowAt(shown, 2)?.id).toBe('message-3');
+    });
+
+    it('puts a row back the moment the act stops being asked for, which is what a refusal leaves behind', () => {
+        const held = readForward(1);
+        const leaving = withoutLeaving(held, (email) => email.id === 'message-1');
+
+        const restored = withoutLeaving(held, () => false);
+
+        expect(rowCountOf(leaving)).toBe(rowsPerPage - 1);
+        expect(rowCountOf(restored)).toBe(rowsPerPage);
+        expect(rowAt(restored, 1)?.id).toBe('message-1');
+    });
+
+    it('answers with the list itself where nothing is leaving, so a folder nobody acted in redraws no row', () => {
+        const held = readForward(2);
+
+        expect(withoutLeaving(held, () => false)).toBe(held);
+    });
+
+    it('leaves the page cursors alone, so the list goes on reading from where it had got to', () => {
+        const held = readForward(2);
+
+        const shown = withoutLeaving(held, (email) => email.id === 'message-7');
+
+        expect(cursorAfter(shown)).toBe(cursorAfter(held));
+    });
+});
 
 describe('answered', () => {
     it('stands a list on the first page it read', () => {

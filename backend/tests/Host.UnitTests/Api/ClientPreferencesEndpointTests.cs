@@ -23,7 +23,8 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
-    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true, true, false);
+    private static readonly ClientPreferences Chosen =
+        new(false, ClientThemeChoice.Dark, true, false, true, true, false, 12);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_HandsThemWhatTheySet()
@@ -106,7 +107,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(false, "dark", true, false, true, true, false),
+            new ClientPreferencesRequest(false, "dark", true, false, true, true, false, 12),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -134,7 +135,7 @@ public sealed class ClientPreferencesEndpointTests
         // Assert
         await store.Received(1).SaveAsync(
             SyntheticMailUser.Deployment,
-            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false, true),
+            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false, true, 5),
             Arg.Any<CancellationToken>());
     }
 
@@ -200,11 +201,64 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Act
         var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true,"aiFiltersShown":false,"notificationSeconds":12}""",
             WebFormat);
 
         // Assert
         Assert.Equal(Chosen, request!.Stated());
+    }
+
+    /// <summary>
+    /// The notification time is the one preference that is a number rather than a switch, so it carries a bound — and a
+    /// value outside it is refused rather than brought inside, because a client told nothing would draw a setting the
+    /// deployment quietly disagrees with.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(31)]
+    public async Task SaveAsync_ABodyStatingANotificationTimeOutsideTheBound_RefusesItRatherThanClampingIt(int stated)
+    {
+        // Arrange
+        var store = Substitute.For<IClientPreferencesStore>();
+
+        // Act
+        var result = await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            new ClientPreferencesRequest(NotificationSeconds: stated),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains("between 1 and 30", refusal.ProblemDetails.Detail!, StringComparison.Ordinal);
+
+        await store.DidNotReceive()
+            .SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(30)]
+    public async Task SaveAsync_ABodyStatingTheBoundItself_StoresIt(int stated)
+    {
+        // Arrange
+        var store = Substitute.For<IClientPreferencesStore>();
+        store.SaveAsync(Arg.Any<MailUserId>(), Arg.Any<ClientPreferences>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        await ClientPreferencesEndpoint.SaveAsync(
+            SignedIn(store),
+            new ClientPreferencesRequest(NotificationSeconds: stated),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await store.Received(1).SaveAsync(
+            SyntheticMailUser.Deployment,
+            ClientPreferences.Unset with { NotificationSeconds = stated },
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>The fifth preference binds like the four beside it, and a body written before it existed still states the rest.</summary>

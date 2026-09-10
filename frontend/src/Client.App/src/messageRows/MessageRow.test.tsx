@@ -167,8 +167,13 @@ function reservedLine(row: HTMLElement): Element | null {
 }
 
 /** What a client that has asked for this act on exactly this message carries, pending the deployment's own pass. */
-function asking(act: MailboxAct, storedEmailId = email.id): MailboxActs {
-    return { ...nothingActed, asked: new Map([[storedEmailId, act]]) };
+function asking(
+    act: MailboxAct,
+    storedEmailId = email.id,
+    from = email.folder,
+    leaves = act === 'archive' || act === 'move' || act === 'delete',
+): MailboxActs {
+    return { ...nothingActed, asked: new Map([[storedEmailId, { act, from, leaves }]]) };
 }
 
 /** What a client that has marked exactly this message read carries, which is what a row reads its state through. */
@@ -251,6 +256,16 @@ describe('MessageRow', () => {
 
         expect(reserved?.textContent).toBe(said);
         expect(reserved?.getAttribute('aria-hidden')).toBeNull();
+    });
+
+    // A delete from the trash destroys the mail rather than filing it anywhere, so the row stays where it is and says
+    // what is happening to it — which is also the sentence the toast offering the way back carries.
+    it('says a message being deleted for good is being deleted rather than moved', () => {
+        const reserved = reservedLine(
+            drawRow(undefined, false, nothingMarkedRead, asking('delete', email.id, email.folder, false)),
+        );
+
+        expect(reserved?.textContent).toBe('Deleting permanently…');
     });
 
     // Taking a flag off is asked for from the head of the open message rather than from a row, and the row it is about

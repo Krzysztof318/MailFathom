@@ -39,6 +39,24 @@ export const mailMoveMutationsRoute = '/mutations/moves';
  */
 export const mailDeleteMutationsRoute = '/mutations/deletes';
 
+/**
+ * The route a batch of recorded deletes is taken back at, relative to the client prefix.
+ *
+ * The way back the act itself has none of. A delete this surface records waits before the deployment asks anything of
+ * the mail server, so a record still unattempted is a message still there — and withdrawing it leaves it there. A
+ * record a pass has already taken in hand is answered where it stands instead, which is the mail having gone.
+ */
+export const mailDeleteWithdrawalsRoute = '/mutations/deletes/withdrawals';
+
+/**
+ * The route the wait in front of recorded deletes is ended at, relative to the client prefix.
+ *
+ * Asked once the notification offering the way back has gone, so the mailbox waits as long as the person was actually
+ * given rather than for the whole window. Nothing depends on it: a window elapses on its own, so a tab that closes
+ * costs a wait rather than a delete, and asking twice or asking late is the same as asking once.
+ */
+export const mailDeleteReleasesRoute = '/mutations/deletes/releases';
+
 /** The route the caller's own change records are read back at, relative to the client prefix. */
 export const mailMutationRecordsRoute = '/mutations';
 
@@ -253,6 +271,62 @@ export function deleteMail(
     return submit(session, transport, mailDeleteMutationsRoute, {
         deletes: storedEmailIds.slice(0, mostMessagesPerMutation).map((storedEmailId) => ({ storedEmailId })),
     });
+}
+
+/**
+ * Takes back deletes the deployment has not asked the mail server about yet.
+ *
+ * @param session Who is asking and where.
+ * @param transport How a request reaches the deployment.
+ * @param recordIds The records to withdraw, at most {@link mostMessagesPerMutation} of them.
+ * @returns Each named record as it now stands, or an expected failure as a value.
+ */
+export function withdrawMailDeletes(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    recordIds: readonly string[],
+): Promise<ClientResult<readonly MailMutationRecord[]>> {
+    return overRecords(session, transport, mailDeleteWithdrawalsRoute, recordIds);
+}
+
+/**
+ * Ends the wait in front of deletes whose way back is no longer offered.
+ *
+ * @param session Who is asking and where.
+ * @param transport How a request reaches the deployment.
+ * @param recordIds The records to release, at most {@link mostMessagesPerMutation} of them.
+ * @returns Each named record as it now stands, or an expected failure as a value.
+ */
+export function releaseMailDeletes(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    recordIds: readonly string[],
+): Promise<ClientResult<readonly MailMutationRecord[]>> {
+    return overRecords(session, transport, mailDeleteReleasesRoute, recordIds);
+}
+
+// Both routes name records rather than messages and both answer the same document the read route does, so the exchange
+// is stated once. The answer is bounded by what the call named, exactly as `readMailMutationRecords` bounds its own.
+function overRecords(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    route: string,
+    recordIds: readonly string[],
+): Promise<ClientResult<readonly MailMutationRecord[]>> {
+    const naming = recordIds.slice(0, mostMessagesPerMutation);
+
+    return spanned(`POST ${route}`, async () =>
+        recordsOf(
+            await send(transport, {
+                method: 'POST',
+                path: routeFor(session, route),
+                headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recordIds: naming }),
+                longestAnswer: longestRecordsAnswer,
+            }),
+            naming.length,
+        ),
+    );
 }
 
 /** Puts one batch on the wire and reads what came back, which is the same exchange whichever act asked for it. */

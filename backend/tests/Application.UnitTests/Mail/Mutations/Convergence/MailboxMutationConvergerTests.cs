@@ -486,6 +486,7 @@ public sealed class MailboxMutationConvergerTests
             await this.Store.OpenAsync(
                 Substitute.For<IPersistenceSession>(),
                 request,
+                heldUntil: null,
                 CancellationToken.None);
             this.Store.Arrange(request, stoppedAt);
 

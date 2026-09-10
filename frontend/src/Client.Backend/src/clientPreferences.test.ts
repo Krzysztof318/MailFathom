@@ -3,7 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { readClientPreferences, unsetClientPreferences, writeClientPreferences } from './clientPreferences';
+import {
+    longestNotificationSeconds,
+    readClientPreferences,
+    shortestNotificationSeconds,
+    unsetClientPreferences,
+    writeClientPreferences,
+} from './clientPreferences';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -20,6 +26,7 @@ const stored = {
     expandWholeThread: true,
     embeddedHtmlMessages: true,
     aiFiltersShown: false,
+    notificationSeconds: 12,
 } as const;
 const storedBody = JSON.stringify(stored);
 
@@ -56,7 +63,7 @@ describe('readClientPreferences', () => {
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
     });
 
-    it('reads the seven preferences the deployment answered', async () => {
+    it('reads the eight preferences the deployment answered', async () => {
         const answer = await readClientPreferences(session, answering({ status: 200, body: storedBody }));
 
         expect(answer).toStrictEqual({ outcome: 'read', value: stored });
@@ -128,11 +135,54 @@ describe('readClientPreferences', () => {
                 embeddedHtmlMessages: false,
             }),
         ],
+        [
+            'an answer from a deployment older than the notification time',
+            JSON.stringify({
+                telemetryEnabled: true,
+                theme: 'dark',
+                openMailInTabs: false,
+                markReadOnOpen: true,
+                expandWholeThread: false,
+                embeddedHtmlMessages: false,
+                aiFiltersShown: true,
+            }),
+        ],
     ])('refuses %s as unreadable rather than reading a document with a hole in it', async (_, body) => {
         const answer = await readClientPreferences(session, answering({ status: 200, body }));
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
+
+    // The bound is the deployment's and this package holds it too, for the reason every field on this surface is
+    // checked: an answer outside it would reach a screen as a notification that never goes or one nobody can read.
+    it.each([
+        ['under the shortest', shortestNotificationSeconds - 1],
+        ['over the longest', longestNotificationSeconds + 1],
+        ['a fraction of a second rather than a whole one', 5.5],
+        ['not a number at all', '5'],
+    ])('refuses a notification time %s', async (_, notificationSeconds) => {
+        const answer = await readClientPreferences(
+            session,
+            answering({ status: 200, body: JSON.stringify({ ...unsetClientPreferences, notificationSeconds }) }),
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it.each([shortestNotificationSeconds, longestNotificationSeconds])(
+        'reads %i seconds, which is the bound itself rather than past it',
+        async (notificationSeconds) => {
+            const answer = await readClientPreferences(
+                session,
+                answering({ status: 200, body: JSON.stringify({ ...unsetClientPreferences, notificationSeconds }) }),
+            );
+
+            expect(answer).toStrictEqual({
+                outcome: 'read',
+                value: { ...unsetClientPreferences, notificationSeconds },
+            });
+        },
+    );
 });
 
 describe('writeClientPreferences', () => {
