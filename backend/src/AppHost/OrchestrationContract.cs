@@ -752,19 +752,18 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ClientEnabledKey = "Client:Enabled";
 
-    /// <summary>The fixed configuration a normal local run supplies beside its interactive mailbox values.</summary>
+    /// <summary>The fixed configuration a normal local run supplies.</summary>
     /// <remarks>
-    /// Every listener is restricted to loopback because the MCP and administrative surfaces deliberately authenticate
-    /// nobody in this topology. The client surface accepts the password credential the app host provisions after the
-    /// service starts.
+    /// The mailbox is not among it. A deployment reads no mail account from its own file, so the interactive values a
+    /// local run collects compose a record instead, which the app host writes through the administrative surface after
+    /// the service starts. Every listener is restricted to loopback because the MCP and administrative surfaces
+    /// deliberately authenticate nobody in this topology. The client surface accepts the password credential the app
+    /// host provisions at the same moment.
     /// </remarks>
     public static IReadOnlyDictionary<string, string> DevelopmentHostEnvironment { get; } =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["MailSynchronization__Enabled"] = "true",
-            ["MailSynchronization__Accounts__0__AccountId"] = "local",
-            ["MailSynchronization__Accounts__0__DisplayName"] = "Local mailbox",
-            ["MailSynchronization__Accounts__0__Secrets__Password__Name"] = "local-mail-password",
             ["McpEndpoint__Enabled"] = "true",
             ["McpEndpoint__BindAddress"] = DeveloperLoopbackAddress,
             ["AdminEndpoint__Enabled"] = "true",
@@ -772,6 +771,17 @@ public static class OrchestrationContract
             ["ClientEndpoint__Enabled"] = "true",
             ["ClientEndpoint__Authentication__0__Method"] = "password",
         }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>The identifier the normal local run declares its one mail account under.</summary>
+    /// <remarks>Declared here rather than beside the write, because it is what a developer names the account by afterwards — in a rule's scope, in a tool argument, and in <c>mfctl user account</c>.</remarks>
+    public const string DevelopmentMailAccountId = "local";
+
+    /// <summary>The label the normal local run records that account under.</summary>
+    public const string DevelopmentMailAccountDisplayName = "Local mailbox";
+
+    /// <summary>The stable declared name the recorded account's password is carried under.</summary>
+    /// <remarks>A name rather than the material, which is what a record keeps beside the reference: rotating the mailbox password is then a change to what the reference reaches rather than to the record.</remarks>
+    public const string DevelopmentMailAccountPasswordName = "local-mail-password";
 
     /// <summary>The username the normal local run provisions for the browser client.</summary>
     public const string DevelopmentBasicUsername = "test";

@@ -5,31 +5,26 @@
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
-using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Spam;
 
-/// <summary>Reads what each user asked to happen to their own junk, from whichever source their record is read from.</summary>
+/// <summary>Reads what each user asked to happen to their own junk, out of the record that is the whole of their posture.</summary>
 /// <remarks>
 /// <para>
-/// The same two sources <see cref="ConfiguredSpamClassificationSettingsReader" /> reads and the same marker deciding
-/// between them, because the two halves of one user's posture are written in one place: a user whose document has
-/// been written has their switches read from it, and a user still served from a configuration source has them read
-/// from the deployment's section.
+/// The same source <see cref="ConfiguredSpamClassificationSettingsReader" /> reads, because the two halves of one
+/// user's posture are written in one place: their own record.
 /// </para>
 /// <para>
-/// The source is read per request rather than captured, so switching filing on reaches that user's next verdict and
+/// The record is read per request rather than captured, so switching filing on reaches that user's next verdict and
 /// switching it off stops it, neither needing a restart.
 /// </para>
 /// <para>
 /// Classification being switched off answers for the actions too, although validation already refuses that combination
-/// in both sources. The two are read from one posture here, so a candidate that somehow reached this reader cannot
-/// leave a mailbox being written to on the strength of verdicts nothing is producing.
+/// in a record. The two are read from one posture here, so a candidate that somehow reached this reader cannot leave a
+/// mailbox being written to on the strength of verdicts nothing is producing.
 /// </para>
 /// </remarks>
-internal sealed class ConfiguredSpamActionSettingsReader(
-    IOptionsMonitor<SpamClassificationOptions> deploymentOptions,
-    MailSynchronizationOptions synchronizationOptions)
+internal sealed class ConfiguredSpamActionSettingsReader(MailSynchronizationOptions synchronizationOptions)
     : ISpamActionSettingsReader
 {
     /// <inheritdoc />
@@ -47,13 +42,6 @@ internal sealed class ConfiguredSpamActionSettingsReader(
         if (served is null)
         {
             return SpamActionSettings.None;
-        }
-
-        if (served.ReadFromConfiguration)
-        {
-            var deployment = deploymentOptions.CurrentValue;
-
-            return deployment.Enabled ? deployment.Actions.ToSettings() : SpamActionSettings.None;
         }
 
         var record = served.SpamClassification ?? new UserSpamClassificationOptions();

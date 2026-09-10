@@ -88,7 +88,7 @@ internal static class UserOutput
         if (answer.Code == UserRecordWriteAnswer.RecordReadFromConfiguration)
         {
             context.Console.WriteNotice(
-                "Change this user's mail accounts in MailSynchronization:Accounts. Nothing moves them into their record for you: clear that section, restart, and state their mailboxes again with 'mfctl user account add'.");
+                "A configuration source supplies this user's mail accounts. Nothing moves them into their record for you: stop declaring them there, restart, and state their mailboxes again with 'mfctl user account add'.");
         }
 
         return refused ? CliExitCode.Failure : CliExitCode.Success;
@@ -97,5 +97,5 @@ internal static class UserOutput
     /// <summary>Says where one user's mail accounts are read from, in the words an operator edits.</summary>
     private static string DescribeSource(MailUserRosterEntry user) => user.RecordIsTheirOwn
         ? "their own record, maintained with 'mfctl user account'"
-        : "this deployment's own MailSynchronization:Accounts, which is where they are changed";
+        : "a configuration source, which is where they are changed";
 }

@@ -40,6 +40,14 @@ internal static class ComposedSettings
     /// </remarks>
     private const string WithdrawnUserCollectionSection = "Accounts";
 
+    /// <summary>The mail section a deployment used to declare its own mailboxes in, which nothing binds any more.</summary>
+    /// <remarks>
+    /// Spelled here for the same reason the collection above is: <see cref="Mail.MailSynchronizationOptions" /> no
+    /// longer carries the property, so there is no member to read the name off and the refusal is the only place that
+    /// still has to recognize it.
+    /// </remarks>
+    private const string WithdrawnDeploymentMailAccountsSection = "MailSynchronization:Accounts";
+
     /// <summary>Finds every refusal these settings carry, in the order a start would meet them.</summary>
     /// <param name="configuration">The configuration to judge.</param>
     /// <returns>One refusal per section that would stop a start, empty when none would.</returns>
@@ -63,7 +71,7 @@ internal static class ComposedSettings
         // would have stopped at.
         try
         {
-            refusals.AddRange(FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()));
+            refusals.AddRange(FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler(), declaredAccounts: null));
             refusals.AddRange(FindProviderRefusals(configuration));
             refusals.AddRange(FindSurfaceRefusals(configuration));
         }
@@ -75,29 +83,40 @@ internal static class ComposedSettings
         return refusals;
     }
 
-    /// <summary>Finds whether a configuration still declares the users this deployment now records.</summary>
+    /// <summary>Finds whether a configuration still declares the users or the mailboxes this deployment now records.</summary>
     /// <param name="configuration">The configuration to judge.</param>
-    /// <returns>The refusal, or nothing when no configuration source carries the withdrawn collection.</returns>
+    /// <returns>One refusal per withdrawn section the configuration still carries, empty when it carries neither.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// First among the groups, because who this deployment serves decides what every other section is read for. The
-    /// collection it names is gone rather than deprecated: a user is a row this deployment records, so a file still
-    /// carrying one is a file whose mailboxes, scanning posture, and labels reach nobody. Starting on it silently is
-    /// what this refuses, because the alternative is a deployment that serves one user while its operator reads a file
-    /// describing several.
+    /// First among the groups, because who this deployment serves decides what every other section is read for. Both
+    /// sections are gone rather than deprecated: a user is a row this deployment records and a mailbox belongs to one
+    /// of those rows, so a file still carrying either is a file whose mailboxes, scanning posture, and labels reach
+    /// nobody. Starting on one silently is what this refuses, because the alternative is a deployment that serves
+    /// nobody while its operator reads a file describing a mailbox they expect to be synchronized.
     /// </remarks>
     public static IReadOnlyList<SettingsRefusal> FindWithdrawnUserCollectionRefusals(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        return Refusal<ServedMailUsers>(
-            WithdrawnUserCollectionSection,
-            configuration.GetSection(WithdrawnUserCollectionSection).GetChildren().Any()
-                ?
-                [
-                    $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the section from your configuration.",
-                ]
-                : []);
+        return
+        [
+            .. Refusal<ServedMailUsers>(
+                WithdrawnUserCollectionSection,
+                configuration.GetSection(WithdrawnUserCollectionSection).GetChildren().Any()
+                    ?
+                    [
+                        $"{WithdrawnUserCollectionSection} is no longer read: this deployment records the users it serves rather than declaring them, and nothing imports what the collection declared. Record each of them with 'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the section from your configuration.",
+                    ]
+                    : []),
+            .. Refusal<ServedMailUsers>(
+                WithdrawnDeploymentMailAccountsSection,
+                configuration.GetSection(WithdrawnDeploymentMailAccountsSection).GetChildren().Any()
+                    ?
+                    [
+                        $"{WithdrawnDeploymentMailAccountsSection} is no longer read: a mail account belongs to the user who owns it, and this deployment reads every one of them from that user's own record. Nothing imports what the section declared. Record the user with 'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the section from your configuration.",
+                    ]
+                    : []),
+        ];
     }
 
     /// <summary>Finds what the declared AI endpoints and the ceilings around them would be refused for.</summary>
@@ -152,12 +171,18 @@ internal static class ComposedSettings
     /// <summary>Finds what the declared rule set would be refused for.</summary>
     /// <param name="configuration">The configuration to judge.</param>
     /// <param name="conditionCompiler">The compiler every condition is read through.</param>
-    /// <returns>The refusal, or nothing when every declaration compiles against an account this configuration declares.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <param name="declaredAccounts">
+    /// The mailboxes this deployment serves, or <see langword="null" /> where the caller cannot yet know them. A
+    /// mailbox is a user's own record, so composition and a configuration write both pass nothing and leave a rule's
+    /// claims about mailboxes to the startup gate, which is the first reading that has the roster.
+    /// </param>
+    /// <returns>The refusal, or nothing when every declaration compiles against what the caller could see.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="conditionCompiler" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the section will not bind at all.</exception>
     public static IReadOnlyList<SettingsRefusal> FindMailRuleRefusals(
         IConfiguration configuration,
-        IMailRuleConditionCompiler conditionCompiler)
+        IMailRuleConditionCompiler conditionCompiler,
+        IReadOnlyCollection<DeclaredMailAccount>? declaredAccounts)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(conditionCompiler);
@@ -168,10 +193,7 @@ internal static class ComposedSettings
 
         return Refusal<MailRulesOptions>(
             MailRulesOptions.SectionName,
-            MailRuleDeclarationRules.FindDeclarationErrors(
-                declared,
-                conditionCompiler,
-                DeclaredMailAccounts.ReadFrom(configuration)));
+            MailRuleDeclarationRules.FindDeclarationErrors(declared, conditionCompiler, declaredAccounts));
     }
 
     /// <summary>Finds what the sockets, the surfaces served on them, and the postures around them would be refused for.</summary>

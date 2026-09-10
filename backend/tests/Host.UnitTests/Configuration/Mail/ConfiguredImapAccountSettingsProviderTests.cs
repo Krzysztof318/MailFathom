@@ -106,23 +106,17 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
 
     private static ConfiguredImapAccountSettingsProvider CreateProvider(ISecretReferenceResolver? resolver = null)
     {
-        var options = new MailSynchronizationOptions
+        var options = new MailSynchronizationOptions().Serving(new MailSynchronizationAccountOptions
         {
-            Accounts =
-            [
-                new MailSynchronizationAccountOptions
-                {
-                    DisplayName = "The configured mailbox",
-                    AccountId = "primary",
-                    Host = "imap.example.test",
-                    UserName = "mailfathom@example.test",
-                    Secrets = new MailAccountSecretOptions
-                    {
-                        Password = new ConfiguredSecret { SecretReference = "plaintext:dev-password" },
-                    },
-                },
-            ],
-        };
+            DisplayName = "The configured mailbox",
+            AccountId = "primary",
+            Host = "imap.example.test",
+            UserName = "mailfathom@example.test",
+            Secrets = new MailAccountSecretOptions
+            {
+                Password = new ConfiguredSecret { SecretReference = "plaintext:dev-password" },
+            },
+        });
 
         var secretReferenceResolver = resolver ?? new PlaintextOnlySecretReferenceResolver();
 

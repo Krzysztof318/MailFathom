@@ -63,22 +63,6 @@ public sealed class OwnDisplayNameTests
         Assert.False(read!.Value.Changeable);
     }
 
-    /// <summary>Somebody whose mailboxes an administrator maintains holds the grant and still cannot change the name, because a start would write it back.</summary>
-    [Fact]
-    public async Task ReadAsync_APersonAConfigurationSourceDeclares_ReportsTheNameAsUnchangeable()
-    {
-        // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailRead, MailFathomPermission.MailAccountsWrite);
-        harness.Recording("Ada Lovelace");
-        harness.Declared();
-
-        // Act
-        var read = await harness.Names.ReadAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.False(read!.Value.Changeable);
-    }
-
     /// <summary>Reached where the row behind an authenticated caller has gone, which is a user erased under a credential that has not yet been withdrawn.</summary>
     [Fact]
     public async Task ReadAsync_APersonThisDeploymentDoesNotHold_AnswersNothing()
@@ -152,24 +136,6 @@ public sealed class OwnDisplayNameTests
         Assert.Equal("Ada King", change.Recorded);
         await harness.Provisioning.Received(1)
             .RelabelAsync(SyntheticMailUser.Deployment, "Ada King", Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>A person the deployment's own configuration supplies is administered rather than self-served, so their name is not theirs to set.</summary>
-    [Fact]
-    public async Task ChangeAsync_APersonAConfigurationSourceDeclares_IsRefusedNamingWhoToAsk()
-    {
-        // Arrange
-        var harness = new NameHarness(MailFathomPermission.MailAccountsWrite);
-        harness.Recording("declared");
-        harness.Declared();
-
-        // Act
-        var change = await harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Contains("the name on it is theirs to set", change.RefusalMessage!, StringComparison.Ordinal);
-        await harness.Provisioning.DidNotReceive()
-            .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -259,7 +225,7 @@ public sealed class OwnDisplayNameTests
             () => harness.Names.ChangeAsync("Ada King", TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The service over a substituted envelope, with the roster a configuration refusal is read from.</summary>
+    /// <summary>The service over a substituted envelope.</summary>
     private sealed class NameHarness
     {
         internal NameHarness(params MailFathomPermission[] granted)
@@ -274,15 +240,11 @@ public sealed class OwnDisplayNameTests
                 .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
 
-            // The person these tests act for is served from their own document, which is the ordinary case, until a
-            // test states otherwise.
-            this.Serving(MailUserAccountSource.UserDocument);
-
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
                 this.Directory,
                 this.Provisioning,
-                this.ServedUsers);
+                new ConfiguredUserSettings());
         }
 
         internal OwnDisplayName Names { get; }
@@ -291,18 +253,10 @@ public sealed class OwnDisplayNameTests
 
         internal IMailUserProvisioning Provisioning { get; }
 
-        private ServedMailUsers ServedUsers { get; } = new();
-
         /// <summary>States the name the envelope of the person these tests act for carries.</summary>
         internal void Recording(string displayName) =>
             this.Directory
                 .ReadUserAsync(SyntheticMailUser.Deployment, Arg.Any<CancellationToken>())
                 .Returns(new MailUserRecord(SyntheticMailUser.Deployment, displayName, DocumentWrittenAtRuntime: true));
-
-        /// <summary>States that a configuration source still supplies that person's mail accounts.</summary>
-        internal void Declared() => this.Serving(MailUserAccountSource.DeploymentSection);
-
-        private void Serving(MailUserAccountSource source) =>
-            this.ServedUsers.Resolved([new(SyntheticMailUser.Deployment, "recorded", source, [])]);
     }
 }

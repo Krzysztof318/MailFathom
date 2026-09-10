@@ -88,13 +88,13 @@ That is a property of the interpretation rather than of this layer. Under `Refer
 
 **Where each setting lives is decided in compiled code, one entry per store, and by nothing an operator or a caller supplies.** A path no entry names is persisted in `settings_root`, which is almost every setting. A path an entry names is persisted in that entry's own store, and is then **excluded** from `settings_root`, so no setting is described by two rows and no reader has to decide which of the two the deployment meant. There is no configuration key that adds an entry, and no argument that names a table: a store MailFathom could be asked for at run time would be a relation nobody reviewed and a document nothing knows how to read back, so adding one is a change to the catalog, the projection that reads its document, and the migration that creates its table, reviewed together.
 
-One entry exists in this release: the top-level `Accounts`, which is the collection a deployment once declared its users in. Nothing binds it any more — [the users a deployment serves](#the-users-a-deployment-serves) below is what replaced it — and the entry stays so that a write naming one of its paths is refused with the commands that record a user rather than persisted into a document nothing reads. It is **not** `MailSynchronization:Accounts` — the deployment's own mailbox section carries the same word, is an ordinary deployment setting, and stays in `settings_root` with everything else.
+One entry exists in this release: the top-level `Accounts`, which is the collection a deployment once declared its users in. Nothing binds it any more — [the users a deployment serves](#the-users-a-deployment-serves) below is what replaced it — and the entry stays so that a write naming one of its paths is refused with the commands that record a user rather than persisted into a document nothing reads. `MailSynchronization:Accounts` carries the same word and is not this entry: it is the mailbox section a deployment once declared its own accounts in, it binds to nothing either, and a candidate carrying it is refused where every unbound key is rather than routed anywhere.
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
 
-**A row's document is bound at startup and after each accepted write through MailFathom, for a user whose record is their own and for no other.** Each row holds the mail accounts and the user-level settings that are one person's own, and [the users a deployment serves](#the-users-a-deployment-serves) below is which source each user is read from. The one user this does not reach is the sole user the deployment's own `MailSynchronization:Accounts` belongs to, whose document is left unread — that section supplies their mailboxes — so a `settings_accounts` row written by hand for them changes nothing and is neither judged nor refused.
+**A row's document is bound at startup and after each accepted write through MailFathom, for every user the deployment holds.** Each row holds the mail accounts and the user-level settings that are one person's own, and it is the only place either is stated: no configuration source reaches a user, so no row is left unread and none is superseded.
 
-Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the user*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it, and [the users a deployment serves](#the-users-a-deployment-serves) states it: no two users this deployment serves may name a mail account alike, wherever each of them is read from. A write refuses a name another user of the settled roster already answers to; a start refuses a roster in which one name reaches two users, which is where a collision two writes made in one process run is first visible, because each of those writes was judged against a roster the other had not moved. So `work` under two users is refused whether it was written into a file or into two records. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
+Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the user*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it, and [the users a deployment serves](#the-users-a-deployment-serves) states it: no two users this deployment serves may name a mail account alike. A write refuses a name another user of the settled roster already answers to; a start refuses a roster in which one name reaches two users, which is where a collision two writes made in one process run is first visible, because each of those writes was judged against a roster the other had not moved. So `work` under two users is refused. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. Runtime-created material is sealed in `stored_secrets` and the document carries only its `database:` reference. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
 What the read does enforce is size. The row is measured by PostgreSQL in the statement that reads it, and a document past what this build binds is refused under error code `12012` rather than transferred, so a row something else wrote too large stops that request instead of the process.
 
@@ -118,7 +118,7 @@ That number is the only record of which document the process actually read — t
 
 Every mail account, every stored message, and every job belongs to an **user**, and `settings_accounts` holds one row per user because the mail graph's foreign key is relational rather than a predicate over a document. **A user is recorded rather than declared**: the envelope — the identifier, the label, the version, the timestamps — is the row's, and the content beside it — the user's mail accounts and the settings that are theirs — is that user's own record.
 
-**No configuration source names a user.** The top-level `Accounts` collection a deployment used to declare them in is gone: nothing binds it, and a start that meets it stops rather than serving a roster its operator's file no longer describes. What is left that reaches anybody at all is the deployment's own `MailSynchronization:Accounts`, which names no user and therefore belongs to whichever sole user such a deployment holds.
+**No configuration source names a user, and none declares a mailbox.** Both collections that used to are gone: the top-level `Accounts` a deployment declared its users in, and `MailSynchronization:Accounts`, where it declared its own mail accounts. Neither binds, and a start that meets either stops rather than serving a roster or a mailbox its operator's file no longer describes.
 
 ### Recording a user
 
@@ -126,8 +126,12 @@ Every mail account, every stored message, and every job belongs to an **user**, 
 
 ```sh
 mfctl user add --display-name alex
-mfctl user account add --user alex --account-id alex-work --host imap.example.test --user-name alex@example.test
+mfctl user account add --user <id> --from-file alex-work.json
 ```
+
+The mailbox travels as a file rather than as a list of flags, and what goes in it is the JSON object a configuration
+source used to carry — [one account](configuration-mail.md#one-account--a-mailbox-in-a-users-record) states every key
+of it. `--user` may be left out on a deployment holding one person.
 
 At most **256** users may be recorded. A roster that long was generated rather than provisioned, which is worth stopping for on its own.
 
@@ -197,37 +201,44 @@ A label is applied only where nobody else holds it, because a label names one us
 
 ### A deployment that records no user
 
-Today's shape keeps working and **no file has to change**. A deployment holding no user row at all serves exactly one: the row the release's migration provisioned, or — where the deployment holds none — one identifier generated once and recorded, reported at `Information`:
+**A deployment holding no user starts, completes every startup gate, reports itself started, and serves nobody.** That is what a first run is, and nothing about it is a failure: there is no roster to compose, no mailbox to read, and no surface answering for anybody. It says so once, at `Information`:
 
 ```
-This deployment held no user, so one has been recorded for the mail accounts it is configured with.
+This deployment holds no user and therefore serves nobody. Record the first with 'mfctl user add', then give them a mailbox with 'mfctl user account add'.
 ```
 
-Every account in `MailSynchronization:Accounts` belongs to that sole user. Once the deployment holds more than one user still reading that section there is no sole user for its accounts to belong to, so such a roster is **refused**: record each of those mailboxes against the user who owns it with `mfctl user account add`, and clear the section.
+Synchronization being switched on changes nothing about that. A deployment whose served users record no mailbox has nothing to synchronize, which is **reported** rather than refused, for the same reason: it is the ordinary state of a deployment between its first start and its first mailbox.
 
-The same section is **refused** once nobody reads it. A deployment whose every user reads a record of their own clears `MailSynchronization:Accounts` in the same edit, so the next start does not meet an account section that belongs to nobody. A start that meets it refuses and names the section.
+```
+Mail synchronization is switched on and no user this deployment serves records a mail account, so there is nothing to synchronize. Record one with 'mfctl user account add'.
+```
 
-Two further bounds hold while several users are served. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all. And no two users this deployment serves may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two users shared would reach whichever declaration the lookup met first. Give each mailbox a name no other user uses. The bound holds over the whole roster: a start reads every served user's mail accounts, from the deployment's section or from their own record, and refuses a start in which one name reaches two of them, naming the names to change.
+**The first user recorded at runtime is served without a restart**, mailboxes and all: a committed record is published to the running roster by the write that committed it, so the next synchronization run picks the account up and every surface answers for that user from that moment.
+
+**A deployment whose file still carries `MailSynchronization:Accounts` does not start.** Nothing imports what the section declared, so a start that quietly ignored it would leave an operator believing mail was being read that nothing was reading. The refusal names the section and the two commands that replace it:
+
+```
+MailSynchronization:Accounts is no longer read: a mail account belongs to the user who owns it, and this deployment
+reads every one of them from that user's own record. Nothing imports what the section declared. Record the user with
+'mfctl user add' and each of their mailboxes with 'mfctl user account add', credentials included, then remove the
+section from your configuration.
+```
+
+Two bounds hold while several users are served. Only one user may be served whenever an **user-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no user, because such a caller is composed against whichever user the deployment happens to hold, and a second user would leave that surface serving one person another person's mail. Every credential these two surfaces admit is a record naming the user it belongs to, whichever method presents it, so the one way a caller arrives naming nobody is a surface requiring no authentication at all. A deployment serving several with either of those surfaces in that state is refused, and the message names the correction: require a credential, or switch the surface off. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no user and every user-scoped route names the user it is for, which is what makes recording a second user something an operator can do at all. And no two users this deployment serves may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two users shared would reach whichever declaration the lookup met first. Give each mailbox a name no other user uses. The bound holds over the whole roster: a start reads every served user's record and refuses a roster in which one name reaches two of them, naming the names to change.
 
 ### What a start reports
 
 Every start records the roster, at `Information`:
 
 ```
-This deployment serves 3 users: 1 read from configuration and 2 from their own document.
+This deployment serves 3 users, each read from their own record; no configuration source reaches anybody's mail accounts. Change them with mfctl.
 ```
 
-and then one line per user whose mailboxes are their own record's:
-
-```
-The user labelled morgan is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.
-```
-
-Every user the deployment holds is served: the one the deployment's own mail section belongs to, and every user whose record is their own. They are served in that order, because the section is the one part of the roster a file still decides and a user outside it has no place in that order to take.
+Every user the deployment holds is served, in the order the rows were recorded in. A deployment holding none says so instead, in the line [a deployment that records no user](#a-deployment-that-records-no-user) above carries.
 
 ### Which source reaches a user
 
-**Which source a user is read from is decided per user, and nothing moves anybody between them.** A start reads each row's document marker and serves that user from whichever source it names — the deployment's own mail section while the marker is unset, their record once it is set. Nothing in a start sets it: no upgrade, no import, and no first start writes anybody's document. What sets it is [`mfctl user add`](admin-endpoint.md#users-and-their-records), whose record is the user's own from the first moment.
+**Every user is read from their own record, and no configuration source reaches any of them** — not the provisioned file, and not an environment variable or a command-line argument either. Their accounts are not configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them, and a user's record is their own from the first moment [`mfctl user add`](admin-endpoint.md#users-and-their-records) records them.
 
 **`mfctl config` never writes a record's mail accounts.** A record lives in a store of its own rather than in the deployment's document, so a change naming one of the withdrawn collection's paths is **refused** there and the refusal names how those mailboxes are actually changed:
 
@@ -237,17 +248,15 @@ document, so this is not where it is changed. A user's mailboxes are changed wit
 'mfctl user account remove', or with 'mfctl user edit' for their whole record at once.
 ```
 
-`MailSynchronization:Accounts` is not one of those paths and stays an ordinary deployment setting `mfctl config` writes, which is how the mailboxes of the sole user such a deployment holds are changed. The user routes are the ones that write the record store, and for that sole user **they refuse** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox that section was supplying. That refusal names the section as where those mailboxes are changed.
+A change naming `MailSynchronization:Accounts` is refused too, and by the binding rather than by the catalog: nothing in this release binds that section, so a candidate carrying it composes no configuration this deployment would accept.
 
-**A user read from their own record is reached by no configuration source at all** — not the provisioned file, and not an environment variable or a command-line argument either. Their accounts are not configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them.
-
-This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What decides which source reaches a user is the marker beside their row, which the file itself cannot show; the startup line naming that user is what says so.
+This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and nothing here writes into anybody's file. What a file can no longer show is who this deployment serves or which mailboxes they own; the startup line above is what says so.
 
 ### One user's own classification posture
 
-A user read from their own record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
-of their posture from the moment the document is written — the deployment's section reaches them no longer, and the two
-are never unioned. That is what makes switching classification off in a record actually switch it off.
+A user's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source of their
+posture — the deployment's section reaches nobody's classification scope, and the two are never unioned. That is what
+makes switching classification off in a record actually switch it off.
 
 ```json
 {
@@ -415,22 +424,7 @@ metadata:
 data:
   10-mail.json: |
     {
-      "MailSynchronization": {
-        "Accounts": [
-          {
-            "AccountId": "primary",
-            "DisplayName": "Personal mail",
-            "Host": "imap.example.test",
-            "Port": 993,
-            "UserName": "mailfathom@example.test",
-            "Secrets": {
-              "Password": { "Name": "primary-imap-password", "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password" }
-            },
-            "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
-            "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
-          }
-        ]
-      }
+      "MailSynchronization": { "Enabled": true }
     }
   20-persistence.json: |
     {
@@ -483,5 +477,7 @@ spec:
 ```
 
 The ConfigMap carries the settings and the secret *references*; the Secret carries the material. That split is the property the reference indirection exists for: this ConfigMap is safe to commit, review, and diff, because a copy of it yields credential paths rather than credentials.
+
+No mailbox is in it, and none can be: a mail account is a declaration in the record of the user whose mailbox it is, written with `mfctl user account add` against a running deployment. The reference it carries names this same mounted path, so the Secret above is still where a mailbox password lives — what moved is which artifact states the account, not where its credential is provisioned.
 
 `Secrets:Interpretation` stays at its `ReferenceOnly` default here, so a plain-text password pasted where a reference belongs fails startup instead of authenticating. Read [secret provisioning](secret-provisioning.md#interpretation-modes) before changing it.

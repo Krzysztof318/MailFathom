@@ -174,7 +174,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("MailSynchronization:Accounts, which is where they are changed", StringComparison.Ordinal));
+            line => line.Contains("a configuration source, which is where they are changed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -361,7 +361,7 @@ public sealed class UserCommandTests : IDisposable
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
-            line => line.Contains("Change this user's mail accounts in MailSynchronization:Accounts", StringComparison.Ordinal));
+            line => line.Contains("A configuration source supplies this user's mail accounts", StringComparison.Ordinal));
     }
 
     /// <summary>No configuration change takes somebody's mail away, so a withdrawal says what it did not do.</summary>

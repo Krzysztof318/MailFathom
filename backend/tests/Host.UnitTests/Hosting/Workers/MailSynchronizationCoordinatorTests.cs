@@ -10,6 +10,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.UserSettings;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
@@ -125,9 +126,9 @@ public sealed class MailSynchronizationCoordinatorTests
         await harness.StopAndDrainAsync();
     }
 
-    /// <summary>An account added by a configuration reload must start synchronizing without the host being restarted.</summary>
+    /// <summary>A mailbox recorded while the process runs must start synchronizing without the host being restarted.</summary>
     [Fact]
-    public async Task ExecuteAsync_AccountAddedByAReload_IsSupervisedWithoutARestart()
+    public async Task ExecuteAsync_MailboxAddedByARecordCommit_IsSupervisedWithoutARestart()
     {
         // Arrange
         var originalAccountAttempted = new TaskCompletionSource();
@@ -161,8 +162,7 @@ public sealed class MailSynchronizationCoordinatorTests
         // Act
         await harness.Coordinator.StartAsync(CancellationToken.None);
         await originalAccountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
-        harness.Settings.Current = SynchronizationTestHost.CreateOptions(
-            enabled: true,
+        harness.RecordMailboxes(
             SynchronizationTestHost.CreateAccount("original", "INBOX"),
             SynchronizationTestHost.CreateAccount("added", "INBOX"));
         await addedAccountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
@@ -353,6 +353,7 @@ public sealed class MailSynchronizationCoordinatorTests
     {
         private readonly ServiceProvider services;
         private readonly RecordingLoggerFactory loggerFactory = new();
+        private long recordedDocumentVersion;
 
         internal CoordinatorHarness(
             ServiceProvider services,
@@ -360,6 +361,7 @@ public sealed class MailSynchronizationCoordinatorTests
             FakeTimeProvider clock)
         {
             this.services = services;
+            this.ServedUsers = services.GetRequiredService<ServedMailUsers>();
             this.Settings = settings;
             this.Clock = clock;
             this.Coordinator = new MailSynchronizationCoordinator(
@@ -375,12 +377,31 @@ public sealed class MailSynchronizationCoordinatorTests
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 
+        /// <summary>Gets the roster a record commit publishes into, which is where the accounts a run supervises come from.</summary>
+        internal ServedMailUsers ServedUsers { get; }
+
         internal FakeTimeProvider Clock { get; }
 
         /// <summary>Gets everything the coordinator and its supervisors have logged, whichever category wrote it.</summary>
         internal IEnumerable<string> LoggedMessages => this.loggerFactory.Records.Select(record => record.Message);
 
         internal MailSynchronizationCoordinator Coordinator { get; }
+
+        /// <summary>Commits one user's record, which is the only way a mailbox arrives while the process runs.</summary>
+        /// <param name="mailAccounts">The mailboxes that user's document now holds.</param>
+        /// <remarks>
+        /// Both halves, because the composition root publishes both: the roster is what decides which accounts are
+        /// served, and the settings snapshot is what a supervision pass wakes on.
+        /// </remarks>
+        internal void RecordMailboxes(params MailSynchronizationAccountOptions[] mailAccounts)
+        {
+            this.ServedUsers.UserDocumentPublished(
+                SyntheticMailUser.Deployment,
+                "user",
+                new UserAccountOptions { MailAccounts = [.. mailAccounts] },
+                ++this.recordedDocumentVersion);
+            this.Settings.Current = this.Settings.Current.WithServedUsers(this.ServedUsers.Users);
+        }
 
         /// <summary>Stops the coordinator and advances the clock, so work that ignores the drain is cancelled by it.</summary>
         internal Task StopAndDrainAsync() => SynchronizationTestHost.AdvanceUntilAsync(

@@ -65,27 +65,6 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     /// <summary>
-    /// A rule that needs the current date is refused by the custom validator the host registers for it, which proves
-    /// the candidate container constructs that validator with the clock the running process has.
-    /// </summary>
-    [Fact]
-    public void FindErrors_ASynchronizationWindowAheadOfTheClock_NamesTheAccount()
-    {
-        // Arrange
-        var validator = Validator();
-
-        // Act
-        var errors = validator.FindErrors(Compose(new()
-        {
-            ["MailSynchronization:Accounts:0:AccountId"] = "work",
-            ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "2030-01-01",
-        }));
-
-        // Assert
-        Assert.Contains(errors, error => error.Contains("2030-01-01", StringComparison.Ordinal));
-    }
-
-    /// <summary>
     /// A scanner switched on with nothing behind it is refused by the catalog validator, which proves the candidate
     /// container constructs that one too — with the detectors this deployment registered rather than with none.
     /// </summary>
@@ -133,13 +112,12 @@ public sealed class CandidateSettingsValidatorTests
         var errors = validator.FindErrors(Compose(new()
         {
             ["MailboxSearch:SnippetsPerEmail"] = "-1",
-            ["MailSynchronization:Accounts:0:AccountId"] = "work",
-            ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "2030-01-01",
+            ["MailSynchronization:MaxConcurrentAccounts"] = "0",
         }));
 
         // Assert
         Assert.Contains(errors, error => error.Contains("SnippetsPerEmail", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("2030-01-01", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MaxConcurrentAccounts", StringComparison.Ordinal));
     }
 
     /// <summary>

@@ -51,6 +51,7 @@ that never reached the mailbox and a client that cannot draw a list are two diff
 | The database and the mail server | The app model, on the topology `EndToEndClient=true` selects: PostgreSQL and GreenMail under the ephemeral run prefix, and no MailFathom |
 | The schema | The artifact applied with `psql` inside the database container, the route [the schema page](database-schema.md) gives an operator whose database is not reachable from where they stand |
 | MailFathom | `dotnet publish` of `Host`, the bundle copied to `wwwroot/` beside it as the image does, started with the client endpoint on and serving the page |
+| The user and the mailbox | `POST /api/admin/users`, then `POST /api/admin/users/{id}/record/mail-accounts`, because the host started holding nobody and no configuration source declares a mailbox — the mailbox is served from that write, without a restart |
 | The credential | `POST /api/admin/users/{id}/credentials` on [the administrative endpoint](admin-endpoint.md), so the password this run signs in with was made the way an operator makes one |
 | The mail | `SyntheticMail replay` of `backend/tools/SyntheticMail/corpora/office-en.zip` into the mailbox over SMTP |
 | The synchronization | Polling [the folders route](client-endpoint.md) until the account's run reports no failed folder and at least one synchronized one |

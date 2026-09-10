@@ -215,10 +215,10 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
-| `GET /api/admin/users` | `mailfathom.admin.read` | Reads [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by, whether their mail accounts come from their own record or from this deployment's own `MailSynchronization:Accounts`, and whether the running process serves them. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
+| `GET /api/admin/users` | `mailfathom.admin.read` | Reads [the users this deployment holds records for](#users-and-their-records), each with the label it tells them apart by and whether the running process serves them. It is what a user or credential command reads before it acts, so that a deployment serving one person needs no `--user`. |
 | `POST /api/admin/users` | `mailfathom.admin.configuration.write` | Records a user this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second user while a user-facing endpoint admits a caller who names nobody, a label another user already carries, and a roster already at its bound. |
 | `PUT /api/admin/users/{userId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the user is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another user carries, naming what to change, and answers `404` for a user this deployment holds no record for, as every other user-scoped route does. |
-| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. The user `MailSynchronization:Accounts` supplies is refused instead, naming the section to clear first: the next start would record a user for it again and download those mailboxes again. |
+| `DELETE /api/admin/users/{userId}` | `mailfathom.admin.erase` | Erases the user and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** A user this deployment does not hold is reported as nothing erased rather than as a refusal. |
 | `GET /api/admin/users/{userId}/record` | `mailfathom.admin.read` | Hands over one user's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that user's mail accounts from. |
 | `POST /api/admin/users/{userId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. It is what `mfctl user edit` sends when the editor exits, and a record another writer moved past is refused as superseded rather than merged. |
 | `POST /api/admin/users/{userId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
@@ -1028,8 +1028,8 @@ what you recorded about them. The book's own rules — what identifies a person,
 who may change what — are that page's; this is the command group over them.
 
 A book belongs to one user, and this surface acts for none: it is the deployment's administrator rather than somebody
-whose mail is being served, so every command here reaches the book of the user this deployment serves — which is
-exactly one while its mail accounts come from `MailSynchronization:Accounts`.
+whose mail is being served, so every command here reaches the book of the user this deployment serves — which it can
+supply only while it serves exactly one.
 
 ```console
 $ mfctl contact create --name "Anna Kowalska" --address anna@example.test --note "Met at the conference."
@@ -1165,11 +1165,10 @@ MailFathom setting, which is every override written for this deployment on purpo
 ### Users and their records
 
 A user is a person this deployment reads mail for, and a record is what it reads for them: the mailboxes, the
-credentials each one is reached with, and the settings that are theirs rather than the deployment's. A first deployment
-states its mailboxes in its own `MailSynchronization:Accounts` and never comes here at all — one person, one section,
-nothing to administer. These routes are what a deployment reaches for when that stops being true: a second person to
-serve, or a first person whose mailboxes should be changed without editing a file. **A user is recorded here rather
-than declared anywhere**: no configuration section names one.
+credentials each one is reached with, and the settings that are theirs rather than the deployment's. A deployment
+starts holding nobody and serves nobody until these routes are used, whether it will end up serving one person or a
+household: no configuration section names a user, and none declares a mailbox. **A user is recorded here rather than
+declared anywhere**, and the first one recorded is served without a restart.
 
 **Every route here is administrative, and the listing exists here and nowhere else.** [The client
 surface](client-endpoint.md#the-record-routes) publishes the signed-in user's own record and nothing beside it, so
@@ -1212,11 +1211,6 @@ anybody's label out of a file and there is nobody for whom this reports a change
 is the opposite case, and
 [configuration sources](configuration-sources.md#the-identifier-mailfathom-mints) holds what changing one would cost.
 
-**The user `MailSynchronization:Accounts` supplies cannot be erased.** `mfctl user remove` refuses them, naming the
-section to clear first, because a start records a user for that section wherever the deployment holds none. The erasure
-would run, the mail would go, and a person would be recreated with those mailboxes downloaded again, which is a deletion
-request answered worse than one refused. Clear the section and ask again.
-
 **A second user is refused while a user-facing endpoint authenticates nobody.** A deployment serving one person may
 leave the MCP endpoint open, because there is only one answer to whose mail a caller is asking about. Recording a second
 person makes that question unanswerable, so the refusal names the endpoints to correct — require a credential on each of
@@ -1238,24 +1232,11 @@ signed ticket rather than a credential, so nothing in the URL names a user and t
 deployment serving several it therefore answers `409` instead of the file. Recording the user in the ticket is what
 ends that, and it changes the capability's own format.
 
-**Nothing moves a user off this deployment's files.** The one user `MailSynchronization:Accounts` supplies has their
-mail accounts read from that section on every start, and a write to their record is refused rather than committed —
-because committing it would leave two answers to which mailboxes this deployment reads, and the section would win at
-the next restart. The refusal names where those mailboxes are actually changed:
-
-```console
-$ mfctl user account add --from-file work-mailbox.json
-This deployment's own MailSynchronization:Accounts supplies this user's mail accounts, so their record is empty and a
-change written into it would leave them served from less than that section supplies. Change them in that section;
-nothing moves what it states into a record.
-Change this user's mail accounts in MailSynchronization:Accounts. Nothing moves them into their record for you: clear
-that section, restart, and state their mailboxes again with 'mfctl user account add'.
-```
-
-So a deployment moving that person out of its files does it in that order — the section is cleared, the next start
-stops serving them from it, and `mfctl user account add` states their mailboxes into the record — and the credentials
-each account needs are stated afresh as part of it, because nothing carries a secret reference across for you. A user
-recorded through `mfctl user add` was never read from a file and their record is their own from the first moment.
+**Nothing imports a mailbox a file used to declare.** A deployment upgrading from a release that stated its own mail
+accounts does not start until `MailSynchronization:Accounts` is removed, and the refusal names these commands: record
+the person with `mfctl user add`, state each of their mailboxes with `mfctl user account add`, and remove the section.
+The credentials each account needs are stated afresh as part of it, because nothing carries a secret reference across
+for you. Every user's record is their own from the first moment they are recorded.
 
 `mfctl config adopt` is a different command about a different thing — the deployment's own settings moving into the
 persisted layer, which has nothing to do with whose mailboxes these are — and it is unaffected.
@@ -2099,7 +2080,7 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
-| `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. Nothing was stored. |
+| `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no served user's record declares, or you are signed in to the wrong deployment. Nothing was stored. |
 | `is still mirrored, so erasing it would only cost a remirror` | `folder erase` named a folder the account still synchronizes, and nothing was erased. Switch that folder's `Synchronize` off, or remove its mapping, and ask again. |
 | `before the erasure was interrupted` | `folder erase` was stopped part way. What it reported erasing is gone and the rest is still there; run the same command again to continue from where it stopped. |
 | `The deployment refused the grant without saying why.` | The request was refused with no reason in the answer, which is what something in front of the endpoint answering `400` looks like. Check that `--endpoint` reaches the deployment itself. |

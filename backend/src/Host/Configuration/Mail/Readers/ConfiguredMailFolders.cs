@@ -26,11 +26,10 @@ internal static class ConfiguredMailFolders
     /// identity for it here would attach one folder's decision to a name no operator wrote.
     /// </para>
     /// <para>
-    /// Both places a mailbox is declared are read, through <see cref="MailSynchronizationOptions.DeclaredAccounts" />:
-    /// the deployment's own section, and each served user's accounts. A deployment declaring users is refused a
-    /// non-empty <c>MailSynchronization:Accounts</c>, so reading only the first leaves such a deployment with no mapped
-    /// folder at all — every folder unmapped, no folder visible to a tool, and mail it has already stored reported as
-    /// an empty mailbox.
+    /// Every mailbox is read through <see cref="MailSynchronizationOptions.DeclaredAccounts" />, which is the whole
+    /// roster's rather than one user's: a folder mapping belongs to the account that declares it, and the account
+    /// belongs to the user whose record holds it. A deployment serving nobody maps no folder, which is what a start
+    /// before its first user is recorded looks like.
     /// </para>
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(MailSynchronizationOptions settings) =>

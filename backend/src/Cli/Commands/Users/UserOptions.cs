@@ -60,9 +60,9 @@ internal static class UserOptions
         {
             [var only] => only.Id,
             null or [] => throw new CliFailure(
-                "The deployment holds no user records, so there is nobody to act for. A user record is written when "
-                + "the deployment first composes its settings, and 'user add' records another; check that it started "
-                + "successfully."),
+                "The deployment holds no user records, so there is nobody to act for. Nothing records one but "
+                + "'user add', and a deployment holding none is the ordinary shape of a first run rather than a "
+                + "failed start."),
             var several => throw new CliFailure(
                 $"The deployment holds {several.Count} users, so which one this acts for has to be said. Pass --user "
                 + $"with one of: {string.Join(", ", several.Select(user => user.Describe()))}"),

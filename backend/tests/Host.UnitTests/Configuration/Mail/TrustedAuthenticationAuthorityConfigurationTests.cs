@@ -5,6 +5,7 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -66,7 +67,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
         account.TrustedAuthenticationServiceIdentifier = configured;
 
         // Act
-        var messages = OptionsFor(account).ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(OptionsFor(account)).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(
@@ -84,7 +85,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
 
         // Act
         var refusal = Assert.Single(
-            OptionsFor(account).ValidateForSynchronization().Select(result => result.ErrorMessage),
+            ConfiguredMailAccounts.Validate(OptionsFor(account)).Select(result => result.ErrorMessage),
             message => message!.Contains("trusted authentication service identifier", StringComparison.Ordinal));
 
         // Assert
@@ -97,8 +98,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
     public void ValidateForSynchronization_NoTrustedServiceIdentifier_IsAccepted()
     {
         // Act
-        var messages = OptionsFor(CreateAccount("primary"))
-            .ValidateForSynchronization()
+        var messages = ConfiguredMailAccounts.Validate(OptionsFor(CreateAccount("primary")))
             .Select(result => result.ErrorMessage)
             .ToArray();
 
@@ -108,10 +108,8 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
             message => message!.Contains("trusted authentication service identifier", StringComparison.Ordinal));
     }
 
-    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Accounts = [.. accounts],
-    };
+    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().Serving(accounts);
 
     private static MailSynchronizationAccountOptions CreateAccount(string accountId) => new()
     {

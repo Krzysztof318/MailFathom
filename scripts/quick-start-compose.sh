@@ -10,6 +10,11 @@ set -euo pipefail
 # What it ends with is an address a chat client connects to and an address the MailFathom client answers on. The client
 # is served from the same image, so preparing it is two settings rather than anything to install.
 #
+# The mailbox is not among the settings it writes. A deployment declares no mail account in its own file: every mailbox
+# belongs to the record of the user whose mail it is, and a record is written while the deployment runs. So the answers
+# collected here become mailbox.json, and the run that starts the deployment records the user and that mailbox through
+# the administrative endpoint — which is why that endpoint is served rather than optional.
+#
 # It provisions no credential to sign in to that page with, and that is the current client rather than an omission: the
 # React client reads its own sample data and calls no endpoint yet, so a password would be a record nothing can present.
 # The client surface it is served on is served behind `password` all the same, because it is a mail-reading endpoint and
@@ -80,10 +85,10 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
   --password-file <path>   Where to read the mailbox password from, instead of asking for it.
   --mcp-authentication <api-key|none>
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
-  --admin-endpoint <off|api-key|none>
-                           Whether the administrative endpoint is served, and how. Served with a
-                           generated key when the MCP endpoint requires one, which is minted through
-                           it. Defaults to off, and off with an MCP key is refused.
+  --admin-endpoint <api-key|none>
+                           Whether the administrative endpoint requires a generated key. It is always
+                           served: the user this deployment holds, the mailbox it reads, and the key
+                           an MCP client presents are all recorded through it. Defaults to api-key.
   --no-client              Prepare the MCP endpoint alone, without the client page or the surface it
                            is served on.
   --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
@@ -108,10 +113,7 @@ display_name=''
 account_id='primary'
 password_file=''
 mcp_authentication='api-key'
-admin_endpoint='off'
-# Whether the line above is the default or the operator's own answer. The MCP key this script prepares is minted over
-# the administrative endpoint, so a default of `off` is corrected where it was asked for and an explicit one is refused.
-admin_endpoint_chosen='no'
+admin_endpoint='api-key'
 serve_client='yes'
 relax_tls_policy='yes'
 requested_version=''
@@ -132,7 +134,7 @@ while [[ $# -gt 0 ]]; do
         --account-id) account_id="$2" ;;
         --password-file) password_file="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
-        --admin-endpoint) admin_endpoint="$2"; admin_endpoint_chosen='yes' ;;
+        --admin-endpoint) admin_endpoint="$2" ;;
         --version) requested_version="$2" ;;
       esac
       shift 2
@@ -359,8 +361,8 @@ case "$mcp_authentication" in
 esac
 
 case "$admin_endpoint" in
-  off | api-key | none) ;;
-  *) printf 'The administrative endpoint takes off, api-key, or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
+  api-key | none) ;;
+  *) printf 'The administrative endpoint takes api-key or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
 esac
 
 if [[ "$interactive" == 'yes' ]]; then
@@ -372,7 +374,7 @@ present a key.
 
   api-key  The endpoint accepts a key the running deployment mints for the user, and the client
            sends it as a bearer credential. Minting it is one mfctl command against the
-           administrative endpoint, which this script then turns on for you. Two popular chat
+           administrative endpoint, which this deployment serves either way. Two popular chat
            clients offer no field for a key, and cannot connect to an endpoint configured this way.
   none     Anything that can reach 127.0.0.1:8080 reads your mail. Legal, announced with a startup
            warning, and reasonable only because the port is published on loopback alone.
@@ -382,21 +384,6 @@ TEXT
   if [[ "$mcp_authentication" == 'api-key' ]] && confirm 'Serve the MCP endpoint without authentication?'; then
     mcp_authentication='none'
   fi
-fi
-
-# The MCP key is not written into a file here: it is a record the running deployment mints over the administrative
-# endpoint. So switching that endpoint off while a key is asked for produces a deployment nothing can be provisioned
-# for. An operator who asked for that combination is told; a default that arrived at it is corrected, since nobody
-# chose it.
-if [[ "$admin_endpoint" == 'off' && "$mcp_authentication" == 'api-key' ]]; then
-  if [[ "$admin_endpoint_chosen" == 'yes' ]]; then
-    printf 'An MCP key is minted with mfctl over the administrative endpoint, so\n' >&2
-    printf '%s\n' '--admin-endpoint off cannot be combined with it. Pass --admin-endpoint api-key, or ask for no' >&2
-    printf '%s\n' 'key at all with --mcp-authentication none.' >&2
-    exit 1
-  fi
-
-  admin_endpoint='api-key'
 fi
 
 if [[ "$interactive" == 'yes' ]]; then
@@ -427,18 +414,11 @@ is served on its own port ($admin_port), also on 127.0.0.1 and also over plain H
 An entry that writes no grant reaches every administrative operation, so a key here is as sensitive
 as the mail it can dispose of.
 
+It is served either way, because it is the only thing that records a user at all: a deployment
+declares no mail account in its own file, so the person this one serves and the mailbox it reads are
+written through this endpoint once it is running. What is decided here is whether it takes a key.
+
 TEXT
-
-  # An authenticated MCP endpoint has nowhere else to get its key from: it is a record beside the user, minted with
-  # `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather than an extra. The validation
-  # above has already turned it on; this is where the operator is told why.
-  if [[ "$mcp_authentication" == 'api-key' ]]; then
-    printf 'It is on, because the MCP key you chose above is minted through it.\n\n' >&2
-  fi
-
-  if [[ "$admin_endpoint" == 'off' ]] && confirm 'Serve the administrative endpoint as well?'; then
-    admin_endpoint='api-key'
-  fi
 
   if [[ "$admin_endpoint" == 'api-key' ]] \
     && confirm 'Without authentication? Anything that reaches the port can then administer the service'; then
@@ -507,14 +487,6 @@ readonly imap_password_name="imap-$account_id-password"
 readonly admin_key_name='admin-workstation-key'
 readonly schema_asset="mailfathom-schema-$version.sql"
 
-# compose.yaml publishes no port for the administrative endpoint and mounts no file that need not exist, and it is a
-# tracked file. An override is what states either without editing it — .gitignore already covers this path.
-writes_override='no'
-if [[ "$admin_endpoint" != 'off' || "$relax_tls_policy" == 'yes' ]]; then
-  writes_override='yes'
-fi
-readonly writes_override
-
 # Written into JSON as a string. Only these two characters can end a string early or start an escape, and a control
 # character is refused rather than encoded, because a name carrying one is a mistake in every case that reaches here.
 json_string() {
@@ -539,9 +511,10 @@ write_secret() {
 }
 
 refuse_existing "secrets/mailfathom/$imap_password_name"
+refuse_existing 'mailbox.json'
+refuse_existing 'compose.override.yaml'
 [[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
 [[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'openssl-legacy.cnf'
-[[ "$writes_override" != 'yes' ]] || refuse_existing 'compose.override.yaml'
 
 printf '\nPreparing deploy/compose for MailFathom %s.\n' "$version" >&2
 
@@ -597,14 +570,14 @@ JSON
   )
 fi
 
-admin_section=''
-if [[ "$admin_endpoint" != 'off' ]]; then
-  admin_authentication_block='[]'
+admin_api_key=''
+admin_authentication_block='[]'
 
-  if [[ "$admin_endpoint" == 'api-key' ]]; then
-    write_secret "secrets/mailfathom/$admin_key_name" "$(openssl rand -base64 33 | tr -d '\n')"
-    admin_authentication_block=$(
-      cat << JSON
+if [[ "$admin_endpoint" == 'api-key' ]]; then
+  admin_api_key="$(openssl rand -base64 33 | tr -d '\n')"
+  write_secret "secrets/mailfathom/$admin_key_name" "$admin_api_key"
+  admin_authentication_block=$(
+    cat << JSON
 [
       {
         "ApiKey": {
@@ -615,22 +588,23 @@ if [[ "$admin_endpoint" != 'off' ]]; then
       }
     ]
 JSON
-    )
-  fi
+  )
+fi
 
-  # The port is stated here and published in compose.override.yaml below. The bind address is left at its default,
-  # which is every address inside the container — that is what makes the published mapping reach it, and the mapping is
-  # what restricts the endpoint to this machine.
-  admin_section=$(
-    cat << JSON
+readonly admin_api_key
+
+# The port is stated here and published in compose.override.yaml below. The bind address is left at its default, which
+# is every address inside the container — that is what makes the published mapping reach it, and the mapping is what
+# restricts the endpoint to this machine.
+admin_section=$(
+  cat << JSON
   "AdminEndpoint": {
     "Enabled": true,
     "Port": $admin_port,
     "Authentication": $admin_authentication_block
   },
 JSON
-  )
-fi
+)
 
 cat > config/10-mailfathom.json << JSON
 // Written by scripts/quick-start-compose.sh. It is ordinary configuration from here on: edit it, review it as a diff,
@@ -641,29 +615,7 @@ cat > config/10-mailfathom.json << JSON
 {
   "MailSynchronization": {
     "Enabled": true,
-    "Interval": "00:05:00",
-    "Accounts": [
-      {
-        "AccountId": $(json_string "$account_id"),
-        "DisplayName": $(json_string "$display_name"),
-        "Host": $(json_string "$imap_host"),
-        "Port": $imap_port,
-        "UserName": $(json_string "$user_name"),
-        "Secrets": {
-          "Password": {
-            "Name": $(json_string "$imap_password_name"),
-            "SecretReference": $(json_string "file:/etc/mailfathom/secrets/$imap_password_name")
-          }
-        },
-        "TransportSecurity": {
-          "ConnectionSecurity": "TlsOnConnect"
-        },
-        "Folders": [
-          { "Alias": "inbox", "SpecialUse": "Inbox" },
-          { "Alias": "sent", "SpecialUse": "Sent" }
-        ]
-      }
-    ]
+    "Interval": "00:05:00"
   },
 $admin_section
 $client_section
@@ -678,6 +630,36 @@ $client_section
 JSON
 
 chmod 644 config/10-mailfathom.json
+
+# The mailbox is not configuration and this is not a file the deployment reads: every mail account belongs to the record
+# of the user whose mail it is, and a record is written while the deployment runs. So the answers collected above are
+# written here as the declaration `mfctl user account add --from-file` takes, and recorded through the administrative
+# endpoint below — by this script where it started the deployment, and by the operator where it did not. It stays on
+# this machine either way: what it carries is a reference to a credential rather than a credential.
+cat > mailbox.json << JSON
+{
+  "AccountId": $(json_string "$account_id"),
+  "DisplayName": $(json_string "$display_name"),
+  "Host": $(json_string "$imap_host"),
+  "Port": $imap_port,
+  "UserName": $(json_string "$user_name"),
+  "Secrets": {
+    "Password": {
+      "Name": $(json_string "$imap_password_name"),
+      "SecretReference": $(json_string "file:/etc/mailfathom/secrets/$imap_password_name")
+    }
+  },
+  "TransportSecurity": {
+    "ConnectionSecurity": "TlsOnConnect"
+  },
+  "Folders": [
+    { "Alias": "inbox", "SpecialUse": "Inbox" },
+    { "Alias": "sent", "SpecialUse": "Sent" }
+  ]
+}
+JSON
+
+chmod 600 mailbox.json
 
 cat > .env << ENV
 # Written by scripts/quick-start-compose.sh. .env.example documents every other value this file can carry.
@@ -708,9 +690,8 @@ if [[ "$relax_tls_policy" == 'yes' ]]; then
   chmod 644 openssl-legacy.cnf
 fi
 
-if [[ "$writes_override" == 'yes' ]]; then
-  {
-    cat << 'YAML'
+{
+  cat << 'YAML'
 # Written by scripts/quick-start-compose.sh, and ignored by Git.
 #
 # What compose.yaml leaves out on purpose, because it is tracked and this is not: a published port for an
@@ -719,13 +700,13 @@ services:
   mailfathom:
 YAML
 
-    # The whole process reads its TLS parameters from this file, which is what reaches a mail server offering only
-    # parameters the platform's own policy refuses — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key, a SHA-1
-    # signature. It relaxes nothing else: the protocol floor stays where it was, and certificate validation is
-    # untouched. It applies to every TLS session this process makes, the database's included, which is why the closing
-    # report names it and --no-legacy-tls leaves the platform default in force.
-    if [[ "$relax_tls_policy" == 'yes' ]]; then
-      cat << 'YAML'
+  # The whole process reads its TLS parameters from this file, which is what reaches a mail server offering only
+  # parameters the platform's own policy refuses — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key, a SHA-1
+  # signature. It relaxes nothing else: the protocol floor stays where it was, and certificate validation is untouched.
+  # It applies to every TLS session this process makes, the database's included, which is why the closing report names
+  # it and --no-legacy-tls leaves the platform default in force.
+  if [[ "$relax_tls_policy" == 'yes' ]]; then
+    cat << 'YAML'
     environment:
       OPENSSL_CONF: /etc/mailfathom/openssl-legacy.cnf
     volumes:
@@ -734,22 +715,19 @@ YAML
         target: /etc/mailfathom/openssl-legacy.cnf
         read_only: true
 YAML
-    fi
+  fi
 
-    # Loopback, like every other port this deployment publishes: mfctl reaches it from this machine, and nothing else
-    # reaches it at all.
-    if [[ "$admin_endpoint" != 'off' ]]; then
-      cat << YAML
+  # Loopback, like every other port this deployment publishes: mfctl reaches it from this machine, and nothing else
+  # reaches it at all.
+  cat << YAML
     ports:
       - "127.0.0.1:$admin_port:$admin_port"
 YAML
-    fi
-  } > compose.override.yaml
+} > compose.override.yaml
 
-  chmod 644 compose.override.yaml
-fi
+chmod 644 compose.override.yaml
 
-printf 'Wrote .env, config/10-mailfathom.json, and the credentials under secrets/.\n' >&2
+printf 'Wrote .env, config/10-mailfathom.json, mailbox.json, and the credentials under secrets/.\n' >&2
 
 if [[ "$relax_tls_policy" == 'yes' ]]; then
   printf 'Wrote openssl-legacy.cnf, which this deployment reads its TLS parameters from.\n' >&2
@@ -777,15 +755,78 @@ report_connection() {
       "$documentation_base" >&2
   fi
 
-  if [[ "$admin_endpoint" != 'off' ]]; then
-    printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
-    printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
+  printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
+  printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
 
-    if [[ "$admin_endpoint" == 'api-key' ]]; then
-      printf '  cat %s/secrets/mailfathom/%s\n' "$compose_directory" "$admin_key_name" >&2
-    fi
+  if [[ "$admin_endpoint" == 'api-key' ]]; then
+    printf '  cat %s/secrets/mailfathom/%s\n' "$compose_directory" "$admin_key_name" >&2
+  fi
 
-    printf 'Getting the command: %s/operations/admin-endpoint.html\n' "$documentation_base" >&2
+  printf 'Getting the command: %s/operations/admin-endpoint.html\n' "$documentation_base" >&2
+}
+
+# Printed wherever this script did not record the mailbox itself, which is every path that leaves the deployment not
+# running. Nothing is synchronized until this record exists, so it is a step rather than an afterthought.
+report_recording_commands() {
+  printf '\nThen record the user this deployment serves and the mailbox it reads:\n\n' >&2
+  printf '  mfctl login --endpoint http://127.0.0.1:%s\n' "$admin_port" >&2
+  printf "  mfctl user add --display-name '%s'\n" "$display_name" >&2
+  printf '  mfctl user account add --from-file %s/mailbox.json\n\n' "$compose_directory" >&2
+  printf 'A deployment declares no mail account in its own file, so until that record exists it holds\n' >&2
+  printf 'nobody and reads nothing. %s/users/administering.html\n' "$documentation_base" >&2
+}
+
+# One scalar out of a small administrative answer. A JSON parser is not a prerequisite of an evaluation, and every value
+# read here is a string or a number at the top of an object this deployment composed a moment ago — a record's own
+# document travels escaped, so nothing inside it can be matched by mistake.
+read_json_text() {
+  grep --only-matching "\"$1\":\"[^\"]*\"" | head -n 1 | cut -d '"' -f 4
+}
+
+read_json_number() {
+  grep --only-matching "\"$1\":[0-9]*" | head -n 1 | cut -d ':' -f 2
+}
+
+# The user this deployment serves and the mailbox it reads are rows it keeps rather than settings it reads, so both are
+# written through the administrative endpoint once the deployment is up. Recording them after the start is what the
+# product does rather than a way around a missing setting: a deployment holding no user starts and serves nobody, and
+# the write that commits a record publishes it to the running roster — so this mailbox is synchronized without a
+# restart. A refusal answers with what it refused rather than with a failing status, which is why the outcome is read
+# out of the body.
+record_the_user_and_the_mailbox() {
+  local origin="http://127.0.0.1:$admin_port" user record version outcome declaration
+  local -a authorization=()
+
+  if [[ "$admin_endpoint" == 'api-key' ]]; then
+    authorization=(--header "Authorization: Bearer $admin_api_key")
+  fi
+
+  user="$(
+    curl -fsS "${authorization[@]}" \
+      --header 'Content-Type: application/json' \
+      --data "{ \"displayName\": $(json_string "$display_name") }" \
+      "$origin/api/admin/users" | read_json_text 'id'
+  )" || return 1
+  [[ -n "$user" ]] || return 1
+
+  record="$(curl -fsS "${authorization[@]}" "$origin/api/admin/users/$user/record")" || return 1
+  version="$(printf '%s' "$record" | read_json_number 'version')"
+  [[ -n "$version" ]] || return 1
+
+  # The declaration travels as the JSON object a file states it in, so it is the file's own text on one line rather
+  # than a body composed a second time here.
+  declaration="$(tr '\n' ' ' < mailbox.json)"
+
+  outcome="$(
+    curl -fsS "${authorization[@]}" \
+      --header 'Content-Type: application/json' \
+      --data "{ \"version\": $version, \"account\": $(json_string "$declaration") }" \
+      "$origin/api/admin/users/$user/record/mail-accounts"
+  )" || return 1
+
+  if [[ "$outcome" != *'"committed":true'* ]]; then
+    printf '\nThe deployment refused the declaration in mailbox.json:\n%s\n' "$outcome" >&2
+    return 1
   fi
 }
 
@@ -838,6 +879,7 @@ if [[ "$start_stack" != 'yes' ]]; then
   printf '  # apply %s — %s/operations/deployment-compose.html\n' "$schema_asset" "$documentation_base" >&2
   printf '  docker compose up -d\n' >&2
   report_connection
+  report_recording_commands
   report_what_an_evaluation_is_missing
   exit 0
 fi
@@ -893,6 +935,7 @@ if ! confirm "Download that file, verify it against its checksum, and apply it t
   printf "    < %s\n" "$schema_asset" >&2
   printf '\nThen: docker compose up -d\n' >&2
   report_connection
+  report_recording_commands
   report_what_an_evaluation_is_missing
   exit 0
 fi
@@ -940,10 +983,22 @@ if [[ "$started" != 'yes' ]]; then
   exit 1
 fi
 
-if curl -fsS 'http://127.0.0.1:8081/health' > /dev/null 2>&1; then
-  printf '\nMailFathom %s is running and ready.\n' "$version" >&2
+printf '\nMailFathom %s started, holding no user — which is what a first run looks like.\n' "$version" >&2
+printf 'Recording the person it serves, and the mailbox it reads.\n' >&2
+
+if record_the_user_and_the_mailbox; then
+  printf 'Recorded %s, and declared the mailbox %s in their record. It is served from now on, without\n' \
+    "$display_name" "$account_id" >&2
+  printf 'a restart, and the first synchronization starts on the next run.\n' >&2
 else
-  printf '\nMailFathom %s started, and /health is not ready yet — the first synchronization is running.\n' "$version" >&2
+  printf '\nThe deployment is running and still holds nobody, so nothing is synchronized yet.\n' >&2
+  report_recording_commands
+fi
+
+if curl -fsS 'http://127.0.0.1:8081/health' > /dev/null 2>&1; then
+  printf '\nMailFathom %s is ready.\n' "$version" >&2
+else
+  printf '\nMailFathom %s is not ready yet — the first synchronization is running.\n' "$version" >&2
 fi
 
 report_connection

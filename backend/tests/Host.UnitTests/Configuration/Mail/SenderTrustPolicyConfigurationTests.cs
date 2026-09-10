@@ -8,6 +8,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
@@ -147,8 +148,7 @@ public sealed class SenderTrustPolicyConfigurationTests
             [new TrustedSenderOptions { Domain = domain, Address = address, IncludeSubdomains = includeSubdomains }];
 
         // Act
-        var messages = OptionsFor(account)
-            .ValidateForSynchronization()
+        var messages = ConfiguredMailAccounts.Validate(OptionsFor(account))
             .Select(result => result.ErrorMessage)
             .ToArray();
 
@@ -170,7 +170,7 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var refusal = Assert.Single(
-            OptionsFor(account).ValidateForSynchronization().Select(result => result.ErrorMessage),
+            ConfiguredMailAccounts.Validate(OptionsFor(account)).Select(result => result.ErrorMessage),
             message => message!.Contains("trusted sender", StringComparison.Ordinal));
 
         // Assert
@@ -192,30 +192,12 @@ public sealed class SenderTrustPolicyConfigurationTests
         ];
 
         // Act
-        var messages = OptionsFor(account)
-            .ValidateForSynchronization()
+        var messages = ConfiguredMailAccounts.Validate(OptionsFor(account))
             .Select(result => result.ErrorMessage)
             .ToArray();
 
         // Assert
         Assert.DoesNotContain(messages, message => message!.Contains("trusted sender", StringComparison.Ordinal));
-    }
-
-    /// <summary>A mailbox declared under a served user is the whole of what such a deployment configures, so its list has to be read.</summary>
-    [Fact]
-    public void GetTrustPolicy_AnAccountDeclaredUnderAServedUser_RecognizesTheSendersItConfigured()
-    {
-        // Arrange
-        var account = AccountAt("work", "user@work.example");
-        account.TrustedSenders = [new TrustedSenderOptions { Domain = "partner.example" }];
-
-        // Act
-        var trust = UserDeclaring(account)
-            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
-            .Evaluate(WrittenBy("partner.example"), displayedSender: null);
-
-        // Assert
-        Assert.Equal(SenderTrustLevel.Trusted, trust.Level);
     }
 
     /// <summary>Two served users are two people, so one person's mail domain is not correspondence the other recognizes.</summary>
@@ -253,16 +235,11 @@ public sealed class SenderTrustPolicyConfigurationTests
         return address;
     }
 
-    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Accounts = [.. accounts],
-    };
-
-    private static MailSynchronizationOptions UserDeclaring(params MailSynchronizationAccountOptions[] accounts) =>
-        new MailSynchronizationOptions().WithServedUsers([User(SyntheticMailUser.Deployment, accounts)]);
+    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().Serving(accounts);
 
     private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
-        new(user, "a user this deployment serves", MailUserAccountSource.UserDocument, accounts);
+        new(user, "a user this deployment serves", accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {

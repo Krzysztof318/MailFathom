@@ -174,20 +174,23 @@ many scans run at once, how long a message may wait for a verdict before the ind
 pass of a classification run is. So are the bounds a threshold may be set within — a user writing a value outside them
 is refused at the write, and the refusal names the range.
 
-Which source a user's posture is read from is the same per-user marker that decides where their mail accounts come
-from, described in [the users a deployment serves](../operations/configuration-sources.md#the-users-a-deployment-serves).
-The sole user the deployment's own `MailSynchronization:Accounts` supplies takes the deployment's `SpamClassification`
-section; a user whose document has been written takes the block that document carries. **The two are never unioned**:
-switching classification off in a record actually switches it off rather than falling back to whatever the file still
-says. Nothing carries the section's posture into a record, so a deployment moving somebody into one states their posture
+A user's posture is read from their own record, beside the mail accounts it declares, described in
+[the users a deployment serves](../operations/configuration-sources.md#the-users-a-deployment-serves). **A record and
+the deployment's `SpamClassification` section are never unioned**: switching classification off in a record actually
+switches it off rather than falling back to whatever the file still says. Nothing carries the section's posture into a
+record, so a deployment stating somebody's posture states it
 there afresh alongside their mailboxes.
 
 A folder resolves within that user's own mail accounts and nowhere else — both the folders their mail is classified
 over and the folder their junk is filed into. A name only somebody else's account carries is answered exactly as one
 this deployment does not serve.
 
-A single-user deployment is unchanged by all of this. It serves one user read from configuration, so the section it
-already has is that user's posture and behaves exactly as it did.
+This reaches every deployment, one served user or several. `SpamClassification:ScannedFolders`,
+`SpamClassification:ScannerThreshold`, and the `SpamClassification:Actions` block name nobody's posture and are read by
+no classification: a deployment that stated them and recorded nothing in its users' records classifies nothing. State
+them in each user's record instead. `SpamClassification:Enabled` and `SpamClassification:UseScanner` stay the
+deployment's in the one sense the section above describes — whether a scanner is registered at all — and a user's own
+`UseScanner` asks for it rather than deciding it.
 
 ## What an operator can let a verdict do
 

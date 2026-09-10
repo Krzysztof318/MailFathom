@@ -180,15 +180,11 @@ public sealed class ClientDisplayNameEndpointTests
                 .RelabelAsync(Arg.Any<MailUserId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(true);
 
-            var servedUsers = new ServedMailUsers();
-            servedUsers.Resolved(
-                [new(SyntheticMailUser.Deployment, "recorded", MailUserAccountSource.UserDocument, [])]);
-
             this.Names = new OwnDisplayName(
                 AccessAuthorizations.ForUserGranted(SyntheticMailUser.Deployment, granted),
                 this.directory,
                 provisioning,
-                servedUsers);
+                new ConfiguredUserSettings());
         }
 
         internal OwnDisplayName Names { get; }

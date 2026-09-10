@@ -499,17 +499,22 @@ generated per clone, so every checkout reads the same store and the commands bel
 store is loaded by the framework in the `Development` environment only, which is the environment the orchestration and
 both launch profiles run the host in.
 
-When the host is started directly rather than through Aspire, configure a development account in
+When the host is started directly rather than through Aspire, keep the deployment's own credentials in
 `appsettings.Development.json` or, better, in user secrets:
 
 ```bash
 dotnet user-secrets --project backend/src/Host/Host.csproj set \
-  "MailSynchronization:Accounts:0:Secrets:Password:Name" "dev-password"
+  "Persistence:Password:Name" "dev-password"
 dotnet user-secrets --project backend/src/Host/Host.csproj set \
-  "MailSynchronization:Accounts:0:Secrets:Password:SecretReference" "plaintext:dev-password"
+  "Persistence:Password:SecretReference" "plaintext:dev-password"
 ```
 
-The block shape is identical to production, so moving a working development configuration to a real deployment is one string edit — `plaintext:dev-password` becomes `systemd-credential:imap-primary-password` — rather than a restructuring.
+The block shape is identical to production, so moving a working development configuration to a real deployment is one string edit — `plaintext:dev-password` becomes `systemd-credential:postgres-password` — rather than a restructuring.
+
+**A mailbox is not configured this way and cannot be.** No configuration source declares a mail account, so a locally
+started host reads its mailbox from the record of the user it holds: `mfctl user account add --from-file mailbox.json`
+against its administrative endpoint, carrying the same JSON object a configuration source used to. The app model does
+exactly that for you when the orchestration starts the host, out of the three mailbox parameters it collects.
 
 Neither file nor user secrets is a production secret store. User secrets are stored unencrypted in the developer's profile directory and exist only to keep credentials out of the repository; `appsettings.Development.json` is committed and must never hold a real credential. [Secret provisioning](secret-provisioning.md) describes the deployment paths.
 

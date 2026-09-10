@@ -7,7 +7,7 @@
 > named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
 > the product's documentation is right.
 
-[Getting started § configure the mailbox](getting-started.md#2-configure-the-mailbox) shows the account block and what
+[Getting started § write down the mailbox](getting-started.md#2-write-down-the-mailbox) shows the account block and what
 each of its keys is for. This page answers the question that comes next and that no reference page can answer, because
 the answer belongs to somebody else: **what goes in `Host`, `Port`, `Secrets`, and `TransportSecurity` for the mail
 service I actually use, and what does that service do differently once synchronization is running.**
@@ -51,33 +51,31 @@ the credential block, and, in one case, `TransportSecurity`:
 
 ```json
 {
-  "MailSynchronization": {
-    "Enabled": true,
-    "Accounts": [
-      {
-        "AccountId": "primary",
-        "DisplayName": "Personal mail",
-        "Host": "imap.example.test",
-        "Port": 993,
-        "UserName": "you@example.test",
-        "Secrets": {
-          "Password": {
-            "Name": "imap-primary-password",
-            "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
-          }
-        },
-        "Folders": [
-          { "Alias": "inbox", "SpecialUse": "Inbox" },
-          { "Alias": "sent", "SpecialUse": "Sent" }
-        ]
-      }
-    ]
-  }
+  "AccountId": "primary",
+  "DisplayName": "Personal mail",
+  "Host": "imap.example.test",
+  "Port": 993,
+  "UserName": "you@example.test",
+  "Secrets": {
+    "Password": {
+      "Name": "imap-primary-password",
+      "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
+    }
+  },
+  "Folders": [
+    { "Alias": "inbox", "SpecialUse": "Inbox" },
+    { "Alias": "sent", "SpecialUse": "Sent" }
+  ]
 }
 ```
 
+It stands on its own rather than inside a configuration file, because a deployment declares no mail account in its own
+file: the block above is written into the record of the user whose mailbox it is, with
+`mfctl user account add --from-file`. Turning synchronization on at all is the deployment's own
+`MailSynchronization:Enabled`, and it is the whole of what a configuration source says about mail.
+
 A service that will not accept a password takes an `OAuth` block in place of `Secrets` instead;
-[mailbox OAuth § configuring the account](../operations/mailbox-oauth.md#configuring-the-account) holds that form in
+[mailbox OAuth § declaring the account](../operations/mailbox-oauth.md#declaring-the-account) holds that form in
 full, and no section below repeats it. [Mail configuration § `MailSynchronization`](../operations/configuration-mail.md#mailsynchronization)
 is the inventory of every key named on this page, with its type, default, and constraint.
 
@@ -210,7 +208,7 @@ from an application using a username and password, and an app password cannot be
 therefore carries an `OAuth` block and no `Secrets:Password`, with `PermittedAuthenticationMechanisms` set to the
 token-bearing mechanisms — which is what frees the account from configuring a password.
 [Mailbox OAuth § Google](../operations/mailbox-oauth.md#google) is the registration, and
-[§ configuring the account](../operations/mailbox-oauth.md#configuring-the-account) is the block.
+[§ declaring the account](../operations/mailbox-oauth.md#declaring-the-account) is the block.
 
 The label and All Mail behaviour and both limits are Gmail's and apply here unchanged.
 
@@ -443,7 +441,7 @@ synchronized keeps the answer it was stored with until [a re-derivation](adminis
 re-reads it — which is also what applies a newly configured authserv-id to the mail you already hold.
 
 [Sender authentication](../features/sender-authentication.md) states what the verdict records, how the header is chosen,
-what local verification reaches and deliberately does not, and how a reader tells the two verdicts apart; [the mail configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states
+what local verification reaches and deliberately does not, and how a reader tells the two verdicts apart; [the mail configuration](../operations/configuration-mail.md#one-account--a-mailbox-in-a-users-record) states
 where the setting lives.
 
 ## Related

@@ -561,7 +561,7 @@ public sealed class AccountPushNotificationWatchTests
     private static WatchHarness CreateHarness(MailSynchronizationMode mode)
     {
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
-        options.Accounts[0].Mode = mode;
+        options.DeclaredAccount(0).Mode = mode;
 
         return new WatchHarness(options);
     }
@@ -608,7 +608,7 @@ public sealed class AccountPushNotificationWatchTests
         internal Task WatchAsync(IReadOnlyList<MailFolderResolution> resolvedFolders) =>
             this.Watch.WatchResolvedFoldersAsync(
                 this.Options,
-                this.Options.Accounts[0],
+                this.Options.DeclaredAccount(0),
                 resolvedFolders,
                 TestContext.Current.CancellationToken);
 
@@ -616,7 +616,7 @@ public sealed class AccountPushNotificationWatchTests
         internal void PublishReloadedSnapshot()
         {
             var reloaded = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
-            reloaded.Accounts[0].Mode = this.Options.Accounts[0].Mode;
+            reloaded.DeclaredAccount(0).Mode = this.Options.DeclaredAccount(0).Mode;
             this.settings.Current = reloaded;
             this.Options = reloaded;
         }

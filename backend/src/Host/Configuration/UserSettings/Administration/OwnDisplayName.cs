@@ -45,7 +45,7 @@ internal sealed class OwnDisplayName(
     AccessAuthorization authorization,
     IMailUserDirectory directory,
     IMailUserProvisioning provisioning,
-    ServedMailUsers servedUsers)
+    ConfiguredUserSettings configured)
 {
     /// <summary>Reads the name this deployment records the signed-in person under.</summary>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -87,7 +87,7 @@ internal sealed class OwnDisplayName(
         // Ahead of the bound, exactly as the record's own gate is checked ahead of the version it was composed over:
         // a person a file still supplies is refused whatever name they wrote, and telling them to shorten one first
         // would send them back to a field that was never going to be accepted.
-        if (servedUsers.SourceFor(user) != MailUserAccountSource.UserDocument)
+        if (configured.DeclaredByAConfigurationSource(user))
         {
             return OwnDisplayNameChange.Refused(DeclaredElsewhere);
         }
@@ -113,7 +113,7 @@ internal sealed class OwnDisplayName(
     /// </remarks>
     private bool WouldAcceptAWriteFor(MailUserId user) =>
         authorization.Permits(MailFathomPermission.MailAccountsWrite)
-        && servedUsers.SourceFor(user) == MailUserAccountSource.UserDocument;
+        && !configured.DeclaredByAConfigurationSource(user);
 
     /// <summary>Says why a stated name is not one this deployment would record, or nothing where it is.</summary>
     /// <remarks>

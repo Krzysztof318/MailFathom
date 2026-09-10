@@ -50,10 +50,9 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// startup gate has run.
     /// </para>
     /// <para>
-    /// The deployment's section is read once for the whole scope rather than per user. Every setting in it reloads, so
-    /// a reload landing part way through would otherwise judge one configuration-served user under the old section and
-    /// the next under the new one, and one walk would then withhold one user's junk and admit another's from a single
-    /// setting.
+    /// The deployment's section supplies the wait every user's classification is bounded by and nothing about whose
+    /// mail is classified: that is each user's own record. It is read once for the whole scope rather than per user,
+    /// so a reload landing part way through cannot bound one user's walk by the old value and the next by the new one.
     /// </para>
     /// </remarks>
     public SpamClassificationScope ScopeInForce
@@ -68,9 +67,9 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
             var deployment = deploymentOptions.CurrentValue;
 
             var classifying = users
-                .Select(served => new { Served = served, Settings = this.SettingsFor(served, deployment) })
+                .Select(served => new { Served = served, Settings = SettingsFor(served) })
                 .Where(entry => entry.Settings.IsEnabled)
-                .Select(entry => new { entry.Settings, Folders = this.FoldersOf(entry.Served).ToArray() })
+                .Select(entry => new { entry.Settings, Folders = FoldersOf(entry.Served).ToArray() })
                 .ToArray();
 
             return SpamClassificationScope.Create(
@@ -93,7 +92,7 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
         }
 
         return this.Served(user) is { } served
-            ? this.SettingsFor(served, deploymentOptions.CurrentValue)
+            ? SettingsFor(served)
             : SpamClassificationSettings.Disabled;
     }
 
@@ -104,23 +103,8 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
     /// <see cref="ServedMailUsers.MaximumUsers" /> entries — a cost every stored message pays, because the
     /// derived-work gate reads the scope once per message a synchronization run stores.
     /// </remarks>
-    private SpamClassificationSettings SettingsFor(ServedMailUser served, SpamClassificationOptions deployment)
-    {
-        var accounts = this.AccountDeclarationsOf(served);
-
-        return served.ReadFromConfiguration
-            ? Compose(deployment, accounts)
-            : Compose(served.SpamClassification ?? new UserSpamClassificationOptions(), accounts);
-    }
-
-    /// <summary>Builds one user's settings out of the deployment's section, which is what still reaches them.</summary>
-    private static SpamClassificationSettings Compose(
-        SpamClassificationOptions deployment,
-        IReadOnlyList<MailSynchronizationAccountOptions> accounts) => SpamClassificationSettings.Create(
-        deployment.Enabled,
-        deployment.UseScanner,
-        ScannedAliasesOf(deployment.ScannedFolders, accounts),
-        deployment.ScannerThreshold);
+    private static SpamClassificationSettings SettingsFor(ServedMailUser served) =>
+        Compose(served.SpamClassification ?? new UserSpamClassificationOptions(), served.MailAccounts);
 
     /// <summary>Builds one user's settings out of the block their own document carries.</summary>
     private static SpamClassificationSettings Compose(
@@ -148,22 +132,11 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
             : ConfiguredMailFolders.InboxAliasesOf(accounts);
 
     /// <summary>Reads the folders of the accounts this user is served with.</summary>
-    private IEnumerable<ConfiguredFolder> FoldersOf(ServedMailUser served) =>
-        ConfiguredMailFolders.Of(this.AccountDeclarationsOf(served));
+    private static IEnumerable<ConfiguredFolder> FoldersOf(ServedMailUser served) =>
+        ConfiguredMailFolders.Of(served.MailAccounts);
 
     /// <summary>Finds the user on the roster this snapshot was published with.</summary>
     private ServedMailUser? Served(MailUserId user) =>
         (synchronizationOptions.ServedUsers ?? [])
             .FirstOrDefault(candidate => candidate.User == user);
-
-    /// <summary>Reads the mailbox declarations this user is served with, which is not always their own record's.</summary>
-    /// <remarks>
-    /// The deployment's own section names no user and therefore belongs to whichever sole user such a deployment
-    /// holds, so a user served from it takes its accounts and the roster holds none for them. Every other user's
-    /// mailboxes are on the roster, which is where their own declared section and their own document both arrive.
-    /// </remarks>
-    private IReadOnlyList<MailSynchronizationAccountOptions> AccountDeclarationsOf(ServedMailUser served) =>
-        served.Source is MailUserAccountSource.DeploymentSection
-            ? synchronizationOptions.Accounts ?? []
-            : served.MailAccounts;
 }

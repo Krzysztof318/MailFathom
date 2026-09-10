@@ -31,57 +31,6 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DeploymentMailUserUnresolved;
 
-    /// <summary>Reports a deployment that switched synchronization on with no mailbox for any user it serves.</summary>
-    /// <returns>The failure to raise.</returns>
-    /// <remarks>
-    /// The rule is about mailboxes rather than about users, and it is here because this is where a start's refusals
-    /// about the roster live: a user's mailboxes are a record now as well as a section, so the effective set is first
-    /// visible once the roster is settled, and a reading of the files alone would refuse a deployment whose user
-    /// declared their mailbox through the client.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException NothingToSynchronize() => new(
-        "MailSynchronization:Enabled is on and no user this deployment serves has a mail account: neither "
-        + "MailSynchronization:Accounts nor any user's own record declares one. Declare the mailbox this deployment "
-        + "exists to synchronize — with 'mfctl user account add', or in that section — or switch synchronization "
-        + "off.");
-
-    /// <summary>Reports mail accounts left in the deployment's own section that no user this start serves reads.</summary>
-    /// <param name="accountCount">How many accounts the section still declares.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="accountCount" /> is not positive.</exception>
-    /// <remarks>
-    /// The state a half-finished move out of the files leaves behind: every user reads a record of their own and the
-    /// section is still there, so the deployment holds two declarations of one mailbox. It is not an ambiguity a
-    /// reader resolves, because the per-account lookup searches that section first and the record second and answers
-    /// from the file — which is the opposite of what a record being the user's own means. Refused rather than ignored
-    /// for that reason: the settings a mailbox is synchronized under would silently be the ones the operator believes
-    /// they have stopped editing.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException DeploymentSectionServesNobody(int accountCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(accountCount);
-
-        return new(
-            $"MailSynchronization:Accounts declares {accountCount} mail accounts and no user this deployment serves "
-            + "reads that section: every user it holds reads a record of their own. An account's settings are "
-            + "resolved from that section before any record, so those declarations would be what each mailbox is "
-            + "synchronized under while the records naming the same mailboxes were ignored. Clear "
-            + "MailSynchronization:Accounts, which no user this deployment serves reads.");
-    }
-
-    /// <summary>Reports a deployment more than one of whose user records still reads the section that names no user.</summary>
-    /// <returns>The failure to raise.</returns>
-    /// <remarks>
-    /// It is the count of those records that decides this rather than what the section currently states, so the
-    /// sentence says so: an operator holding two such records and an empty section is in this state too, and a message
-    /// asserting the section supplies mailboxes would send them to clear something already clear.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException SeveralUsers() => new(
-        "More than one user record this deployment holds still reads MailSynchronization:Accounts, which names no "
-        + "user, so an account configured there could not be attributed to one of them. Give each of those users a "
-        + "record of their own — 'mfctl user account add' states their mailboxes and stops them reading that section — "
-        + "and clear the section, so every mailbox says whose it is.");
-
     /// <summary>Reports a deployment holding more user records than it may serve.</summary>
     /// <param name="maximumUsers">The greatest number of users one deployment serves.</param>
     /// <returns>The failure to raise.</returns>
@@ -150,36 +99,6 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
             $"The mail accounts of the user labelled '{displayName}' carry a setting this deployment cannot use, so "
             + "they would have failed one connection at a time rather than the start: "
             + string.Join(" ", refusals));
-    }
-
-    /// <summary>Reports a mail-account name more than one served user would answer to.</summary>
-    /// <param name="sharedNames">The names two users of this roster both carry.</param>
-    /// <returns>The failure to raise.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sharedNames" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="sharedNames" /> names nothing.</exception>
-    /// <remarks>
-    /// The deployment-wide naming rule, asked over the roster a start would actually serve — which is the only place
-    /// a collision written into two users' records while a process ran can
-    /// be seen. Neither user is named: the answer is about a name two people share, and which two they are is read
-    /// from the roster rather than from a line that would outlive the collision.
-    /// </remarks>
-    public static DeploymentMailUserUnresolvedException MailAccountNameSharedByUsers(
-        IReadOnlyList<string> sharedNames)
-    {
-        ArgumentNullException.ThrowIfNull(sharedNames);
-
-        if (sharedNames.Count == 0)
-        {
-            throw new ArgumentException("A shared mail-account name is reported for at least one name.", nameof(sharedNames));
-        }
-
-        return new(
-            $"More than one user this deployment would serve names a mail account {string.Join(", ", sharedNames)}. "
-            + "A mail account belongs to its user, but this release resolves an account's settings by its identifier "
-            + "alone, so a name two users share would reach whichever of the two the lookup met first. Give each of "
-            + "them a name no other user uses, with 'mfctl user account remove' and 'mfctl user account add' for a "
-            + "user whose record is their own, and in MailSynchronization:Accounts for the sole user that section "
-            + "belongs to.");
     }
 
     /// <summary>Reports a user whose own record could not be read as the settings it is meant to hold.</summary>

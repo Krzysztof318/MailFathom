@@ -92,40 +92,6 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <summary>Lets the next user-document write validate against the roster this one published.</summary>
     internal void ReleaseRosterPublication() => this.rosterPublication.Release();
 
-    /// <summary>Reads where one user's mail accounts come from, which is their own record for a user the roster does not hold.</summary>
-    /// <param name="user">The user asked about.</param>
-    /// <returns>The source their accounts are read from.</returns>
-    /// <remarks>
-    /// A user not yet published to this process, and one the deployment holds and no source declares, have no
-    /// configuration section a write into their record could be replacing. Both are ordinary users here, which keeps
-    /// the narrow interval between provisioning the row and publishing the runtime roster writable.
-    /// <para>
-    /// It is here rather than beside either caller because two gates read it and neither may come to a different
-    /// answer than the other: what refuses a change to a user's record is what refuses a change to the label on the
-    /// envelope beside it.
-    /// </para>
-    /// </remarks>
-    internal MailUserAccountSource SourceFor(MailUserId user) =>
-        this.Users.FirstOrDefault(served => served.User == user)?.Source
-        ?? MailUserAccountSource.UserDocument;
-
-    /// <summary>Gets whether any served user's mail accounts are their own rather than the deployment's section.</summary>
-    /// <returns><see langword="true" /> when at least one user is served from their own declaration or their own document.</returns>
-    /// <remarks>
-    /// It answers rather than refusing before the gate because its caller judges a reloaded candidate, and a deployment
-    /// whose roster is not settled yet has nothing for a candidate to conflict with. The question is about the source
-    /// rather than about the count, because the deployment's own section belongs to whichever sole user a deployment
-    /// holds and is legitimately populated for that one.
-    /// </remarks>
-    public bool ServesAnyUserFromTheirOwnAccounts()
-    {
-        lock (this.mutex)
-        {
-            return (this.resolvedUsers ?? [])
-                .Any(user => user.Source != MailUserAccountSource.DeploymentSection);
-        }
-    }
-
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet run.</exception>
     /// <exception cref="DeploymentMailUserUnresolvedException">Thrown when this deployment serves more than one user and there is therefore no sole user to name.</exception>
@@ -169,15 +135,14 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
     /// <summary>States the roster the startup gate established.</summary>
     /// <param name="users">Every user this deployment serves, each with the source their accounts are read from.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="users" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the roster is empty, which is a deployment serving nobody rather than a roster.</exception>
+    /// <remarks>
+    /// An empty roster is an ordinary state rather than a refusal: a deployment records the users it serves, so its
+    /// first start finds none and serves nobody until an administrator records the first. What absence still means is
+    /// *the gate has not run*, which is why that is a null field rather than an empty list.
+    /// </remarks>
     internal void Resolved(IReadOnlyList<ServedMailUser> users)
     {
         ArgumentNullException.ThrowIfNull(users);
-
-        if (users.Count == 0)
-        {
-            throw new ArgumentException("A deployment serves at least one user.", nameof(users));
-        }
 
         lock (this.mutex)
         {
@@ -229,7 +194,6 @@ internal sealed class ServedMailUsers : IDeploymentMailUserSource
                 var published = new ServedMailUser(
                     user,
                     displayName,
-                    MailUserAccountSource.UserDocument,
                     [.. record.MailAccounts],
                     record.SpamClassification,
                     record.SensitiveContent);

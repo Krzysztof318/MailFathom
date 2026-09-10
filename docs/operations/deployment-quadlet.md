@@ -162,6 +162,10 @@ whose mail it reaches, so the key is minted by the running deployment with
 [`mfctl credential create`](admin-endpoint.md#user-credentials) rather than encrypted into this store — nothing on this
 host holds it, and the configuration names only which methods the endpoint accepts.
 
+The mailbox password above is encrypted here all the same, because the record that will reference it is not a
+credential store: a declaration carries a `systemd-credential:` reference exactly as a configuration file would, and
+[recording the user and the mailbox](#recording-the-user-and-the-mailbox) below is what writes it.
+
 **Each unit reaches only the credentials it lists**, which is what the two `LoadCredentialEncrypted=` lines in
 `mailfathom-postgres.container` and the two in `mailfathom.container` are: a grant rather than a manifest. The
 database superuser password is on the first list and not the second, so it is never on a path MailFathom can read —
@@ -205,9 +209,15 @@ lists and nothing else in the store.
 ### The configuration
 
 `~/.config/mailfathom/config/10-mailfathom.json` is ordinary configuration, layered under the unit's environment block.
-Edit the mailbox, and read [configuration sources](configuration-sources.md) for the precedence and
+Read [configuration sources](configuration-sources.md) for the precedence and
 [the configuration reference](configuration-reference.md) for every key. The database is configured by the unit rather
-than by this file, so it is deliberately absent from the example.
+than by this file, so it is deliberately absent from the example — and so is the mailbox, which belongs to a user's
+record rather than to any configuration source.
+
+**Enable the administrative endpoint here**, in this file, because both of the acts this deployment still needs go
+through it: recording the person it serves and the mailbox it reads, and minting the key an MCP client presents.
+[The administrative endpoint](admin-endpoint.md#what-the-endpoint-serves) is what to write and how the credential it
+takes is provisioned — encrypted into the same store as everything else on this host.
 
 ## Starting
 
@@ -246,6 +256,23 @@ podman exec --interactive mailfathom-postgres sh -c \
 **As `mailfathom`, never as `postgres`.** Read the SQL before applying it and take a backup first;
 [applying the database schema](database-schema.md) states the privileges it needs, the locks it takes, why the role
 that runs it becomes the user of everything it creates, and what each startup failure means.
+
+### Recording the user and the mailbox
+
+The started deployment holds nobody. Who it serves and which mailboxes it reads are rows it keeps rather than settings
+it reads, so both are written over the administrative endpoint enabled above:
+
+```bash
+mfctl login --endpoint http://127.0.0.1:8090
+mfctl user add --display-name 'Alex'
+mfctl user account add --from-file mailbox.json
+```
+
+`mailbox.json` is the JSON object one mail account is declared as — the object the example configuration's comments
+show, `systemd-credential:` reference and all, so the mailbox password encrypted into the store above is what it names.
+The mailbox is served from the moment the write commits, without restarting the unit.
+[Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
+file.
 
 ## Checking it
 

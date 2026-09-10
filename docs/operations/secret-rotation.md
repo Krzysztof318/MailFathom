@@ -33,7 +33,7 @@ Every secret block states a `Lifetime`: `NoLimit`, or the absolute instant it st
 **Only the MCP API keys enforce it.** An expired key authenticates nothing; a mailbox password, a database credential, and a trust anchor keep working past their stated lifetime and are reported instead:
 
 ```
-warn: Configuration setting MailSynchronization:Accounts:0:Secrets:Password carries the secret
+warn: Configuration setting document:MailAccounts:0:Secrets:Password carries the secret
       imap-primary-password, whose configured lifetime ended at 2026-07-30T00:00:00Z.
 ```
 
@@ -201,13 +201,13 @@ restarted, and a reference that no longer loads fails that restart naming the ke
 A rejected candidate is logged at `Error` with the configuration path and a stable failure identity, and the previous configuration stays active:
 
 ```
-Rejected a reloaded mail synchronization configuration and kept the previous one active. MailSynchronization:Accounts:0:Secrets:Password — the secret reference could not be resolved [MaterialNotFound].
+Rejected a reloaded persistence configuration and kept the previous one active. Persistence:Password — the secret reference could not be resolved [MaterialNotFound].
 ```
 
 An adopted one is logged at `Information`:
 
 ```
-Adopted a reloaded mail synchronization configuration; new operations use its secret references.
+Adopted a reloaded persistence configuration; new operations use its secret references.
 ```
 
 No log line, exception, or diagnostic carries the reference target, the environment variable's value, or any part of the material. A loaded trust anchor is the one exception and only in the sense that a certificate is public: it is logged by subject and thumbprint.

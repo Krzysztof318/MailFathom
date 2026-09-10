@@ -54,9 +54,6 @@ internal static class BoundSettings
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
-        // The one mail synchronization rule that needs the current date, which no attribute on a bound options graph can
-        // reach, arrives through the options framework's own validator seam rather than as a second validation mechanism.
-        services.AddSingleton<IValidateOptions<MailSynchronizationOptions>, MailSynchronizationWindowValidator>();
         // The host stops awaiting StopAsync once its own shutdown budget expires, so a drain configured beyond that budget
         // would be accepted and never honored: the process would exit with the work still running. The budget is therefore
         // derived from the configured drain instead of being left on the framework default. Read from configuration
@@ -204,10 +201,6 @@ internal static class BoundSettings
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
-        // Whether the junk folder a filing names exists is a claim about the synchronization section, which no attribute on
-        // this graph can reach. Registered whatever the switches say, because a filing switched on with no folder behind it
-        // is exactly what it refuses.
-        services.AddSingleton<IValidateOptions<SpamClassificationOptions>>(new SpamJunkFolderValidator(configuration));
         // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
         // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
         // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would

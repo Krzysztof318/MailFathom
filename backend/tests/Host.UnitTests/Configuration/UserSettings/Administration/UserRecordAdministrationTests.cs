@@ -76,27 +76,6 @@ public sealed class UserRecordAdministrationTests
         Assert.DoesNotContain("/run/secrets/primary-password", reading!.Json, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// A user a configuration source still supplies holds an empty record, and reading that without being told why
-    /// would look like a user with no mailboxes rather than one whose mailboxes are in a file.
-    /// </summary>
-    [Fact]
-    public async Task ReadRecordAsync_AUserAConfigurationSourceSupplies_SaysTheirRecordIsNotWhereTheirMailboxesAre()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminRead);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var reading = await harness.Records.ReadRecordAsync(
-            SyntheticMailUser.Deployment,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.True(reading!.ReadFromConfiguration);
-    }
-
     [Fact]
     public async Task ReadRecordAsync_AUserThisDeploymentDoesNotHold_ReportsNothing()
     {
@@ -165,32 +144,6 @@ public sealed class UserRecordAdministrationTests
     }
 
     /// <summary>
-    /// The refusal this service exists for. A change written into the empty record of the user the deployment's own
-    /// mail section supplies would leave them served from less than that section was supplying — a mailbox that stops
-    /// being synchronized because somebody edited a record nobody was reading.
-    /// </summary>
-    [Fact]
-    public async Task AddMailAccountAsync_TheUserTheDeploymentsOwnMailSectionSupplies_IsRefusedNamingThatSection()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
-
-        // Act
-        var outcome = await harness.Records.AddMailAccountAsync(
-            SyntheticMailUser.Deployment,
-            Account("archive"),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.UserRecordReadFromConfiguration, outcome!.Refusal);
-        Assert.Contains("MailSynchronization:Accounts", Assert.Single(outcome.Messages), StringComparison.Ordinal);
-        await harness.Store.DidNotReceiveWithAnyArgs().CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
-    }
-
-    /// <summary>
     /// A user the roster does not hold has no configuration section a write could be replacing, which is what makes
     /// a user an administrator has just recorded writable at once rather than after a restart.
     /// </summary>
@@ -200,7 +153,7 @@ public sealed class UserRecordAdministrationTests
         // Arrange
         var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(SyntheticMailUser.Another, EmptyRecord, version: 1);
-        harness.Roster(Serving(SyntheticMailUser.Deployment, MailUserAccountSource.DeploymentSection));
+        harness.Roster(Serving(SyntheticMailUser.Deployment));
 
         // Act
         var outcome = await harness.Records.AddMailAccountAsync(
@@ -272,32 +225,6 @@ public sealed class UserRecordAdministrationTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-    }
-
-    /// <summary>
-    /// A mail account belongs to its user, but this release resolves an account's settings by its identifier alone, so
-    /// a name two users share would reach whichever of the two the lookup met first.
-    /// </summary>
-    [Fact]
-    public async Task AddMailAccountAsync_AnAccountNameAnotherServedUserAnswersTo_IsRefused()
-    {
-        // Arrange
-        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
-        harness.Holding(SyntheticMailUser.Deployment, EmptyRecord, version: 1);
-        harness.Roster(
-            Serving(SyntheticMailUser.Deployment, MailUserAccountSource.UserDocument),
-            Serving(SyntheticMailUser.Another, MailUserAccountSource.UserDocument, "shared-name"));
-
-        // Act
-        var outcome = await harness.Records.AddMailAccountAsync(
-            SyntheticMailUser.Deployment,
-            Account("shared-name"),
-            expectedVersion: 1,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.Contains("shared-name", Assert.Single(outcome.Messages), StringComparison.Ordinal);
     }
 
     /// <summary>A user's record is theirs, so a name that user already answers to is a collision the naming rules refuse rather than a deployment-wide one.</summary>
@@ -820,14 +747,10 @@ public sealed class UserRecordAdministrationTests
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
     }
 
-    private static ServedMailUser Serving(
-        MailUserId user,
-        MailUserAccountSource source,
-        params string[] accountIds) =>
+    private static ServedMailUser Serving(MailUserId user, params string[] accountIds) =>
         new(
             user,
             $"user-{user.Value:D}",
-            source,
             [.. accountIds.Select(accountId => new MailSynchronizationAccountOptions
             {
                 AccountId = accountId,
@@ -930,7 +853,7 @@ public sealed class UserRecordAdministrationTests
             // The roster is settled with somebody the tests never write for, so the default deployment reads as a
             // user nothing declares — which is the ordinary case — until a test states otherwise.
             this.ServedUsers.Resolved(
-                [Serving(MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")), MailUserAccountSource.UserDocument)]);
+                [Serving(MailUserId.Create(new Guid("99999999-9999-9999-9999-999999999999")))]);
 
             var settings = new ConfigurationBuilder()
                 .AddInMemoryCollection(configuration ?? [])
@@ -946,7 +869,7 @@ public sealed class UserRecordAdministrationTests
                     Options.Create(scanning ?? new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedUsers,
-                new ConfiguredUserSettings(settings, this.ServedUsers));
+                new ConfiguredUserSettings());
         }
 
         internal UserRecordAdministration Records { get; }

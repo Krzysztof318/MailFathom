@@ -8,6 +8,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
@@ -190,23 +191,18 @@ public sealed class MailFolderParticipationOptionsTests
     public void FoldersVisibleToTools_TheSameAliasInTwoAccounts_NamesOnlyTheAccountThatDidNotWithholdIt()
     {
         // Arrange
-        var options = new MailSynchronizationOptions
-        {
-            Accounts =
-            [
-                CreateAccount(new MailFolderMappingOptions
-                {
-                    Alias = "private",
-                    RemotePath = "Private",
-                    VisibleToTools = false,
-                }),
-                CreateAccount("secondary", new MailFolderMappingOptions
-                {
-                    Alias = "private",
-                    RemotePath = "Private",
-                }),
-            ],
-        };
+        var options = new MailSynchronizationOptions().Serving(
+            CreateAccount(new MailFolderMappingOptions
+            {
+                Alias = "private",
+                RemotePath = "Private",
+                VisibleToTools = false,
+            }),
+            CreateAccount("secondary", new MailFolderMappingOptions
+            {
+                Alias = "private",
+                RemotePath = "Private",
+            }));
 
         // Act
         var visible = options.Readers.FolderParticipation.FoldersVisibleToTools;
@@ -240,7 +236,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage!).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage!).ToArray();
 
         // Assert
         Assert.Contains(
@@ -262,7 +258,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var results = options.ValidateForSynchronization().ToArray();
+        var results = ConfiguredMailAccounts.Validate(options).ToArray();
 
         // Assert
         Assert.Empty(results);
@@ -282,7 +278,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var results = options.ValidateForSynchronization().ToArray();
+        var results = ConfiguredMailAccounts.Validate(options).ToArray();
 
         // Assert
         Assert.Empty(results);
@@ -305,7 +301,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage!).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage!).ToArray();
 
         // Assert
         Assert.Contains(
@@ -327,7 +323,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var results = options.ValidateForSynchronization().ToArray();
+        var results = ConfiguredMailAccounts.Validate(options).ToArray();
 
         // Assert
         Assert.Empty(results);
@@ -346,7 +342,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act
-        var results = options.ValidateForSynchronization().ToArray();
+        var results = ConfiguredMailAccounts.Validate(options).ToArray();
 
         // Assert
         Assert.Empty(results);
@@ -393,7 +389,7 @@ public sealed class MailFolderParticipationOptionsTests
         var options = OptionsFor(CreateAccount());
 
         // Act, Assert
-        Assert.Equal([MailFolderAlias.Create("INBOX")], ConfiguredMailFolders.InboxAliasesOf(options.Accounts));
+        Assert.Equal([MailFolderAlias.Create("INBOX")], ConfiguredMailFolders.InboxAliasesOf(options.DeclaredAccounts));
     }
 
     /// <summary>A server presenting the inbox under another name is configured by role, and the default scope follows the role.</summary>
@@ -409,49 +405,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act, Assert
-        Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], ConfiguredMailFolders.InboxAliasesOf(options.Accounts));
-    }
-
-    /// <summary>
-    /// A deployment declaring its mailboxes under a user is refused a deployment section, so a reader that read only
-    /// that section reported every folder as unmapped and hid mail the deployment had already stored.
-    /// </summary>
-    [Fact]
-    public void GetParticipation_AFolderDeclaredUnderAUser_AnswersForThatFolderRatherThanUnmapped()
-    {
-        // Arrange
-        var options = UserDeclaring(CreateAccount(new MailFolderMappingOptions
-        {
-            Alias = "archive",
-            RemotePath = "Archive",
-        }));
-        var archive = new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"));
-
-        // Act
-        var participation = options.Readers.FolderParticipation.GetParticipation(Primary, MailFolderAlias.Create("ARCHIVE"));
-
-        // Assert
-        Assert.Equal(MailFolderParticipation.Full, participation);
-        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersMapped);
-        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersSynchronized);
-        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersVisibleToTools);
-        Assert.Equal([archive], options.Readers.FolderParticipation.FoldersGeneratingEmbeddings);
-    }
-
-    /// <summary>The junk catalog reads the same entries, so a user-declared junk folder is withheld as a mapped one is.</summary>
-    [Fact]
-    public void JunkFolders_AFolderDeclaredUnderAUser_NamesThatFolder()
-    {
-        // Arrange
-        var options = UserDeclaring(CreateAccount(new MailFolderMappingOptions
-        {
-            Alias = "junk",
-            SpecialUse = "Junk",
-        }));
-
-        // Act, Assert
-        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("JUNK"))], options.Readers.JunkFolderCatalog.JunkFolders);
-        Assert.True(options.Readers.JunkFolderCatalog.IsJunkFolder(Primary, MailFolderAlias.Create("JUNK")));
+        Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], ConfiguredMailFolders.InboxAliasesOf(options.DeclaredAccounts));
     }
 
     /// <summary>A folder is identified by its account beside its alias, so one user's folder never enters another user's scope.</summary>
@@ -483,17 +437,10 @@ public sealed class MailFolderParticipationOptionsTests
     }
 
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
-        new() { Accounts = [account] };
-
-    private static MailSynchronizationOptions UserDeclaring(MailSynchronizationAccountOptions account) =>
-        new MailSynchronizationOptions().WithServedUsers([User(SyntheticMailUser.Deployment, account)]);
+        new MailSynchronizationOptions().Serving(account);
 
     private static ServedMailUser User(MailUserId user, MailSynchronizationAccountOptions account) =>
-        new(
-            user,
-            "the user this deployment serves",
-            MailUserAccountSource.UserDocument,
-            [account]);
+        new(user, "the user this deployment serves", [account]);
 
     private static MailSynchronizationAccountOptions CreateAccount(params MailFolderMappingOptions[] folders) =>
         CreateAccount("primary", folders);

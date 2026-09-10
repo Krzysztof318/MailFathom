@@ -41,7 +41,7 @@ and the reading follows two rules and no others:
 The identifier is compared without regard to case, since RFC 8601 writes it as a domain-shaped token and a server may
 change its casing between messages. Which identifier is right is a property of who receives that account's mail rather
 than of MailFathom, so there is nothing to default it to; [the mail
-configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states where the setting
+configuration](../operations/configuration-mail.md#one-account--a-mailbox-in-a-users-record) states where the setting
 lives. What to write in it is read off
 the mail the account already holds: open a message that arrived recently, read its topmost `Authentication-Results`
 header, and take the first token after the colon, which is the identifier that server stamps on everything it

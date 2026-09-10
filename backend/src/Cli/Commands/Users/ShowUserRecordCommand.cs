@@ -66,7 +66,6 @@ internal static class ShowUserRecordCommand
 
         context.Console.WriteLine($"{record.DisplayName} ({record.User:D})");
         context.Console.WriteLine($"  version: {record.Version.ToString(CultureInfo.InvariantCulture)}");
-        context.Console.WriteLine($"  mail accounts read from: {record.Source}");
         context.Console.WriteLine(record.Document ?? "{}");
 
         if (record.ReadFromConfiguration)

@@ -5,6 +5,7 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -32,7 +33,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         }));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage!).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage!).ToArray();
 
         // Assert
         Assert.Contains(
@@ -54,7 +55,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         }));
 
         // Act
-        var results = options.ValidateForSynchronization().ToArray();
+        var results = ConfiguredMailAccounts.Validate(options).ToArray();
 
         // Assert
         Assert.Empty(results);
@@ -186,7 +187,7 @@ public sealed class OutgoingMailFilingConfigurationTests
     }
 
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
-        new() { Accounts = [account] };
+        new MailSynchronizationOptions().Serving(account);
 
     private static MailSynchronizationAccountOptions CreateAccount(params MailFolderMappingOptions[] folders) => new()
     {

@@ -7,17 +7,21 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AppHost;
 
-/// <summary>Provisions the synthetic Basic credential after the normal local host is ready.</summary>
+/// <summary>Records the local mailbox and provisions the synthetic Basic credential once the normal local host is ready.</summary>
 /// <remarks>
-/// The write goes through the existing administrative API rather than through persistence, so the same password policy,
-/// hashing, audit, and ownership rules apply here as to an operator provisioning the credential. An existing credential
-/// is left alone, which preserves a local rotation across restarts of the persistent database.
+/// Both writes go through the existing administrative API rather than through persistence, so the same validation,
+/// password policy, hashing, audit, and ownership rules apply here as to an operator performing them. Each is skipped
+/// where the deployment already holds it, which preserves a local rotation, and a mailbox an operator edited, across
+/// restarts of the persistent database.
 /// </remarks>
 internal sealed partial class DevelopmentCredentialProvisioningWorker(
     ResourceNotificationService resourceNotifications,
     IHttpClientFactory httpClientFactory,
     EndpointReference healthEndpoint,
     EndpointReference adminEndpoint,
+    ParameterResource mailAccountHost,
+    ParameterResource mailAccountUserName,
+    ParameterResource mailAccountPassword,
     TimeProvider timeProvider,
     ILogger<DevelopmentCredentialProvisioningWorker> logger) : BackgroundService
 {
@@ -35,9 +39,33 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
         using var client = httpClientFactory.CreateClient(HttpClientName);
         var provisioner = new DevelopmentCredentialProvisioner(client, timeProvider);
 
-        var created = await provisioner.EnsureAsync(
+        var user = await provisioner.WaitForSoleServedUserAsync(
             new Uri(healthAddress, "started"),
             adminAddress,
+            stoppingToken);
+
+        // The mailbox first, because it is what the deployment exists to read: a credential provisioned against a
+        // record declaring no account would sign a client in to an empty deployment.
+        var declared = await provisioner.EnsureMailAccountAsync(
+            adminAddress,
+            user,
+            await RequiredValueAsync(mailAccountHost, stoppingToken),
+            await RequiredValueAsync(mailAccountUserName, stoppingToken),
+            await RequiredValueAsync(mailAccountPassword, stoppingToken),
+            stoppingToken);
+
+        if (declared)
+        {
+            MailAccountDeclared(logger, OrchestrationContract.DevelopmentMailAccountId);
+        }
+        else
+        {
+            MailAccountAlreadyDeclared(logger, OrchestrationContract.DevelopmentMailAccountId);
+        }
+
+        var created = await provisioner.EnsureCredentialAsync(
+            adminAddress,
+            user,
             OrchestrationContract.DevelopmentBasicUsername,
             OrchestrationContract.DevelopmentBasicPassword,
             stoppingToken);
@@ -51,6 +79,12 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
             CredentialAlreadyExists(logger, OrchestrationContract.DevelopmentBasicUsername);
         }
     }
+
+    private static async Task<string> RequiredValueAsync(
+        ParameterResource parameter,
+        CancellationToken cancellationToken) =>
+        await parameter.GetValueAsync(cancellationToken)
+            ?? throw new InvalidOperationException($"The {parameter.Name} parameter was not supplied.");
 
     private static async Task<Uri> ResolveHttpAddressAsync(
         EndpointReference endpoint,
@@ -68,4 +102,10 @@ internal sealed partial class DevelopmentCredentialProvisioningWorker(
 
     [LoggerMessage(2, LogLevel.Information, "The local Basic credential named {Username} already exists and was left unchanged.")]
     private static partial void CredentialAlreadyExists(ILogger logger, string username);
+
+    [LoggerMessage(3, LogLevel.Information, "Declared the mail account {AccountId} in the local user's record.")]
+    private static partial void MailAccountDeclared(ILogger logger, string accountId);
+
+    [LoggerMessage(4, LogLevel.Information, "The local user's record already declares the mail account {AccountId} and was left unchanged.")]
+    private static partial void MailAccountAlreadyDeclared(ILogger logger, string accountId);
 }

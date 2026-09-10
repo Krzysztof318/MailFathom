@@ -212,9 +212,9 @@ public sealed class AccountSynchronizationSupervisorTests
     {
         // Arrange
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive");
-        options.Accounts[0].Folders[1].Synchronize = synchronize;
-        options.Accounts[0].Folders[1].GenerateEmbeddings = generateEmbeddings;
-        options.Accounts[0].Folders[1].VisibleToTools = visibleToTools;
+        options.DeclaredAccount(0).Folders[1].Synchronize = synchronize;
+        options.DeclaredAccount(0).Folders[1].GenerateEmbeddings = generateEmbeddings;
+        options.DeclaredAccount(0).Folders[1].VisibleToTools = visibleToTools;
         var mirrorStore = new RecordingMailFolderMirrorStore();
         var ruleEvaluationReached = new TaskCompletionSource();
         await using var harness = CreateHarness(
@@ -250,7 +250,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 ]);
             });
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true);
-        options.Accounts[0].Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
+        options.DeclaredAccount(0).Folders = [new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }];
         await using var harness = CreateHarness(options, Substitute.For<IMailboxSessionFactory>(), remoteFolderCatalog: catalog);
 
         // Act
@@ -276,7 +276,7 @@ public sealed class AccountSynchronizationSupervisorTests
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
-        options.Accounts[0].Folders.Insert(0, new MailFolderMappingOptions { Alias = "  ", RemotePath = "Archive" });
+        options.DeclaredAccount(0).Folders.Insert(0, new MailFolderMappingOptions { Alias = "  ", RemotePath = "Archive" });
         await using var harness = CreateHarness(options, sessionFactory);
 
         // Act
@@ -952,7 +952,7 @@ public sealed class AccountSynchronizationSupervisorTests
     {
         // Arrange
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
-        options.Accounts[0].Mode = MailSynchronizationMode.Push;
+        options.DeclaredAccount(0).Mode = MailSynchronizationMode.Push;
         var passes = 0;
         var secondPassStarted = new TaskCompletionSource();
         await using var emptyMailbox = CreateEmptyMailbox();
@@ -1056,7 +1056,7 @@ public sealed class AccountSynchronizationSupervisorTests
     private static MailSynchronizationOptions CreateOptionsWithArchiveUnmirrored()
     {
         var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive");
-        options.Accounts[0].Folders[1].Synchronize = false;
+        options.DeclaredAccount(0).Folders[1].Synchronize = false;
 
         return options;
     }
@@ -1526,7 +1526,7 @@ public sealed class AccountSynchronizationSupervisorTests
             clock,
             MailAccountIdentity.Create(
                 SyntheticMailUser.Deployment,
-                MailAccountId.Create(options.Accounts[0].AccountId)));
+                MailAccountId.Create(options.DeclaredAccount(0).AccountId)));
     }
 
     /// <summary>Holds the one supervisor a test drives, together with what it was composed from.</summary>

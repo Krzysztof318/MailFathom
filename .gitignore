@@ -90,6 +90,9 @@ deploy/compose/secrets/mailfathom/*
 # because it names the mailboxes a person reads.
 deploy/compose/config/*.json
 deploy/compose/compose.override.yaml
+# The mailbox declaration the quick start collects and hands to `mfctl user account add`. The deployment reads it never:
+# it names one person's mailbox, and what reads it is an administrator recording that mailbox into their record.
+deploy/compose/mailbox.json
 # The TLS parameters this deployment reads, copied from deploy/openssl/ by the quick start and mounted by the override
 # above. Untracked for the same reason the override is: it describes one machine's deployment rather than the product.
 deploy/compose/openssl-legacy.cnf

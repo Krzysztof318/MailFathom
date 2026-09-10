@@ -12,38 +12,49 @@ Every secret-bearing setting is a JSON object carrying a `Name`, a `SecretRefere
 
 ```json
 {
-  "MailSynchronization": {
-    "Accounts": [
-      {
-        "AccountId": "primary",
-        "DisplayName": "Personal mail",
-        "Host": "imap.example.test",
-        "Port": 993,
-        "UserName": "mailfathom@example.test",
-        "Secrets": {
-          "Password": {
-            "Name": "imap-primary-password",
-            "SecretReference": "systemd-credential:imap-primary-password"
-          }
-        },
-        "TransportSecurity": {
-          "ConnectionSecurity": "TlsOnConnect",
-          "CertificateTrust": "AdditionalTrustedAuthority",
-          "TrustedCertificateAuthority": {
-            "Name": "primary-private-ca",
-            "SecretReference": "file:/run/secrets/private-ca.pem"
-          }
-        },
-        "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
-      }
-    ]
-  },
   "Persistence": {
     "Password": {
       "Name": "postgres-password",
       "SecretReference": "file:/run/secrets/postgres-password"
     }
+  },
+  "McpEndpoint": {
+    "Https": {
+      "Certificate": {
+        "Name": "mcp-endpoint-certificate",
+        "SecretReference": "file:/run/secrets/mcp-endpoint.pfx"
+      }
+    }
   }
+}
+```
+
+The same block is what a mail account carries, and it is written the same way — except that the account is a
+declaration in one user's record rather than a section of a configuration file, so what states it is
+`mfctl user account add` rather than an editor:
+
+```json
+{
+  "AccountId": "primary",
+  "DisplayName": "Personal mail",
+  "Host": "imap.example.test",
+  "Port": 993,
+  "UserName": "mailfathom@example.test",
+  "Secrets": {
+    "Password": {
+      "Name": "imap-primary-password",
+      "SecretReference": "systemd-credential:imap-primary-password"
+    }
+  },
+  "TransportSecurity": {
+    "ConnectionSecurity": "TlsOnConnect",
+    "CertificateTrust": "AdditionalTrustedAuthority",
+    "TrustedCertificateAuthority": {
+      "Name": "primary-private-ca",
+      "SecretReference": "file:/run/secrets/private-ca.pem"
+    }
+  },
+  "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
 }
 ```
 
@@ -96,7 +107,7 @@ A bounded lifetime is an **absolute instant carrying an explicit offset**, never
 **A lifetime is enforced where the consumer can act on one.** Today that is the administrative endpoint's own API keys: an expired key authenticates nothing, which is what makes two overlapping keys a rotation rather than an outage. A credential a user's client presents carries no lifetime at all, because it is a record rather than a setting — `mfctl credential disable` and `mfctl credential rotate` are what retire one, at the moment somebody decides to rather than at an instant written months earlier. Everywhere else — a mailbox password, the database credential, a trust anchor — the lifetime is recorded and reported, and nothing stops using the credential when it passes. It is a statement of intent that shows up in the log, not a kill switch:
 
 ```
-warn: Configuration setting MailSynchronization:Accounts:0:Secrets:Password carries the secret
+warn: Configuration setting document:MailAccounts:0:Secrets:Password carries the secret
       imap-primary-password, whose configured lifetime ended at 2026-07-30T00:00:00Z.
 ```
 
@@ -307,8 +318,11 @@ The block is a nested object in JSON but requires no JSON provider. Every hierar
 
 | Provider | Key |
 | --- | --- |
-| Azure App Configuration | `MailSynchronization:Accounts:0:Secrets:Password:SecretReference` |
-| Environment block | `MailSynchronization__Accounts__0__Secrets__Password__SecretReference` |
+| Azure App Configuration | `Persistence:Password:SecretReference` |
+| Environment block | `Persistence__Password__SecretReference` |
+
+A mailbox password is not among them. Every mail account belongs to a user's record rather than to a configuration
+source, so the reference it carries is written with `mfctl user account add` and reaches no provider here.
 
 Combined with `InlineOnly`, that is the complete Azure App Configuration path: the store holds the key, Key Vault holds the secret, the provider maps one to the other, and MailFathom binds an already-resolved value and uses it as material.
 
@@ -317,11 +331,15 @@ Combined with `InlineOnly`, that is the complete Azure App Configuration path: t
 Secret resolution runs before any hosted service starts, so no synchronization run ever starts against an unresolvable secret. Every failure is reported together, each naming its configuration path and a stable failure identity:
 
 ```
-MailSynchronization:Accounts:0:Secrets:Password — the secret reference could not be resolved [MaterialNotFound].
-MailSynchronization:Accounts:1:Secrets:Password — the secret reference could not be resolved [SchemeMissing].
-MailSynchronization:Accounts:2:Secrets:Password — the secret reference could not be resolved [RetrievalTimedOut].
-MailSynchronization:Accounts:3:Secrets:Password:Name — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.
+Persistence:Password — the secret reference could not be resolved [MaterialNotFound].
+McpEndpoint:Authentication:0:ApiKey — the secret reference could not be resolved [SchemeMissing].
+DataEncryption:Keys:0:Material — the secret reference could not be resolved [RetrievalTimedOut].
+DataEncryption:Keys:1:Material:Name — every secret needs a name, which is the identity a rotation, an expiry, and an audit record name it by.
 ```
+
+A mailbox's own credential is proven at the same moment and reported the same way, under the record it is declared in
+rather than under a configuration path — `document:MailAccounts:0:Secrets:Password`, with the user named beside it —
+because there is no key an operator could go and edit.
 
 A target that never answers is one line of that report rather than the end of it, which is what the deadline above buys: the reference after an unreachable mount is still resolved and still reported.
 

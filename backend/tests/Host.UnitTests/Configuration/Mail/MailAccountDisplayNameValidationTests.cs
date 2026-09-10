@@ -5,6 +5,7 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -24,7 +25,7 @@ public sealed class MailAccountDisplayNameValidationTests
         var options = OptionsFor(CreateAccount("primary", configured));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(messages, message => message!.Contains("a display name is required", StringComparison.Ordinal));
@@ -39,7 +40,7 @@ public sealed class MailAccountDisplayNameValidationTests
         options.Enabled = false;
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(messages, message => message!.Contains("a display name is required", StringComparison.Ordinal));
@@ -55,7 +56,7 @@ public sealed class MailAccountDisplayNameValidationTests
         var options = OptionsFor(CreateAccount("primary", configured));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         var refusal = Assert.Single(messages, message => message!.Contains("display name is not usable", StringComparison.Ordinal));
@@ -71,7 +72,7 @@ public sealed class MailAccountDisplayNameValidationTests
             CreateAccount("primary", new string('m', MailAccountDisplayName.MaximumLength + 1)));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(messages, message => message!.Contains("display name is not usable", StringComparison.Ordinal));
@@ -89,7 +90,7 @@ public sealed class MailAccountDisplayNameValidationTests
             CreateAccount("acct-2", repeated));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(
@@ -107,7 +108,7 @@ public sealed class MailAccountDisplayNameValidationTests
             CreateAccount("acct-2", "ACCT-1"));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.Contains(
@@ -123,7 +124,7 @@ public sealed class MailAccountDisplayNameValidationTests
         var options = OptionsFor(CreateAccount("primary", "primary"), CreateAccount("acct-2", "Work mail"));
 
         // Act
-        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+        var messages = ConfiguredMailAccounts.Validate(options).Select(result => result.ErrorMessage).ToArray();
 
         // Assert
         Assert.DoesNotContain(
@@ -180,10 +181,8 @@ public sealed class MailAccountDisplayNameValidationTests
         Assert.Equal(enabled, ConfiguredMailAccounts.CatalogOver(options).SynchronizationEnabled);
     }
 
-    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Accounts = [.. accounts],
-    };
+    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().Serving(accounts);
 
     private static MailSynchronizationAccountOptions CreateAccount(string accountId, string displayName) => new()
     {

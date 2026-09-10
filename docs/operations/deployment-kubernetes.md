@@ -65,6 +65,7 @@ kubectl create namespace mailfathom
 
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
+  --from-literal=admin-api-key='…' \
   --from-file=imap-primary-password=./imap-primary-password \
   --from-file=mailfathom-data-key=./mailfathom-data-key
 
@@ -79,6 +80,11 @@ afterwards changes what is presented rather than what the server accepts — rot
 
 The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
 reference — the same path and the same references the Compose deployment uses.
+
+The administrative key is in that list because a deployment that cannot be administered cannot be given a mailbox:
+every mail account belongs to a user's record, and [recording the user and the
+mailbox](#recording-the-user-and-the-mailbox) below is the write that puts one there. The mailbox password beside it is
+what that record's declaration will reference; nothing in the ConfigMap names it.
 
 **The encrypted systemd credentials the native installation uses do not reach a pod**, and they would work against this
 shape if they did: nothing schedules a systemd unit here, and that encryption binds material to one machine while every
@@ -128,23 +134,12 @@ config:
     10-mailfathom.json: |
       {
         "MailSynchronization": {
+          "Enabled": true
+        },
+        "AdminEndpoint": {
           "Enabled": true,
-          "Accounts": [
-            {
-              "AccountId": "primary",
-              "DisplayName": "Personal mail",
-              "Host": "imap.example.test",
-              "Port": 993,
-              "UserName": "you@example.test",
-              "Secrets": {
-                "Password": {
-                  "Name": "imap-primary-password",
-                  "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
-                }
-              },
-              "TransportSecurity": { "ConnectionSecurity": "TlsOnConnect" },
-              "Folders": [ { "Alias": "inbox", "SpecialUse": "Inbox" } ]
-            }
+          "Authentication": [
+            { "ApiKey": { "Name": "admin", "SecretReference": "file:/etc/mailfathom/secrets/admin-api-key" } }
           ]
         },
         "McpEndpoint": {
@@ -250,6 +245,30 @@ The role that applies it needs privileges `database.user` does not — the `vect
 not create — and PostgreSQL leaves whoever ran the DDL owning every object it created, so `database.user` needs grants
 rather than a transfer of ownership. [Applying the database schema](database-schema.md) states both in full, along with
 the locks the script takes and what each startup failure means.
+
+## Recording the user and the mailbox
+
+A started deployment holds nobody, and no ConfigMap entry changes that: who a deployment serves and which mailboxes it
+reads are rows it keeps rather than settings it reads. Both are written over the administrative endpoint, which is why
+the values above turn it on — reach it with a port-forward and record them:
+
+```bash
+kubectl --namespace mailfathom port-forward service/mailfathom 8080:8080 &
+
+mfctl login --endpoint http://127.0.0.1:8080
+mfctl user add --display-name 'Alex'
+mfctl user account add --from-file mailbox.json
+```
+
+`mailbox.json` is the JSON object one mail account is declared as, and its `Secrets.Password` reference names the same
+mounted path every other credential here does — `file:/etc/mailfathom/secrets/imap-primary-password`, one of the keys
+of the Secret above. The mailbox is served from the moment the write commits, without a rollout.
+[Getting started § write down the mailbox](../users/getting-started.md#2-write-down-the-mailbox) is what goes in the
+file.
+
+**Every replica picks the record up.** A write reaches the replica that served the request at once; the others read it
+on their next user write or restart, so a deployment scaled past one serves a newly recorded mailbox from one replica
+first rather than from all of them at once.
 
 ## TLS and reaching it
 

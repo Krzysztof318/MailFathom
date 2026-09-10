@@ -38,14 +38,36 @@ public sealed class ComposedSettingsWithdrawnUserCollectionTests
         Assert.Contains("nothing imports what the collection declared", error, StringComparison.Ordinal);
     }
 
-    /// <summary>The deployment's own mail section carries the same word and is a different collection, so it is untouched.</summary>
+    /// <summary>The deployment's own mail section is withdrawn beside the roster, and says so in its own sentence.</summary>
     [Fact]
-    public void FindWithdrawnUserCollectionRefusals_ADeploymentDeclaringOnlyItsOwnMailAccounts_IsNotRefused()
+    public void FindWithdrawnUserCollectionRefusals_ADeploymentStillDeclaringItsOwnMailAccounts_IsRefusedNamingTheCommandsToRun()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["MailSynchronization:Accounts:0:AccountId"] = "work",
+        });
+
+        // Act
+        var refusals = ComposedSettings.FindWithdrawnUserCollectionRefusals(configuration);
+
+        // Assert
+        var refusal = Assert.Single(refusals);
+        Assert.Equal("MailSynchronization:Accounts", refusal.SectionName);
+        var error = Assert.Single(refusal.Errors);
+        Assert.Contains("mfctl user add", error, StringComparison.Ordinal);
+        Assert.Contains("mfctl user account add", error, StringComparison.Ordinal);
+        Assert.Contains("Nothing imports what the section declared", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A mail section left behind with no account in it declares no mailbox, so it stops no start.</summary>
+    [Fact]
+    public void FindWithdrawnUserCollectionRefusals_AMailSectionCarryingNoAccount_IsNotRefused()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["MailSynchronization:Enabled"] = "true",
         });
 
         // Act

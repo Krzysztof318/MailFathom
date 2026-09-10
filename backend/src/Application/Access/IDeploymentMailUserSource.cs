@@ -9,12 +9,11 @@ namespace MailFathom.Application.Access;
 /// <summary>Names the sole user an act that carries none is for, where this deployment serves exactly one.</summary>
 /// <remarks>
 /// <para>
-/// The deployment's own <c>MailSynchronization:Accounts</c> section names no user, so its accounts belong to whichever
-/// sole user the deployment holds, and this is that user. A deployment may instead declare its users, and then it
-/// serves as many as its file declares and there is no sole one to name: reading this refuses rather than answering,
-/// because attributing an act to whichever user a read happened to find is how one person is handed another person's
-/// mail. What keeps that refusal off a running deployment is the startup gate, which will not serve a roster of several
-/// users while any surface that reads this is enabled.
+/// A deployment serves the users it has recorded, so where it holds exactly one there is a sole user to name and this
+/// is that user. A deployment holding several has no sole one: reading this refuses rather than answering, because
+/// attributing an act to whichever user a read happened to find is how one person is handed another person's mail. What
+/// keeps that refusal off a running deployment is the startup gate, which will not serve a roster of several users
+/// while any surface that reads this is enabled.
 /// </para>
 /// <para>
 /// It is what makes an admitted caller a caller acting for somebody. A credential is configured today and carries no

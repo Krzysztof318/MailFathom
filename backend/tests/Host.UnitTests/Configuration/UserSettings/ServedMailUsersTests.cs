@@ -72,15 +72,19 @@ public sealed class ServedMailUsersTests
         Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
     }
 
-    /// <summary>The empty roster is what an unresolved holder would look like, and neither is a deployment.</summary>
+    /// <summary>A deployment holding no user serves nobody, which is the state every deployment starts its first time in.</summary>
     [Fact]
-    public void Resolved_ARosterServingNobody_IsRejected()
+    public void Resolved_ARosterServingNobody_ServesNobodyRatherThanRefusing()
     {
         // Arrange
         var servedUsers = new ServedMailUsers();
 
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => servedUsers.Resolved([]));
+        // Act
+        servedUsers.Resolved([]);
+
+        // Assert
+        Assert.Empty(servedUsers.Users);
+        Assert.Throws<DeploymentMailUserUnresolvedException>(() => servedUsers.User);
     }
 
     [Fact]
@@ -164,7 +168,6 @@ public sealed class ServedMailUsersTests
         // Assert
         var served = Assert.Single(servedUsers.Users);
 
-        Assert.False(served.ReadFromConfiguration);
         Assert.Same(classification, served.SpamClassification);
     }
 
@@ -190,11 +193,5 @@ public sealed class ServedMailUsersTests
         MailUserId user,
         string displayName,
         params MailSynchronizationAccountOptions[] mailAccounts) =>
-        new(
-            user,
-            displayName,
-            mailAccounts.Length == 0
-                ? MailUserAccountSource.DeploymentSection
-                : MailUserAccountSource.UserDocument,
-            mailAccounts);
+        new(user, displayName, mailAccounts);
 }

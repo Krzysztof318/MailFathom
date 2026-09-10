@@ -2,15 +2,16 @@
 
 <!-- describes: backend/src/Mcp/Tools/**, backend/src/Host/Configuration/** -->
 
-This page walks from an installed MailFathom to a first successful tool call: provision the credentials, configure a
-mailbox, start the service, verify it, connect an MCP client, and read a result correctly. It assumes an installation
+This page walks from an installed MailFathom to a first successful tool call: provision the credentials, write the
+mailbox down, start the service, verify it, record the person it serves and their mailbox, connect an MCP client, and
+read a result correctly. It assumes an installation
 from [installing MailFathom](installation.md); a developer evaluating from the checkout can run the
 [Aspire orchestration](../operations/local-development.md#running-locally-with-aspire) instead, which provisions
 PostgreSQL and applies the schema on its own.
 
-**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 6 performed for them.**
-`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, and ends by printing
-the two a client needs in step 7 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
+**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 7 performed for them.**
+`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, records the user and
+the mailbox once the deployment is up, and ends by printing the two a client needs in step 8 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
 and a generated username and password to sign in to it with, which it provisions for you. [Trying it first, with one
 command](../operations/deployment-compose.md#trying-it-first-with-one-command) is that path, including what a deployment
 it prepares is missing before anybody depends on it. Read this page anyway, for what each answer means.
@@ -37,7 +38,7 @@ You need one piece of material before anything is configured:
   whole of it.
 
 There is deliberately **no MCP key to provision here**. What a client presents to that endpoint belongs to the person
-whose mail it reaches rather than to the deployment, so the running service mints it in [step 6](#6-enable-the-mcp-endpoint)
+whose mail it reaches rather than to the deployment, so the running service mints it in [step 7](#7-enable-the-mcp-endpoint)
 and nothing on this machine holds it beforehand.
 
 Where the files go is the deployment's convention: `secrets/mailfathom/` for
@@ -47,36 +48,46 @@ for [systemd](../operations/secret-provisioning.md#native-systemd-service), and 
 `~/.config/credstore.encrypted/` for [the Quadlet](../operations/deployment-quadlet.md#the-credentials). The references
 below assume the mounted directory the Compose and Helm shapes share.
 
-## 2. Configure the mailbox
+## 2. Write down the mailbox
 
-Synchronization is off until configuration turns it on, and an enabled synchronization requires at least one account:
+Synchronization is off until configuration turns it on, and turning it on is the whole of what a deployment's own file
+says about mail:
 
 ```json
 {
-  "MailSynchronization": {
-    "Enabled": true,
-    "Accounts": [
-      {
-        "AccountId": "primary",
-        "DisplayName": "Personal mail",
-        "Host": "imap.example.test",
-        "Port": 993,
-        "UserName": "you@example.test",
-        "Secrets": {
-          "Password": {
-            "Name": "imap-primary-password",
-            "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
-          }
-        },
-        "Folders": [
-          { "Alias": "inbox", "SpecialUse": "Inbox" },
-          { "Alias": "sent", "SpecialUse": "Sent" }
-        ]
-      }
-    ]
-  }
+  "MailSynchronization": { "Enabled": true }
 }
 ```
+
+**The mailbox itself is not configuration.** Every mail account belongs to the record of the person whose mail it is,
+and a record is written while the deployment runs rather than read from a file — so a deployment holding no user starts,
+completes every startup gate, serves nobody, and says so once.
+[Step 6](#6-record-the-user-and-their-mailbox) is where this mailbox is recorded, and it is served from that moment
+without a restart. What to write now is the account's own JSON object, saved as `mailbox.json` on the machine you
+administer the deployment from:
+
+```json
+{
+  "AccountId": "primary",
+  "DisplayName": "Personal mail",
+  "Host": "imap.example.test",
+  "Port": 993,
+  "UserName": "you@example.test",
+  "Secrets": {
+    "Password": {
+      "Name": "imap-primary-password",
+      "SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"
+    }
+  },
+  "Folders": [
+    { "Alias": "inbox", "SpecialUse": "Inbox" },
+    { "Alias": "sent", "SpecialUse": "Sent" }
+  ]
+}
+```
+
+The reference is resolved by the deployment rather than by the machine this file sits on, so the path it names is the
+one the service reads — the mounted directory of [step 1](#1-provision-the-secrets), not a path on your workstation.
 
 **What goes in `Host`, `Port`, and `Secrets` depends on where the mailbox lives**, and so does whether IMAP has to be
 switched on first and whether a password is accepted at all. [Configuring a mailbox at your
@@ -177,8 +188,10 @@ with when each last synchronized — so a mistyped path shows up as a folder mis
 holding no mail. The log names an alias that resolved to nothing or to more than one folder, in both cases naming the
 remedy.
 
-The Compose deployment reads this from `config/10-mailfathom.json`; Kubernetes mounts it as a ConfigMap key; a native
-process names the file through [`ConfigurationSources`](../operations/configuration-sources.md).
+`MailSynchronization:Enabled` above is what a deployment reads from its own file — `config/10-mailfathom.json` for
+Compose, a ConfigMap key for Kubernetes, a file named through
+[`ConfigurationSources`](../operations/configuration-sources.md) for a native process. `mailbox.json` is read by nothing
+until step 6 hands it over: no configuration source names it, and none declares a mail account at all.
 
 ## 3. Point it at the database
 
@@ -235,7 +248,36 @@ Then let the first synchronization run. Its progress is visible in the log — e
 and, once you can call a tool, in the `folderFreshness` every result carries. A large mailbox takes a while on the
 first pass; later runs move only what changed, every five minutes by default.
 
-## 6. Enable the MCP endpoint
+## 6. Record the user and their mailbox
+
+A deployment holds no user until one is recorded, and no configuration source records one: who this deployment serves
+is its own to keep, and the [administrative endpoint](administering.md) is where it is written. So the deployment
+started above serves nobody and said so once, in a line naming the two commands below —
+[a deployment that records no user](../operations/configuration-sources.md#a-deployment-that-records-no-user) is what
+that state is, and it refuses no start.
+
+`mfctl` is the client for that endpoint; [administering a deployment](administering.md) covers reaching it. From there,
+two commands:
+
+```console
+$ mfctl user add --display-name "Alex"
+Recorded Alex as 6f1c….
+$ mfctl user account add --from-file mailbox.json
+```
+
+The second reads the file written in [step 2](#2-write-down-the-mailbox) and declares that mailbox in Alex's record.
+Neither command names a user here, because this deployment holds one: `--user` is how a deployment serving several says
+which of them, and an invocation that omits it where there are several is refused rather than guessed at.
+
+**The mailbox is served from that moment, without a restart.** The write that commits the record publishes it to the
+running roster, so the next synchronization run is this account's first one — and the same holds for the first user a
+deployment ever records.
+
+A declaration the deployment will not accept is refused whole rather than committed in part, naming what it refused: an
+account identifier the record already carries, a missing `Host` or `UserName`, a transport weakening that was not
+stated, or a secret reference that resolves to nothing. Correct `mailbox.json` and run the command again.
+
+## 7. Enable the MCP endpoint
 
 The endpoint is off by default, and enabling it means stating how it is authenticated:
 
@@ -295,7 +337,7 @@ you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well. The 
 either way; naming the proxy is what stops anything else that can reach the port from claiming them:
 [behind a TLS-terminating reverse proxy](../operations/mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
 
-## 7. Connect an MCP client
+## 8. Connect an MCP client
 
 The endpoint speaks the MCP **Streamable HTTP** transport at `/mcp` — the path is fixed — and the key travels as a
 bearer credential. Any client that supports Streamable HTTP connects with two facts:
@@ -335,7 +377,7 @@ this, including what the refusals look like when the key or the origin is wrong.
 the only way for a client whose dialog takes no header. Most of that work is in the provider rather than here:
 [MCP client OAuth](../operations/mcp-client-oauth.md) walks it end to end from a deployment in exactly this state.
 
-## 8. Make the first call, and read it correctly
+## 9. Make the first call, and read it correctly
 
 Ask the connected agent to list recent mail, or have the client call `list_emails` with a small page. Two parts of the
 result matter more than the emails on the first day:

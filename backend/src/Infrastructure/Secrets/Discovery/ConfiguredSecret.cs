@@ -19,7 +19,7 @@ namespace MailFathom.Infrastructure.Secrets.Discovery;
 /// managed-store version pin — can be added without changing the JSON type of a setting an operator already configured.
 /// It is a nested object in JSON but requires no JSON provider: a flattening provider addresses it as one more
 /// colon-separated path segment, for example
-/// <c>MailSynchronization:Accounts:0:Secrets:Password:SecretReference</c>.
+/// <c>Persistence:Password:SecretReference</c>.
 /// </para>
 /// <para>
 /// The type is mutable because the configuration binder requires it, and it carries no resolution logic: it is the

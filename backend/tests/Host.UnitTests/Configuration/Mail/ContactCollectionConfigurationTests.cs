@@ -7,6 +7,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.UserSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
@@ -275,22 +276,6 @@ public sealed class ContactCollectionConfigurationTests
         Assert.DoesNotContain(messages, message => message.Contains("contact collection", StringComparison.Ordinal));
     }
 
-    /// <summary>A mailbox declared under a served user is the whole of what such a deployment configures, so its switch has to be read.</summary>
-    [Fact]
-    public void SettingsFor_AnAccountDeclaredUnderAServedUser_CarriesTheSwitchItStated()
-    {
-        // Arrange
-        var account = AccountAt("work", "user@work.example");
-        account.ContactCollection = new ContactCollectionOptions { Enabled = true, MinimumMessagesFromSender = 4 };
-
-        // Act
-        var settings = UserDeclaring(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
-
-        // Assert
-        Assert.True(settings.IsEnabled);
-        Assert.Equal(4, settings.MinimumMessagesFromSender);
-    }
-
     /// <summary>Two served users are two people, so one of them writing to the other is an ordinary correspondent.</summary>
     [Fact]
     public void SettingsFor_AnotherUsersOwnAddress_IsStillCollectableInThisUsersMailbox()
@@ -314,8 +299,7 @@ public sealed class ContactCollectionConfigurationTests
 
     private static string[] MessagesFrom(MailSynchronizationAccountOptions account) =>
     [
-        .. OptionsFor(account)
-            .ValidateForSynchronization()
+        .. ConfiguredMailAccounts.Validate(OptionsFor(account))
             .Select(result => result.ErrorMessage)
             .OfType<string>(),
     ];
@@ -327,16 +311,11 @@ public sealed class ContactCollectionConfigurationTests
         return address;
     }
 
-    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()
-    {
-        Accounts = [.. accounts],
-    };
-
-    private static MailSynchronizationOptions UserDeclaring(params MailSynchronizationAccountOptions[] accounts) =>
-        new MailSynchronizationOptions().WithServedUsers([User(SyntheticMailUser.Deployment, accounts)]);
+    private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) =>
+        new MailSynchronizationOptions().Serving(accounts);
 
     private static ServedMailUser User(MailUserId user, params MailSynchronizationAccountOptions[] accounts) =>
-        new(user, "a user this deployment serves", MailUserAccountSource.UserDocument, accounts);
+        new(user, "a user this deployment serves", accounts);
 
     private static MailSynchronizationAccountOptions AccountAt(string accountId, string userName) => new()
     {

@@ -7,12 +7,10 @@ using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Common;
-using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -45,9 +43,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_EveryReferenceResolvable_CompletesSoHostedServicesMayStart()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")),
-            new PersistenceOptions { Password = new ConfiguredSecret { Name = "postgres", SecretReference = "plaintext:postgres-password" } });
+        var harness = CreateHarness(PersistenceReferencing("plaintext:postgres-password"));
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -58,9 +54,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_EveryReferenceResolvable_ReportsTheSecretGateToTheStartupProbe()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("plaintext:postgres-password"));
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -77,9 +71,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_UnresolvableReference_LeavesTheSecretGateOutstanding()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("file:/run/secrets/absent"));
 
         // Act
         await Assert.ThrowsAsync<OptionsValidationException>(() => harness.Validator.StartingAsync(CancellationToken.None));
@@ -92,7 +84,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_NoSecretConfigured_CompletesBecauseNothingWasDiscovered()
     {
         // Arrange
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions());
+        var harness = CreateHarness(new PersistenceOptions());
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -102,9 +94,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_UnresolvableReference_FailsStartupNamingTheConfigurationPath()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("file:/run/secrets/absent"));
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -112,7 +102,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("MailSynchronization:Accounts:0:Secrets:Password", failure, StringComparison.Ordinal);
+        Assert.StartsWith("Persistence:Password", failure, StringComparison.Ordinal);
         Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), failure, StringComparison.Ordinal);
     }
 
@@ -121,10 +111,12 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(
-                ("primary", "file:/run/secrets/absent"),
-                ("secondary", "a-pasted-password")),
-            new PersistenceOptions { Password = new ConfiguredSecret { Name = "postgres", SecretReference = "file:/run/secrets/postgres" } });
+            PersistenceReferencing("file:/run/secrets/postgres"),
+            contentStorageOptions: new ContentStorageOptions
+            {
+                Backend = ContentStorageBackend.ObjectStorage,
+                ObjectStorage = EndpointReferencing("file:/run/secrets/absent", "a-pasted-secret"),
+            });
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -133,8 +125,8 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Assert
         Assert.Equal(
             [
-                "MailSynchronization:Accounts:0:Secrets:Password",
-                "MailSynchronization:Accounts:1:Secrets:Password",
+                "ContentStorage:ObjectStorage:AccessKeyId",
+                "ContentStorage:ObjectStorage:SecretAccessKey",
                 "Persistence:Password",
             ],
             exception.Failures.Select(failure => failure.Split(' ', 2)[0]).Order(StringComparer.Ordinal));
@@ -144,9 +136,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_PlainTextValueUnderReferenceOnly_FailsInsteadOfAcceptingItAsTheSecret()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "a-pasted-password")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("a-pasted-password"));
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -161,9 +151,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_EveryFailure_NamesNeitherTheReferenceTargetNorTheMaterial()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/imap-primary-password")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("file:/run/secrets/postgres-password"));
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -172,50 +160,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Assert
         var reported = string.Join(' ', exception.Failures.Concat(harness.ReportedMessages));
         Assert.DoesNotContain("/run/secrets", reported, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task StartingAsync_TrustAnchorBlock_IsDiscoveredAndResolvedLikeAnyOtherSecret()
-    {
-        // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
-            new ConfiguredSecret { Name = "primary-ca", SecretReference = "file:/run/secrets/private-ca.pem" };
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith(
-            "MailSynchronization:Accounts:0:TransportSecurity:TrustedCertificateAuthority",
-            failure,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task StartingAsync_TrustAnchorMaterialThatIsNotACertificate_FailsStartupNamingTheLoadFailure()
-    {
-        // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].TransportSecurity.CertificateTrust = MailServerCertificateTrust.AdditionalTrustedAuthority;
-        synchronization.Accounts[0].TransportSecurity.TrustedCertificateAuthority =
-            new ConfiguredSecret { Name = "primary-ca", SecretReference = "plaintext:not-a-certificate" };
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith(
-            "MailSynchronization:Accounts:0:TransportSecurity:TrustedCertificateAuthority",
-            failure,
-            StringComparison.Ordinal);
-        Assert.Contains(nameof(CertificateMaterialFailure.EncodingNotRecognized), failure, StringComparison.Ordinal);
     }
 
     /// <summary>Material that resolves but is not a connection string would otherwise replace a working snapshot and then fail every connection.</summary>
@@ -228,7 +172,6 @@ public sealed class SecretConfigurationStartupValidatorTests
             Failures = [DatabaseConnectionConfigurationFailure.ConnectionStringNotParsable],
         };
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             databaseConnectionSettings: databaseConnectionSettings);
 
@@ -247,8 +190,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:top-secret-password")),
-            new PersistenceOptions(),
+            PersistenceReferencing("plaintext:top-secret-password"),
             SecretValueInterpretation.ReferenceOrInline,
             SecretMaterialSource.InlineValue);
 
@@ -256,7 +198,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         await harness.Validator.StartingAsync(CancellationToken.None);
 
         // Assert
-        Assert.Contains(harness.ReportedMessages, message => message.Contains("MailSynchronization:Accounts:0:Secrets:Password", StringComparison.Ordinal));
+        Assert.Contains(harness.ReportedMessages, message => message.Contains("Persistence:Password", StringComparison.Ordinal));
         Assert.DoesNotContain(harness.ReportedMessages, message => message.Contains("top-secret-password", StringComparison.Ordinal));
     }
 
@@ -264,9 +206,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_ReferenceResolvedThroughAnAdapter_LogsNoInlineWarning()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("plaintext:postgres-password"));
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -279,7 +219,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_Always_LogsTheActiveInterpretationMode()
     {
         // Arrange
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions());
+        var harness = CreateHarness(new PersistenceOptions());
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -298,7 +238,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions { TextSearchConfiguration = "english" });
 
         // Act
@@ -320,7 +259,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions { CommandTimeoutSeconds = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds + 1 });
 
         // Act
@@ -338,7 +276,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions { CommandTimeoutSeconds = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds });
 
         // Act, Assert
@@ -350,7 +287,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions { TextSearchConfiguration = "klingon" });
 
         // Act
@@ -366,9 +302,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_ASecretWithNoName_FailsStartupNamingTheSettingToAdd()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password!.Name = string.Empty;
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("plaintext:postgres-password", name: string.Empty));
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -376,18 +310,22 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("MailSynchronization:Accounts:0:Secrets:Password:Name", failure, StringComparison.Ordinal);
+        Assert.StartsWith("Persistence:Password:Name", failure, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task StartingAsync_TwoSecretsSharingAName_FailsStartupBecauseNeitherCouldBeNamedUnambiguously()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(
-            ("primary", "plaintext:dev-password"),
-            ("secondary", "plaintext:dev-password"));
-        synchronization.Accounts[1].Secrets.Password!.Name = synchronization.Accounts[0].Secrets.Password!.Name;
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
+        var objectStorage = EndpointReferencing("plaintext:key-id", "plaintext:signing-secret");
+        objectStorage.SecretAccessKey!.Name = objectStorage.AccessKeyId!.Name;
+        var harness = CreateHarness(
+            new PersistenceOptions(),
+            contentStorageOptions: new ContentStorageOptions
+            {
+                Backend = ContentStorageBackend.ObjectStorage,
+                ObjectStorage = objectStorage,
+            });
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -395,7 +333,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("MailSynchronization:Accounts:1:Secrets:Password:Name", failure, StringComparison.Ordinal);
+        Assert.StartsWith("ContentStorage:ObjectStorage:SecretAccessKey:Name", failure, StringComparison.Ordinal);
     }
 
     /// <summary>Names identify secrets to an operator reading one section, so adding a section must not collide with one already working.</summary>
@@ -403,16 +341,14 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_TheSameNameInTwoSections_IsAcceptedBecauseUniquenessIsScopedToOne()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        var persistence = new PersistenceOptions
-        {
-            Password = new ConfiguredSecret
+        var objectStorage = EndpointReferencing("plaintext:key-id", "plaintext:signing-secret");
+        var harness = CreateHarness(
+            PersistenceReferencing("plaintext:postgres-password", name: objectStorage.AccessKeyId!.Name!),
+            contentStorageOptions: new ContentStorageOptions
             {
-                Name = synchronization.Accounts[0].Secrets.Password!.Name,
-                SecretReference = "plaintext:postgres-password",
-            },
-        };
-        var harness = CreateHarness(synchronization, persistence);
+                Backend = ContentStorageBackend.ObjectStorage,
+                ObjectStorage = objectStorage,
+            });
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -422,9 +358,9 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AnUnreadableLifetime_FailsStartupRatherThanFallingBackToNoLimit()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password!.Lifetime = "next Tuesday";
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
+        var persistence = PersistenceReferencing("plaintext:postgres-password");
+        persistence.Password!.Lifetime = "next Tuesday";
+        var harness = CreateHarness(persistence);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -432,7 +368,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("MailSynchronization:Accounts:0:Secrets:Password:Lifetime", failure, StringComparison.Ordinal);
+        Assert.StartsWith("Persistence:Password:Lifetime", failure, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -443,9 +379,9 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_AnExpiredSecret_IsReportedByNameRatherThanFailingStartup()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password!.Lifetime = "2026-07-30T00:00:00Z";
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
+        var persistence = PersistenceReferencing("plaintext:postgres-password");
+        persistence.Password!.Lifetime = "2026-07-30T00:00:00Z";
+        var harness = CreateHarness(persistence);
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -453,7 +389,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Assert
         Assert.Contains(
             harness.ReportedMessages,
-            message => message.Contains("primary-password", StringComparison.Ordinal)
+            message => message.Contains("postgres", StringComparison.Ordinal)
                 && message.Contains("lifetime ended", StringComparison.Ordinal));
     }
 
@@ -461,9 +397,9 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task StartingAsync_ASecretExpiringLater_IsNotReportedAsExpired()
     {
         // Arrange
-        var synchronization = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
-        synchronization.Accounts[0].Secrets.Password!.Lifetime = "2027-07-30T00:00:00Z";
-        var harness = CreateHarness(synchronization, new PersistenceOptions());
+        var persistence = PersistenceReferencing("plaintext:postgres-password");
+        persistence.Password!.Lifetime = "2027-07-30T00:00:00Z";
+        var harness = CreateHarness(persistence);
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -478,7 +414,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         var endpoint = EndpointAcceptingApiKeys();
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -497,7 +433,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var endpoint = EndpointAcceptingApiKeys();
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -523,7 +459,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Name = "workstation",
             SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
         });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -546,7 +482,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Name = "workstation",
             SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailfathom")}",
         });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -566,7 +502,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -584,7 +520,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var endpoint = EndpointAcceptingPublicKey("plaintext:not-a-public-key");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -601,7 +537,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportSubjectPublicKeyInfoPem()}");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -631,7 +567,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         endpoint.ClientCertificateProfiles.Add(profile);
 
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             mcpEndpointOptions: endpoint);
 
@@ -662,7 +597,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         };
 
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             contentStorageOptions: contentStorage);
 
@@ -690,7 +624,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         };
 
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             contentStorageOptions: contentStorage);
 
@@ -719,7 +652,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         });
         profile.SubjectAlternativeNames.Add("mtls.prod.connectors.openai.com");
         endpoint.ClientCertificateProfiles.Add(profile);
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), mcpEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -742,7 +675,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var endpoint = EndpointAcceptingApiKeys();
         endpoint.Enabled = false;
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -755,7 +688,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         // sealed value, which is the failure this section exists to move to startup. Thirty-three bytes is the mistake
         // that actually happens: it is what the command beside this one generates for a database password.
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             dataEncryptionOptions: RingOf("2026-08", Convert.ToBase64String(new byte[33])));
 
@@ -774,7 +706,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             dataEncryptionOptions: RingOf("2026-08", "not-base64-material"));
 
@@ -793,7 +724,6 @@ public sealed class SecretConfigurationStartupValidatorTests
     {
         // Arrange
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions
             {
                 Password = new ConfiguredSecret
@@ -829,7 +759,6 @@ public sealed class SecretConfigurationStartupValidatorTests
             },
         });
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             dataEncryptionOptions: options);
 
@@ -850,7 +779,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange — the counterpart the two refusals need: without it they would pass against a validator that
         // rejected every ring it was handed.
         var harness = CreateHarness(
-            new MailSynchronizationOptions(),
             new PersistenceOptions(),
             dataEncryptionOptions: RingOf(
                 "2026-08",
@@ -867,11 +795,13 @@ public sealed class SecretConfigurationStartupValidatorTests
         // resolved rather than rejected merely because it carries the database scheme.
         const string storedReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2";
         var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", storedReference)),
             new PersistenceOptions(),
-            secretReferenceResolver: new SingleSecretReferenceResolver(
-                storedReference,
-                "not-a-real-mailbox-password"));
+            contentStorageOptions: new ContentStorageOptions
+            {
+                Backend = ContentStorageBackend.ObjectStorage,
+                ObjectStorage = EndpointReferencing(storedReference, storedReference),
+            },
+            secretReferenceResolver: new SingleSecretReferenceResolver(storedReference, "not-a-real-key"));
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -882,9 +812,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     public async Task RemainingLifecycleMembers_Always_CompleteWithoutResolvingAnything()
     {
         // Arrange
-        var harness = CreateHarness(
-            ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent")),
-            new PersistenceOptions());
+        var harness = CreateHarness(PersistenceReferencing("file:/run/secrets/absent"));
 
         // Act
         await harness.Validator.StartAsync(CancellationToken.None);
@@ -949,8 +877,14 @@ public sealed class SecretConfigurationStartupValidatorTests
         return options;
     }
 
+    /// <summary>The database credential, which is where these tests state a secret now that no mailbox is a configuration key.</summary>
+    /// <remarks>A user's mailbox secrets are judged per user against their own record, by the served-users startup gate.</remarks>
+    private static PersistenceOptions PersistenceReferencing(string reference, string name = "postgres") => new()
+    {
+        Password = new ConfiguredSecret { Name = name, SecretReference = reference },
+    };
+
     private static ValidatorHarness CreateHarness(
-        MailSynchronizationOptions synchronizationOptions,
         PersistenceOptions persistenceOptions,
         SecretValueInterpretation interpretation = SecretValueInterpretation.ReferenceOnly,
         SecretMaterialSource source = SecretMaterialSource.SchemeAdapter,
@@ -969,7 +903,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         var startupGates = new HostStartupGates(HostStartupGate.SecretConfiguration);
 
         var validator = new SecretConfigurationStartupValidator(
-            new StubSettingsSnapshot<MailSynchronizationOptions>(synchronizationOptions),
             new StubSettingsSnapshot<PersistenceOptions>(persistenceOptions),
             new StubSettingsSnapshot<DataEncryptionOptions>(dataEncryptionOptions ?? new DataEncryptionOptions()),
             Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),

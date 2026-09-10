@@ -8,68 +8,54 @@ using MailFathom.Host.Configuration.Mail;
 
 namespace MailFathom.Host.Configuration.UserSettings;
 
-/// <summary>Finds what a configuration source supplies for one user.</summary>
+/// <summary>Finds what a configuration source supplies for one user, which is nothing.</summary>
 /// <remarks>
 /// <para>
-/// One section is left that reaches a user at all: the deployment's own <c>MailSynchronization:Accounts</c>, which
-/// names nobody and therefore belongs to whichever sole user such a deployment holds. Every other user is a record,
-/// and no configuration source reaches them.
+/// No section reaches a user any longer: the collection that declared them and the deployment's own mail section are
+/// both withdrawn, so every user is a record and every mailbox is in it. The three questions below therefore have one
+/// answer each, and they are still asked because three refusals are written against them — a record write, an erasure,
+/// and a person correcting their own name — and each of those goes with the marker that says a document has never been
+/// written, in <see href="https://github.com/Krzysztof318/MailFathom/issues/1829">issue 1829</see>.
 /// </para>
 /// <para>
-/// It reads the deployment's live configuration rather than the roster's copy, because what a write into a user's
-/// record is judged against is what the files say now rather than what the last start reconciled.
+/// One reading rather than a constant at each of the three, so that retiring them is one deletion and none of them can
+/// be left behind answering differently in the meantime.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reading.")]
-internal sealed class ConfiguredUserSettings(IConfiguration configuration, ServedMailUsers servedUsers)
+internal sealed class ConfiguredUserSettings
 {
     /// <summary>Gets whether a configuration source names this user.</summary>
     /// <param name="user">The user asked about.</param>
-    /// <returns><see langword="true" /> when they are the sole user the deployment's own mail section belongs to.</returns>
+    /// <returns><see langword="false" />, no configuration source naming anybody.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>
-    /// What an act a start would undo asks — the relabel and the erasure — and what a write into a user's record is
-    /// judged against, which are the same question now that one section is left.
-    /// </remarks>
     public bool DeclaredByAConfigurationSource(MailUserId user)
     {
-        if (!user.IsSpecified)
-        {
-            throw new ArgumentException("A configured declaration is looked up for a named user.", nameof(user));
-        }
+        RequireNamed(user);
 
-        return servedUsers.Users.Any(served =>
-            served.User == user && served.Source == MailUserAccountSource.DeploymentSection);
+        return false;
     }
 
     /// <summary>Reads which users a configuration source names, for a caller asking about more than one of them.</summary>
-    /// <returns>The sole user the deployment's own mail section belongs to, empty when every user is a record.</returns>
-    public IReadOnlySet<MailUserId> UsersAConfigurationSourceDeclares() =>
-        servedUsers.Users
-            .Where(served => served.Source == MailUserAccountSource.DeploymentSection)
-            .Select(served => served.User)
-            .ToHashSet();
+    /// <returns>Nobody.</returns>
+    public IReadOnlySet<MailUserId> UsersAConfigurationSourceDeclares() => new HashSet<MailUserId>();
 
     /// <summary>Reads the mail accounts a configuration source declares for one user.</summary>
     /// <param name="user">The user asked about.</param>
-    /// <returns>The declarations, empty when no configuration source reaches this user.</returns>
+    /// <returns>Nothing, every mailbox being its user's own record.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody.</exception>
-    /// <remarks>
-    /// A user whose record is their own, and a user this process's roster does not hold at all, both answer with
-    /// nothing — the first because their record decides their mailboxes, the second because they were provisioned
-    /// after the roster was settled. Neither is a failure: both are users an ordinary write reaches.
-    /// </remarks>
     public IReadOnlyList<MailSynchronizationAccountOptions> DeclaredFor(MailUserId user)
+    {
+        RequireNamed(user);
+
+        return [];
+    }
+
+    private static void RequireNamed(MailUserId user)
     {
         if (!user.IsSpecified)
         {
             throw new ArgumentException("A configured declaration is looked up for a named user.", nameof(user));
         }
-
-        var served = servedUsers.Users.FirstOrDefault(candidate => candidate.User == user);
-
-        return served?.Source == MailUserAccountSource.DeploymentSection
-            ? MailSynchronizationOptions.AccountsDeclaredIn(configuration)
-            : [];
     }
 }
