@@ -10,6 +10,12 @@ namespace MailFathom.Host.Configuration.UserSettings;
 /// user its own mail section belongs to beside every user recorded through <c>mfctl</c>, and each of them is served
 /// from the source their own row says. What a start reports is this value for every user it serves, because a section
 /// somebody goes on editing for a user that no longer reads it is the failure the report exists to prevent.
+/// <para>
+/// <c>1</c> is absent because it was <c>UserDeclaration</c>'s, the source a withdrawn configuration collection named,
+/// and a value that once meant something else is retired rather than handed to the next member. Nothing persists or
+/// serializes this enum by number today; what the gap protects is whoever adds a column, a cache key, or a wire format
+/// keyed on the ordinal, for whom the reuse would be silent.
+/// </para>
 /// </remarks>
 internal enum MailUserAccountSource
 {
@@ -17,5 +23,5 @@ internal enum MailUserAccountSource
     DeploymentSection = 0,
 
     /// <summary>The user's own document, which is the source from the moment a committed record writes it and permanently afterwards.</summary>
-    UserDocument = 1,
+    UserDocument = 2,
 }

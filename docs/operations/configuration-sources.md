@@ -141,7 +141,7 @@ imports what the collection declared. Record each of them with 'mfctl user add' 
 'mfctl user account add', credentials included, then remove the section from your configuration.
 ```
 
-**Nothing imports what the file declared**, and there is no route that would. The identifiers the file carried are the operator's own values rather than ones MailFathom mints, so a deployment moving across records its roster afresh and lets synchronization refill it — which is what [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-configuration-is-read-only-and-provisioning-is-the-operators-act.md) already says an operator does.
+**Nothing imports what the file declared**, and there is no route that would. The identifiers the file carried are the operator's own values rather than ones MailFathom mints, so a deployment moving across records its roster afresh and lets synchronization refill it — which is what [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) already says an operator does: *the operator's action is to provision what they had configured, and nothing imports it for them*.
 
 ### What a user may say about scanning their own mail
 
@@ -200,7 +200,7 @@ A label is applied only where nobody else holds it, because a label names one us
 Today's shape keeps working and **no file has to change**. A deployment holding no user row at all serves exactly one: the row the release's migration provisioned, or — where the deployment holds none — one identifier generated once and recorded, reported at `Information`:
 
 ```
-This deployment declared no user and held none, so one has been recorded for the mail accounts it is configured with.
+This deployment held no user, so one has been recorded for the mail accounts it is configured with.
 ```
 
 Every account in `MailSynchronization:Accounts` belongs to that sole user. Once the deployment holds more than one user still reading that section there is no sole user for its accounts to belong to, so such a roster is **refused**: record each of those mailboxes against the user who owns it with `mfctl user account add`, and clear the section.

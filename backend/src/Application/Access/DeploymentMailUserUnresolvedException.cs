@@ -69,13 +69,18 @@ public sealed class DeploymentMailUserUnresolvedException : MailFathomException
             + "MailSynchronization:Accounts, which no user this deployment serves reads.");
     }
 
-    /// <summary>Reports a deployment holding several users while its mail accounts are declared in the section that names none.</summary>
+    /// <summary>Reports a deployment more than one of whose user records still reads the section that names no user.</summary>
     /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It is the count of those records that decides this rather than what the section currently states, so the
+    /// sentence says so: an operator holding two such records and an empty section is in this state too, and a message
+    /// asserting the section supplies mailboxes would send them to clear something already clear.
+    /// </remarks>
     public static DeploymentMailUserUnresolvedException SeveralUsers() => new(
-        "This deployment holds more than one user record while its mail accounts are declared in "
-        + "MailSynchronization:Accounts, which names no user, so a configured account cannot be attributed to one of "
-        + "them. Record each mailbox against the user who owns it with 'mfctl user account add' and clear that "
-        + "section, so every mailbox says whose it is.");
+        "More than one user record this deployment holds still reads MailSynchronization:Accounts, which names no "
+        + "user, so an account configured there could not be attributed to one of them. Give each of those users a "
+        + "record of their own — 'mfctl user account add' states their mailboxes and stops them reading that section — "
+        + "and clear the section, so every mailbox says whose it is.");
 
     /// <summary>Reports a deployment holding more user records than it may serve.</summary>
     /// <param name="maximumUsers">The greatest number of users one deployment serves.</param>

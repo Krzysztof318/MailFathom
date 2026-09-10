@@ -104,8 +104,11 @@ public sealed class ServedMailUsersStartupGateTests
     }
 
     /// <summary>
-    /// Several rows still reading the deployment's own section is a deployment whose mailboxes are in the section that
-    /// names no user, so nothing could say which of them a configured account is for.
+    /// Several rows still reading the deployment's own section is a deployment for which nothing could say which of
+    /// them a configured account is for. **It is the count of those rows that decides it**, which is why this
+    /// arrangement configures no <c>MailSynchronization:Accounts</c> at all and is refused anyway: the state an
+    /// operator reaches by upgrading with two provisioned rows is this one, and a refusal that waited for the section
+    /// to state a mailbox would let that deployment start with no sole user for a later edit of it to belong to.
     /// </summary>
     [Fact]
     public async Task StartAsync_SeveralRowsHeldAndNoneRecordingTheirOwnMailboxes_FailsStartupNamingWhatToRun()
@@ -117,7 +120,8 @@ public sealed class ServedMailUsersStartupGateTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.DeploymentMailUserUnresolved, refusal.ErrorCode);
-        Assert.Contains("Record each mailbox against the user who owns it", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("still reads MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("mfctl user account add", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -650,7 +654,6 @@ public sealed class ServedMailUsersStartupGateTests
         return documents;
     }
 
-    /// <summary>States one user's own record, holding a single mail account named as the test asks.</summary>
     /// <summary>The same for the other source a served user's settings come from, which is their own record.</summary>
     [Fact]
     public async Task StartAsync_AnAdoptedUserWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()

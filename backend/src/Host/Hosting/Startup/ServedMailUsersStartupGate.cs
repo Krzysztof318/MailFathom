@@ -482,6 +482,6 @@ internal sealed partial class ServedMailUsersStartupGate : IHostedService
     /// <remarks>Reached only where the deployment holds no user row at all, which the release's own migration ordinarily provisions.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "This deployment declared no user and held none, so one has been recorded for the mail accounts it is configured with.")]
+        Message = "This deployment held no user, so one has been recorded for the mail accounts it is configured with.")]
     private partial void LogSoleUserRecorded();
 }

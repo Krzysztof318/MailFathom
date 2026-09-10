@@ -44,10 +44,11 @@ public interface IMailUserProvisioning
     /// <exception cref="ArgumentException">Thrown when <paramref name="user" /> names nobody, or <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
     /// <para>
-    /// A label is what an administrator reads a roster by rather than anything an account hangs on, so a file that
-    /// renames a user renames them, and so does an administrator over the endpoint. The identifier is the opposite
-    /// case and is refused rather than followed, because changing it would orphan every mail account and every stored
-    /// message recorded under the old one.
+    /// A label is what an administrator reads a roster by rather than anything an account hangs on, so an administrator
+    /// renaming a user over the endpoint is the whole of what renames them, and the new label lasts — no configuration
+    /// source names a user, so no start puts an earlier one back. The identifier is the opposite case and is refused
+    /// rather than followed, because changing it would orphan every mail account and every stored message recorded
+    /// under the old one.
     /// </para>
     /// <para>
     /// The answer is read the way <see cref="ProvisionAsync" />'s is, and for the same race: a label taken between a
