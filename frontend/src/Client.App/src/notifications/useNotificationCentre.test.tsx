@@ -371,6 +371,46 @@ describe('useNotificationCentre', () => {
         expect(result.current.notifications.map((row) => row.id)).toEqual(['n-mail']);
     });
 
+    it('names the rows it had not shown before, and none on the first read of a centre', async () => {
+        const { transport, hold } = deployment({ unreadCount: 1, notifications: [mail] });
+        const { result } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        // Everything is new to a client that has just read the centre for the first time, and nothing arrived in it.
+        expect([...result.current.arrived]).toEqual([]);
+
+        hold(2, [{ ...mail, id: 'n-second' }, mail]);
+        await polled();
+
+        expect([...result.current.arrived]).toEqual(['n-second']);
+    });
+
+    it('reads the page and the count again when it is asked to by hand, which is what the rail refresh asks', async () => {
+        const { transport, requests, hold } = deployment({ unreadCount: 1, notifications: [mail] });
+        const { result } = centreOf(transport);
+
+        await settled();
+
+        // Not the panel: the reader who presses refresh has the bell in front of them rather than the page, and the
+        // badge is the half that would otherwise wait out the interval.
+        requests.length = 0;
+        hold(2, [{ ...mail, id: 'n-second' }, mail]);
+
+        act(() => {
+            result.current.readAgain();
+        });
+        await settled();
+
+        expect(pathsAsked(requests)).toContain('/api/client/notifications/unread-count');
+        expect(pathsAsked(requests)).toContain('/api/client/notifications');
+        expect(result.current.unreadCount).toBe(2);
+        expect(result.current.notifications.map((row) => row.id)).toEqual(['n-second', 'n-mail']);
+    });
+
     it('reads the page when the count rises, which is what an arrival looks like to a client that polls', async () => {
         const { transport, requests, hold } = deployment({ unreadCount: 0, notifications: [] });
 

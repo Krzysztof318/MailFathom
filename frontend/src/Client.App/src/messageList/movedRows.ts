@@ -29,6 +29,38 @@ export function rowSettled(rows: ReadonlySet<string>, id: string): ReadonlySet<s
     return left.size === 0 ? noRows : left;
 }
 
+/**
+ * The rows saying they moved, once these ones have started saying it too.
+ *
+ * A union rather than a replacement, because a page arriving does not finish what the page before it is still
+ * animating: two arrivals a second apart are two sets of rows moving at once, and replacing the first with the second
+ * would take the class off rows mid-animation and leave them stopped halfway.
+ */
+export function rowsAlsoMoved(rows: ReadonlySet<string>, moved: ReadonlySet<string>): ReadonlySet<string> {
+    if (moved.size === 0) {
+        return rows;
+    }
+
+    return new Set([...rows, ...moved]);
+}
+
+/**
+ * The rows still saying they moved, less the ones the list has stopped drawing.
+ *
+ * A windowed list unmounts a row that scrolled out of it, and an unmounted row never reports its animation ending — so
+ * a row held as having moved would come back mounted as one that had just moved, which is the replay this whole
+ * mechanism exists to stop, one scroll further along.
+ */
+export function rowsStillDrawn(rows: ReadonlySet<string>, drawn: ReadonlySet<string>): ReadonlySet<string> {
+    const left = [...rows].filter((id) => drawn.has(id));
+
+    if (left.length === rows.size) {
+        return rows;
+    }
+
+    return left.length === 0 ? noRows : new Set(left);
+}
+
 /** What a page's arrival amounts to: which of its rows are new to the reader, and what they have now been shown. */
 export interface RowsNoticed {
     readonly arrived: ReadonlySet<string>;

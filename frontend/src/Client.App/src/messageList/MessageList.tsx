@@ -56,7 +56,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, narrowedByReading, narrowedToView, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, withToggled } from './messageSelection';
-import { noRows, rowSettled, rowsNoticed } from './movedRows';
+import { noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { actedMessages, useListedMail } from './useListedMail';
 
@@ -250,7 +250,7 @@ export function MessageList({
                     );
 
                     drawnBefore.current = noticed.shown;
-                    setArrivedRows(noticed.arrived);
+                    setArrivedRows((rows) => rowsAlsoMoved(rows, noticed.arrived));
                 }
             },
         );
@@ -340,7 +340,7 @@ export function MessageList({
 
                 if (signal.kind === 'mail.changed' && scopeReaches(scope, signal.account, signal.folder)) {
                     setHeld((current) => changeNoticed(current, signal.emails));
-                    setChangedRows(new Set(signal.emails));
+                    setChangedRows((rows) => rowsAlsoMoved(rows, new Set(signal.emails)));
                 }
             }),
         [signalledChanges, scope],
@@ -430,8 +430,27 @@ export function MessageList({
         setScrollTop(top);
 
         const moved = windowOf(rowCount, rowHeight, top, viewport);
+        const last = moved.first + moved.count - 1;
 
-        setHeld((current) => trimmedAround(current, moved.first, moved.first + moved.count - 1));
+        setHeld((current) => trimmedAround(current, moved.first, last));
+
+        // What the rows that moved are let go of, and it is a scroll rather than an animation that does it: a row
+        // carried out of the window is unmounted, and an unmounted row never reports its own animation ending. Asked
+        // only where something is actually being held, so an ordinary scroll down a folder reads nothing.
+        if (arrivedRows.size > 0 || changedRows.size > 0) {
+            const stillDrawn = new Set<string>();
+
+            for (let row = moved.first; row <= last; row += 1) {
+                const email = rowAt(held, row);
+
+                if (email !== null) {
+                    stillDrawn.add(email.id);
+                }
+            }
+
+            setArrivedRows((rows) => rowsStillDrawn(rows, stillDrawn));
+            setChangedRows((rows) => rowsStillDrawn(rows, stillDrawn));
+        }
     }
 
     function tryAgain(): void {

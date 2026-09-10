@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { mostRowsRemembered, noRows, rowSettled, rowsNoticed } from './movedRows';
+import { mostRowsRemembered, noRows, rowSettled, rowsAlsoMoved, rowsNoticed, rowsStillDrawn } from './movedRows';
 
 describe('rowsNoticed', () => {
     it('reports nothing as having arrived in a list that had drawn nothing, because that list appeared', () => {
@@ -71,5 +71,37 @@ describe('rowSettled', () => {
 
     it('answers with the one empty set once the last row has settled, so a list that noticed nothing draws nothing', () => {
         expect(rowSettled(new Set(['one']), 'one')).toBe(noRows);
+    });
+});
+
+describe('rowsAlsoMoved', () => {
+    it('keeps the rows already moving beside the ones that just did, two arrivals being able to overlap', () => {
+        const moving = rowsAlsoMoved(new Set(['one']), new Set(['two', 'three']));
+
+        expect([...moving].sort()).toEqual(['one', 'three', 'two']);
+    });
+
+    it('answers with the same set where nothing moved, so a page that brought nothing new redraws nothing', () => {
+        const rows = new Set(['one']);
+
+        expect(rowsAlsoMoved(rows, noRows)).toBe(rows);
+    });
+});
+
+describe('rowsStillDrawn', () => {
+    it('lets go of a row the list has stopped drawing, which will never say it has settled', () => {
+        const left = rowsStillDrawn(new Set(['one', 'two']), new Set(['two']));
+
+        expect([...left]).toEqual(['two']);
+    });
+
+    it('answers with the same set where every row it holds is still drawn', () => {
+        const rows = new Set(['one', 'two']);
+
+        expect(rowsStillDrawn(rows, new Set(['one', 'two', 'three']))).toBe(rows);
+    });
+
+    it('answers with the one empty set where the window has left every row it held behind', () => {
+        expect(rowsStillDrawn(new Set(['one']), new Set(['two']))).toBe(noRows);
     });
 });

@@ -135,8 +135,8 @@ export function App({
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
 
-    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token every eleven
-    // hours, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
+    // What names this sign-in, and it is deliberately not the credential: a renewal replaces the token an hour before
+    // it expires, and a frame keyed on the value would empty the screen, take focus off whatever was being read, and record
     // a second session beginning — at an instant nothing happened at. The person and the address are what actually
     // change when somebody signs out and somebody else signs in.
     const signedInAs = person === null || baseAddress === null ? null : `${baseAddress}\n${person}`;

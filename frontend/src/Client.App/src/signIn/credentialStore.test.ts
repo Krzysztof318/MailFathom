@@ -158,6 +158,48 @@ describe('a credential kept nowhere', () => {
     });
 });
 
+describe('a credential kept beyond the tab in this browser', () => {
+    it('writes the session where the browser keeps it beyond the tab, and nowhere the tab alone would read it', async () => {
+        const store = await credentialStore();
+
+        expect(await store.keep(deployment, credential, true)).toBe(true);
+        expect(window.localStorage.length).toBe(1);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe(credential);
+    });
+
+    it('removes it on signing out, which is the promise the screen made about the tick', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+
+        expect(await store.forget(deployment)).toBe(true);
+        expect(window.localStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBeNull();
+    });
+
+    it('renews into the place the session is already kept, a renewal being told nothing about the choice', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+        await store.keep(deployment, 'renewed');
+
+        expect(window.localStorage.length).toBe(1);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe('renewed');
+    });
+
+    it('takes the durable copy away where somebody signs in again without asking to be kept', async () => {
+        const store = await credentialStore();
+
+        await store.keep(deployment, credential, true);
+        await store.keep(deployment, 'a second sign-in', false);
+
+        expect(window.localStorage.length).toBe(0);
+        expect(await store.read(deployment)).toBe('a second sign-in');
+    });
+});
+
 describe('a credential kept for the run', () => {
     it('reads back what was kept for the deployment it was given for', async () => {
         const store = await credentialStore();
