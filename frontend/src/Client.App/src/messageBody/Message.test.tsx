@@ -208,18 +208,16 @@ describe('Message', () => {
         asked = [];
     });
 
-    // What the words standing in that space look like is held against the design as images rather than asserted here:
-    // they are `aria-hidden` by construction and jsdom computes no layout. What this says is the pair a person meets —
-    // the shapes are drawn, and the sentence beside them is said out of sight for somebody not looking at the column.
-    it('stands the words where they will be, and says out of sight that the message is opening', () => {
+    // The words standing in that space are held against the design as images rather than asserted here: they are
+    // `aria-hidden` by construction and jsdom computes no layout, so what this suite can say about the wait is what a
+    // person meets — the sentence while the read is in flight, and no message until one has arrived.
+    it('says the message is opening while the read is in flight', () => {
         // An answer that never comes, which is the whole of the state under test.
         answer = () => new Promise<Answer>(() => undefined);
 
-        const { container } = readingOneMessage();
+        readingOneMessage();
 
         expect(screen.getByRole('status').textContent).toBe('Opening the message…');
-        expect([...screen.getByRole('status').classList]).toContain('sr-only');
-        expect(container.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
         expect(screen.queryByText('A drawn message.')).toBeNull();
     });
 

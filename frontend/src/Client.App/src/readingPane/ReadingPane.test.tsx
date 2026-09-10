@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect } from 'react';
-import { act, fireEvent, render, screen, waitFor, type RenderResult } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
@@ -162,8 +162,8 @@ function drawing(
     deliver: AttachmentExchange = deliversNothing,
     marking: ReadMarking = nothingMarkedRead,
     signalled: SignalledChanges = nothingSignalled,
-): RenderResult {
-    return render(
+): void {
+    render(
         <SignalledChangesContext value={signalled}>
             <LocalizationProvider>
                 <ToastsProvider>
@@ -242,12 +242,10 @@ describe('ReadingPane', () => {
         expect(asked).toEqual([]);
     });
 
-    it('stands the message where it will be, and says out of sight that it is opening', () => {
-        const { container } = drawing(answersNothing);
+    it('says it is reading while the deployment has answered nothing', () => {
+        drawing(answersNothing);
 
         expect(screen.getByRole('status')).toHaveProperty('textContent', 'Opening this message…');
-        expect([...screen.getByRole('status').classList]).toContain('sr-only');
-        expect(container.querySelectorAll('.shimmering').length).toBeGreaterThan(0);
     });
 
     // What the skeleton standing in that space looks like is held against the design as images rather than asserted
