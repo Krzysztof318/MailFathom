@@ -812,7 +812,11 @@ The canonical skills are:
   context before edits. The refusal reads the issue's own `blocked by` list, so
   what stops the session is the order the tracker records rather than a judgement
   the session makes; an issue it opens carries that order out to the tracker in
-  the same pass that places it;
+  the same pass that places it. Its brief also says whether the change looks large
+  enough to split, which lands there rather than on the board's `Size` field
+  because this is the last point before the first edit at which anything has read
+  the issue against the repository, and the warning needs the surfaces a change
+  reaches rather than a count of the sentences describing it;
 - `read-design` points at the state inventory a client screen is built from. What
   it exists to prevent is a screen built from a picture — a rendered preview shows
   the one state it was clicked into, while the source states every screen, every
@@ -848,7 +852,9 @@ The canonical skills are:
   verification, checks the final diff, creates a focused commit, pushes the
   branch, opens a pull request that references its issue with
   `Closes #<issue>`, and then moves that issue to `Queue: Next` so the board
-  shows the work as in flight;
+  shows the work as in flight and writes its `Size` from the pull request's own
+  `additions + deletions`, which is the first moment that field can state a
+  measurement rather than the placeholder the issue was opened with;
 - `prepare-release` opens the two pull requests a release consists of and prints
   the order they and the tag between them have to land in. It composes the
   changelog section from what merged since the previous tag, reading each closed
