@@ -108,10 +108,12 @@ export const pl: Catalogue = {
         'Wylogowanie nie usunęło zapamiętanego logowania z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. MailFathom został poproszony o zakończenie sesji, a ona i tak przestaje działać sama. Usuń wpis w samym magazynie, jeśli wolisz, żeby zniknął już teraz.',
     'signIn.notKept':
         'Nie udało się zapisać tego logowania na tej maszynie, więc zapytamy o hasło ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
-    'signIn.keptUntilSignedOut':
-        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane w pęku kluczy tego komputera, dopóki się nie wylogujesz, i po pewnym czasie przestaje działać samo.',
-    'signIn.keptUntilTheTabCloses':
-        'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia tej karty i zapytamy wtedy o hasło ponownie — to, co przeglądarka przechowuje, może odczytać wszystko, co ma dostęp do tej strony.',
+    'signIn.keepMeSignedIn': 'Nie wylogowuj mnie',
+    'signIn.keepMeSignedInUnticked':
+        'To logowanie jest trzymane do zamknięcia tej karty. Dotyczy wyłącznie logowania hasłem — sesje u dostawców rządzą się własnymi regułami.',
+    'signIn.keptOnThisDevice': 'To urządzenie pozostanie zalogowane przez 30 dni. Dotyczy wyłącznie logowania hasłem.',
+    'signIn.keptInThisBrowser':
+        'Ta przeglądarka pozostanie zalogowana przez 30 dni, we wszystkich kartach. Dotyczy wyłącznie logowania hasłem — a to, co przeglądarka przechowuje, może odczytać wszystko, co ma dostęp do tej strony.',
     'signIn.keptUntilTheClientCloses':
         'Twoje hasło nie jest nigdzie przechowywane. To logowanie jest trzymane do zamknięcia MailFathom i zapytamy wtedy o hasło ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
     'signIn.notKeptStorageUnreachable':
@@ -188,13 +190,13 @@ export const pl: Catalogue = {
         'Imię, nazwisko i zdjęcie przechowuje wdrożenie, na które się logujesz, więc idą za Tobą między maszynami. Żadne z nich nie trafia na Twój serwer poczty.',
     'settings.messageView': 'Widok wiadomości',
     'settings.messageViewReduced': 'Uproszczony',
-    'settings.messageViewHtml': 'HTML',
+    'settings.messageViewHtml': 'Oryginał',
     'settings.messageViewReducedExplanation':
-        'Wiadomości pokazują oczyszczony tekst; pełny HTML otwierasz ikoną przy nagłówku.',
+        'Wiadomości pokazują oczyszczony tekst; oryginał otwierasz ikoną przy nagłówku.',
     'settings.messageViewHtmlExplanation':
-        'Wiadomości pokazują osadzoną treść HTML; przełącznik HTML przy nagłówku wiadomości znika.',
+        'Wiadomości pokazują od razu oryginał, tak jak napisał go nadawca; przełącznik przy nagłówku znika.',
     'settings.messageViewHtmlWarning':
-        'Ryzyko bezpieczeństwa: HTML z wiadomości może zawierać ukryte piksele śledzące, podszywające się układy i odnośniki phishingowe. Renderujemy go w izolacji, ale sam podgląd może ujawnić nadawcy, że wiadomość została otwarta.',
+        'Ryzyko bezpieczeństwa: oryginalna wiadomość może zawierać ukryte piksele śledzące, podszywające się układy i odnośniki phishingowe. Renderujemy ją w izolacji, ale sam podgląd może ujawnić nadawcy, że wiadomość została otwarta.',
     'settings.expandWholeThread': 'Rozwijaj cały wątek automatycznie',
     'settings.expandWholeThreadExplanation':
         'Bez tego wątek otwiera się na wybranej wiadomości, a pozostałe są pod przyciskiem.',
@@ -665,7 +667,7 @@ export const pl: Catalogue = {
     'failure.unreadable': 'odpowiedź nie do odczytania',
     'failure.missing': 'już nie istnieje',
 
-    'body.reading': 'Odczytywanie wiadomości…',
+    'body.reading': 'Otwieranie wiadomości…',
     'body.failed': 'Nie udało się odczytać wiadomości: {reason}.',
 
     'body.encryptedNotReadable': 'Ta wiadomość jest zaszyfrowana i to wdrożenie nie potrafi jej odczytać.',
@@ -711,19 +713,19 @@ export const pl: Catalogue = {
     'body.markupPicturesTruncated':
         'Część obrazów z tej wiadomości jest większa, niż zwraca jeden odczyt, więc zamiast wersji nadawcy pokazujemy uproszczoną.',
 
-    'fullHtml.show': 'Pokaż pełną wersję HTML',
-    'fullHtml.question': 'Pokazać pełny HTML?',
+    'fullHtml.show': 'Pokaż oryginalną wiadomość',
+    'fullHtml.question': 'Pokazać oryginalną wiadomość?',
     'fullHtml.whatItRisks':
         'Oryginalny HTML może zawierać piksele śledzące, układy podszywające się pod znane marki i odnośniki phishingowe. Skrypty i zdalne zasoby blokujemy, ale nadawca może rozpoznać, że wiadomość została otwarta.',
     'fullHtml.stayReduced': 'Zostań w uproszczonym',
-    'fullHtml.confirm': 'Pokaż HTML',
-    'fullHtml.surface': 'Własna wersja tej wiadomości od nadawcy',
-    'fullHtml.mark': 'HTML',
+    'fullHtml.confirm': 'Pokaż oryginał',
+    'fullHtml.surface': 'Oryginalna wiadomość, tak jak napisał ją nadawca',
+    'fullHtml.mark': 'Oryginał',
     'fullHtml.frame': 'Kod napisany przez nadawcę, rysowany w izolacji',
     'fullHtml.sentBy': '{author} · {when}',
-    'fullHtml.close': 'Zamknij ten widok',
-    'fullHtml.reading': 'Wczytywanie wersji od nadawcy…',
-    'fullHtml.failed': 'Nie udało się odczytać wersji od nadawcy: {reason}.',
+    'fullHtml.close': 'Zamknij oryginalną wiadomość',
+    'fullHtml.reading': 'Wczytywanie oryginalnej wiadomości…',
+    'fullHtml.failed': 'Nie udało się odczytać oryginalnej wiadomości: {reason}.',
     'fullHtml.noMarkup': 'Nadawca nie napisał sformatowanej wersji tej wiadomości, więc nie ma tu czego pokazać.',
     'fullHtml.truncated': 'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc urywa się w tym miejscu.',
     'fullHtml.picturesTruncated':
@@ -779,7 +781,7 @@ export const pl: Catalogue = {
     'threadState.offline':
         'Ta maszyna jest bez sieci, więc nie można odczytać, na czym stanęła ta rozmowa. Odczyta się, gdy sieć wróci.',
 
-    'message.reading': 'Trwa otwieranie tej wiadomości…',
+    'message.reading': 'Otwieranie tej wiadomości…',
     'message.offline':
         'Ta maszyna jest bez sieci, więc nie można otworzyć tej wiadomości. Otworzy się sama, gdy sieć wróci.',
     'message.failed': 'Nie udało się otworzyć tej wiadomości: {reason}.',

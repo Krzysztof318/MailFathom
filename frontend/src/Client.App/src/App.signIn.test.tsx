@@ -103,19 +103,23 @@ describe('App sign-in', () => {
         });
     });
 
-    it('says how long the sign-in will be kept before anybody has typed a password', () => {
-        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping('untilSignedOut'));
+    it('offers to keep the sign-in on the device before anybody has typed a password', () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping('inTheDeviceStore'));
 
+        expect(screen.getByRole('checkbox', { name: 'Keep me signed in' })).toBeDefined();
         expect(
             screen.getByText(
-                'Your password is not stored anywhere. This sign-in is kept in this machine’s keychain until you sign out, and it stops working on its own after a while.',
+                'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',
             ),
         ).toBeDefined();
     });
 
-    it('says why it will ask again where nothing may be kept beyond the run', () => {
-        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping('untilTheClientCloses'));
+    // A choice between one place and the same place is not a choice, so the screen states what will happen instead of
+    // offering something to tick. This is the head ADR 0027 wrote that answer for.
+    it('offers nothing to tick and says why it will ask again where nothing may be kept beyond the run', () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping('nowhereTheShellKeepsTheRun'));
 
+        expect(screen.queryByRole('checkbox', { name: 'Keep me signed in' })).toBeNull();
         expect(
             screen.getByText(
                 'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again — this machine offers no keychain to keep it in safely.',

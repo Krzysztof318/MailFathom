@@ -25,7 +25,7 @@ import { defaultPortOf, portForPermission, portOf, resolveConnection, type Resol
 import { resolveCredentialEntry, resolveSessionCredential, type CredentialEntryRefusal } from './credentialEntry';
 import type { KeptSession } from './keptSession';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
-import type { CredentialLifetime } from './credentialStore';
+import { offersMoreThanTheTab, type KeptBeyondTheTab } from './credentialStore';
 
 // The screen somebody meets before any mail: it collects the credential, and the address beside it wherever nothing has
 // already said where the deployment is. Those are one form rather than two screens because a person was handed all four
@@ -101,12 +101,15 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
 // served this page is the deployment — so the same outcome takes the sentence that fits the shape it is rendered in.
 const silentDeployment: Refusal = { message: 'signIn.deploymentSilent', controls: [] };
 
-const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
-    untilSignedOut: 'signIn.keptUntilSignedOut',
-    untilTheTabCloses: 'signIn.keptUntilTheTabCloses',
-    untilTheClientCloses: 'signIn.keptUntilTheClientCloses',
-    notKeptStorageUnreachable: 'signIn.notKeptStorageUnreachable',
-    notKeptKeyInvalidated: 'signIn.notKeptKeyInvalidated',
+// What a store that keeps nothing beyond the tab has to say for itself, which is the sentence a person on a shared
+// machine is deciding from. The two places that do keep something say it under the checkbox instead, in the design
+// project's own words, because there the sentence is about a choice being made rather than about a limit being met.
+const nothingKeptMessages: Readonly<Record<KeptBeyondTheTab, MessageKey>> = {
+    inTheDeviceStore: 'signIn.keptOnThisDevice',
+    inThisBrowser: 'signIn.keptInThisBrowser',
+    nowhereTheShellKeepsTheRun: 'signIn.keptUntilTheClientCloses',
+    nowhereStorageUnreachable: 'signIn.notKeptStorageUnreachable',
+    nowhereKeyInvalidated: 'signIn.notKeptKeyInvalidated',
 };
 
 // One shape for every field on this screen, stated once. The focus treatment is the design project's — the line goes
@@ -134,7 +137,7 @@ const designedProviders = ['GitHub', 'Gmail', 'Keycloak'] as const;
 export function SignIn({
     adopted,
     clearTextPermitted: configuredClearText,
-    lifetime,
+    beyondTheTab,
     notices,
     send,
     onSignedIn,
@@ -145,10 +148,12 @@ export function SignIn({
     /** The clear-text permission a deployment configured, or `null` where it configured none. */
     readonly clearTextPermitted: boolean | null;
 
-    readonly lifetime: CredentialLifetime;
+    /** Where a session somebody asks to keep would go, which decides whether the choice is offered at all. */
+    readonly beyondTheTab: KeptBeyondTheTab;
+
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
-    readonly onSignedIn: (deployment: DeploymentAddress, session: KeptSession) => void;
+    readonly onSignedIn: (deployment: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean) => void;
 
     /** Pointing away from an address somebody named themselves, which this screen offers inside its disclosure. */
     readonly onPointSomewhereElse: () => void;
@@ -163,6 +168,12 @@ export function SignIn({
     const [userName, setUserName] = useState('');
     const [password, setPassword] = useState('');
     const [revealed, setRevealed] = useState(false);
+
+    // Unticked to begin with, and that is the decision rather than the default: a box already ticked would keep a
+    // session on a machine somebody borrowed for one message, and the person who wants it kept is the one who is
+    // there to tick it. ADR 0023 turns on nothing being kept durably that nobody asked for, and this is where it is
+    // asked.
+    const [keepSignedIn, setKeepSignedIn] = useState(false);
     const [presenting, setPresenting] = useState(false);
 
     // The address the attempt in flight was started against, which is the one case on this screen where a value is
@@ -220,6 +231,14 @@ export function SignIn({
     }, [presenting]);
 
     const shown = refusal === null ? null : shownFor(refusal, deployment);
+    // Whether the choice between the tab and the device is a choice at all, which is what decides both that the
+    // checkbox is drawn and that the sentence it replaces is not.
+    const keptBeyondTheTabOffered = offersMoreThanTheTab(beyondTheTab);
+
+    // The two credential fields are described by where the sign-in is kept, and that sentence is the checkbox's
+    // own hint where the choice is offered and the standing paragraph where it is not. Naming an element that is
+    // not in the document leaves an `aria-describedby` resolving to nothing, which is a field described by
+    // silence rather than by the refusal that is on the screen.
     const describedBy = (hint: string): string => (shown === null ? hint : `sign-in-refusal ${hint}`);
     const marks = (control: RefusedControl): boolean => shown?.controls.includes(control) === true;
 
@@ -334,11 +353,18 @@ export function SignIn({
         // The password is not handed on and is not kept anywhere: what the exchange answered with is a session, and
         // that is the whole of what this client holds from here. The name travels beside it because a token does not
         // carry one and the screens above ask who is signed in.
-        onSignedIn(reached.deployment, {
-            authorization: resolveSessionCredential(answer.value.session.token),
-            expiresAt: answer.value.session.expiresAt,
-            person: userName,
-        });
+        onSignedIn(
+            reached.deployment,
+            {
+                authorization: resolveSessionCredential(answer.value.session.token),
+                expiresAt: answer.value.session.expiresAt,
+                person: userName,
+            },
+            // Ticking a box a store cannot honour keeps nothing, so the answer is the choice and the store's ability to
+            // act on it together rather than the checkbox alone. Where nothing is offered the box is not drawn either,
+            // and this is the same statement read from the other end.
+            keepSignedIn && offersMoreThanTheTab(beyondTheTab),
+        );
     }
 
     // A deployment that accepts the connection and never answers would otherwise hold the screen on `signIn.presenting`
@@ -472,7 +498,7 @@ export function SignIn({
                     </label>
                     <div className={fieldBox}>
                         <input
-                            aria-describedby={describedBy('sign-in-kept')}
+                            aria-describedby={describedBy(keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept')}
                             aria-invalid={marks('userName')}
                             autoComplete="username"
                             className={fieldInput}
@@ -496,7 +522,7 @@ export function SignIn({
                     </label>
                     <div className={fieldBox}>
                         <input
-                            aria-describedby={describedBy('sign-in-kept')}
+                            aria-describedby={describedBy(keptBeyondTheTabOffered ? 'sign-in-keep' : 'sign-in-kept')}
                             aria-invalid={marks('password')}
                             autoComplete="current-password"
                             className={fieldInput}
@@ -528,6 +554,43 @@ export function SignIn({
                         </button>
                     </div>
                 </div>
+
+                {/* Under the password field and only where there is one, as the design draws it: what this keeps is a
+                    password sign-in, and a provider session follows the provider's own rules. It is also only drawn
+                    where the store has somewhere to keep it — a choice between one place and the same place is not a
+                    choice, and the sentence below the form says what is happening instead. */}
+                {keptBeyondTheTabOffered ? (
+                    <label className="flex cursor-pointer items-start gap-2.25 py-0.5 select-none">
+                        {/* Named by the line above the hint rather than by the whole label. A `label` wrapping both
+                            would name the control with the sentence under it as well, which reads out as one run-on
+                            name and is not what the hint is: it describes what ticking the box will do. */}
+                        <input
+                            aria-describedby="sign-in-keep"
+                            aria-labelledby="sign-in-keep-label"
+                            checked={keepSignedIn}
+                            className="mt-0.5 size-5.5 shrink-0 cursor-pointer accent-accent workspace:size-4.5"
+                            type="checkbox"
+                            onChange={(event) => {
+                                setKeepSignedIn(event.target.checked);
+                            }}
+                        />
+
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="text-sm text-text-soft" id="sign-in-keep-label">
+                                {translate('signIn.keepMeSignedIn')}
+                            </span>
+
+                            {/* The hint is the design's own, and it changes with the box rather than describing the
+                                control: ticked it says what will be kept and for how long, unticked it says what the
+                                choice does not cover. */}
+                            <span className="text-xs leading-snug text-faint text-pretty" id="sign-in-keep">
+                                {translate(
+                                    keepSignedIn ? nothingKeptMessages[beyondTheTab] : 'signIn.keepMeSignedInUnticked',
+                                )}
+                            </span>
+                        </span>
+                    </label>
+                ) : null}
 
                 {shown === null || presenting ? null : (
                     <p
@@ -577,12 +640,17 @@ export function SignIn({
                 />
             </form>
 
-            {/* Where the password is kept and for how long. The design draws no such sentence, so it is out of sight
-                rather than out of the document: both credential fields are described by it, and a reader who is told
-                nothing about where a password goes has been told less than the screen knows. */}
-            <p className="sr-only" id="sign-in-kept">
-                {translate(lifetimeMessages[lifetime])}
-            </p>
+            {/* Where the sign-in is kept, for the case the checkbox above is not drawn for: a store with nowhere to
+                put a session says so here rather than offering a choice between one place and the same place. Out of
+                sight rather than out of the document, because the design draws no sentence in that case and both
+                credential fields are described by it — a reader who is told nothing about where a password goes has
+                been told less than the screen knows. Where the box is drawn, its own hint is the statement and this
+                one would be a second one saying something else. */}
+            {keptBeyondTheTabOffered ? null : (
+                <p className="sr-only" id="sign-in-kept">
+                    {translate(nothingKeptMessages[beyondTheTab])}
+                </p>
+            )}
 
             {/* The wait is drawn on the control that started it, which is where somebody looking at the screen reads
                 it. A label changing is not something a screen reader announces, so the same sentence stands here in a

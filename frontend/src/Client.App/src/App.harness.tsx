@@ -23,7 +23,7 @@ import { AttachmentUploadContext, type AttachmentUpload } from './deployment/att
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
-import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
+import type { CredentialStore, KeptBeyondTheTab } from './signIn/credentialStore';
 import type { KeptSession } from './signIn/keptSession';
 import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
@@ -503,22 +503,36 @@ export function deploymentRefusing(answer: Answer): DeploymentTransport {
 interface RecordingStore extends CredentialStore {
     /** What this store holds, by deployment, so a test asserts on what was kept rather than on what was called. */
     readonly kept: Map<string, string>;
+
+    /** Whether what it holds was asked to outlive the tab, which is the choice the sign-in screen carries down. */
+    readonly keptBeyondTheTab: Map<string, boolean>;
 }
 
-export function storeKeeping(lifetime: CredentialLifetime = 'untilTheTabCloses'): RecordingStore {
+export function storeKeeping(beyondTheTab: KeptBeyondTheTab = 'inThisBrowser'): RecordingStore {
     const kept = new Map<string, string>();
+    const keptBeyondTheTab = new Map<string, boolean>();
 
     return {
         kept,
-        lifetime,
+        keptBeyondTheTab,
+        beyondTheTab,
         read: (deployment) => Promise.resolve(kept.get(deployment.baseAddress) ?? null),
-        keep: (deployment, authorization) => {
+        keep: (deployment, authorization, asked) => {
             kept.set(deployment.baseAddress, authorization);
+
+            // A renewal passes nothing, and the real store then writes the session back where the one before it was
+            // kept. This holds the same answer for the same reason: a test asserting that a renewal did not quietly
+            // move a session out of the store somebody picked has to be able to read where it went.
+            keptBeyondTheTab.set(
+                deployment.baseAddress,
+                asked ?? keptBeyondTheTab.get(deployment.baseAddress) ?? false,
+            );
 
             return Promise.resolve(true);
         },
         forget: (deployment) => {
             kept.delete(deployment.baseAddress);
+            keptBeyondTheTab.delete(deployment.baseAddress);
 
             return Promise.resolve(true);
         },
@@ -527,14 +541,14 @@ export function storeKeeping(lifetime: CredentialLifetime = 'untilTheTabCloses')
 
 /** A store that will not write, which is a keychain locked between being found and being written to. */
 export function storeRefusingToKeep(): RecordingStore {
-    const store = storeKeeping('untilSignedOut');
+    const store = storeKeeping('inTheDeviceStore');
 
     return { ...store, keep: () => Promise.resolve(false) };
 }
 
 /** A store that holds the credential and will not give it up, which is a locked keychain from the client's side. */
 export function storeRefusingToForget(): RecordingStore {
-    const store = storeKeeping('untilSignedOut');
+    const store = storeKeeping('inTheDeviceStore');
 
     return { ...store, forget: () => Promise.resolve(false) };
 }

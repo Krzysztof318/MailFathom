@@ -108,10 +108,12 @@ export const en = {
         'Signing out did not remove the sign-in from this machine’s credential store, so it is still kept there. MailFathom was asked to end the session, and it stops working on its own in any case. Remove the entry in the store itself if you would rather it were gone now.',
     'signIn.notKept':
         'This sign-in could not be stored on this machine, so you will be asked for your password again the next time you open MailFathom. You are signed in either way.',
-    'signIn.keptUntilSignedOut':
-        'Your password is not stored anywhere. This sign-in is kept in this machine’s keychain until you sign out, and it stops working on its own after a while.',
-    'signIn.keptUntilTheTabCloses':
-        'Your password is not stored anywhere. This sign-in is kept until you close this tab, and you will be asked for your password again — anything that reaches this page can read what a browser keeps.',
+    'signIn.keepMeSignedIn': 'Keep me signed in',
+    'signIn.keepMeSignedInUnticked':
+        'This sign-in is kept until you close this tab. Applies to password sign-in only — provider sessions follow their own rules.',
+    'signIn.keptOnThisDevice': 'This device stays signed in for 30 days. Applies to password sign-in only.',
+    'signIn.keptInThisBrowser':
+        'This browser stays signed in for 30 days, in every tab. Applies to password sign-in only — and anything that reaches this page can read what a browser keeps.',
     'signIn.keptUntilTheClientCloses':
         'Your password is not stored anywhere. This sign-in is kept until you close MailFathom, and you will be asked for your password again — this machine offers no keychain to keep it in safely.',
     'signIn.notKeptStorageUnreachable':
@@ -186,13 +188,13 @@ export const en = {
         'Your name and picture are held by the deployment you signed in to, so they follow you between machines. Neither is sent to your mail server.',
     'settings.messageView': 'Message view',
     'settings.messageViewReduced': 'Reduced',
-    'settings.messageViewHtml': 'HTML',
+    'settings.messageViewHtml': 'Original',
     'settings.messageViewReducedExplanation':
-        'Messages are shown as cleaned-up text; the full HTML is one control away on the message head.',
+        'Messages are shown as cleaned-up text; the original is one control away on the message head.',
     'settings.messageViewHtmlExplanation':
-        "Messages show the sender's own HTML inline; the HTML control on the message head goes.",
+        'Messages show the original as its sender wrote it, inline; the control on the message head goes.',
     'settings.messageViewHtmlWarning':
-        'A security risk: HTML from a message can carry hidden tracking pixels, layouts that imitate somebody else, and phishing links. It is drawn in isolation, but showing it at all can tell the sender the message was opened.',
+        'A security risk: an original message can carry hidden tracking pixels, layouts that imitate somebody else, and phishing links. It is drawn in isolation, but showing it at all can tell the sender the message was opened.',
     'settings.expandWholeThread': 'Expand the whole thread automatically',
     'settings.expandWholeThreadExplanation':
         'Without it, a conversation opens at the message you chose and the rest sit behind a control.',
@@ -663,7 +665,7 @@ export const en = {
     'failure.unreadable': 'unreadable',
     'failure.missing': 'no longer there',
 
-    'body.reading': 'Reading the message…',
+    'body.reading': 'Opening the message…',
     'body.failed': 'The message could not be read: {reason}.',
 
     'body.encryptedNotReadable': 'This message is encrypted and this deployment cannot read it.',
@@ -707,19 +709,19 @@ export const en = {
     'body.markupPicturesTruncated':
         "Some of the pictures this message carried are larger than one read returns, so the sender's version is shown as the reduced version instead.",
 
-    'fullHtml.show': 'Show the full HTML version',
-    'fullHtml.question': 'Show the full HTML?',
+    'fullHtml.show': 'Show the original message',
+    'fullHtml.question': 'Show the original message?',
     'fullHtml.whatItRisks':
         "The sender's own markup can carry tracking pixels, layouts imitating brands you know, and phishing links. Scripts and remote resources are blocked, but the sender may still be able to tell the message was opened.",
     'fullHtml.stayReduced': 'Keep the reduced version',
-    'fullHtml.confirm': 'Show the HTML',
-    'fullHtml.surface': "The sender's own version of this message",
-    'fullHtml.mark': 'HTML',
+    'fullHtml.confirm': 'Show the original',
+    'fullHtml.surface': 'The original message, as its sender wrote it',
+    'fullHtml.mark': 'Original',
     'fullHtml.frame': "The sender's own markup, drawn in isolation",
     'fullHtml.sentBy': '{author} · {when}',
-    'fullHtml.close': 'Close this view',
-    'fullHtml.reading': "Reading the sender's own version…",
-    'fullHtml.failed': "The sender's own version could not be read: {reason}.",
+    'fullHtml.close': 'Close the original message',
+    'fullHtml.reading': 'Reading the original message…',
+    'fullHtml.failed': 'The original message could not be read: {reason}.',
     'fullHtml.noMarkup': 'The sender wrote no formatted version of this message, so there is nothing to show here.',
     'fullHtml.truncated': 'This message is longer than one read returns, so it stops here.',
     'fullHtml.picturesTruncated':
@@ -776,7 +778,7 @@ export const en = {
     'threadState.offline':
         'This machine is offline, so where this conversation stands cannot be read. It is read once the network comes back.',
 
-    'message.reading': 'Reading this message…',
+    'message.reading': 'Opening this message…',
     'message.offline':
         'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
     'message.failed': 'This message could not be opened: {reason}.',

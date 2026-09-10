@@ -511,7 +511,7 @@ export function App({
         revise({ selection: null, conversation: null });
     }, [space, layers, closeAttachment, closeFullHtml, revise]);
 
-    function signedIn(reached: DeploymentAddress, session: KeptSession): void {
+    function signedIn(reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean): void {
         if (adopted === null) {
             storeDeployment(reached);
             setAdopted({ deployment: reached, origin: 'chosen' });
@@ -529,7 +529,7 @@ export function App({
         // The screen has already said how long the sign-in will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
         // one is read inside the frame: signing in worked, and what failed is only the keeping.
-        void credentials.keep(reached, writeKeptSession(session)).then((stored) => {
+        void credentials.keep(reached, writeKeptSession(session), keptBeyondTheTab).then((stored) => {
             if (!stored) {
                 setNotices(['sessionNotKept']);
             }
@@ -618,7 +618,7 @@ export function App({
                 adopted={adopted}
                 refusal={deployment.outcome === 'refused' ? deployment.refusal : null}
                 clearTextPermitted={deployment.outcome === 'resolved' ? deployment.clearTextPermitted : null}
-                lifetime={credentials.lifetime}
+                beyondTheTab={credentials.beyondTheTab}
                 notices={notices}
                 send={send}
                 onSignedIn={signedIn}
@@ -1080,7 +1080,7 @@ function SignInScreen({
     adopted,
     refusal,
     clearTextPermitted,
-    lifetime,
+    beyondTheTab,
     notices,
     send,
     onSignedIn,
@@ -1089,10 +1089,10 @@ function SignInScreen({
     readonly adopted: AdoptedDeployment | null;
     readonly refusal: ConfigurationRefusal | null;
     readonly clearTextPermitted: boolean | null;
-    readonly lifetime: CredentialStore['lifetime'];
+    readonly beyondTheTab: CredentialStore['beyondTheTab'];
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
-    readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession) => void;
+    readonly onSignedIn: (reached: DeploymentAddress, session: KeptSession, keptBeyondTheTab: boolean) => void;
     readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
@@ -1138,7 +1138,7 @@ function SignInScreen({
                         <SignIn
                             adopted={adopted}
                             clearTextPermitted={clearTextPermitted}
-                            lifetime={lifetime}
+                            beyondTheTab={beyondTheTab}
                             notices={notices}
                             send={send}
                             onSignedIn={onSignedIn}

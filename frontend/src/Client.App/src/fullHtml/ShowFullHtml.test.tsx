@@ -32,18 +32,18 @@ describe('ShowFullHtml', () => {
 
         drawing(shown);
 
-        expect(screen.queryByRole('heading', { name: 'Show the full HTML?' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Show the original message?' })).toBeNull();
 
-        press('Show the full HTML version');
+        press('Show the original message');
 
-        expect(screen.getByRole('heading', { name: 'Show the full HTML?' })).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'Show the original message?' })).toBeDefined();
         expect(shown).not.toHaveBeenCalled();
     });
 
     it('names what a stranger markup can carry and what this client does about it', () => {
         drawing(vi.fn());
 
-        press('Show the full HTML version');
+        press('Show the original message');
 
         expect(screen.getByText(/tracking pixels/)).toBeDefined();
         expect(screen.getByText(/Scripts and remote resources are blocked/)).toBeDefined();
@@ -53,19 +53,19 @@ describe('ShowFullHtml', () => {
         const shown = vi.fn();
 
         drawing(shown);
-        press('Show the full HTML version');
+        press('Show the original message');
         press('Keep the reduced version');
 
         expect(shown).not.toHaveBeenCalled();
-        expect(screen.queryByRole('heading', { name: 'Show the full HTML?' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Show the original message?' })).toBeNull();
     });
 
     it('opens the surface once the reader has answered the question', () => {
         const shown = vi.fn();
 
         drawing(shown);
-        press('Show the full HTML version');
-        press('Show the HTML');
+        press('Show the original message');
+        press('Show the original');
 
         expect(shown).toHaveBeenCalledOnce();
     });
@@ -74,10 +74,10 @@ describe('ShowFullHtml', () => {
         const shown = vi.fn();
 
         drawing(shown);
-        press('Show the full HTML version');
+        press('Show the original message');
         press('Keep the reduced version');
-        press('Show the full HTML version');
+        press('Show the original message');
 
-        expect(screen.getByRole('heading', { name: 'Show the full HTML?' })).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'Show the original message?' })).toBeDefined();
     });
 });

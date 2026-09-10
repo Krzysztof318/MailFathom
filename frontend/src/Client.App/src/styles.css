@@ -611,6 +611,21 @@
         --color-warning: var(--color-warning-text);
     }
 
+    /* A colour a sender wrote was picked against the white page their composer drew, and says nothing about the panel
+       the reduced view actually draws it on — so an ordinary `#333333` signature reads on the light theme and is very
+       nearly invisible on the dark one, which is a run of a message nobody can read rather than a shade somebody
+       dislikes. `messageBody/senderColour.ts` answers with the colour as it stands on each of the two panels, lifted
+       away from that panel until it clears 4.5:1 and keeping the hue the sender chose. Which of the two is painted is
+       decided here for the reason every other theme difference is: no component asks which theme is in force, so the
+       run carries both answers and the theme picks between them. */
+    [data-sender-colour] {
+        color: var(--sender-colour-light);
+    }
+
+    :root[data-theme='dark'] [data-sender-colour] {
+        color: var(--sender-colour-dark);
+    }
+
     /* What a control measures under a finger, decided once here for the same reason the ring above is: a floor met by
        seven control shapes and forty hand-written buttons is a floor most of them eventually stop meeting, and the one
        that stops is invisible in the diff that stopped it.

@@ -241,8 +241,8 @@ describe('ThreadMessage', () => {
         const onShowFullHtml = vi.fn();
         drawing(message(), { onShowFullHtml });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the original' }));
 
         expect(onShowFullHtml).toHaveBeenCalled();
     });

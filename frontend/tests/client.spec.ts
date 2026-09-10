@@ -1094,8 +1094,8 @@ test('fetches nothing from the sender until the reader asks, and asks again next
 const markupFrame = "The sender's own markup, drawn in isolation";
 
 async function showTheSenderMarkup(page: Page): Promise<void> {
-    await page.getByRole('button', { name: 'Show the full HTML version' }).click();
-    await page.getByRole('button', { name: 'Show the HTML' }).click();
+    await page.getByRole('button', { name: 'Show the original message' }).click();
+    await page.getByRole('button', { name: 'Show the original' }).click();
 }
 
 test('draws the sender own markup in a frame that permits no origin and no way out of itself', async ({ page }) => {
@@ -1160,7 +1160,7 @@ test('carries nothing that runs, and reaches no host but its own until the reade
 
     // Scoped to the surface, because the message it stands over is still drawn underneath and offers the same ask: the
     // window is what the reader is looking at, and it is that one's promise being asserted.
-    const surface = page.getByRole('region', { name: "The sender's own version of this message" });
+    const surface = page.getByRole('region', { name: 'The original message, as its sender wrote it' });
 
     // The picture's host is what the anti-tracking promise is measured against: the representation carries no address
     // for it until the reader asks, so a frame that fetched one would be drawing markup this client composed rather
@@ -1187,7 +1187,7 @@ test('carries nothing that runs, and reaches no host but its own until the reade
 test('leaves the markup surface for the message it was opened from, and asks again next time', async ({ page }) => {
     await openTheFirstMessage(page);
 
-    const showTheMarkup = page.getByRole('button', { name: 'Show the full HTML version' });
+    const showTheMarkup = page.getByRole('button', { name: 'Show the original message' });
 
     await showTheSenderMarkup(page);
     await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
@@ -1195,7 +1195,7 @@ test('leaves the markup surface for the message it was opened from, and asks aga
     // The message is still where it was rather than replaced, which is what a window over it means.
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Close this view' }).click();
+    await page.getByRole('button', { name: 'Close the original message' }).click();
 
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
     await expect(page.locator(`iframe[title="${markupFrame}"]`)).toHaveCount(0);
@@ -1205,9 +1205,9 @@ test('leaves the markup surface for the message it was opened from, and asks aga
     await expect(showTheMarkup).toBeFocused();
 
     // Nothing on either side wrote the answer down, so the control asks again rather than reopening what was shown.
-    await page.getByRole('button', { name: 'Show the full HTML version' }).click();
+    await page.getByRole('button', { name: 'Show the original message' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Show the full HTML?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Show the original message?' })).toBeVisible();
 });
 
 // A failure the pane cannot survive, induced by refusing the element every reading surface is built around: the frame

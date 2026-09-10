@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type {
     MailBlockAlignment,
     MailDocumentBlock,
@@ -17,6 +17,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageLink } from './MessageLink';
+import { readableRunColour, type ReadableRunColour } from './senderColour';
 
 // The whole of what a message may draw, which is the closed catalogue the service reduces every body to. Each block is
 // an ordinary element of the application's own document: nothing here is handed markup, nothing here writes any, and
@@ -298,7 +299,25 @@ function MessageRun({ run }: { readonly run: MailInlineRun }) {
     // `MailInlineRun` states — so a signature, a postal address, and a poem are all line breaks this has to keep.
     const emphasized = emphasize(run, <span className="whitespace-pre-line">{run.text}</span>);
 
-    return run.foreground === null ? emphasized : <span style={{ color: run.foreground }}>{emphasized}</span>;
+    // Both readings of the sender's colour, because neither this component nor any other asks which theme is in force.
+    // A colour this client cannot read answers `null` and the run is drawn in the theme's own text colour, which is
+    // readable by construction — dropping a colour is never worse than drawing one nobody can see.
+    const readable = run.foreground === null ? null : readableRunColour(run.foreground);
+
+    return readable === null ? (
+        emphasized
+    ) : (
+        <span data-sender-colour="" style={senderColour(readable)}>
+            {emphasized}
+        </span>
+    );
+}
+
+// React writes a property whose name begins with two dashes straight through to the element, but `CSSProperties` names
+// the properties CSS itself declares and a custom property is spellable in none of them — so the assertion here is
+// about what that type can express rather than about the two values, which are colours this module computed.
+function senderColour({ onLight, onDark }: ReadableRunColour): CSSProperties {
+    return { '--sender-colour-light': onLight, '--sender-colour-dark': onDark } as CSSProperties;
 }
 
 // Emphasis is drawn with the elements that mean it rather than with a class, so the meaning survives a stylesheet and
