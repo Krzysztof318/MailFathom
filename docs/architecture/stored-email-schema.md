@@ -438,9 +438,12 @@ instant — no message, no header, no request, and no key material. There is no 
 because the credential column holds a configured key's name as readily as a registered key's fingerprint and belongs
 to neither.
 
-**It cannot grow without bound.** An assertion lives at most five minutes, and how fast a verified client can add rows
-is exactly what the surface's rate limit already bounds — so the removal is what keeps the table proportional to the
-traffic of the last few minutes. A row is dropped by the first sweep after the point past which its assertion can no
+**It cannot grow without bound.** An assertion lives at most five minutes, and the removal is what keeps the table
+proportional to the traffic of the last few of them. The surface's rate limit is not part of that bound on the MCP
+surface: authentication runs ahead of the limiter there, so a client presenting freshly signed assertions above its
+permitted rate writes a row per request and is refused afterwards — the limiter bounds what is served rather than what
+is inserted. On the administrative and client surfaces the credential is judged behind the limiter, where it does bound
+both. A row is dropped by the first sweep after the point past which its assertion can no
 longer be presented, which is its recorded expiry plus the skew the validator tolerates, so a row outlives that point
 by up to one more permitted lifetime rather than ending with it. Each replica issues its own removal, once per that
 lifetime, from its own interval — there is no deployment-wide sweep, and two replicas each issuing a bounded delete
@@ -1700,7 +1703,7 @@ swept on each account's own run. Nothing in the table reaches a log, a metric, a
 user's generated identifier and the account alias are what a failure names, and they are the two values that are not
 personal data.
 
-`spent_client_assertions` is the one table on this page whose classification depends on which credential a row was written under. For a configured key pair the `CredentialKey` column holds the name an operator gave the key, which is MailFathom's own configuration and nobody's data; for a user's registered key it holds that key's 43-character fingerprint, which is a pseudonymous identifier for an identified person and is read as their data. The other two columns are neither in both cases — a value the client minted for one request, and an instant. Nothing cascades into the table, and that is deliberate rather than an omission: the column holds a configured name as readily as a fingerprint and belongs to neither record, so there is nothing for a constraint to point at. What replaces the cascade is the row's own lifetime, which is minutes rather than a retention window somebody has to sweep against — a data-subject erasure is therefore not owed a statement here, because whatever a fingerprint could still identify is gone on its own before such a request could be answered. Nothing in the table reaches a log, a metric, a trace, or an error message; a refusal names the rule rather than the identifier, exactly as every other client-assertion refusal does.
+`spent_client_assertions` is the one table on this page whose classification depends on which credential a row was written under. For a configured key pair the `CredentialKey` column holds the name an operator gave the key, which is MailFathom's own configuration and nobody's data; for a user's registered key it holds that key's 43-character fingerprint, which is a pseudonymous identifier for an identified person and is read as their data. The other two columns are neither in both cases — a value the client minted for one request, and an instant. Nothing cascades into the table, and that is deliberate rather than an omission: the column holds a configured name as readily as a fingerprint and belongs to neither record, so there is nothing for a constraint to point at. What replaces the cascade is the row's own lifetime, which is minutes rather than a retention window somebody has to sweep against — a data-subject erasure is therefore not owed a statement here, because whatever a fingerprint could still identify is gone on its own before such a request could be answered. Neither the fingerprint nor the identifier reaches a log, a metric, a trace, or an error message — a refusal on the user path names the credential's own generated identifier. The configured key name does reach one, in the warnings that say which key presented a replayed or overlong assertion, and it is the column value there as well as in the row; it is MailFathom's own configuration rather than anybody's data, which is why that is the one part of the table a log carries.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

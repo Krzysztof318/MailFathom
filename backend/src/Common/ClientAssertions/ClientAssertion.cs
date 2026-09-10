@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace MailFathom.Common.ClientAssertions;
 
 /// <summary>The shape of the assertion a client signs with its private key to authenticate.</summary>
@@ -75,9 +77,9 @@ public static class ClientAssertion
     /// signed credential is one: a deployment able to widen it would eventually be a deployment that had.
     /// </para>
     /// <para>
-    /// It also bounds what the endpoint has to remember. An identifier is kept only until the assertion carrying it
-    /// expires, so the replay store holds no more than one window's worth of a client's requests — which the surface's
-    /// own rate limit already bounds.
+    /// It also bounds what the endpoint has to remember. An identifier is kept until the first sweep past the point the
+    /// assertion carrying it stops being accepted, so what the deployment's record holds is the traffic of the last few
+    /// such windows rather than a deployment's history of authenticated requests.
     /// </para>
     /// </remarks>
     public static readonly TimeSpan MaximumLifetime = TimeSpan.FromMinutes(5);
@@ -89,10 +91,25 @@ public static class ClientAssertion
     /// <summary>The longest replay identifier an assertion may carry.</summary>
     /// <remarks>
     /// The identifier is the one value a client chooses that the endpoint has to remember, so its length is the one
-    /// thing about an assertion that decides how much memory a verified client can spend. A random 128-bit value
+    /// thing about an assertion that decides how much a verified client can write per request. A random 128-bit value
     /// encodes well inside this; nothing legitimate approaches it.
     /// </remarks>
     public const int IdentifierLengthLimit = 128;
+
+    /// <summary>Reports whether a replay identifier is one this deployment can accept and record.</summary>
+    /// <param name="identifier">The <c>jti</c> the client put in the assertion, which may be absent.</param>
+    /// <returns><see langword="true" /> when the identifier may be spent; <see langword="false" /> when the assertion carrying it is refused.</returns>
+    /// <remarks>
+    /// The identifier is the one value a client chooses that reaches a column, so it is bounded here rather than at
+    /// each verifier: a control character is legal in the JSON a client signs and is not legal in a PostgreSQL text
+    /// value, so an identifier carrying one would leave the endpoint as a provider failure where the contract promises
+    /// the same empty refusal every other unacceptable claim gets. Nothing legitimate carries one — the shape this
+    /// endpoint mints and expects is a random value in an ASCII encoding.
+    /// </remarks>
+    public static bool IsUsableIdentifier([NotNullWhen(true)] string? identifier) =>
+        identifier is { Length: > 0 }
+        && identifier.Length <= IdentifierLengthLimit
+        && !identifier.Any(char.IsControl);
 
     /// <summary>The claim naming the assertion's own replay identifier.</summary>
     public const string IdentifierClaimName = "jti";

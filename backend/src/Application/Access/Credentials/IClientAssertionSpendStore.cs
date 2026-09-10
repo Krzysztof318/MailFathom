@@ -28,6 +28,7 @@ public interface IClientAssertionSpendStore
     /// <param name="expiresAt">When the assertion stops being accepted, which is when the record stops being needed.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns><see langword="true" /> when this call is the one that spent the identifier; <see langword="false" /> when something already had.</returns>
+    /// <exception cref="ClientAssertionSpendUnrecordableException">Thrown when the record could not be written, which the caller answers by refusing rather than by serving.</exception>
     /// <remarks>
     /// One statement whose own outcome is the answer, so two replicas presenting one identifier at the same instant
     /// leave one served and one refused with PostgreSQL settling it rather than a check between two statements. An
@@ -48,6 +49,7 @@ public interface IClientAssertionSpendStore
     /// </param>
     /// <param name="cancellationToken">Cancels the removal.</param>
     /// <returns>A task that completes when the expired records are gone.</returns>
+    /// <exception cref="ClientAssertionSpendUnrecordableException">Thrown when the removal could not run, which reaches the request that triggered it rather than being swallowed.</exception>
     /// <remarks>
     /// Bounded by what it can match rather than by a limit the caller passes: an implementation reaches the expired
     /// records through an ordering on the expiry, so the work is proportional to what has expired since the last

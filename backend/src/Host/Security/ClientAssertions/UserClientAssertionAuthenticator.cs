@@ -177,7 +177,9 @@ internal sealed partial class UserClientAssertionAuthenticator
             return UserClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.ClaimsUnacceptable);
         }
 
-        if (assertion.Id is not { Length: > 0 } identifier || identifier.Length > ClientAssertion.IdentifierLengthLimit)
+        var identifier = assertion.Id;
+
+        if (!ClientAssertion.IsUsableIdentifier(identifier))
         {
             this.LogUnusableIdentifierPresented(credential.Id);
 

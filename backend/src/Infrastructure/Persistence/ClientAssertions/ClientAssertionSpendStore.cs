@@ -30,10 +30,14 @@ namespace MailFathom.Infrastructure.Persistence.ClientAssertions;
 /// rather than into the pool, and the two statements here open no context.
 /// </para>
 /// <para>
-/// A failure to reach the database is not caught here and must not be. The answer this store gives is what decides
-/// whether a request is served, so a store that cannot answer is one whose caller must not serve — and turning an
-/// outage into a <see langword="true" /> would open the replay window this exists to close, while turning it into a
-/// <see langword="false" /> would report a replay that did not happen and hide the outage from the operator.
+/// A failure to reach the database is translated rather than absorbed, and the two are separate decisions. It is not
+/// absorbed because the answer this store gives is what decides whether a request is served, so a store that cannot
+/// answer is one whose caller must not serve — turning an outage into a <see langword="true" /> would open the replay
+/// window this exists to close, and turning it into a <see langword="false" /> would report a replay that did not
+/// happen and hide the outage from the operator. It is translated because the port it crosses is an application
+/// contract and the caller is an authentication handler: an <c>NpgsqlException</c> reaching there would put a driver's
+/// type and a server's own message on the path that answers an unauthenticated caller, which is the arrangement the
+/// persisted configuration document is read under and for the same reason.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this store.")]
@@ -79,7 +83,16 @@ internal sealed class ClientAssertionSpendStore(NpgsqlDataSource dataSource) : I
         command.Parameters.AddWithValue("identifier", identifier);
         command.Parameters.AddWithValue("expiresAt", expiresAt.ToUniversalTime());
 
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        try
+        {
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new ClientAssertionSpendUnrecordableException(
+                $"The assertion a request presented could not be recorded in {SpentClientAssertionEntity.TableName}, so the request was refused rather than served unrecorded. Check that the database is reachable and that this build's migrations have been applied to it.",
+                exception);
+        }
     }
 
     /// <inheritdoc />
@@ -88,6 +101,15 @@ internal sealed class ClientAssertionSpendStore(NpgsqlDataSource dataSource) : I
         await using var command = dataSource.CreateCommand(RemoveExpiredStatement);
         command.Parameters.AddWithValue("removableFrom", removableFrom.ToUniversalTime());
 
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new ClientAssertionSpendUnrecordableException(
+                $"The records of assertions past the point they could still be presented could not be removed from {SpentClientAssertionEntity.TableName}. Check that the database is reachable and that this build's migrations have been applied to it.",
+                exception);
+        }
     }
 }

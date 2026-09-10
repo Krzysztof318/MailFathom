@@ -178,6 +178,27 @@ public sealed class ClientAssertionAuthenticatorTests
         Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
     }
 
+    /// <summary>
+    /// A control character is legal in the JSON a client signs and is not legal in a PostgreSQL text value, so an
+    /// identifier carrying one has to be refused here — reaching the record with it would leave the endpoint as a
+    /// provider failure where every other unacceptable claim leaves it as the same empty refusal.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_AnAssertionCarryingAControlCharacterInItsIdentifier_IsRefused()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var harness = HarnessFor(clientKey);
+
+        // Act
+        var result = await harness.AuthenticateAsync(
+            Presenting(clientKey, identifier: @"\u0000an-identifier"));
+
+        // Assert
+        Assert.False(result.Succeeded);
+        Assert.Equal(ClientAssertionRejection.ClaimsUnacceptable, result.Rejection);
+    }
+
     /// <summary>Without an identifier there is nothing to remember, so the assertion could be replayed for its whole life.</summary>
     [Fact]
     public async Task AuthenticateAsync_AnAssertionCarryingNoIdentifier_IsRefused()

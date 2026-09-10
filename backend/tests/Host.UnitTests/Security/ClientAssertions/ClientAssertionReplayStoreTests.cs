@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -192,6 +193,44 @@ public sealed class ClientAssertionReplayStoreTests
 
         // Assert
         Assert.Equal(1, deployment.RemovalCount);
+    }
+
+    /// <summary>
+    /// A store that cannot say whether an identifier has been served is a store whose caller must not serve. Answering
+    /// <see langword="true" /> on a database failure would reopen the replay window this exists to close, and answering
+    /// <see langword="false" /> would report a replay that did not happen — so the failure leaves this method rather
+    /// than being turned into either answer.
+    /// </summary>
+    [Fact]
+    public async Task TrySpendAsync_ARecordThatCannotBeWritten_RefusesToAnswerRatherThanServing()
+    {
+        // Arrange
+        var store = new ClientAssertionReplayStore(
+            new UnreachableClientAssertionSpendStore(),
+            new FakeTimeProvider(SpentAt));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<ClientAssertionSpendUnrecordableException>(
+            () => SpendAsync(store, "nightly", "an-identifier", SpentAt.AddMinutes(1)));
+
+        // Assert
+        Assert.NotNull(refusal.InnerException);
+    }
+
+    /// <summary>The removal reaches the same database over the same pool, so a sweep that cannot run takes the request that triggered it rather than being swallowed into a spend that then answers.</summary>
+    [Fact]
+    public async Task TrySpendAsync_ASweepThatCannotRun_RefusesToAnswerRatherThanServing()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(SpentAt);
+        var store = new ClientAssertionReplayStore(new UnreachableClientAssertionSpendStore(), clock);
+
+        // Act
+        clock.Advance(ClientAssertion.MaximumLifetime);
+
+        // Assert
+        await Assert.ThrowsAsync<ClientAssertionSpendUnrecordableException>(
+            () => SpendAsync(store, "nightly", "an-identifier", clock.GetUtcNow().AddMinutes(1)));
     }
 
     private static Task<bool> SpendAsync(

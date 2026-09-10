@@ -43,11 +43,14 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// the same fact, which is that the table only ever holds the last few minutes of a deployment's authenticated traffic.
 /// </para>
 /// <para>
-/// The table is bounded by what it accepts rather than by a cap. Only an assertion whose signature already verified is
-/// remembered, so nothing an unauthenticated caller sends reaches it; a record lives no longer than the permitted
-/// assertion lifetime; and how fast a verified client can add records is exactly what the surface's rate limit already
-/// bounds. A cap with an eviction policy would be worse than none: evicting a record that has not expired is precisely
-/// the replay this exists to refuse.
+/// The table is bounded by what it accepts and by the removal rather than by a cap. Only an assertion whose signature
+/// already verified is remembered, so nothing an unauthenticated caller sends reaches it, and a record is dropped by
+/// the first sweep past the point its assertion stops being accepted — which is what keeps the table proportional to
+/// recent authenticated traffic rather than to a deployment's history of it. The surface's rate limit is not part of
+/// that bound on the MCP surface and must not be read as one: authentication runs ahead of the limiter there, so a
+/// client presenting freshly signed assertions above its permitted rate writes a record per request and is refused
+/// afterwards. A cap with an eviction policy would be worse than none: evicting a record whose assertion is still
+/// being accepted is precisely the replay this exists to refuse.
 /// </para>
 /// </remarks>
 internal sealed class ClientAssertionReplayStore
