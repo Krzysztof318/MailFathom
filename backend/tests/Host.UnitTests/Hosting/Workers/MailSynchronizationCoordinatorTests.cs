@@ -28,8 +28,12 @@ public sealed class MailSynchronizationCoordinatorTests
     /// <summary>Guards against a hung coordinator. No assertion depends on how long a run actually takes.</summary>
     private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
 
-    /// <summary>Moves a fake clock far enough for a supervision interval or a shutdown drain to elapse.</summary>
-    private static readonly TimeSpan AdvanceStep = TimeSpan.FromMinutes(5);
+    /// <summary>Moves a fake clock past a shutdown drain in one step and to a supervision interval in a few.</summary>
+    /// <remarks>
+    /// Kept well inside a lease's renewal window, because the stepping loop can run several steps ahead of the code it is
+    /// driving, and a hold that sees its clock jump past that window gives the account up as a paused process would.
+    /// </remarks>
+    private static readonly TimeSpan AdvanceStep = TimeSpan.FromMinutes(1);
 
     [Fact]
     public async Task ExecuteAsync_SynchronizationDisabled_NeverOpensAMailbox()
@@ -300,6 +304,102 @@ public sealed class MailSynchronizationCoordinatorTests
             message => message.Contains("after shutdown began and was cancelled", StringComparison.Ordinal));
     }
 
+    /// <summary>A second replica configured with the same account supervises nothing for it, and keeps asking on its own interval.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AnotherReplicaHoldsTheAccount_OpensNoMailboxAndAsksAgainOnTheInterval()
+    {
+        // Arrange
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var leases = new ScriptedWorkLeaseStore { HeldElsewhere = true };
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory,
+            workLeaseStore: leases);
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await leases.WaitForClaimAsync(TestContext.Current.CancellationToken).WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            leases.WaitForClaimAsync(TestContext.Current.CancellationToken),
+            AdvanceStep,
+            DeadlockGuard);
+
+        // Assert
+        await harness.StopAndDrainAsync();
+        await sessionFactory.DidNotReceiveWithAnyArgs().OpenReadOnlyAsync(default!, default!, default!, CancellationToken.None);
+        Assert.DoesNotContain(
+            harness.LoggedMessages,
+            message => message.Contains("is now supervised", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A replica that can no longer show it holds an account stops the run it has under way on that renewal, rather than
+    /// letting it run on until the lease has expired and another replica may already be synchronizing the same account.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_HoldLostWhileARunIsUnderWay_CancelsTheRunBeforeTheLeaseCouldExpire()
+    {
+        // Arrange
+        var workUnitStarted = new TaskCompletionSource();
+        var workUnitCancelled = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => NeverAnswerUntilCancelledAsync(workUnitStarted, workUnitCancelled, call.Arg<CancellationToken>()));
+        var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX");
+        var leases = new ScriptedWorkLeaseStore();
+        using var harness = CreateHarness(options, sessionFactory, workLeaseStore: leases);
+        var claimedAt = harness.Clock.GetUtcNow();
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await workUnitStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        leases.HeldElsewhere = true;
+        harness.Clock.Advance(options.LeaseRenewalInterval);
+        await workUnitCancelled.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(harness.Clock.GetUtcNow() - claimedAt < options.LeaseDuration);
+        await harness.StopAndDrainAsync();
+    }
+
+    /// <summary>A replica that stops gracefully gives its accounts back, so another replica need not wait out the lease.</summary>
+    [Fact]
+    public async Task ExecuteAsync_HostStops_ReleasesTheAccountItHeld()
+    {
+        // Arrange
+        var accountAttempted = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => FailImmediately(accountAttempted));
+        var leases = new ScriptedWorkLeaseStore();
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory,
+            workLeaseStore: leases);
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await accountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        var heldWhileRunning = leases.HeldScopes;
+        await harness.StopAndDrainAsync();
+
+        // Assert
+        var held = Assert.Single(heldWhileRunning);
+        Assert.Equal([held], leases.Releases);
+        Assert.Empty(leases.HeldScopes);
+    }
+
     /// <summary>Models a server that accepts the connection and then answers nothing until the caller gives up.</summary>
     private static async Task<IMailboxSession> NeverAnswerAsync(TaskCompletionSource entered, CancellationToken cancellationToken)
     {
@@ -308,6 +408,24 @@ public sealed class MailSynchronizationCoordinatorTests
         await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 
         throw new InvalidOperationException("The mail server answered after all.");
+    }
+
+    /// <summary>Models a server that answers nothing, and says when the caller gave up on it.</summary>
+    private static async Task<IMailboxSession> NeverAnswerUntilCancelledAsync(
+        TaskCompletionSource entered,
+        TaskCompletionSource cancelled,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await NeverAnswerAsync(entered, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled.TrySetResult();
+
+            throw;
+        }
     }
 
     /// <summary>Models a server that refuses the connection at once, which is the cheapest failed work unit there is.</summary>
@@ -321,7 +439,8 @@ public sealed class MailSynchronizationCoordinatorTests
     private static CoordinatorHarness CreateHarness(
         MailSynchronizationOptions options,
         IMailboxSessionFactory sessionFactory,
-        IRemoteFolderCatalog? remoteFolderCatalog = null)
+        IRemoteFolderCatalog? remoteFolderCatalog = null,
+        ScriptedWorkLeaseStore? workLeaseStore = null)
     {
         var clock = new FakeTimeProvider();
         var settings = new StubSettingsSnapshot<MailSynchronizationOptions>(options);
@@ -330,7 +449,8 @@ public sealed class MailSynchronizationCoordinatorTests
             settings,
             sessionFactory,
             clock,
-            remoteFolderCatalog: remoteFolderCatalog);
+            remoteFolderCatalog: remoteFolderCatalog,
+            workLeaseStore: workLeaseStore);
 
         return new CoordinatorHarness(services, settings, clock);
     }

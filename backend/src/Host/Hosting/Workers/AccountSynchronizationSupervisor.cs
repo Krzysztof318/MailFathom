@@ -94,8 +94,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     }
 
     /// <summary>Supervises the account until scheduling stops or the account leaves configuration.</summary>
-    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down.</param>
-    /// <param name="workUnitToken">Tears down a run already under way; cancelled only once the coordinator's bounded shutdown drain expires.</param>
+    /// <param name="schedulingToken">Stops the supervisor from starting another run; cancelled when the host begins shutting down, when a reload replaces this supervisor, or when this replica stops holding the account.</param>
+    /// <param name="workUnitToken">Tears down a run already under way; cancelled once the coordinator's bounded shutdown drain expires, or at once when this replica stops holding the account.</param>
     /// <returns>A task that completes when the account is no longer supervised, and that never faults.</returns>
     /// <remarks>
     /// <para>
@@ -1458,7 +1458,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Supervision of account {AccountId} stopped because the host is shutting down.")]
+        Message = "Supervision of account {AccountId} stopped because it was asked to: the host is shutting down, a reload replaced it, or this replica no longer holds the account.")]
     private partial void LogSupervisionStopped(string accountId);
 
     /// <summary>Separates a supervisor that ended unexpectedly from one that was asked to stop, because only the first is a defect.</summary>

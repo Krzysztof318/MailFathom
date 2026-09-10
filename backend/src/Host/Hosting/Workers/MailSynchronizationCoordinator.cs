@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
@@ -15,7 +17,7 @@ using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Hosting.Workers;
 
-/// <summary>Supervises one <see cref="AccountSynchronizationSupervisor" /> per configured account.</summary>
+/// <summary>Supervises one <see cref="AccountSynchronizationSupervisor" /> per configured account this replica holds.</summary>
 /// <remarks>
 /// <para>
 /// The coordinator itself reaches no mail server and holds no scoped service. It decides which accounts are
@@ -27,6 +29,12 @@ namespace MailFathom.Host.Hosting.Workers;
 /// adds, replaces, or removes a supervisor without a restart; an unexpected end is likewise restarted instead of
 /// leaving one account silently unsynchronized. Replacing a supervisor cancels scheduling and never its in-flight
 /// work-unit token, so a run drains against the snapshot it began with.
+/// </para>
+/// <para>
+/// Every replica of a deployment reads the same account set, so a supervisor is started only for an account whose
+/// lease this replica took, as <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0031-dividing-singleton-work-between-replicas-with-a-leased-scope.md">ADR 0031</see>
+/// decides. An account another replica holds is asked for again on each pass, which is how it moves here once that
+/// replica stops.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
@@ -44,14 +52,14 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new mail synchronization coordinator.</summary>
-    /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
+    /// <param name="scopeFactory">Creates the scope each folder work unit and each lease statement runs in.</param>
     /// <param name="settings">Supplies the snapshot the supervised account set is read from.</param>
     /// <param name="telemetry">Published to by every supervisor this coordinator starts, which is why one instance is handed to all of them.</param>
     /// <param name="runLedger">Written to by every supervisor this coordinator starts, for the reason the telemetry is: it is one account of what the whole process is doing.</param>
     /// <param name="runSignal">Handed to every supervisor this coordinator starts, for the reason the telemetry is: one registry carries what was authored for any account to the supervisor waiting on that account.</param>
     /// <param name="signals">Handed to every supervisor this coordinator starts, for the reason the telemetry is: one publisher folds what every account observed rather than one per account.</param>
-    /// <param name="loggerFactory">Supplies this coordinator's logger and the logger of every supervisor it starts, so a supervisor logs under its own category.</param>
-    /// <param name="timeProvider">Drives the supervision interval and bounds the shutdown drain.</param>
+    /// <param name="loggerFactory">Supplies this coordinator's logger and the logger of every supervisor and hold it starts, so each logs under its own category.</param>
+    /// <param name="timeProvider">Drives the supervision interval, the lease renewals, and bounds the shutdown drain.</param>
     public MailSynchronizationCoordinator(
         IServiceScopeFactory scopeFactory,
         ISettingsSnapshot<MailSynchronizationOptions> settings,
@@ -75,11 +83,22 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         this.timeProvider = timeProvider;
     }
 
+    /// <summary>Names the lease one account's supervision is held under.</summary>
+    /// <param name="account">The account supervised.</param>
+    /// <returns>The scope every replica configured with the account asks for.</returns>
+    /// <remarks>
+    /// The unit is the account's whole identity rather than its identifier alone, because two users may each name an
+    /// account alike and neither has any reason to be synchronized by the replica holding the other.
+    /// </remarks>
+    internal static WorkScope SupervisionScope(MailAccountIdentity account) => WorkScope.Create(
+        string.Create(CultureInfo.InvariantCulture, $"mail-synchronization/{account.User.Value}/{account.Id.Value}"));
+
     /// <inheritdoc />
     /// <remarks>
     /// Whether synchronization runs at all, how often the account set is re-read, how many accounts may run at once,
-    /// and how long shutdown drains are read once, because all four shape the loop this method is rather than the work
-    /// one run does. Everything a run reads is taken from the published snapshot when that run begins.
+    /// how long an account is held and renewed, and how long shutdown drains are read once, because all of them shape
+    /// the loop this method is rather than the work one run does. Everything a run reads is taken from the published
+    /// snapshot when that run begins.
     /// </remarks>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -106,8 +125,9 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
                 var settingsReload = this.settings.GetReloadToken();
                 var settingsSnapshot = this.settings.Current;
 
-                this.SuperviseConfiguredAccounts(
+                await this.SuperviseConfiguredAccountsAsync(
                     settingsSnapshot,
+                    startupSettings,
                     accountRunSlots,
                     stoppingToken,
                     workUnitCancellation.Token);
@@ -144,15 +164,16 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         await waitCancellation.CancelAsync();
     }
 
-    /// <summary>Starts a supervisor for every configured account that has none running.</summary>
+    /// <summary>Starts a supervisor for every configured account that has none running and whose lease this replica takes.</summary>
     /// <remarks>
-    /// A supervisor task that has completed is one whose account was removed, or one that ended unexpectedly. Both are
-    /// answered the same way: if the current snapshot still names the account, it is supervised again. A supervisor
-    /// never faults, so replacing a completed task leaves nothing unobserved.
+    /// A supervisor task that has completed is one whose account was removed, whose hold was lost, or one that ended
+    /// unexpectedly. All three are answered the same way: if the current snapshot still names the account, its lease is
+    /// asked for again. A supervisor never faults, so replacing a completed task leaves nothing unobserved.
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of each linked cancellation source passes to the supervised-account record and is released when that supervisor ends or the coordinator drains.")]
-    private void SuperviseConfiguredAccounts(
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of each linked cancellation source passes to the supervised-account record and is released when that supervisor ends or the coordinator drains; each hold is disposed by the supervision it guards.")]
+    private async Task SuperviseConfiguredAccountsAsync(
         MailSynchronizationOptions settingsSnapshot,
+        MailSynchronizationOptions startupSettings,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
@@ -172,28 +193,33 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             supervision.SchedulingCancellation.Cancel();
         }
 
-        // Read through the application port in a scope of its own rather than off the configuration snapshot, because
-        // the served set is now configuration plus the user a startup gate established and only the composed port
-        // holds both. The scope lives for the read: a supervisor gets a scope of its own per work unit.
-        using var accountScope = this.scopeFactory.CreateScope();
-        accountScope.ServiceProvider
-            .GetRequiredService<ScopedMailSynchronizationSettings>()
-            .UseRunSnapshot(settingsSnapshot);
-
-        var servedAccounts = accountScope.ServiceProvider
-            .GetRequiredService<IDeploymentMailAccountCatalog>()
-            .ServedAccounts;
-
-        foreach (var account in servedAccounts.Select(static account => account.Identity))
+        foreach (var account in this.ReadServedAccounts(settingsSnapshot))
         {
             if (this.supervisedAccounts.ContainsKey(account.Id.Value))
             {
                 continue;
             }
 
-            var accountScheduling = CancellationTokenSource.CreateLinkedTokenSource(schedulingToken);
-            var task = this.StartSupervisor(
+            var hold = await WorkLeaseHold.TryTakeAsync(
+                SupervisionScope(account),
+                startupSettings.LeaseDuration,
+                startupSettings.LeaseRenewalInterval,
+                this.scopeFactory,
+                this.loggerFactory.CreateLogger<WorkLeaseHold>(),
+                this.timeProvider,
+                schedulingToken);
+
+            if (hold is null)
+            {
+                this.LogAccountHeldElsewhere(account.Id.Value);
+
+                continue;
+            }
+
+            var accountScheduling = CancellationTokenSource.CreateLinkedTokenSource(schedulingToken, hold.Lost);
+            var task = this.SuperviseWhileHeldAsync(
                 account,
+                hold,
                 accountRunSlots,
                 accountScheduling.Token,
                 workUnitToken);
@@ -204,6 +230,58 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
                 task);
 
             this.LogAccountSupervisionStarted(account.Id.Value);
+        }
+    }
+
+    /// <summary>Reads the accounts the deployment serves under the snapshot this pass supervises against.</summary>
+    /// <remarks>
+    /// Read through the application port in a scope of its own rather than off the configuration snapshot, because the
+    /// served set is configuration plus the user a startup gate established and only the composed port holds both. The
+    /// scope lives for the read: a supervisor gets a scope of its own per work unit.
+    /// </remarks>
+    private MailAccountIdentity[] ReadServedAccounts(MailSynchronizationOptions settingsSnapshot)
+    {
+        using var accountScope = this.scopeFactory.CreateScope();
+        accountScope.ServiceProvider
+            .GetRequiredService<ScopedMailSynchronizationSettings>()
+            .UseRunSnapshot(settingsSnapshot);
+
+        return [.. accountScope.ServiceProvider
+            .GetRequiredService<IDeploymentMailAccountCatalog>()
+            .ServedAccounts
+            .Select(static account => account.Identity)];
+    }
+
+    /// <summary>Supervises one account for as long as this replica holds it, and gives the account back once supervision ends.</summary>
+    /// <remarks>
+    /// The hold is renewed for the whole of the supervision, the shutdown drain included, and given back only after the
+    /// supervisor and the push watch it owns have ended, so no connection of this replica's outlives its hold. A hold
+    /// that is lost cancels the run in flight through its work-unit token rather than draining it: the drain is for a
+    /// host that stops while it still holds the account, and a replica that lost the hold has only the rest of the
+    /// lease's margin before another replica may open its own sessions.
+    /// </remarks>
+    private async Task SuperviseWhileHeldAsync(
+        MailAccountIdentity account,
+        WorkLeaseHold hold,
+        SemaphoreSlim accountRunSlots,
+        CancellationToken schedulingToken,
+        CancellationToken workUnitToken)
+    {
+        using var renewalStop = new CancellationTokenSource();
+        using var heldWorkUnits = CancellationTokenSource.CreateLinkedTokenSource(workUnitToken, hold.Lost);
+
+        var renewals = hold.KeepAsync(renewalStop.Token);
+
+        try
+        {
+            await this.StartSupervisor(account, accountRunSlots, schedulingToken, heldWorkUnits.Token);
+        }
+        finally
+        {
+            await renewalStop.CancelAsync();
+            await renewals;
+            await hold.ReleaseAsync();
+            hold.Dispose();
         }
     }
 
@@ -241,7 +319,8 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// Cancelling every supervisor at the moment the host stops would tear a run down wherever it happened to be. The
     /// drain instead lets a work unit finish what it started — the local write that follows a fetch, and the
     /// checkpoint that follows that write — and cancels only once the configured bound has passed, at which point the
-    /// progress already committed is durable and the next start resumes from it.
+    /// progress already committed is durable and the next start resumes from it. Each supervision gives its account
+    /// back as it ends, so what the drain waits for includes the release.
     /// </remarks>
     private async Task DrainSupervisedAccountsAsync(CancellationTokenSource workUnitCancellation, TimeSpan drainTimeout)
     {
@@ -285,6 +364,12 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         Level = LogLevel.Information,
         Message = "Account {AccountId} is now supervised on a synchronization schedule of its own.")]
     private partial void LogAccountSupervisionStarted(string accountId);
+
+    /// <summary>Records the ordinary answer for an account another replica supervises, which is why it is not worth more than debug.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Account {AccountId} is not supervised here because its lease is held elsewhere; it is asked for again on the next pass.")]
+    private partial void LogAccountHeldElsewhere(string accountId);
 
     /// <summary>Records that shutdown ran out of patience, because a run cut short is what the next start has to resume.</summary>
     [LoggerMessage(

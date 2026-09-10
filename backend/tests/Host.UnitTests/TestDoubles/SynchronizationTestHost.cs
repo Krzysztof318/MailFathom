@@ -7,6 +7,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Coordination;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -94,8 +95,19 @@ internal static class SynchronizationTestHost
     };
 
     /// <summary>Configures the accounts a run is scheduled from, on the defaults every bound the tests do not exercise takes.</summary>
+    /// <remarks>
+    /// The lease settings sit at the top of their ranges because a hold reads a clock that jumped past its renewal window
+    /// as a process that was paused, and stops its work — which is right, and is not what a test stepping its clock to
+    /// reach an interval or a drain means to model.
+    /// </remarks>
     internal static MailSynchronizationOptions CreateOptions(bool enabled, params MailSynchronizationAccountOptions[] accounts) =>
-        new MailSynchronizationOptions { Enabled = enabled, Interval = TimeSpan.FromMinutes(5) }.Serving(accounts);
+        new MailSynchronizationOptions
+        {
+            Enabled = enabled,
+            Interval = TimeSpan.FromMinutes(5),
+            LeaseDuration = TimeSpan.FromHours(1),
+            LeaseRenewalInterval = TimeSpan.FromMinutes(30),
+        }.Serving(accounts);
 
     /// <summary>Configures the single account most tests need, named <c>primary</c>.</summary>
     internal static MailSynchronizationOptions CreateSingleAccountOptions(bool enabled, params string[] folders) =>
@@ -118,6 +130,7 @@ internal static class SynchronizationTestHost
     /// on, because a run whose deployment left the switch off answers in one comparison and never reaches a store at
     /// all — so a test that hands one over and got the default bounds would be watching a query that is never issued.
     /// </param>
+    /// <param name="workLeaseStore">Replaces the lease table that grants every account to this replica.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -133,6 +146,7 @@ internal static class SynchronizationTestHost
         ISpamClassificationRunStore? classificationRunStore = null,
         IStoredEmailChunkingStore? chunkingStore = null,
         IStoredEmailAttachmentTextStore? attachmentTextStore = null,
+        IWorkLeaseStore? workLeaseStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -361,6 +375,10 @@ internal static class SynchronizationTestHost
         services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
             provider.GetRequiredService<ServedMailUsers>()));
+
+        // The coordinator supervises an account only once it holds the account's lease, so the table stands here as one
+        // that grants every account to this replica unless a test plays the other one.
+        services.AddSingleton(workLeaseStore ?? new ScriptedWorkLeaseStore());
 
         return services.BuildServiceProvider();
     }
