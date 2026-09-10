@@ -119,6 +119,20 @@ internal sealed class InMemoryNotificationStore : INotificationStore
         return Task.FromResult(marked);
     }
 
+    /// <inheritdoc />
+    public Task<int> EraseAsync(
+        MailUserId user,
+        IReadOnlyCollection<NotificationId> notifications,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+
+        var named = notifications.ToHashSet();
+
+        return Task.FromResult(this.recorded.RemoveAll(candidate => candidate.User == user
+            && named.Contains(candidate.Id)));
+    }
+
     /// <summary>Rebuilds one notification in a stated read state, which is the only field a store may move.</summary>
     private static Notification InReadState(Notification notification, bool isRead) => Notification.Restore(
         notification.Id,

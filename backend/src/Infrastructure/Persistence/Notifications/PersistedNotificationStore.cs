@@ -140,6 +140,32 @@ internal sealed class PersistedNotificationStore(
 
     /// <inheritdoc />
     /// <remarks>
+    /// One set-based delete rather than a lookup and a delete per identifier: the user is inside the predicate, so a
+    /// row another user holds is never matched and never has to be told apart from one that does not exist. Nothing
+    /// here is bounded, because what a caller may name at once is the surface's decision rather than the store's.
+    /// </remarks>
+    public Task<int> EraseAsync(
+        MailUserId user,
+        IReadOnlyCollection<NotificationId> notifications,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+
+        if (notifications.Count == 0)
+        {
+            return Task.FromResult(0);
+        }
+
+        var userValue = user.Value;
+        var namedIds = notifications.Select(notification => notification.Value).Distinct().ToArray();
+
+        return readContext.Notifications
+            .Where(notification => notification.UserId == userValue && namedIds.Contains(notification.Id))
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// The bounded set is read first and deleted by key, rather than bounding the delete itself, for the reason every
     /// retention sweep here is written that way: PostgreSQL has no <c>DELETE ... LIMIT</c>, so a bound expressed on the
     /// delete either fails to translate or becomes a subquery whose shape depends on the provider.

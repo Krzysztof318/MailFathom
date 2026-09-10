@@ -104,6 +104,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/notifications/unread-count` | `mailfathom.mail.read` |
 | `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.mail.read` |
 | `POST /api/client/notifications/read` | `mailfathom.mail.read` |
+| `POST /api/client/notifications/deletions` | `mailfathom.mail.read` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
@@ -2025,9 +2026,9 @@ rather than a power beside it.
 ### The notification routes
 
 These are the notification centre: what happened to a person while nobody was looking at their screen, how much of it
-they have not read, and both ways of marking it read. What they serve is a record this deployment produced — an
-[IMAP synchronization](../features/imap-synchronization.md) run writing down that mail arrived or that a credential was
-refused — rather than a second reading of the mailbox.
+they have not read, both ways of marking it read, and taking rows out of it for good. What they serve is a record this
+deployment produced — an [IMAP synchronization](../features/imap-synchronization.md) run writing down that mail arrived
+or that a credential was refused — rather than a second reading of the mailbox.
 
 | Route | What it does |
 | --- | --- |
@@ -2035,6 +2036,7 @@ refused — rather than a second reading of the mailbox.
 | `GET /api/client/notifications/unread-count` | Reports how many of them stand unread, without reading a page |
 | `POST /api/client/notifications/{notificationId}/read-state` | Puts one notification into the read state the body states |
 | `POST /api/client/notifications/read` | Marks every one of the person's unread notifications read |
+| `POST /api/client/notifications/deletions` | Erases the notifications the body names, one or several at a time |
 
 **A raised notification reaches an open client at once, and the routes above are still what it reads.**
 [The signal channel](#the-signal-channel) says that a row was written and how many now stand unread; the panel then
@@ -2076,20 +2078,35 @@ to say it in their own; a client that recognizes the cause draws the statement a
 until retention has taken those rows, and a cause a client does not recognize is read the same way — the English is
 what both of them draw.
 
+**Erasing is one route rather than a path per notification, and it names what goes.** The body is
+`{"notificationIds": [...]}`, because a person clearing one row and a person clearing the eleven they ticked are the
+same act with a different count. **A request naming more than 100 is refused with `400` rather than served in part**,
+which is the opposite of what the page size above does and deliberately so: erasing the first hundred of a longer list
+and answering `200` would report an act nobody asked for, on rows nobody saw, and this is the one act here that cannot
+be taken back. **An identifier that names nothing is not an error** — a notification another person holds and one
+already erased are the same answer, neither is counted and neither is reported — so `deleted` is what happened rather
+than what was asked for, and nothing here says whether a notification the caller does not hold exists. The answer
+carries `unreadCount` beside it, so removing an unread row redraws the bell from what the deployment holds rather than
+from a subtraction on the screen. Nothing about the mail a notification described changes: the record is what this
+deployment derived, and the message it points at stays exactly where it is.
+
 **Marking one unread can be refused, and only in that direction.** One unread notification stands per condition, so a
 condition said again after this one was read already stands unread in its place; asking for the older one back is
 answered `409` and the row stays read. Marking read is never refused, and asking for the state a notification already
 stands in is answered as done rather than as an error.
 
-**Both writes answer with what a client redraws from.** The read-state route reports the notification, its new state,
-and how many remain unread; the mark-all route reports how many it moved and that none remain. Neither needs the page
-to be fetched again to find out what the request produced.
+**Every write answers with what a client redraws from.** The read-state route reports the notification, its new state,
+and how many remain unread; the mark-all route reports how many it moved and that none remain; the erasure reports how
+many went and what stands unread after them. None of them needs the page to be fetched again to find out what the
+request produced.
 
-**Every route here is `mailfathom.mail.read`, the two writes included.** Marking a notification read changes what this
-deployment draws for one person about mail they can already see: it reaches no mail server and moves nothing in a
-mailbox. It is [the preferences routes](#the-preferences-routes)' reasoning rather than
-[the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator maintains does not hold a
-write grant and still has to be able to clear their own bell.
+**Every route here is `mailfathom.mail.read`, the three writes included.** Marking a notification read, and taking one
+out of the centre, each change what this deployment draws for one person about mail they can already see: neither
+reaches a mail server and neither moves anything in a mailbox. It is [the preferences routes](#the-preferences-routes)'
+reasoning rather than [the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator
+maintains does not hold a write grant and still has to be able to clear their own bell. `mailfathom.mail.delete` is the
+power to remove somebody's mail and is not what the erasure asks for: what leaves is a record about a message that
+stays.
 
 **A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out

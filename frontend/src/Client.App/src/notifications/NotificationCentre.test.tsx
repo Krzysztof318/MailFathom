@@ -56,6 +56,7 @@ const acts = {
     hide: vi.fn(),
     markRead: vi.fn(),
     markAllRead: vi.fn(),
+    remove: vi.fn(),
     follow: vi.fn(),
     show: vi.fn(),
 };
@@ -311,6 +312,93 @@ describe('NotificationCentre', () => {
         fireEvent.click(bar.getByRole('button', { name: 'Mark as read' }));
 
         expect(acts.markRead).toHaveBeenCalledWith(['n-mail', 'n-meeting'], true);
+    });
+
+    // The confirmation stands over the panel that opened it, so a control is looked for inside the question rather than
+    // on the screen: the selection bar behind it names the same act.
+    function questionAsked(heading: string): HTMLElement {
+        const dialog = screen.getByRole('heading', { name: heading }).closest('dialog');
+
+        if (!(dialog instanceof HTMLElement)) {
+            throw new Error(`No question was standing under the heading “${heading}”.`);
+        }
+
+        return dialog;
+    }
+
+    // A row that has gone does not come back, so the question stands in front of every delete and names the row rather
+    // than counting it.
+    it('asks about the row by name before taking it out of the centre', () => {
+        panel();
+
+        fireEvent.contextMenu(screen.getByText('Ada Lovelace wrote'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete notification' }));
+
+        expect(screen.getByRole('heading', { name: 'Delete notification?' })).toBeDefined();
+        expect(screen.getByText('“Ada Lovelace wrote” will disappear from the notification centre.')).toBeDefined();
+        expect(acts.remove).not.toHaveBeenCalled();
+    });
+
+    it('takes the row out once the question has been answered', () => {
+        panel();
+
+        fireEvent.contextMenu(screen.getByText('Ada Lovelace wrote'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete notification' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(acts.remove).toHaveBeenCalledWith(['n-mail']);
+    });
+
+    it('leaves the centre as it was where the question is answered by keeping the row', () => {
+        panel();
+
+        fireEvent.contextMenu(screen.getByText('Ada Lovelace wrote'));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete notification' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+
+        expect(acts.remove).not.toHaveBeenCalled();
+    });
+
+    it('counts what a selection would take rather than naming one of the rows in it', () => {
+        panel();
+
+        fireEvent.pointerDown(screen.getByText('Ada Lovelace wrote'), {
+            pointerType: 'mouse',
+            button: 0,
+            ctrlKey: true,
+        });
+        fireEvent.pointerDown(screen.getByText('Standing meeting moved'), {
+            pointerType: 'mouse',
+            button: 0,
+            ctrlKey: true,
+        });
+
+        const bar = within(screen.getByRole('toolbar', { name: 'Actions on the notifications selected' }));
+        fireEvent.click(bar.getByRole('button', { name: 'Delete' }));
+
+        expect(screen.getByText('2 notifications will disappear from the centre.')).toBeDefined();
+
+        // Scoped to the question rather than to the screen, because the bar that opened it is still behind it and both
+        // controls are called what the act is called.
+        fireEvent.click(within(questionAsked('Delete notifications?')).getByRole('button', { name: 'Delete' }));
+
+        expect(acts.remove).toHaveBeenCalledWith(['n-mail', 'n-meeting']);
+    });
+
+    it('asks about one notification when the selection holds one, however it was picked out', () => {
+        panel();
+
+        fireEvent.pointerDown(screen.getByText('Ada Lovelace wrote'), {
+            pointerType: 'mouse',
+            button: 0,
+            ctrlKey: true,
+        });
+
+        const bar = within(screen.getByRole('toolbar', { name: 'Actions on the notifications selected' }));
+        fireEvent.click(bar.getByRole('button', { name: 'Delete' }));
+
+        expect(screen.getByRole('heading', { name: 'Delete notification?' })).toBeDefined();
+        expect(screen.getByText('1 notification will disappear from the centre.')).toBeDefined();
     });
 
     it('opens a row’s own menu on a right-click, where a selection starts and the source is opened from', () => {

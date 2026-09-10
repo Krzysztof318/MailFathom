@@ -159,6 +159,7 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveMutationsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.NotificationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.DeletionsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.UnreadCountRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}",
@@ -268,6 +269,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute} -> {MailFathomPermission.MailMove.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.DeletionsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientNotificationEndpoints.MarkAllReadRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientNotificationEndpoints.ReadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
@@ -348,7 +350,7 @@ public sealed class ClientApiEndpointsTests
                         || IsPublishedAsAWrite(endpoint)
                         || WritesTheCallersOwnPreferences(endpoint)
                         || WritesTheCallersOwnPortrait(endpoint)
-                        || MarksTheCallersOwnNotificationsRead(endpoint)
+                        || ChangesTheCallersOwnNotificationCentre(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
                         || ExchangesTheCallersOwnCredentialForASession(endpoint)
                         || FollowsTheCallersOwnCitations(endpoint)
@@ -394,19 +396,22 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}";
 
-    /// <summary>Reports whether a route marks the caller's own notifications read, by the two routes they are served at.</summary>
+    /// <summary>Reports whether a route changes the caller's own notification centre, by the three routes they are served at.</summary>
     /// <remarks>
     /// The routes rather than the grant, for the reason the preferences and portrait writes are named that way. What
     /// these change is what this deployment draws for one person about mail they can already see: nothing reaches a
     /// mail server, nothing moves in a mailbox, and a person whose mail accounts an administrator maintains does not
-    /// hold a write grant and still has to be able to clear their own bell. Naming the two keeps the claim narrow — a
-    /// third write published under the read grant fails this rather than joining it.
+    /// hold a write grant and still has to be able to clear their own bell. That reasoning carries the erasure as well
+    /// as the two markings — <see cref="MailFathomPermission.MailDelete" /> is the power to remove somebody's mail, and
+    /// what leaves here is a record this deployment derived about mail that stays exactly where it was. Naming the
+    /// three keeps the claim narrow — a fourth write published under the read grant fails this rather than joining it.
     /// </remarks>
-    private static bool MarksTheCallersOwnNotificationsRead(Endpoint endpoint) =>
+    private static bool ChangesTheCallersOwnNotificationCentre(Endpoint endpoint) =>
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}"
-            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}");
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.DeletionsRoute}");
 
     /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
     /// <remarks>
@@ -563,6 +568,31 @@ public sealed class ClientApiEndpointsTests
 
         Assert.Equal(
             ClientNotificationEndpoints.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The erasure carries a bound of its own, sized for a full page of identifiers rather than for the one boolean the
+    /// read state sends, so a body that was never a list of them is refused before the handler is reached.
+    /// </summary>
+    [Fact]
+    public void MapClientApi_TheNotificationErasure_CarriesItsOwnRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}"
+                    == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.DeletionsRoute}");
+
+        Assert.Equal(
+            ClientNotificationEndpoints.MaxDeletionRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 

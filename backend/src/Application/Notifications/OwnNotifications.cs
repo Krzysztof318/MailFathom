@@ -44,6 +44,15 @@ public sealed class OwnNotifications
     /// </remarks>
     public const int MaximumPageSize = 100;
 
+    /// <summary>The greatest number of notifications one erasure may name.</summary>
+    /// <remarks>
+    /// It is <see cref="MaximumPageSize" /> because that is where a selection is made: a client picks rows out of the
+    /// page it drew, so a request naming more than one page could hold names notifications nobody was looking at.
+    /// Unlike the page size it is a refusal rather than a clamp — erasing the first hundred of what a caller named and
+    /// answering as though the request had been served is the one shape of this act nothing can take back.
+    /// </remarks>
+    public const int MaximumErasedAtOnce = MaximumPageSize;
+
     private readonly AccessAuthorization authorization;
     private readonly INotificationStore store;
 
@@ -143,6 +152,30 @@ public sealed class OwnNotifications
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         return this.store.MarkAllReadAsync(this.authorization.RequireUser(), cancellationToken);
+    }
+
+    /// <summary>Erases the named notifications, of those the signed-in person holds.</summary>
+    /// <param name="notifications">The notifications to erase, which may name none and at most <see cref="MaximumErasedAtOnce" />.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>How many notifications were erased.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="notifications" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more than <see cref="MaximumErasedAtOnce" /> are named.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller acts for no user, or its grant omits <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <remarks>
+    /// It is the person's own centre being tidied rather than mail being removed, so it is admitted under the same
+    /// grant every other act here is: nothing leaves a mailbox, and the record erased is one this deployment derived
+    /// about mail the caller can already read.
+    /// </remarks>
+    public Task<int> EraseAsync(
+        IReadOnlyCollection<NotificationId> notifications,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(notifications.Count, MaximumErasedAtOnce);
+
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        return this.store.EraseAsync(this.authorization.RequireUser(), notifications, cancellationToken);
     }
 
     /// <summary>Reduces what a caller asked for to a page size this deployment serves.</summary>
