@@ -535,7 +535,7 @@ export const pl: Catalogue = {
     'list.senderUnknown': 'Brak nadawcy',
     'list.threadMessages': 'Wiadomości w tym wątku: {count}',
 
-    'list.readings': 'Co MailFathom z tego wyczytał',
+    'list.readings': 'Podsumowanie AI',
     'list.showReadings': 'Pokazuj odczyt przy każdym wierszu',
     'list.readingsExplained':
         'Jedno zdanie o wiadomości, pod tematem. Ustawienie dotyczy tego folderu, a wyłączenie go niczego nie zmienia w samej poczcie.',
@@ -552,7 +552,7 @@ export const pl: Catalogue = {
     'reading.title': 'Co MailFathom wyczytał z tej wiadomości',
     'reading.about':
         'Każdy odczyt poniżej pochodzi wyłącznie z tej wiadomości i pokazuje fragment, na którym się opiera.',
-    'reading.check': 'Sprawdź, co MailFathom z tego wyczytał',
+    'reading.check': 'Podsumowanie AI',
     'reading.close': 'Zamknij',
     'reading.reason': 'Dlaczego: {reason}',
     'reading.dueAt': 'Termin: {when}',

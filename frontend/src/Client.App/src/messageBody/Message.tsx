@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react';
 import type { ClientFailureReason } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { SkeletonLines, type SkeletonLine } from '../controls/Skeleton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageBody } from './MessageBody';
@@ -18,24 +19,22 @@ import type { MessageBodyRead } from './useMessageBody';
 // opened the message rather than at the moment its description answered: this component is drawn inside the branch
 // that already holds that description, so a read owned here would be a second round trip waiting on the first.
 
-/**
- * A message's words while they are being read, said in words rather than drawn as the shape of them. The reading pane
- * says the same thing its own way while nothing about the message has arrived at all.
- *
- * It is a sentence because a skeleton is a promise about what is coming, and opening a message keeps none of it — the
- * words that arrive are as long as the sender wrote them, so the ragged lines standing in for them are the wrong length
- * every time and the block they occupied changes size under the reader as the answer lands. A line saying what is
- * happening takes one line's room whatever arrives, which is also the only form somebody not looking at the column ever
- * had.
- */
-function MessageOpening() {
-    const { translate } = useLocalization();
+// The lines a message's words stand as before they arrive, which is the design project's own raggedness: uneven
+// lengths broken into two paragraphs, so the block reads as prose that is coming rather than as something loading.
+const waitingLines: readonly SkeletonLine[] = [
+    { fills: 97, height: 'h-2.5' },
+    { fills: 92, height: 'h-2.5' },
+    { fills: 99, height: 'h-2.5' },
+    { fills: 68, height: 'h-2.5' },
+    { fills: 0, height: 'h-1.5' },
+    { fills: 95, height: 'h-2.5' },
+    { fills: 88, height: 'h-2.5' },
+    { fills: 44, height: 'h-2.5' },
+];
 
-    return (
-        <p className="py-1 text-sm text-muted" role="status">
-            {translate('body.reading')}
-        </p>
-    );
+/** A message's words before they have arrived, which two surfaces draw: the whole pane's wait, and the body's own. */
+export function WordsWaiting() {
+    return <SkeletonLines lines={waitingLines} className="gap-2.75 pt-1" />;
 }
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
@@ -99,7 +98,17 @@ export function Message({ body, storedEmailId, quotedHistoryOnRequest = false, o
     // focus of whoever clicked and moves everything below their cursor on an interaction that changes no words. A
     // failure has nothing worth keeping, so a read started from one says it started.
     if (body.drawn === null || (body.reading && body.drawn.outcome === 'failed')) {
-        return <MessageOpening />;
+        return (
+            <>
+                {/* Said out of sight rather than not said: the lines below are what a reader looking at the column
+                    sees, and this is the same statement for somebody who is not. */}
+                <p className="sr-only" role="status">
+                    {translate('body.reading')}
+                </p>
+
+                <WordsWaiting />
+            </>
+        );
     }
 
     if (body.drawn.outcome === 'failed') {

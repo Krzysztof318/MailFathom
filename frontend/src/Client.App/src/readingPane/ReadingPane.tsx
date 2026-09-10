@@ -17,6 +17,8 @@ import { useLocalization } from '../localization/useLocalization';
 import { useSignalledChanges } from '../signals/signalledChanges';
 import { useOpenAttachment } from '../workspace/openAttachment';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { WordsWaiting } from '../messageBody/Message';
+import { Skeleton } from '../controls/Skeleton';
 import { useMessageBody } from '../messageBody/useMessageBody';
 import { BackToList } from '../mailSpace/BackToList';
 import { NothingOpen } from '../mailSpace/NothingOpen';
@@ -323,6 +325,12 @@ function OpenMessage({
             <>
                 {wayBack}
 
+                {/* Said out of sight rather than not said: the shapes below are what a reader looking at the pane
+                    sees, and this is the same statement for somebody who is not. */}
+                <p className="sr-only" role="status">
+                    {translate('message.reading')}
+                </p>
+
                 <MessageWaiting oneColumn={!twoPanes} />
             </>
         );
@@ -378,19 +386,29 @@ function OpenMessage({
     );
 }
 
-// The message before the deployment has answered: one line saying it is being opened, standing where the message will
-// be rather than beside the pane, so the answer lands into the space it was already occupying.
+// The message before the deployment has answered, in the arrangement the design project draws: the subject and the
+// line under it, then the head that carries who wrote it, then the words. It stands in the pane rather than beside a
+// sentence, so the answer lands into the space it was already occupying.
 //
-// The design project draws a skeleton of the message here — the subject, the head, and the ragged words — and this
-// says it instead, which is a difference the owner asked for and the design still carries. `messageBody/Message.tsx`
-// holds why a sentence is the better shape for a message in particular; the padding is still the pane's own pair, a
-// column beside a list and a column that is the screen being two measures.
+// The two lengths widen where the pane is the whole window, which is the design project's own pair: a column beside a
+// list and a column that is the screen are two measures, and a skeleton drawn at the narrower one in the wider case
+// reads as a message that arrived half empty.
 function MessageWaiting({ oneColumn }: { readonly oneColumn: boolean }) {
-    const { translate } = useLocalization();
-
     return (
-        <p className={`text-sm text-muted ${oneColumn ? 'p-4' : 'px-6 py-5'}`} role="status">
-            {translate('message.reading')}
-        </p>
+        <div className={`flex flex-col gap-3.5 ${oneColumn ? 'p-4' : 'px-6 py-5'}`}>
+            <Skeleton className="h-3.75" fills={oneColumn ? 74 : 52} />
+            <Skeleton className="h-2.5" fills={oneColumn ? 56 : 34} />
+
+            <div className="flex items-center gap-2.75 border-t border-line-soft pt-4">
+                <Skeleton className="size-7.5 shrink-0 rounded-full" />
+
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <Skeleton className="h-3.75" fills={oneColumn ? 74 : 52} />
+                    <Skeleton className="h-2.5" fills={oneColumn ? 56 : 34} />
+                </div>
+            </div>
+
+            <WordsWaiting />
+        </div>
     );
 }

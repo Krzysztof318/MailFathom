@@ -208,9 +208,11 @@ describe('Message', () => {
         asked = [];
     });
 
-    it('says the message is opening while the read is in flight, rather than drawing a shape it does not know', () => {
-        // An answer that never comes, which is the whole of the state under test: what stood here before was a
-        // skeleton, and a skeleton promises a shape a message whose length nobody knows yet does not have.
+    // The words standing in that space are held against the design as images rather than asserted here: they are
+    // `aria-hidden` by construction and jsdom computes no layout, so what this suite can say about the wait is what a
+    // person meets — the sentence while the read is in flight, and no message until one has arrived.
+    it('says the message is opening while the read is in flight', () => {
+        // An answer that never comes, which is the whole of the state under test.
         answer = () => new Promise<Answer>(() => undefined);
 
         readingOneMessage();

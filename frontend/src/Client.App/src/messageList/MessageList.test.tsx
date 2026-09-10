@@ -1025,12 +1025,12 @@ describe('MessageList', () => {
         await rows();
 
         fireEvent.contextMenu(screen.getByRole('option', { name: /An answer is owed by Friday\.$/ }));
-        expect(screen.getByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeTruthy();
+        expect(screen.getByRole('menuitem', { name: 'AI summary' })).toBeTruthy();
 
         fireEvent.keyDown(document, { key: 'Escape' });
         fireEvent.contextMenu(row(1));
 
-        expect(screen.queryByRole('menuitem', { name: 'Check what MailFathom made of it' })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: 'AI summary' })).toBeNull();
     });
 
     it('reads nothing again for a change in another account than the one it is showing', async () => {
