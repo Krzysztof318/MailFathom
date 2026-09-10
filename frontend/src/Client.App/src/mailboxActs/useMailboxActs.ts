@@ -177,9 +177,9 @@ export function opensAsDraft(acts: MailboxActs, email: MailTimelineEntry): boole
  * sentence about it, which is the same rule read from the other end.
  */
 export function actPending(acts: MailboxActs, email: MailTimelineEntry): AskedAct | null {
-    const asked = acts.asked.get(email.id) ?? null;
+    const asked = acts.asked.get(email.id);
 
-    if (asked === null || asked.from !== email.folder) {
+    if (asked?.from !== email.folder) {
         return null;
     }
 

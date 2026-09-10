@@ -258,6 +258,29 @@ afterEach(() => {
 });
 
 describe('MessageList', () => {
+    // An act that files a message elsewhere is the reader's, so the row goes at the press rather than when the
+    // deployment next agrees — and it comes back where it stood the moment the act is let go of, which is all a
+    // refusal leaves behind.
+    it('draws no row for a message just asked to be filed elsewhere, and draws it again once the act is let go of', async () => {
+        const transport = answering(wholeFolder);
+        const leaving: MailboxActs = {
+            ...nothingActed,
+            asked: new Map([['message-2', { act: 'archive', from: 'INBOX', leaves: true }]]),
+        };
+        const drawn = renderList(transport, { acts: leaving });
+
+        await rows();
+
+        expect(row(1)).toBeDefined();
+        expect(
+            within(screen.getByRole('listbox', { name: 'Messages' })).queryByRole('option', { name: /Message 2$/ }),
+        ).toBeNull();
+
+        drawn.rerender(listUnder(transport, { acts: nothingActed }));
+
+        expect(row(2)).toBeDefined();
+    });
+
     it('says it is reading from the moment the read starts, where the mail will appear', () => {
         renderList(() => new Promise(() => undefined));
 
